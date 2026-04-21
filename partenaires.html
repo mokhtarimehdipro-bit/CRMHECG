@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>HECG - CRM Partenaires</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        @keyframes pulse-red { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
+        .pulse-red { animation: pulse-red 2s infinite; }
+        .modal-active { display: flex !important; }
+    </style>
+</head>
+<body class="bg-[#F8FAFC] min-h-screen text-slate-900 font-sans">
+
+    <nav class="bg-white shadow-sm px-8 py-4 flex justify-between items-center sticky top-0 z-50 border-b border-slate-100">
+        <div class="flex items-center space-x-6">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" class="h-9 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-1 bg-slate-100 p-1 rounded-xl">
+                <a href="dashboard.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition">Étudiants</a>
+                <a href="partenaires.html" class="px-4 py-2 text-sm font-bold bg-white text-[#1A4E8A] rounded-lg shadow-sm">Entreprises</a>
+                <a href="campagnes.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Campagnes</a>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span id="userNameDisplay" class="text-xs font-bold text-slate-400"></span>
+            <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-slate-400 font-bold text-xs hover:text-red-500">Déconnexion</button>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
+            <div class="space-y-1">
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight italic">Partenaires B2B</h1>
+                <p class="text-slate-400 text-sm font-medium">Gestion du portefeuille, relances et carnet de bord.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <div class="relative flex-grow md:w-64">
+                    <input type="text" id="searchInput" onkeyup="filterPartners()" placeholder="Rechercher une entité..." class="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-[#1A4E8A] outline-none text-sm font-bold shadow-sm transition-all">
+                    <span class="absolute left-4 top-3.5 text-slate-400">🔍</span>
+                </div>
+                
+                <select id="filterNbAlt" onchange="filterPartners()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm cursor-pointer">
+                    <option value="all">🌍 Tous les partenaires</option>
+                    <option value="0">❌ 0 alternant (À relancer)</option>
+                    <option value="1">🟢 1 alternant actif</option>
+                    <option value="2+">🔥 2+ alternants (Grands Comptes)</option>
+                </select>
+
+                <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
+                <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
+            </div>
+        </div>
+
+        <div id="loader" class="text-center py-24">
+            <div class="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#1A4E8A] rounded-full animate-spin mb-4"></div>
+            <p class="font-black text-slate-400 text-sm animate-pulse">SYNCHRONISATION GOOGLE SHEETS...</p>
+        </div>
+
+        <div id="partnersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
+    </main>
+
+    <div id="dossierModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100">
+            
+            <div class="p-8 border-b flex justify-between items-center bg-slate-50/50">
+                <div class="flex items-center space-x-6 flex-grow">
+                    <div class="w-16 h-16 bg-[#1A4E8A] rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-inner">🏢</div>
+                    <div class="flex-grow pr-10">
+                        <input type="text" id="editEntNom" class="text-3xl font-black text-slate-800 bg-transparent border-b-2 border-transparent focus:border-[#F26522] outline-none w-full transition-colors" title="Cliquer pour modifier le nom de l'entreprise">
+                        <p class="text-slate-400 font-bold text-xs mt-1" id="editEntRef"></p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="exportIndividualDossier()" class="text-slate-500 font-black text-[10px] border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-100 transition">📥 EXPORT DOSSIER</button>
+                    <button onclick="closeDossier()" class="w-12 h-12 flex items-center justify-center rounded-full bg-white text-slate-300 hover:text-red-500 shadow-sm transition-all text-2xl">✕</button>
+                </div>
+            </div>
+
+            <div class="flex-grow overflow-y-auto p-8 custom-scrollbar">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                    
+                    <div class="lg:col-span-4 space-y-8">
+                        <div>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-black text-slate-800 uppercase text-[10px] tracking-widest">📇 Interlocuteurs</h3>
+                                <button onclick="openAddContact(currentId)" class="text-[#F26522] text-[10px] font-black hover:underline">+ Ajouter un contact</button>
+                            </div>
+                            <div id="dossierContacts" class="space-y-3"></div>
+                        </div>
+
+                        <div class="bg-green-50/50 p-6 rounded-3xl border border-green-100">
+                            <h3 class="font-black text-green-700 uppercase text-[10px] tracking-widest mb-4">🎓 Alternants HECG en poste</h3>
+                            <div id="dossierAlternants" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-8 space-y-8">
+                        
+                        <div class="bg-orange-50/50 p-6 rounded-3xl border border-orange-100 shadow-sm">
+                            <h3 class="font-black text-orange-700 uppercase text-[10px] tracking-widest mb-4">🔔 Programmer une relance</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="setQuickAlert(1)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">Demain</button>
+                                <button onclick="setQuickAlert(7)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">J+7</button>
+                                <button onclick="setQuickAlert(30)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">1 Mois</button>
+                                <div class="flex items-center bg-white border border-orange-200 rounded-xl px-2">
+                                    <input type="date" id="alertCustomDate" class="p-2 bg-transparent text-xs font-bold outline-none">
+                                    <button onclick="setCustomAlert()" class="p-2 text-[#F26522] font-black text-xs hover:scale-110 transition">OK</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="font-black text-slate-800 uppercase text-[10px] tracking-widest">📝 Historique Échanges (B2B)</h3>
+                            <div class="flex gap-4">
+                                <textarea id="newNote" class="flex-grow bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A] h-20 shadow-inner" placeholder="Saisir un nouvel échange..."></textarea>
+                                <button onclick="addNote()" class="px-6 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg">ENREGISTRER</button>
+                            </div>
+                            <div id="dossierHistory" class="space-y-4 mt-6 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-8 border-t flex justify-between items-center bg-slate-50/50">
+                <button onclick="deleteEnterprise()" class="text-slate-300 hover:text-red-600 font-bold text-xs transition">⚠️ SUPPRIMER L'ENTREPRISE</button>
+                <div class="flex space-x-4">
+                    <button onclick="closeDossier()" class="px-8 py-3 text-slate-400 font-bold hover:bg-slate-100 rounded-2xl transition">Annuler</button>
+                    <button onclick="saveEnterpriseChanges()" class="px-10 py-3 bg-[#1A4E8A] text-white rounded-2xl font-black shadow-xl hover:bg-blue-800 transition">SAUVEGARDER LE NOM</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="addContactModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 border border-slate-100">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-xl font-black text-slate-800 tracking-tight">Ajouter un interlocuteur</h2>
+                <button onclick="closeAddContact()" class="text-slate-300 hover:text-red-500 text-2xl">✕</button>
+            </div>
+            
+            <form id="addContactForm" class="space-y-4">
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Entreprise de rattachement</label>
+                    <input type="text" id="addContEntNom" placeholder="Nom de l'entreprise" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <input type="hidden" id="addContEntId">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="addContPrenom" placeholder="Prénom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                    <input type="text" id="addContNom" placeholder="Nom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-[#1A4E8A] ml-2 italic">Coordonnées Pro (1)</label>
+                        <input type="email" id="addContMail1" placeholder="Mail 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="addContTel1" placeholder="Tel 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Coordonnées Perso (2)</label>
+                        <input type="email" id="addContMail2" placeholder="Mail 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                        <input type="text" id="addContTel2" placeholder="Tel 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                </div>
+
+                <button type="button" onclick="submitNewContact()" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg hover:scale-[1.02] transition duration-300 mt-6">
+                    CRÉER ET VÉRIFIER DOUBLONS
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="contactEditModal" class="fixed inset-0 bg-slate-900/40 hidden items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-slate-100">
+            <h3 class="font-black text-slate-800 mb-6 text-lg">Modifier le contact</h3>
+            <div class="space-y-4">
+                <input type="text" id="editContactPrenom" placeholder="Prénom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="text" id="editContactNom" placeholder="Nom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="text" id="editContactTel" placeholder="Téléphone" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="email" id="editContactMail" placeholder="Email" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+            </div>
+            <div class="flex gap-4 mt-8">
+                <button onclick="closeContactEdit()" class="flex-1 py-2 text-slate-400 font-bold text-sm hover:underline transition">Annuler</button>
+                <button onclick="saveContactChanges()" class="flex-1 py-3 bg-[#1A4E8A] text-white rounded-xl font-black text-xs shadow-md hover:bg-blue-800 transition">ENREGISTRER</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        
+        let allPartners = [];
+        let filterOnlyAlt = false;
+        let currentId = null;
+        let currentContactId = null;
+
+        // Initialisation
+        window.onload = () => {
+            const userName = localStorage.getItem('user_nom');
+            if(userName) document.getElementById('userNameDisplay').innerText = userName;
+            loadPartners();
+        };
+
+        // --- 1. CHARGEMENT & AFFICHAGE ---
+        async function loadPartners() {
+            try {
+                document.getElementById('loader').classList.remove('hidden');
+                document.getElementById('partnersGrid').classList.add('hidden');
+
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartners' }) });
+                const data = await res.json();
+                
+                if(data.success) {
+                    allPartners = data.data;
+                    renderPartners(allPartners);
+                } else {
+                    alert("Erreur Serveur : " + data.message);
+                }
+            } catch(e) { 
+                console.error("Erreur réseau : ", e);
+                alert("Impossible de joindre le serveur. Vérifiez votre connexion.");
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('partnersGrid').classList.remove('hidden');
+            }
+        }
+
+        function renderPartners(data) {
+            const grid = document.getElementById('partnersGrid');
+            
+            grid.innerHTML = data.map(ent => {
+                const nbAlt = (ent.alternants || []).length;
+                const nbContacts = (ent.contacts || []).length;
+
+                // Logique pastille alerte
+                let alertClass = "";
+                if(ent.alerte === "RETARD") alertClass = "bg-red-500 pulse-red";
+                else if(ent.alerte === "PROGRAMMÉE") alertClass = "bg-blue-500";
+
+                return `
+                <div class="bg-white rounded-[2.2rem] p-8 border border-slate-100 flex flex-col justify-between hover:shadow-2xl transition-all duration-500 relative group">
+                    ${alertClass ? `<div class="absolute -top-1 -right-1 w-6 h-6 ${alertClass} rounded-full border-4 border-white shadow-lg"></div>` : ''}
+                    <div>
+                        <div class="flex justify-between items-start mb-6">
+                            <h3 class="text-xl font-black text-slate-800 leading-tight group-hover:text-[#1A4E8A] transition-colors">${ent.nom || "Sans nom"}</h3>
+                            <span class="text-[9px] font-black text-slate-300 uppercase">REF: ${ent.id}</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1.5 rounded-xl font-black">${nbContacts} Contact${nbContacts > 1 ? 's' : ''}</span>
+                            ${nbAlt > 0 ? `<span class="text-[10px] bg-green-50 text-green-700 px-3 py-1.5 rounded-xl font-black">${nbAlt} Alternant${nbAlt > 1 ? 's' : ''}</span>` : ''}
+                        </div>
+                    </div>
+                  <button onclick="window.location.href='dossier_partenaire.html?id=${ent.id}'" class="mt-6 w-full py-3 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg text-center">📂 DOSSIER COMPLET</button>
+                </div>
+                `;
+            }).join('') || '<div class="col-span-full text-center py-20 text-slate-300 font-bold italic">Aucune entreprise trouvée.</div>';
+        }
+
+        // --- 2. GESTION DU DOSSIER ---
+        async function openDossier(id) {
+            const ent = allPartners.find(p => String(ent.id) === String(id));
+            if(!ent) return;
+            currentId = id;
+            
+            document.getElementById('editEntNom').value = ent.nom || "";
+            document.getElementById('editEntRef').innerText = "ID SYSTÈME : " + ent.id;
+            
+            document.getElementById('dossierContacts').innerHTML = (ent.contacts || []).map(c => `
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group/item transition-all hover:bg-white hover:shadow-md">
+                    <div>
+                        <p class="font-black text-slate-800 text-sm">${c.prenom || ""} ${c.nom || ""}</p>
+                        <p class="text-[10px] font-bold text-slate-400 mt-1">📞 ${c.tel || "N/C"} ${c.tel2 ? '| ' + c.tel2 : ''}</p>
+                        <p class="text-[10px] text-blue-500 font-bold truncate">✉️ ${c.email || "N/C"}</p>
+                    </div>
+                    <div class="flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                        <button onclick="editContact('${ent.id}','${c.id_contact}')" class="p-2 text-slate-300 hover:text-blue-500 transition-colors">✏️</button>
+                        <button onclick="deleteContact('${c.id_contact}')" class="p-2 text-slate-300 hover:text-red-500 transition-colors">🗑️</button>
+                    </div>
+                </div>
+            `).join('') || "<p class='text-[10px] text-slate-300 italic font-bold'>Aucun contact enregistré.</p>";
+
+            document.getElementById('dossierAlternants').innerHTML = (ent.alternants || []).map(a => `
+                <span class="px-4 py-2 bg-white border border-green-200 rounded-xl font-black text-green-700 text-xs shadow-sm">🎓 ${a.prenom} ${a.nom}</span>
+            `).join('') || "<p class='text-xs text-slate-300 italic'>Aucun alternant HECG en poste.</p>";
+
+            loadHistory(id);
+            document.getElementById('dossierModal').classList.add('modal-active');
+        }
+
+        function closeDossier() { 
+            document.getElementById('dossierModal').classList.remove('modal-active'); 
+            currentId = null;
+        }
+
+        // --- 3. HISTORIQUE & NOTES ---
+        async function loadHistory(id) {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartnerHistory', id_entreprise: id }) });
+            const data = await res.json();
+            
+            const historyDiv = document.getElementById('dossierHistory');
+            if(data.success && data.data.length > 0) {
+                historyDiv.innerHTML = data.data.map(h => `
+                    <div class="bg-slate-50/50 p-4 rounded-2xl border-l-4 border-[#1A4E8A] shadow-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] font-black text-[#1A4E8A] uppercase">${h.auteur || "Système"}</span>
+                            <span class="text-[10px] font-bold text-slate-400">${new Date(h.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <p class="text-sm text-slate-700 leading-relaxed font-medium">${h.texte}</p>
+                    </div>
+                `).join('');
+            } else {
+                historyDiv.innerHTML = "<p class='text-xs text-slate-300 italic text-center py-4'>Aucun échange consigné pour cette entité.</p>";
+            }
+        }
+
+        async function addNote() {
+            const txt = document.getElementById('newNote').value.trim();
+            if(!txt) return;
+            const author = localStorage.getItem('user_nom') || "Utilisateur";
+            
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "...";
+
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ action: 'addPartnerNote', id_entreprise: currentId, texte: txt, auteur: author }) 
+            });
+            
+            document.getElementById('newNote').value = "";
+            btn.disabled = false; btn.innerText = "ENREGISTRER";
+            loadHistory(currentId);
+        }
+
+        // --- 4. ÉDITION CONTACTS ---
+        function editContact(entId, contId) {
+            const ent = allPartners.find(p => String(ent.id) === String(entId));
+            const c = ent.contacts.find(con => String(con.id_contact) === String(contId));
+            if(!c) return;
+            
+            currentContactId = contId;
+            document.getElementById('editContactPrenom').value = c.prenom || "";
+            document.getElementById('editContactNom').value = c.nom || "";
+            document.getElementById('editContactTel').value = c.tel || "";
+            document.getElementById('editContactMail').value = c.email || "";
+            
+            document.getElementById('contactEditModal').classList.add('modal-active');
+        }
+
+        async function saveContactChanges() {
+            const payload = {
+                action: 'updateContact',
+                id_contact: currentContactId,
+                prenom: document.getElementById('editContactPrenom').value,
+                nom: document.getElementById('editContactNom').value,
+                tel: document.getElementById('editContactTel').value,
+                email: document.getElementById('editContactMail').value
+            };
+            
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            closeContactEdit();
+            openDossier(currentId);
+            loadPartners(); 
+        }
+
+        function closeContactEdit() { document.getElementById('contactEditModal').classList.remove('modal-active'); }
+
+        // --- 5. AJOUT DE CONTACT & DOUBLONS ---
+        function openAddContact(idEnt = null) {
+            document.getElementById('addContactForm').reset();
+            if (idEnt) {
+                const ent = allPartners.find(p => String(ent.id) === String(idEnt));
+                document.getElementById('addContEntNom').value = ent.nom;
+                document.getElementById('addContEntNom').readOnly = true;
+                document.getElementById('addContEntId').value = ent.id;
+            } else {
+                document.getElementById('addContEntNom').readOnly = false;
+                document.getElementById('addContEntId').value = "";
+            }
+            document.getElementById('addContactModal').classList.add('modal-active');
+        }
+
+        function closeAddContact() { document.getElementById('addContactModal').classList.remove('modal-active'); }
+
+        async function submitNewContact() {
+            const payload = {
+                action: 'addPartner',
+                id_entreprise: document.getElementById('addContEntId').value,
+                nom_entreprise: document.getElementById('addContEntNom').value,
+                prenom: document.getElementById('addContPrenom').value,
+                nom: document.getElementById('addContNom').value,
+                mail1: document.getElementById('addContMail1').value,
+                mail2: document.getElementById('addContMail2').value,
+                tel1: document.getElementById('addContTel1').value,
+                tel2: document.getElementById('addContTel2').value
+            };
+
+            if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
+                return alert("Champs obligatoires : Nom Entreprise, Nom Contact, Mail Principal.");
+            }
+
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await res.json();
+            
+            if (result.success) {
+                alert("✅ " + result.message);
+                closeAddContact();
+                if(currentId) openDossier(currentId);
+                loadPartners();
+            } else {
+                alert("❌ ERREUR : " + result.message);
+            }
+        }
+
+        // --- 6. ALERTES ---
+        async function setQuickAlert(days) {
+            const d = new Date(); d.setDate(d.getDate() + days);
+            setAlert(d, (days === 1 ? "Demain" : "Dans " + days + " jours"));
+        }
+
+        async function setCustomAlert() {
+            const d = document.getElementById('alertCustomDate').value;
+            if(!d) return alert("Veuillez sélectionner une date.");
+            setAlert(new Date(d), "Date personnalisée");
+        }
+
+        async function setAlert(dateObj, freqLabel) {
+            const msg = prompt("Objet du rappel (ex: Relancer pour l'offre de com) :");
+            if(!msg) return;
+            
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ 
+                    action: 'setPartnerAlert', 
+                    id_entreprise: currentId, 
+                    date: dateObj.toISOString(), 
+                    msg: msg, 
+                    freq: freqLabel 
+                }) 
+            });
+            
+            alert("⏰ Relance programmée avec succès !");
+            closeDossier();
+            loadPartners();
+        }
+
+        // --- 7. FILTRES & EXPORT (NOUVELLE LOGIQUE) ---
+        function toggleFilter(type) {
+            if(type === 'alt') {
+                filterOnlyAlt = !filterOnlyAlt;
+                const btn = document.getElementById('btnFilterAlt');
+                btn.classList.toggle('bg-[#1A4E8A]', filterOnlyAlt);
+                btn.classList.toggle('text-white', filterOnlyAlt);
+            }
+            filterPartners();
+        }
+
+        function filterPartners() {
+            const s = document.getElementById('searchInput').value.toLowerCase();
+            const nbAltFilter = document.getElementById('filterNbAlt').value;
+
+            let data = allPartners.filter(p => (p.nom || "").toLowerCase().includes(s));
+            
+            // Filtre via le bouton "Alternants" (si on veut juste > 0)
+            if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
+
+            // Nouveau filtre déroulant (Nb Alternants)
+            if (nbAltFilter !== "all") {
+                data = data.filter(p => {
+                    const count = (p.alternants || []).length;
+                    if (nbAltFilter === "0") return count === 0;
+                    if (nbAltFilter === "1") return count === 1;
+                    if (nbAltFilter === "2+") return count >= 2;
+                    return true;
+                });
+            }
+
+            renderPartners(data);
+        }
+
+        function exportFilteredView() {
+            const s = document.getElementById('searchInput').value.toLowerCase();
+            const nbAltFilter = document.getElementById('filterNbAlt').value;
+
+            let data = allPartners.filter(p => (p.nom || "").toLowerCase().includes(s));
+            
+            if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
+
+            if (nbAltFilter !== "all") {
+                data = data.filter(p => {
+                    const count = (p.alternants || []).length;
+                    if (nbAltFilter === "0") return count === 0;
+                    if (nbAltFilter === "1") return count === 1;
+                    if (nbAltFilter === "2+") return count >= 2;
+                    return true;
+                });
+            }
+
+            downloadCSV(data, "HECG_Export_Filtre_Partenaires.csv");
+        }
+
+        function exportIndividualDossier() {
+            const ent = allPartners.find(p => ent.id === currentId);
+            downloadCSV([ent], "Dossier_" + (ent.nom || "Entreprise") + ".csv");
+        }
+
+        function downloadCSV(data, filename) {
+            let csv = "ID;Entreprise;Contact Principal;Email;Tel;Email2;Tel2;Alternants\n";
+            data.forEach(p => {
+                const c = p.contacts[0] || {};
+                const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
+                csv += `"${p.id}";"${p.nom}";"${c.prenom} ${c.nom}";"${c.email}";"${c.tel}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}"\n`;
+            });
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        // --- 8. ACTIONS GLOBALES ---
+        async function saveEnterpriseChanges() {
+            const newName = document.getElementById('editEntNom').value.trim();
+            if(!newName) return alert("Le nom ne peut pas être vide.");
+            
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ action: 'updateEnterprise', id_entreprise: currentId, nouveauNom: newName }) 
+            });
+            
+            loadPartners(); 
+            alert("✅ Nom de l'entreprise mis à jour.");
+        }
+
+        async function deleteEnterprise() {
+            if(!confirm("⚠️ ATTENTION : La suppression de l'entreprise supprimera également TOUS ses contacts. Confirmer ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteEnterprise', id_entreprise: currentId }) });
+            closeDossier();
+            loadPartners();
+        }
+
+        async function deleteContact(id_contact) {
+            if(!confirm("Supprimer ce contact ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteContact', id_contact: id_contact }) });
+            openDossier(currentId);
+            loadPartners();
+        }
+
+    </script>
+</body>
+</html>

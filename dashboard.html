@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HECG - Espace Étudiants</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-[#1A4E8A]">Base Étudiants</h1>
+                <p class="text-gray-400 text-sm font-bold" id="welcomeMsg">Chargement...</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="exportEtudiantsCSV()" class="bg-green-600 text-white px-5 py-3 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
+                <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter un étudiant</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-7 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-gray-400 uppercase">Élèves Affichés</p><p class="text-3xl font-black text-[#1A4E8A]" id="kpi-tot">0</p></div>
+                <div class="text-3xl">🎓</div>
+            </div>
+            <div class="bg-green-50 p-4 rounded-2xl shadow-sm border border-green-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-green-600 uppercase">En Alternance</p><p class="text-3xl font-black text-green-700" id="kpi-alt">0</p></div>
+                <div class="text-3xl">🏢</div>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-2xl shadow-sm border border-purple-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-purple-600 uppercase">En Initial</p><p class="text-3xl font-black text-purple-700" id="kpi-init">0</p></div>
+                <div class="text-3xl">🎒</div>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-2xl shadow-sm border border-orange-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-orange-600 uppercase">En Recherche</p><p class="text-3xl font-black text-orange-700" id="kpi-rech">0</p></div>
+                <div class="text-3xl">🔍</div>
+            </div>
+            <div class="bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-red-600 uppercase">Sorties / Refusés</p><p class="text-3xl font-black text-red-700" id="kpi-sorties">0</p></div>
+                <div class="text-3xl">❌</div>
+            </div>
+            
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Référent HECG</label>
+                <select id="filterReferent" onchange="renderTable()" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A] transition-colors text-xs">
+                    <option value="">Tous les référents</option>
+                </select>
+            </div>
+
+            <div class="flex items-end">
+                <button id="btnAlumni" onclick="toggleAlumni()" class="w-full py-3 px-4 border-2 border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                    🎓 Alumni
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-8 gap-4 items-center">
+            <div class="md:col-span-2 relative">
+                <input type="text" id="fSearch" onkeyup="renderTable()" placeholder="🔍 Chercher un nom ou prénom..." class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm bg-white outline-none focus:border-[#1A4E8A] font-bold">
+            </div>
+            
+            <select id="fTypo" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="actifs">✅ Actifs (Inscrits & Préinscrits)</option>
+                <option value="inscrit">🎓 Inscrits uniquement</option>
+                <option value="préinscrit">⏳ Préinscrits uniquement</option>
+                <option value="prospect">🎯 Prospects</option>
+                <option value="sortie">❌ Sorties (Archivés)</option>
+                <option value="tous">🌍 Tous</option>
+            </select>
+
+            <select id="fCampus" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="">🌍 Tous les campus</option>
+                <option value="HECG">📍 Marseille</option>
+                <option value="HECG_AIX">📍 Aix-en-Provence</option>
+            </select>
+
+            <select id="fClasse" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">🎓 Toutes les classes</option>
+            </select>
+
+            <select id="fStatut" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">🎯 Tous statuts</option>
+                <option value="recherche">🔍 En recherche</option>
+                <option value="alternance">🏢 En Alternance</option>
+                <option value="initial">🎒 En initial</option>
+            </select>
+
+            <select id="fAtelier" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">🛠️ Ateliers</option>
+                <option value="CV">✅ CV Fait</option>
+                <option value="LI">✅ LinkedIn Fait</option>
+                <option value="BOTH">⭐ Les deux Faits</option>
+            </select>
+
+            <select id="fPeriode" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">📞 Dernier échange</option>
+                <option value="7">🟢 < 7 jours</option>
+                <option value="30">🔴 > 30 jours</option>
+                <option value="NEVER">⚪ Jamais</option>
+            </select>
+
+            <button onclick="resetFilters()" class="col-span-full md:col-span-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-black text-[10px] hover:bg-gray-200 transition uppercase tracking-widest">
+                🔄 Reset
+            </button>
+        </div>
+
+        <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement de la base HECG...</div>
+        
+        <div id="tableContainer" class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-400 text-[10px] uppercase tracking-widest font-black">
+                        <tr>
+                            <th class="p-5 border-b">Étudiant & Entreprise</th>
+                            <th class="p-5 border-b">Classe / Typo</th>
+                            <th class="p-5 border-b">Statut Actuel</th>
+                            <th class="p-5 border-b">Dernier Échange</th>
+                            <th class="p-5 border-b text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentList" class="divide-y divide-gray-50"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="etuModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 w-full max-w-4xl overflow-y-auto max-h-[95vh] custom-scrollbar">
+            
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 id="modalTitle" class="text-2xl font-black text-[#1A4E8A]">Fiche Étudiant</h2>
+                <button onclick="closeModal()" class="text-gray-300 hover:text-red-500 font-bold text-3xl transition">&times;</button>
+            </div>
+            
+            <input type="hidden" id="formId">
+            <input type="hidden" id="formIdEnt">
+            <input type="hidden" id="formIdCont">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Nom *</label><input type="text" id="formNom" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-gray-50 font-bold outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Prénom *</label><input type="text" id="formPrenom" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-gray-50 font-bold outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Email</label><input type="email" id="formMail" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Téléphone</label><input type="text" id="formTel" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-orange-50 p-5 rounded-3xl border-2 border-orange-100">
+                        <label class="block text-[10px] uppercase font-black text-orange-600 mb-2 ml-1">🏢 Entreprise B2B (Datalist)</label>
+                        <input list="tuteursList" id="formTuteurSelect" onchange="updateEnterpriseInfo()" placeholder="Tapez le nom..." class="w-full border-2 border-orange-200 p-3 rounded-2xl bg-white font-bold text-sm outline-none focus:border-orange-500 shadow-sm">
+                        <datalist id="tuteursList"></datalist>
+                        <p id="displayEntName" class="mt-2 text-[10px] font-black text-[#1A4E8A] hidden"></p>
+                    </div>
+                    <div class="bg-blue-50 p-5 rounded-3xl border-2 border-blue-100">
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-2 ml-1">👨‍🏫 Référent Pédagogique</label>
+                        <select id="formReferent" class="w-full border-2 border-blue-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A] shadow-sm">
+                            <option value="">-- Non assigné --</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-6 rounded-3xl">
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-1 ml-2">Campus</label>
+                        <select id="formCampus" class="w-full border-2 border-blue-100 p-2 rounded-xl text-sm font-bold bg-blue-50 outline-none mb-2 focus:border-[#1A4E8A]">
+                            <option value="">-- Sans Campus --</option>
+                            <option value="HECG">📍 Marseille</option>
+                            <option value="HECG_AIX">📍 Aix-en-Provence</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Classe</label>
+                        <select id="formClasse" class="w-full border-2 border-gray-200 p-2 rounded-xl text-sm font-bold bg-white outline-none mb-2"></select>
+                        <input type="text" id="formNewClasse" placeholder="Ou tapez une nouvelle classe..." class="w-full border-2 border-gray-100 p-2 rounded-xl text-xs font-bold outline-none focus:border-[#1A4E8A]">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-1 ml-2">Statut Employabilité</label>
+                        <select id="formStatut" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500">
+                            <option value="En recherche">🔍 En recherche</option>
+                            <option value="En Alternance">🏢 En Alternance</option>
+                            <option value="En Initial">🎒 En Initial</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-gray-500 mb-1 ml-2">Forcer Typologie</label>
+                        <select id="formForceTypo" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none">
+                            <option value="Auto">✨ Automatique</option>
+                            <option value="Prospect">🎯 Prospect</option>
+                            <option value="Préinscrit">⏳ Préinscrit</option>
+                            <option value="Attente">⏳ En Attente</option>
+                            <option value="Refusé">❌ Refusé</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-green-50 p-6 rounded-3xl border border-green-100">
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">Atelier CV</label>
+                        <select id="formFaitCV" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
+                            <option value="Non">Non fait</option>
+                            <option value="Oui">Fait ✅</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">Atelier LinkedIn</label>
+                        <select id="formFaitLI" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
+                            <option value="Non">Non fait</option>
+                            <option value="Oui">Fait ✅</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">CV (Upload PDF)</label>
+                        <input type="file" id="formCVFile" accept=".pdf" class="w-full text-[10px] font-bold bg-white p-2 rounded-xl shadow-sm cursor-pointer border border-green-200">
+                        <input type="hidden" id="formCVUrl">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+                    <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Entrée (Texte)</label><input type="text" id="formEntree" placeholder="ex: Rentrée 2026" class="w-full border p-3 rounded-xl bg-gray-50 text-xs font-bold outline-none"></div>
+                    <div><label class="block text-[10px] uppercase font-black text-red-400 mb-1">Date Sortie réelle</label><input type="date" id="formSortie" class="w-full border border-red-200 p-3 rounded-xl bg-red-50 text-xs font-bold outline-none"></div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-red-400 mb-1">Motif (Si sortie)</label>
+                        <select id="formMotif" class="w-full border border-red-200 p-3 rounded-xl text-xs font-bold bg-red-50 outline-none">
+                            <option value="">-- Aucun --</option>
+                            <option value="Démotivation">Démotivation</option>
+                            <option value="Niveau trop haut">Niveau trop haut</option>
+                            <option value="Départ Concurrence">Départ Concurrence</option>
+                            <option value="Diplôme Echoué">Diplôme Echoué</option>
+                            <option value="Fin de parcours / Diplôme obtenu">Fin de parcours / Diplôme obtenu</option>
+                            <option value="Perte/Pas d'alternance">Perte/Pas d'alternance</option>
+                            <option value="Raison financière">Raison financière</option>
+                            <option value="Réorientation">Réorientation</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-10 flex justify-end space-x-3 pt-6 border-t">
+                <button onclick="closeModal()" class="px-8 py-3 text-gray-400 font-black hover:bg-gray-100 rounded-2xl transition">Annuler</button>
+                <button onclick="saveStudent()" id="btnSave" class="px-10 py-3 bg-[#1A4E8A] text-white font-black rounded-2xl shadow-xl hover:bg-blue-800 transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        
+        let fullData = [];
+        let catalogueTuteurs = [];
+        let catalogueReferents = [];
+        let user = null;
+        let showAlumniOnly = false; // Variable du bouton Alumni
+
+        window.onload = () => {
+            try {
+                const stored = localStorage.getItem('user');
+                if (stored) {
+                    user = JSON.parse(stored);
+                    
+                    // --- 🔴 SÉCURITÉ : REDIRECTION DES ÉTUDIANTS ---
+                    // Si l'utilisateur est un étudiant, on le bloque et on l'envoie sur son dossier
+                    if (user.role === 'Etudiant') {
+                        window.location.href = 'dossier.html';
+                        return; // On arrête l'affichage du tableau de bord
+                    }
+                    
+                    document.getElementById('welcomeMsg').innerText = "Ravi de vous voir, " + (user.nom || "Collaborateur");
+                    loadDashboardData();
+                } else { window.location.href = 'index.html'; }
+            } catch(e) { window.location.href = 'index.html'; }
+        };
+        // --- 1. CHARGEMENT DONNÉES ---
+        async function loadDashboardData() {
+            try {
+                const [resE, resP] = await Promise.all([
+    fetch(API_URL, { 
+        method: 'POST', 
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: 'getDashboardData', role: user.role, userId: user.ref }) 
+    }),
+    fetch(API_URL, { 
+        method: 'POST', 
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: 'getPartners' }) 
+    })
+]);
+
+                const dataE = await resE.json();
+                const dataP = await resP.json();
+                
+                if (dataE.success) {
+                    fullData = dataE.data;
+                    catalogueReferents = dataE.referents || [];
+                    catalogueTuteurs = dataP.success ? dataP.data : [];
+                    
+                    setupSelectors();
+                    renderTable();
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('tableContainer').classList.remove('hidden');
+                }
+            } catch (e) { 
+                console.error(e);
+                document.getElementById('loader').innerText = "Erreur de connexion serveur.";
+            }
+        }
+
+        // --- 2. GESTION DES MENUS ---
+        function setupSelectors() {
+            const classes = [...new Set(fullData.map(e => e.classe).filter(Boolean))].sort();
+            
+            const fCl = document.getElementById('fClasse');
+            if(fCl) fCl.innerHTML = '<option value="">🎓 Toutes les classes</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+            
+            const formCl = document.getElementById('formClasse');
+            if(formCl) formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+
+            // Remplissage du select de Création/Modif étudiant
+            const refSelect = document.getElementById('formReferent');
+            if(refSelect) {
+                refSelect.innerHTML = '<option value="">-- Non assigné --</option>' + 
+                    catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+            }
+
+            // Remplissage du filtre rapide par Référent
+            const filterRef = document.getElementById('filterReferent');
+            if(filterRef) {
+                filterRef.innerHTML = '<option value="">Tous les référents</option>' + 
+                    catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+            }
+
+            let listHtml = '';
+            catalogueTuteurs.forEach(ent => {
+                const nom = ent.nom || ent.entreprise;
+                const idEnt = ent.id || ent.id_ent;
+                if(ent.contacts && ent.contacts.length > 0) {
+                    ent.contacts.forEach(c => { listHtml += `<option value="${idEnt}|${c.id_contact}|${nom}">${nom} - Contact: ${c.nom}</option>`; });
+                } else {
+                    listHtml += `<option value="${idEnt}||${nom}">${nom} (Aucun contact)</option>`;
+                }
+            });
+            document.getElementById('tuteursList').innerHTML = listHtml;
+        }
+
+        function updateEnterpriseInfo() {
+            const val = document.getElementById('formTuteurSelect').value;
+            const display = document.getElementById('displayEntName');
+            if(val && val.includes('|')) {
+                const [idEnt, idCont, nomEnt] = val.split('|');
+                document.getElementById('formIdEnt').value = idEnt;
+                document.getElementById('formIdCont').value = idCont;
+                display.innerText = "Assigné chez : " + nomEnt;
+                display.classList.remove('hidden');
+            } else {
+                document.getElementById('formIdEnt').value = "";
+                document.getElementById('formIdCont').value = "";
+                display.classList.add('hidden');
+            }
+        }
+
+        // --- GESTION DU BOUTON ALUMNI ---
+        function toggleAlumni() {
+            showAlumniOnly = !showAlumniOnly;
+            const btn = document.getElementById('btnAlumni');
+            
+            if(showAlumniOnly) {
+                btn.classList.replace('border-slate-200', 'border-[#1A4E8A]');
+                btn.classList.replace('text-slate-500', 'text-[#1A4E8A]');
+                btn.classList.add('bg-blue-50');
+            } else {
+                btn.classList.replace('border-[#1A4E8A]', 'border-slate-200');
+                btn.classList.replace('text-[#1A4E8A]', 'text-slate-500');
+                btn.classList.remove('bg-blue-50');
+            }
+            renderTable();
+        }
+
+        // --- 3. FILTRES & TABLEAU & KPI ---
+        function getFilteredData() {
+            const fSe = document.getElementById('fSearch').value.toLowerCase();
+            const fTy = document.getElementById('fTypo').value;
+            const fCl = document.getElementById('fClasse').value;
+            const fSt = document.getElementById('fStatut').value.toLowerCase();
+            const fAt = document.getElementById('fAtelier').value;
+            const fPe = document.getElementById('fPeriode').value;
+            const fCa = document.getElementById('fCampus') ? document.getElementById('fCampus').value : "";
+            const fRef = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
+            const now = new Date();
+
+            return fullData.filter(e => {
+                // 1. LOGIQUE ALUMNI (PRIORITAIRE)
+                // Si le bouton Alumni est activé, on court-circuite le filtre "Actifs"
+                if (showAlumniOnly) {
+                    let motifLow = String(e.motif || "").toLowerCase();
+                    // Tolérance maximale : on cherche juste "dipl" et "obtenu" pour ignorer les accents
+                    let isAlumni = motifLow.includes("dipl") && motifLow.includes("obtenu");
+                    
+                    // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
+                    const matchName = (e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                    const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                    const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
+                    
+                    return isAlumni && matchName && matchCampus && matchReferent;
+                }
+
+                // 2. LOGIQUE CLASSIQUE (Quand le bouton Alumni est éteint)
+                let matchTypo = false;
+                const typoLow = (e.typo || "").toLowerCase();
+                
+                if (fTy === "tous") matchTypo = true;
+                else if (fTy === "actifs") matchTypo = (typoLow === "inscrit" || typoLow === "préinscrit");
+                else if (fTy === "inscrit") matchTypo = (typoLow === "inscrit");
+                else if (fTy === "préinscrit") matchTypo = (typoLow === "préinscrit");
+                else if (fTy === "prospect") matchTypo = (typoLow === "prospect");
+                else if (fTy === "sortie") matchTypo = (typoLow === "sortie" || typoLow === "refusé");
+
+                // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
+                if (fSe.length > 2) matchTypo = true;
+
+                const matchName = (e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                const matchClass = !fCl || (e.classe && e.classe === fCl);
+                const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
+                
+                let matchAt = true;
+                if(fAt === "CV") matchAt = e.faitCV === "Oui";
+                if(fAt === "LI") matchAt = e.faitLI === "Oui";
+                if(fAt === "BOTH") matchAt = e.faitCV === "Oui" && e.faitLI === "Oui";
+
+                let matchPe = true;
+                if (fPe) {
+                    if (fPe === "NEVER") {
+                        matchPe = !e.dernierEchange;
+                    } else if (!e.dernierEchange) {
+                        // Si on cherche une période mais qu'il n'y a pas de date, on cache
+                        matchPe = false;
+                    } else {
+                        const diff = (now - new Date(e.dernierEchange)) / (1000 * 3600 * 24);
+                        if (fPe === "7") matchPe = diff <= 7;
+                        if (fPe === "30") matchPe = diff >= 30;
+                    }
+                }
+                
+                const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
+
+                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchPe && matchCampus && matchReferent;
+            });
+        }
+        function renderTable() {
+            const filtered = getFilteredData();
+
+            // MISE À JOUR DES 5 KPI DYNAMIQUES
+            let countAlt = 0, countInit = 0, countRech = 0, countSorties = 0;
+            filtered.forEach(e => {
+                const s = (e.statut || "").toLowerCase();
+                const t = (e.typo || "").toLowerCase();
+
+                if(s.includes('alternance') || s.includes('placé') || s.includes('poste')) countAlt++;
+                else if(s.includes('initial')) countInit++;
+                else countRech++;
+
+                if(t === 'sortie' || t === 'refusé') countSorties++;
+            });
+            
+            document.getElementById('kpi-tot').innerText = filtered.length;
+            document.getElementById('kpi-alt').innerText = countAlt;
+            document.getElementById('kpi-init').innerText = countInit;
+            document.getElementById('kpi-rech').innerText = countRech;
+            document.getElementById('kpi-sorties').innerText = countSorties;
+
+            const list = document.getElementById('studentList');
+            if(!list) return;
+
+            list.innerHTML = filtered.map(e => {
+                // BADGE STATUT DYNAMIQUE
+                let badgeStatut = '';
+                const stLow = (e.statut || "").toLowerCase();
+                if (stLow.includes('alternance') || stLow.includes('placé') || stLow.includes('poste')) {
+                    badgeStatut = `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-green-200 shadow-sm">🏢 En Alternance</span>`;
+                } else if (stLow.includes('initial')) {
+                    badgeStatut = `<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-purple-200 shadow-sm">🎒 En Initial</span>`;
+                } else {
+                    badgeStatut = `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-orange-200 shadow-sm">🔍 En recherche</span>`;
+                }
+
+                return `
+                <tr class="hover:bg-blue-50/30 transition group border-b">
+                    <td class="p-5">
+                        <div class="font-black text-slate-800 text-sm">${e.nom} ${e.prenom}</div>
+                        <div class="text-[10px] font-bold mt-1 text-orange-500">${e.entreprise || '<span class="text-slate-300 italic font-medium">Sans entreprise</span>'}</div>
+                        <div class="text-[9px] font-black mt-1 uppercase tracking-widest ${e.campus === 'HECG_AIX' ? 'text-purple-600' : 'text-[#1A4E8A]'}">${e.campus === 'HECG_AIX' ? '📍 Aix-en-Provence' : (e.campus === 'HECG' ? '📍 Marseille' : '')}</div>
+                    </td>
+                    <td class="p-5">
+                        <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' || e.typo === 'Refusé' ? 'text-red-500' : ''}">${e.typo || 'Prospect'}</div>
+                    </td>
+                    <td class="p-5">${badgeStatut}</td>
+                    <td class="p-5 text-[10px] font-bold text-slate-500">
+                        ${e.dernierEchange ? new Date(e.dernierEchange).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'}) : '<span class="text-gray-300">Jamais</span>'}
+                    </td>
+                    <td class="p-5 text-center flex justify-center space-x-2">
+                        <a href="dossier.html?id=${e.id}" target="_blank" class="bg-slate-100 text-[#1A4E8A] px-4 py-2 rounded-xl text-[10px] font-black hover:bg-[#1A4E8A] hover:text-white transition uppercase">Dossier</a>
+                        <button onclick="openModal('${e.id}')" class="text-slate-300 hover:text-orange-500 transition-colors text-lg">✏️</button>
+                    </td>
+                </tr>
+                `;
+            }).join('') || '<tr><td colspan="5" class="p-10 text-center text-slate-300 font-bold italic">Aucun résultat trouvé.</td></tr>';
+        }
+
+        function resetFilters() {
+            document.getElementById('fSearch').value = "";
+            document.getElementById('fTypo').value = "actifs";
+            document.getElementById('fClasse').value = "";
+            document.getElementById('fStatut').value = "";
+            document.getElementById('fAtelier').value = "";
+            document.getElementById('fPeriode').value = "";
+            if(document.getElementById('fCampus')) document.getElementById('fCampus').value = "";
+            if(document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
+            
+            // Remise à zéro du bouton Alumni
+            if (showAlumniOnly) {
+                toggleAlumni(); // Cela va aussi déclencher renderTable()
+            } else {
+                renderTable();
+            }
+        }
+
+        // --- 4. MODALE & SAUVEGARDE ---
+        function openModal(id = null) {
+            document.getElementById('etuModal').classList.replace('hidden', 'flex');
+            
+            if(id) {
+                const e = fullData.find(x => x.id === id);
+                document.getElementById('modalTitle').innerText = "Modifier Étudiant";
+                document.getElementById('formId').value = e.id;
+                document.getElementById('formNom').value = e.nom;
+                document.getElementById('formPrenom').value = e.prenom;
+                document.getElementById('formMail').value = e.mail || "";
+                document.getElementById('formTel').value = e.tel || "";
+                
+                document.getElementById('formReferent').value = e.refPerso || "";
+                if(e.entreprise) {
+                    document.getElementById('formTuteurSelect').value = `${e.id_ent || ''}|${e.id_cont || ''}|${e.entreprise}`;
+                    updateEnterpriseInfo();
+                } else { document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo(); }
+
+                document.getElementById('formClasse').value = e.classe || "";
+                if(document.getElementById('formCampus')) document.getElementById('formCampus').value = e.campus || "";
+                document.getElementById('formNewClasse').value = "";
+                
+                document.getElementById('formStatut').value = e.statut || "En recherche";
+                document.getElementById('formForceTypo').value = (["Refusé", "Attente", "Prospect", "Préinscrit", "Sortie"].includes(e.typo)) ? e.typo : "Auto";
+                
+                document.getElementById('formFaitCV').value = e.faitCV || "Non";
+                document.getElementById('formFaitLI').value = e.faitLI || "Non";
+                document.getElementById('formCVUrl').value = e.cv || ""; 
+                document.getElementById('formCVFile').value = ""; 
+                
+                // On nettoie la date pour enlever le format moche T22:00:00Z s'il existe
+                if (e.entree && String(e.entree).includes('T')) {
+                    document.getElementById('formEntree').value = String(e.entree).split('T')[0];
+                } else {
+                    document.getElementById('formEntree').value = e.entree || "";
+                }
+                if(e.sortie) {
+                    try { document.getElementById('formSortie').value = new Date(e.sortie).toISOString().split('T')[0]; } 
+                    catch(err) { document.getElementById('formSortie').value = ""; }
+                } else document.getElementById('formSortie').value = "";
+                document.getElementById('formMotif').value = e.motif || "";
+            } else {
+                document.getElementById('modalTitle').innerText = "Nouvel Étudiant";
+                document.getElementById('formId').value = "";
+                document.getElementById('formNom').value = "";
+                document.getElementById('formPrenom').value = "";
+                document.getElementById('formMail').value = "";
+                document.getElementById('formTel').value = "";
+                document.getElementById('formReferent').value = user.ref || ""; 
+                document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
+                document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
+                if(document.getElementById('formCampus')) document.getElementById('formCampus').value = "";
+                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Auto";
+                document.getElementById('formFaitCV').value = "Non"; document.getElementById('formFaitLI').value = "Non";
+                document.getElementById('formCVUrl').value = ""; document.getElementById('formCVFile').value = "";
+                document.getElementById('formEntree').value = ""; document.getElementById('formSortie').value = ""; document.getElementById('formMotif').value = "";
+            }
+        }
+
+        function closeModal() { document.getElementById('etuModal').classList.replace('flex', 'hidden'); }
+
+        async function saveStudent() {
+    const btn = document.getElementById('btnSave');
+    const idValue = document.getElementById('formId').value.trim();
+    
+    btn.disabled = true; 
+    btn.innerText = "Traitement...";
+
+    let finalCvUrl = document.getElementById('formCVUrl').value;
+    const cvFile = document.getElementById('formCVFile').files[0];
+
+    // Upload CV
+    if (cvFile) {
+        btn.innerText = "Upload du CV...";
+        try {
+            const base64 = await new Promise(r => { 
+                const reader = new FileReader(); 
+                reader.onload = e => r(e.target.result.split(',')[1]); 
+                reader.readAsDataURL(cvFile); 
+            });
+            const uploadRes = await fetch(API_URL, { 
+                method: 'POST', 
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'uploadCV', userId: idValue || 'NOUVEAU', fileName: `CV_${document.getElementById('formNom').value}.pdf`, mimeType: cvFile.type, base64Data: base64 }) 
+            });
+            const uploadData = await uploadRes.json();
+            if(uploadData.success) finalCvUrl = uploadData.url;
+        } catch(e) { console.error("Upload fail"); }
+    }
+
+    let finalNomEnt = document.getElementById('formTuteurSelect').value;
+    if(finalNomEnt.includes('|')) finalNomEnt = finalNomEnt.split('|')[2];
+    const finalClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
+
+    // LE COLIS (Payload)
+    const payload = {
+        action: idValue ? 'updateStudent' : 'addStudent',
+        id_etu: idValue,
+        nom: document.getElementById('formNom').value.trim(), 
+        prenom: document.getElementById('formPrenom').value.trim(),
+        mail: document.getElementById('formMail').value.trim(), 
+        tel: document.getElementById('formTel').value.trim(),
+        cv: finalCvUrl,
+        entreprise: finalNomEnt, 
+        id_ent: document.getElementById('formIdEnt').value, 
+        id_cont: document.getElementById('formIdCont').value,
+        classe: finalClasse,
+        campus: document.getElementById('formCampus') ? document.getElementById('formCampus').value : "",
+        statut: document.getElementById('formStatut').value, 
+        forceTypo: document.getElementById('formForceTypo').value,
+        faitCV: document.getElementById('formFaitCV').value, 
+        faitLI: document.getElementById('formFaitLI').value,
+        entree: document.getElementById('formEntree').value.trim(), 
+        sortie: document.getElementById('formSortie').value, 
+        motifSortie: document.getElementById('formMotif').value,
+        refPerso: document.getElementById('formReferent').value
+    };
+
+    btn.innerText = "Sauvegarde...";
+
+    try {
+        // On envoie et on ignore l'erreur CORS (le 200 OK suffit)
+        await fetch(API_URL, { 
+            method: 'POST', 
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload) 
+        });
+    } catch (erreur) {
+        console.log("Note: Erreur d'affichage CORS ignorée (Envoi OK).");
+    } finally {
+        closeModal();
+        btn.disabled = false; 
+        btn.innerText = "Enregistrer";
+        // On attend 3 secondes que Google finisse d'écrire avant de rafraîchir
+        setTimeout(() => { loadDashboardData(); }, 3000); 
+    }
+}
+
+        // EXPORT COMPLET (Synchronisé avec les filtres affichés)
+        function exportEtudiantsCSV() {
+            let csv = "Nom;Prenom;Mail Etudiant;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Dernier Echange\n";
+            
+            // On récupère les données exactes qui sont affichées (filtrées)
+            const filteredData = getFilteredData();
+
+            filteredData.forEach(e => {
+                let mail1 = "", tel1 = "", mail2 = "", tel2 = "";
+                if (e.id_ent && catalogueTuteurs) {
+                    const ent = catalogueTuteurs.find(t => String(t.id || t.id_ent) === String(e.id_ent));
+                    if (ent && ent.contacts) {
+                        const cont = ent.contacts.find(c => String(c.id_contact) === String(e.id_cont));
+                        if (cont) { mail1 = cont.email || ""; tel1 = cont.tel || ""; mail2 = cont.mail2 || ""; tel2 = cont.tel2 || ""; }
+                    }
+                }
+                const dateEch = e.dernierEchange ? new Date(e.dernierEchange).toLocaleDateString('fr-FR') : '';
+                csv += `"${e.nom}";"${e.prenom}";"${e.mail || ''}";"${e.tel || ''}";"${e.classe || ''}";"${e.statut || ''}";"${e.typo || ''}";"${e.entreprise || ''}";"${mail1}";"${tel1}";"${mail2}";"${tel2}";"${dateEch}"\n`;
+            });
+
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "Export_HECG_Etudiants_Filtres.csv"; link.click();
+        }
+    </script>
+</body>
+</html>

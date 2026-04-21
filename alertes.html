@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>HECG - Suivi des Alertes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 border-b-2 border-orange-500 pb-1">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com / Evénements</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes Auto</a>
+            </div>
+        </div>
+        <button onclick="window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="mb-10">
+            <h1 class="text-3xl font-black text-gray-800">Mes Relances & Alertes</h1>
+            <p class="text-gray-400 text-sm mt-1">N'oubliez plus jamais de recontacter un partenaire.</p>
+        </div>
+
+        <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A] animate-pulse">Chargement de vos alertes...</div>
+        <div id="alertGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+    </main>
+
+    <div id="editAlertModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-2xl font-black text-[#1A4E8A] mb-6">✏️ Modifier l'alerte</h2>
+            <input type="hidden" id="editAlertId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black uppercase text-gray-400 mb-1">Date Prévue</label>
+                    <input type="date" id="editAlertDate" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
+                </div>
+                <div>
+                    <label class="block text-xs font-black uppercase text-gray-400 mb-1">Fréquence</label>
+                    <select id="editAlertFreq" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
+                        <option value="Unique">Une seule fois</option>
+                        <option value="Hebdomadaire">Hebdomadaire</option>
+                        <option value="Mensuelle">Mensuelle</option>
+                        <option value="Trimestrielle">Trimestrielle</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-black uppercase text-gray-400 mb-1">Email du Destinataire</label>
+                    <input type="email" id="editAlertDest" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
+                </div>
+                <div>
+                    <label class="block text-xs font-black uppercase text-gray-400 mb-1">Message / Contexte</label>
+                    <textarea id="editAlertMsg" rows="4" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A] custom-scrollbar"></textarea>
+                </div>
+            </div>
+            <div class="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-4">
+                <button onclick="closeEditAlert()" class="px-6 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="saveEditAlert()" id="btnSaveAlert" class="px-6 py-3 bg-[#1A4E8A] text-white font-black rounded-xl shadow-md hover:bg-blue-800 transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ⚠️ Remplacer par votre lien API 
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
+
+        async function loadAlerts() {
+            document.getElementById('loader').classList.remove('hidden');
+            document.getElementById('alertGrid').classList.add('hidden');
+
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllAlerts' }) });
+                const d = await res.json();
+                
+                if (d.success) {
+                    renderAlerts(d.data);
+                } else {
+                    alert("Erreur lors du chargement : " + d.message);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('alertGrid').classList.remove('hidden');
+            }
+        }
+
+        function renderAlerts(data) {
+            const grid = document.getElementById('alertGrid');
+            
+            if (data.length > 0) {
+                grid.innerHTML = data.map(a => {
+                    const dateObj = new Date(a.dateRaw);
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    const isRetard = dateObj < today;
+                    const isToday = dateObj.getTime() === today.getTime();
+                    
+                    let badgeDate = `<span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-black">📅 ${a.date}</span>`;
+                    if (isRetard) badgeDate = `<span class="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-black shadow-sm">⚠️ Retard (${a.date})</span>`;
+                    else if (isToday) badgeDate = `<span class="px-3 py-1 bg-orange-100 text-orange-600 rounded-full text-xs font-black shadow-sm">🔥 Aujourd'hui</span>`;
+
+                    // Formatage pour l'input date (YYYY-MM-DD) et sécurité pour les guillemets dans le message
+                    const dateInputFormat = dateObj.toISOString().split('T')[0];
+                    const msgSafe = a.msg.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, "\\n");
+
+                    return `
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border ${isRetard ? 'border-red-200' : 'border-gray-100'} hover:shadow-lg transition flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-4">
+                                ${badgeDate}
+                                <a href="dossier_partenaire.html?id=${a.partId}" target="_blank" class="p-2 bg-gray-50 text-[#1A4E8A] rounded-lg border font-bold text-[10px] hover:bg-blue-50 transition" title="Ouvrir le dossier partenaire">📂 DOSSIER</a>
+                            </div>
+                            <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2 truncate">${a.nomPartenaire}</h3>
+                            <p class="text-sm font-bold text-gray-500 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100 h-24 overflow-y-auto custom-scrollbar">${a.msg}</p>
+                        </div>
+                        
+                        <div class="flex justify-between items-center border-t border-gray-100 pt-4">
+                            <span class="text-[10px] font-bold text-gray-400 bg-white border px-2 py-1 rounded-md shadow-sm">🔁 ${a.freq}</span>
+                            
+                            <div class="flex space-x-1">
+                                <button onclick="testAlert('${a.id}')" class="p-2 text-gray-400 hover:text-orange-500 bg-gray-50 rounded-lg hover:bg-orange-50 transition" title="Tester (Mail à M. Mokhtari)">⚡</button>
+                                <button onclick="openEditAlert('${a.id}', '${dateInputFormat}', '${msgSafe}', '${a.freq}', '${a.destinataire || "m.mokhtari@hecg.fr"}')" class="p-2 text-gray-400 hover:text-blue-500 bg-gray-50 rounded-lg hover:bg-blue-50 transition" title="Modifier">✏️</button>
+                                <button onclick="cancelAlert('${a.id}')" class="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-lg hover:bg-red-50 transition" title="Annuler l'alerte">❌</button>
+                                <button onclick="completeAlert('${a.id}')" class="px-3 py-2 bg-[#F26522] text-white rounded-lg font-black text-[10px] uppercase hover:scale-105 transition shadow-sm ml-1">✔ Traitée</button>
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+            } else {
+                grid.innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm"><p class="text-2xl font-black text-gray-300 mb-2">🎉 Excellente nouvelle !</p><p class="text-gray-400 font-bold">Vous n\'avez aucune relance en attente.</p></div>';
+            }
+        }
+
+        // --- ACTIONS SUR LES ALERTES ---
+
+        async function completeAlert(alertId) {
+            if(!confirm("Avez-vous bien traité cette alerte ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'completeAlert', id: alertId }) });
+            loadAlerts();
+        }
+
+        async function testAlert(alertId) {
+            if(!confirm("Envoyer un mail de test à m.mokhtari@hecg.fr ?")) return;
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testAlert', id: alertId }) });
+            const d = await res.json();
+            alert(d.message);
+        }
+
+        async function cancelAlert(alertId) {
+            if(!confirm("Voulez-vous vraiment annuler cette alerte de manière définitive ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelAlert', id: alertId }) });
+            loadAlerts();
+        }
+
+        // --- MODIFICATION ---
+
+        function openEditAlert(id, date, msg, freq, destinataire) {
+            document.getElementById('editAlertId').value = id;
+            document.getElementById('editAlertDate').value = date;
+            document.getElementById('editAlertDest').value = destinataire || "m.mokhtari@hecg.fr";
+            document.getElementById('editAlertMsg').value = msg;
+            document.getElementById('editAlertFreq').value = freq;
+            document.getElementById('editAlertModal').classList.replace('hidden', 'flex');
+        }
+
+        function closeEditAlert() {
+            document.getElementById('editAlertModal').classList.replace('flex', 'hidden');
+        }
+
+        async function saveEditAlert() {
+            const btn = document.getElementById('btnSaveAlert');
+            btn.innerText = "Enregistrement..."; btn.disabled = true;
+
+            const payload = {
+                action: 'updateAlert',
+                id: document.getElementById('editAlertId').value,
+                date: document.getElementById('editAlertDate').value,
+                destinataire: document.getElementById('editAlertDest').value,
+                msg: document.getElementById('editAlertMsg').value,
+                freq: document.getElementById('editAlertFreq').value
+            };
+
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            
+            btn.innerText = "Enregistrer"; btn.disabled = false;
+            closeEditAlert();
+            loadAlerts();
+        }
+
+        // Chargement initial
+        loadAlerts();
+    </script>
+</body>
+</html>

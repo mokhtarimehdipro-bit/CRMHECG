@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>HECG - Vivier Prospects</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Entreprises</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Stats</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Campagnes</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Com & Événements</a>
+                <a href="prospects.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1 whitespace-nowrap">Prospects</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50 transition">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl font-black text-gray-800 tracking-tight">Vivier Prospects & Inscrits Événements</h1>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A]">Chargement de la base prospects...</div>
+            <table class="w-full text-left hidden" id="prospectsTable">
+                <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-bold">
+                    <tr><th class="p-4 border-b">Identité</th><th class="p-4 border-b">Coordonnées</th><th class="p-4 border-b">Source (Événement)</th><th class="p-4 border-b text-center">Action</th></tr>
+                </thead>
+                <tbody id="prospectList" class="divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+
+        async function loadProspects() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getProspects' }) });
+            const data = await res.json();
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('prospectsTable').classList.remove('hidden');
+
+            if(data.success) {
+                document.getElementById('prospectList').innerHTML = data.data.map(p => `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="p-4 font-bold text-gray-800">${p.nom} ${p.prenom}</td>
+                        <td class="p-4 text-sm"><a href="mailto:${p.mail}" class="text-blue-500 font-bold hover:underline">${p.mail}</a><br><span class="text-gray-400 font-mono">${p.tel}</span></td>
+                        <td class="p-4"><span class="bg-orange-50 text-orange-600 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wide">${p.source}</span></td>
+                        <td class="p-4 text-center">
+                            <button onclick="deleteProspect('${p.id}')" class="text-red-400 hover:text-red-600 font-bold text-sm">Supprimer</button>
+                        </td>
+                    </tr>
+                `).join('') || `<tr><td colspan="4" class="p-8 text-center text-gray-400 italic font-bold">Aucun prospect dans le vivier.</td></tr>`;
+            }
+        }
+
+        async function deleteProspect(id) {
+            if(confirm("Supprimer ce prospect définitivement ?")) {
+                await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id }) });
+                loadProspects();
+            }
+        }
+
+        loadProspects();
+    </script>
+</body>
+</html>

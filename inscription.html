@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Inscription HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-10 rounded-[35px] shadow-2xl w-full max-w-md border-t-8 border-[#F26522]">
+        <div class="text-center mb-8">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" class="h-16 mx-auto mb-4">
+            <h1 class="text-2xl font-black text-[#1A4E8A]">Validation de présence</h1>
+            <p class="text-gray-400 text-sm font-medium mt-1">Merci de remplir vos coordonnées pour vous inscrire à cet événement HECG.</p>
+        </div>
+        
+        <form id="regForm" class="space-y-4">
+            <input type="hidden" id="eventId" value="<?= eventId ?>">
+            <div><label class="block text-xs font-black uppercase text-gray-400 mb-1">Nom</label>
+            <input type="text" id="nom" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl outline-none focus:ring-4 focus:ring-orange-100 transition" required></div>
+            <div><label class="block text-xs font-black uppercase text-gray-400 mb-1">Prénom</label>
+            <input type="text" id="prenom" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl outline-none focus:ring-4 focus:ring-orange-100 transition" required></div>
+            <div><label class="block text-xs font-black uppercase text-gray-400 mb-1">Email</label>
+            <input type="email" id="email" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl outline-none focus:ring-4 focus:ring-orange-100 transition" required></div>
+            <div><label class="block text-xs font-black uppercase text-gray-400 mb-1">Téléphone</label>
+            <input type="tel" id="tel" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl outline-none focus:ring-4 focus:ring-orange-100 transition" required></div>
+            
+            <button type="submit" id="btn" class="w-full bg-[#F26522] text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:scale-105 transition-transform">Valider mon inscription 🚀</button>
+        </form>
+        <div id="msg" class="hidden text-center text-green-600 font-black text-xl py-10 animate-bounce">Félicitations ! Vous êtes bien inscrit. À très vite chez HECG !</div>
+    </div>
+
+    <script>
+        document.getElementById('regForm').onsubmit = function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn');
+            btn.disabled = true; btn.innerText = "Transmission...";
+            
+            const payload = {
+                action: 'publicRegister',
+                eventId: document.getElementById('eventId').value,
+                nom: document.getElementById('nom').value,
+                prenom: document.getElementById('prenom').value,
+                email: document.getElementById('email').value,
+                tel: document.getElementById('tel').value
+            };
+
+            // On ajoute withFailureHandler pour voir l'erreur si ça plante côté serveur
+            google.script.run
+                .withSuccessHandler(() => {
+                    document.getElementById('regForm').classList.add('hidden');
+                    document.getElementById('msg').classList.remove('hidden');
+                })
+                .withFailureHandler((err) => {
+                    alert("Erreur Serveur : " + err.message);
+                    btn.disabled = false;
+                    btn.innerText = "Valider mon inscription 🚀";
+                })
+                .doPostManual(JSON.stringify(payload));
+        };
+    </script>
+</body>
+</html>

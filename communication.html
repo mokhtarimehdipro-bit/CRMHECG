@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HECG - Communication & Événements</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+                <a href="communication.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Com & Événements</a>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="btnSettings" onclick="openSettings()" class="hidden text-gray-400 hover:text-[#F26522] text-2xl transition mr-2" title="Paramètres d'envoi Admin">⚙️</button>
+            <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex justify-between items-center mb-10">
+            <div>
+                <h1 class="text-3xl font-black text-gray-800 tracking-tight">Pilotage Événementiel & E-mailing</h1>
+                <p class="text-gray-400 text-sm font-bold mt-1">Créez vos campagnes et diffusez massivement en un clic (Envoi sécurisé en copie cachée).</p>
+            </div>
+            <button onclick="openModal()" class="bg-[#F26522] text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:scale-105 transition">+ Nouvelle Campagne</button>
+        </div>
+
+        <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement de l'historique...</div>
+        <div id="campaignsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
+    </main>
+
+    <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+        <h2 id="modalTitle" class="text-2xl font-black text-[#1A4E8A]">Paramétrer la Campagne</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+    </div>
+    
+    <input type="hidden" id="formId">
+    <input type="hidden" id="existingPjUrl">
+    <input type="hidden" id="existingFlyerUrl">
+
+    <div class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-2">Type d'action *</label>
+                <select id="formType" onchange="toggleTargeting(); updateAutoSubject();" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold bg-gray-50 outline-none focus:border-[#F26522]">
+                    <option value="Atelier CV">Atelier CV</option>
+                    <option value="Atelier LinkedIn">Atelier LinkedIn</option>
+                    <option value="Atelier Mixte">Atelier CV + LinkedIn</option>
+                    <option value="JPO">JPO (Journée Portes Ouvertes)</option>
+                    <option value="Salon">Salon / Événement Extérieur</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-2">Nom Interne (Pour vous) *</label>
+                <input type="text" id="formNom" placeholder="Ex: Relance JPO Mai" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Date *</label>
+                <input type="date" id="formDateEvt" onchange="updateAutoSubject()" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none">
+            </div>
+            <div id="boxCampus">
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Campus *</label>
+                <select id="formCampus" onchange="updateAutoSubject()" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none">
+                    <option value="Marseille">Marseille</option>
+                    <option value="Aix">Aix-en-Provence</option>
+                </select>
+            </div>
+            <div id="boxLieuLibre" class="hidden">
+                <label class="block text-[10px] font-black uppercase text-orange-400 mb-1 ml-2">Lieu / Adresse Libre *</label>
+                <input type="text" id="formLieuLibre" placeholder="Ex: Parc Chanot, Marseille" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Horaires *</label>
+                <input type="text" id="formHoraires" onkeyup="updateAutoSubject()" placeholder="ex: 14h-16h" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none">
+            </div>
+        </div>
+
+        <div class="relative">
+            <label class="block text-[10px] font-black uppercase text-gray-500 mb-1 ml-2">Objet du mail (Généré automatiquement)</label>
+            <div class="flex gap-2">
+                <input type="text" id="formObjet" readonly class="flex-grow border-2 border-gray-100 p-3 rounded-xl font-bold bg-gray-50 text-gray-400 outline-none">
+                <button onclick="unlockSubject()" class="px-4 bg-slate-200 text-slate-600 rounded-xl font-black text-[10px] hover:bg-slate-300 transition">✏️ MODIFIER</button>
+            </div>
+        </div>
+
+        <div id="boxSalonDetails" class="hidden space-y-4">
+            <div class="bg-blue-50 p-5 rounded-2xl border border-blue-100">
+                <h3 class="text-[10px] font-black uppercase text-[#1A4E8A] mb-3">🎯 Destinataires & Publipostage</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs font-bold text-gray-700 mb-4">
+                    <label><input type="checkbox" id="cb_b2b_avec" class="mr-2">🏢 Ent. Avec Alternant</label>
+                    <label><input type="checkbox" id="cb_b2b_sans" class="mr-2">🏢 Ent. Sans Alternant</label>
+                    <label><input type="checkbox" id="cb_b2c_prospects" class="mr-2">🎯 Prospects</label>
+                    <label><input type="checkbox" id="cb_b2c_preinscrits" class="mr-2">⏳ Préinscrits</label>
+                    <label><input type="checkbox" id="cb_b2c_inscrits" class="mr-2">🎓 Inscrits</label>
+                    <label><input type="checkbox" id="cb_b2c_sorties" class="mr-2">❌ Sorties</label>
+                </div>
+                <label class="block text-[10px] font-black uppercase text-blue-400 mb-1 ml-2">Ajouter des mails libres (séparés par virgule)</label>
+                <textarea id="formEmailsLibres" rows="2" placeholder="mail1@test.com, mail2@test.com..." class="w-full border-2 border-white p-3 rounded-xl text-xs outline-none focus:border-[#1A4E8A]"></textarea>
+            </div>
+            
+            <div>
+                <label class="block text-[10px] font-black uppercase text-gray-500 mb-1 ml-2">Texte d'accroche (Remplace le texte par défaut)</label>
+                <textarea id="formAccroche" rows="3" class="w-full border-2 border-gray-100 p-3 rounded-xl text-sm outline-none focus:border-[#1A4E8A]"></textarea>
+            </div>
+
+            <div>
+               <label class="block text-[10px] font-black uppercase text-[#F26522] mb-1 ml-2">Lien Organisateur (Bouton "Site de l'organisateur") *</label>
+                <input type="url" id="formLienExterne" placeholder="https://..." class="w-full border-2 border-orange-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-6">
+            <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                <label class="block text-[10px] font-black text-indigo-800 mb-2 uppercase">🖼️ Flyer (Haut du mail)</label>
+                <input type="file" id="formFlyer" accept="image/*" class="text-[10px] w-full font-bold">
+            </div>
+            <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <label class="block text-[10px] font-black text-orange-800 mb-2 uppercase">📎 Pièce jointe (PDF)</label>
+                <input type="file" id="formPj" accept=".pdf" class="text-[10px] w-full font-bold">
+            </div>
+        </div>
+
+    </div> <div class="mt-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+        <div class="flex justify-between items-center mb-2">
+            <h4 class="text-[10px] font-black uppercase text-slate-400">👥 Destinataires détectés en temps réel</h4>
+            <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+        </div>
+        <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1">
+            Modifiez les paramètres pour voir la liste...
+        </div>
+    </div>
+
+    <div class="mt-8 flex justify-end space-x-3 border-t pt-4">
+        <button onclick="closeModal()" class="px-6 py-3 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+        <button onclick="saveCampaign()" id="btnSave" class="px-10 py-3 bg-[#1A4E8A] text-white font-black rounded-2xl shadow-xl hover:bg-blue-800 transition">Enregistrer le Brouillon</button>
+    </div>
+</div>
+</div> <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm">
+        <div class="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full mb-4 text-2xl">⚙️</div>
+        <h2 class="text-xl font-black text-gray-800 mb-4">Paramètres d'envoi</h2>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Email de réception des TESTS :</label>
+        <input type="email" id="formTestEmail" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522] mb-6 text-sm">
+        <div class="flex justify-end gap-2">
+            <button onclick="document.getElementById('settingsModal').classList.add('hidden')" class="px-4 py-2 text-gray-400 font-bold hover:bg-gray-50 rounded-lg">Annuler</button>
+            <button onclick="saveSettings()" class="px-6 py-2 bg-[#F26522] text-white rounded-xl font-black shadow-md hover:bg-orange-600">Enregistrer</button>
+        </div>
+    </div>
+</div>
+<div id="participantsModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-6 border-b flex justify-between items-center bg-slate-50">
+                <div>
+                    <h2 class="text-2xl font-black text-[#1A4E8A]">Liste des inscrits</h2>
+                    <p id="partModalSubtitle" class="text-sm font-bold text-gray-400 mt-1">...</p>
+                </div>
+                <button onclick="closeParticipantsModal()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+            </div>
+            <div class="p-4 bg-white border-b flex justify-between items-center">
+                <button onclick="exportParticipants()" class="px-4 py-2 bg-gray-800 text-white rounded-xl text-xs font-bold hover:bg-gray-700 transition">📥 Exporter la liste (CSV)</button>
+                <div class="text-sm font-bold text-gray-500"><span id="partCount" class="text-[#F26522] font-black">0</span> inscrit(s)</div>
+            </div>
+            <div class="p-6 flex-grow overflow-y-auto bg-gray-50">
+                <div id="participantsLoader" class="text-center py-10 font-black text-[#1A4E8A] animate-pulse">Chargement en cours...</div>
+                <div id="participantsList" class="space-y-3 hidden"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        let user = null;
+        let campaigns = [];
+        let allStudentsForMatch = []; // Pour stocker la liste des étudiants
+        let testEmail = "mokhtarimehdi.pro@gmail.com";
+
+        window.onload = () => {
+            user = JSON.parse(localStorage.getItem('user'));
+            if (!user) return window.location.href = 'index.html';
+            
+            // Sécurité Admin
+            if(user.role === "Administrateur") {
+                document.getElementById('btnSettings').classList.remove('hidden');
+                fetchSettings();
+            }
+            loadCampaigns();
+        };
+
+        async function fetchSettings() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getSettings' }) });
+                const data = await res.json();
+                if(data.success) {
+                    testEmail = data.email_test;
+                    document.getElementById('formTestEmail').value = testEmail;
+                }
+            } catch(e) {}
+        }
+
+        async function saveSettings() {
+            const newEmail = document.getElementById('formTestEmail').value;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSettings', email_test: newEmail }) });
+            testEmail = newEmail;
+            document.getElementById('settingsModal').classList.add('hidden');
+            alert("Email de test mis à jour !");
+        }
+
+        function openSettings() {
+            document.getElementById('settingsModal').classList.remove('hidden');
+            document.getElementById('settingsModal').classList.add('flex');
+        }
+
+        async function loadCampaigns() {
+            document.getElementById('loader').classList.remove('hidden');
+            document.getElementById('campaignsGrid').classList.add('hidden');
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getComEvents' }) });
+                const data = await res.json();
+                if(data.success) {
+                    campaigns = data.data;
+                    renderCampaigns();
+                }
+            } catch(e) {}
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('campaignsGrid').classList.remove('hidden');
+        }
+
+        function renderCampaigns() {
+    const grid = document.getElementById('campaignsGrid');
+    const isAdmin = user.role === "Administrateur";
+
+    // 1. On trie la liste : les "Archivé" à la fin
+    const sortedCampaigns = [...campaigns].sort((a, b) => {
+        if (a.statut === "Archivé" && b.statut !== "Archivé") return 1;
+        if (a.statut !== "Archivé" && b.statut === "Archivé") return -1;
+        return 0;
+    });
+
+    grid.innerHTML = sortedCampaigns.map(c => {
+        const isArchived = c.statut === "Archivé";
+        const isSent = c.statut && c.statut.toLowerCase().includes("diffus");
+        
+        // Gestion des badges
+        let badge = '<span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-black uppercase shadow-sm">⏳ Brouillon</span>';
+        if (isArchived) {
+            badge = '<span class="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-[10px] font-black uppercase shadow-sm">📁 Rangé</span>';
+        } else if (isSent) {
+            badge = '<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-black uppercase shadow-sm">✅ Diffusée</span>';
+        }
+        
+        const dateEnvoi = c.dernierEnvoi ? new Date(c.dernierEnvoi).toLocaleDateString('fr-FR') : "Jamais";
+
+        // Style si archivé : opacité réduite et filtre gris
+        const archiveStyle = isArchived ? 'opacity-60 grayscale-[0.5] bg-gray-50' : 'bg-white';
+
+        return `
+        <div class="${archiveStyle} rounded-[2.2rem] shadow-sm border border-gray-100 p-8 flex flex-col justify-between transition-all duration-300">
+            <div>
+                <div class="flex justify-between items-start mb-6">
+                    ${badge}
+                    <span class="text-[10px] font-black text-gray-300 uppercase">#${c.id.substring(3, 8)}</span>
+                </div>
+                <h3 class="text-2xl font-black ${isArchived ? 'text-gray-500' : 'text-[#1A4E8A]'} leading-tight mb-3 line-clamp-2">${c.nom}</h3>
+                
+                <div class="space-y-1 mb-8">
+                    <p class="text-xs font-bold text-gray-400">🏷️ <span class="text-gray-600 truncate">${c.objet}</span></p>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase mt-2">Dernier envoi : ${dateEnvoi}</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                ${!isArchived ? `
+                <div class="flex space-x-3">
+                    <button onclick="sendMail('${c.id}', true)" class="flex-1 bg-blue-50 text-[#1A4E8A] py-3 rounded-xl font-black text-xs hover:bg-blue-100 transition">Test ✉️</button>
+                    <button onclick="sendMail('${c.id}', false)" class="flex-1 bg-[#F26522] text-white py-3 rounded-xl font-black text-xs hover:scale-105 transition">Envoi Réel 🚀</button>
+                </div>
+                ` : ''}
+
+                ${isAdmin ? `
+                <div class="flex space-x-2 pt-3 border-t">
+                    ${!isArchived ? `
+                        <button onclick="openModal('${c.id}')" class="flex-1 text-slate-400 hover:text-[#1A4E8A] text-[11px] font-black uppercase transition">✏️ Modifier</button>
+                        <button onclick="deleteCampaign('${c.id}')" class="flex-1 text-slate-400 hover:text-red-500 text-[11px] font-black uppercase transition">📦 Ranger</button>
+                    ` : `
+                        <button class="flex-1 text-gray-400 text-[11px] font-black uppercase cursor-not-allowed">Élément Historisé</button>
+                    `}
+                </div>` : ''}
+            </div>
+        </div>`;
+    }).join('') || '<div class="col-span-full text-center text-gray-400 font-bold italic py-10">Aucune campagne.</div>';
+}
+
+        function toggleTargeting() {
+            const type = document.getElementById('formType').value;
+            const isSalon = (type === "Salon");
+
+            // Affichage spécifique Salon
+            document.getElementById('boxSalonDetails').classList.toggle('hidden', !isSalon);
+            document.getElementById('boxLieuLibre').classList.toggle('hidden', !isSalon);
+            
+            // Affichage spécifique Ateliers/JPO
+            document.getElementById('boxCampus').classList.toggle('hidden', isSalon);
+        }
+
+        function unlockSubject() {
+            const objField = document.getElementById('formObjet');
+            objField.readOnly = false;
+            objField.classList.remove('bg-gray-50', 'text-gray-400');
+            objField.classList.add('bg-white', 'text-gray-800', 'border-[#F26522]');
+            objField.focus();
+        }
+
+        function updateAutoSubject() {
+            const objField = document.getElementById('formObjet');
+            if (!objField.readOnly) return; // Ne pas écraser si l'utilisateur a déverrouillé
+
+            const type = document.getElementById('formType').value;
+            const dateVal = document.getElementById('formDateEvt').value;
+            const campus = document.getElementById('formCampus').value;
+            const horaires = document.getElementById('formHoraires').value || "Xh à Xh";
+            
+            const dateFormatted = dateVal ? new Date(dateVal).toLocaleDateString('fr-FR') : "le XXXX";
+            
+            let str = "";
+            if (type === "Atelier CV") {
+                str = `HECG - Organisation atelier CV le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+            } else if (type === "Atelier LinkedIn") {
+                str = `HECG - Organisation atelier Linkedin le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+            } else if (type === "Atelier Mixte") {
+                str = `HECG - Organisation atelier CV + Linkedin le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+            } else if (type === "JPO") {
+                str = `HECG - /!\\ JPO /!\\ - Venez nous retrouver le ${dateFormatted} sur le campus ${campus}`;
+            } else if (type === "Salon") {
+                str = `HECG - /!\\ EVENEMENT /!\\ - Venez nous retrouver le ${dateFormatted}`;
+            }
+            
+            objField.value = str;
+        }
+
+        function openModal(id = null) {
+            // 1. On affiche la modale
+            const modal = document.getElementById('cmpModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            if (id) {
+                // CAS ÉDITION : On remplit avec les données existantes
+                const c = campaigns.find(x => x.id === id);
+                document.getElementById('modalTitle').innerText = "Modifier la Campagne";
+                document.getElementById('formId').value = c.id;
+                document.getElementById('formNom').value = c.nom || "";
+                document.getElementById('formType').value = c.type || "Atelier CV";
+                document.getElementById('formObjet').value = c.objet || "";
+                
+                // Pour les dates, on s'assure du format YYYY-MM-DD pour l'input
+                if(c.dateEvt) {
+                    const d = new Date(c.dateEvt);
+                    document.getElementById('formDateEvt').value = d.toISOString().split('T')[0];
+                }
+
+                document.getElementById('formHoraires').value = c.horaires || "";
+                document.getElementById('formCampus').value = c.campus || "Marseille";
+                document.getElementById('formLienExterne').value = c.lienExterne || "";
+                
+                // On déverrouille l'objet si c'est une édition pour permettre la correction
+                const objField = document.getElementById('formObjet');
+                objField.readOnly = false;
+                objField.classList.remove('bg-gray-50', 'text-gray-400');
+            } else {
+                // CAS NOUVELLE CAMPAGNE : On vide tout
+                document.getElementById('modalTitle').innerText = "Paramétrer la Campagne";
+                document.getElementById('formId').value = "";
+                document.getElementById('formNom').value = "";
+                document.getElementById('formDateEvt').value = "";
+                document.getElementById('formHoraires').value = "";
+                document.getElementById('formLienExterne').value = "";
+                
+                // On remet l'objet en mode "Automatique" et verrouillé
+                const objField = document.getElementById('formObjet');
+                objField.value = "";
+                objField.readOnly = true;
+                objField.classList.add('bg-gray-50', 'text-gray-400');
+                
+                updateAutoSubject(); // On génère l'objet par défaut
+        }
+        
+        toggleTargeting(); // On ajuste l'affichage des champs (Salon vs Ateliers)
+        
+        // NOUVEAU : On lance la mise à jour en direct après l'ouverture
+        setTimeout(updateLivePreview, 500);
+    }
+
+    function closeModal() { document.getElementById('cmpModal').classList.add('hidden'); }
+
+        async function saveCampaign() {
+            const btn = document.getElementById('btnSave');
+            const id = document.getElementById('formId').value;
+            const type = document.getElementById('formType').value;
+            
+            btn.disabled = true;
+            btn.innerText = "Sauvegarde en cours...";
+
+            // 1. Préparation du ciblage pour le mode Salon
+            const cible = {
+                b2b_avec: document.getElementById('cb_b2b_avec').checked,
+                b2b_sans: document.getElementById('cb_b2b_sans').checked,
+                b2c_prospects: document.getElementById('cb_b2c_prospects').checked,
+                b2c_preinscrits: document.getElementById('cb_b2c_preinscrits').checked,
+                b2c_inscrits: document.getElementById('cb_b2c_inscrits').checked,
+                b2c_sorties: document.getElementById('cb_b2c_sorties').checked
+            };
+
+            // 2. Récupération des fichiers (Flyer et PJ)
+            let flyerUrl = document.getElementById('existingFlyerUrl').value;
+            let pjUrl = document.getElementById('existingPjUrl').value;
+
+            const flyerFile = document.getElementById('formFlyer').files[0];
+            const pjFile = document.getElementById('formPj').files[0];
+
+            // Fonction interne pour uploader un fichier si présent
+            const upload = async (file, folderTag) => {
+                if (!file) return null;
+                const base64 = await new Promise(r => {
+                    const reader = new FileReader();
+                    reader.onload = () => r(reader.result.split(',')[1]);
+                    reader.readAsDataURL(file);
+                });
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'uploadCV', // On réutilise le moteur d'upload existant
+                        userId: folderTag, // 'FLYER' ou 'PJ'
+                        fileName: file.name,
+                        mimeType: file.type,
+                        base64Data: base64
+                    })
+                });
+                const d = await res.json();
+                return d.url;
+            };
+
+            if (flyerFile) flyerUrl = await upload(flyerFile, 'FLYER');
+            if (pjFile) pjUrl = await upload(pjFile, 'PJ');
+
+            // 3. Envoi des données au serveur
+            const payload = {
+                action: 'saveComEvent',
+                id: id,
+                nom: document.getElementById('formNom').value,
+                type: type,
+                objet: document.getElementById('formObjet').value,
+                dateEvt: document.getElementById('formDateEvt').value,
+                campus: document.getElementById('formCampus').value,
+                lieuLibre: document.getElementById('formLieuLibre').value,
+                horaires: document.getElementById('formHoraires').value,
+                accroche: document.getElementById('formAccroche').value,
+                lienExterne: document.getElementById('formLienExterne').value,
+                emailsLibres: document.getElementById('formEmailsLibres').value,
+                cible: cible,
+                flyerUrl: flyerUrl,
+                pjUrl: pjUrl
+            };
+
+            try {
+                const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.success) {
+                    closeModal();
+                    loadCampaigns(); // Recharge la liste
+                } else {
+                    alert("Erreur : " + result.message);
+                }
+            } catch (e) {
+                alert("Erreur de connexion au serveur.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Enregistrer le Brouillon";
+            }
+        }
+
+        async function deleteCampaign(id) {
+    if (!confirm("Voulez-vous ranger cette campagne dans l'historique ? Elle ne sera plus modifiable mais restera visible en bas de page.")) return;
+    
+    try {
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ action: 'deleteComEvent', id: id }) 
+        });
+        const result = await res.json();
+        if (result.success) {
+            loadCampaigns(); // On recharge la liste pour voir le changement
+        }
+    } catch (e) {
+        alert("Erreur lors de l'archivage.");
+    }
+}
+
+        let pendingPreviewEmails = [];
+let pendingCampaignId = null;
+
+async function sendMail(cmpId, isTest) {
+    const cmp = campaigns.find(c => c.id === cmpId);
+
+    // Si c'est un TEST, on demande l'email et on envoie direct (pas besoin du filet de sécurité)
+    if (isTest) {
+        let testEmail = prompt("À quelle adresse envoyer le test ?", localStorage.getItem('lastTestEmail') || "");
+        if (!testEmail) return;
+        localStorage.setItem('lastTestEmail', testEmail);
+        return executeFinalSend(cmpId, true, [testEmail]);
+    }
+
+    // SI C'EST UN ENVOI RÉEL : Étape 1, on calcule la liste
+    const btns = document.querySelectorAll(`button[onclick="sendMail('${cmpId}', ${isTest})"]`);
+    btns.forEach(b => { b.innerText = "Calcul..."; b.disabled = true; });
+
+    try {
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'previewComMail', 
+                type: cmp.type, campus: cmp.campus, cible: cmp.cible, emailsLibres: cmp.emailsLibres
+            }) 
+        });
+        const d = await res.json();
+        
+        btns.forEach(b => { b.innerText = "Envoi Réel 🚀"; b.disabled = false; });
+
+        if (d.success && d.data.length > 0) {
+            pendingPreviewEmails = d.data;
+            pendingCampaignId = cmpId;
+            openPreviewModal(); // On ouvre le filet de sécurité
+        } else {
+            alert("Aucun étudiant ou partenaire ne correspond à vos critères.");
+        }
+    } catch(e) {
+        alert("Erreur lors du calcul des destinataires.");
+        btns.forEach(b => { b.innerText = "Envoi Réel 🚀"; b.disabled = false; });
+    }
+}
+
+// --- FONCTIONS DU FILET DE SÉCURITÉ ---
+function openPreviewModal() {
+    document.getElementById('previewModal').classList.remove('hidden');
+    document.getElementById('previewModal').classList.add('flex');
+    renderPreviewList();
+}
+
+function closePreviewModal() {
+    document.getElementById('previewModal').classList.add('hidden');
+    document.getElementById('previewModal').classList.remove('flex');
+    pendingPreviewEmails = [];
+}
+
+function renderPreviewList() {
+    document.getElementById('previewCount').innerText = pendingPreviewEmails.length;
+    const tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = pendingPreviewEmails.map((c, index) => `
+        <tr class="border-b hover:bg-slate-50 transition">
+            <td class="p-3 text-sm font-bold text-gray-800">${c.nom}</td>
+            <td class="p-3 text-sm text-gray-500 font-mono">${c.email}</td>
+            <td class="p-3 text-xs text-blue-500 font-bold">${c.source}</td>
+            <td class="p-3 text-center">
+                <button onclick="removePreviewEmail(${index})" class="text-red-500 hover:bg-red-100 p-2 rounded-lg" title="Retirer cet email">❌</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function removePreviewEmail(index) {
+    pendingPreviewEmails.splice(index, 1);
+    renderPreviewList();
+}
+
+async function confirmFinalSend() {
+    if (pendingPreviewEmails.length === 0) return alert("La liste est vide.");
+    
+    const btn = document.getElementById('btnConfirmSend');
+    btn.innerText = "Envoi en cours...";
+    btn.disabled = true;
+
+    // On isole juste les adresses mails de la liste que l'utilisateur a validée/nettoyée
+    const finalEmailsOnly = pendingPreviewEmails.map(c => c.email);
+    
+    await executeFinalSend(pendingCampaignId, false, finalEmailsOnly);
+    
+    closePreviewModal();
+    btn.innerText = "🚀 Confirmer & Envoyer à TOUS";
+    btn.disabled = false;
+}
+
+// Étape Finale : Le Vrai Envoi
+async function executeFinalSend(cmpId, isTest, emailList) {
+    const cmp = campaigns.find(c => c.id === cmpId);
+    
+    const isModalOpen = document.getElementById('cmpModal') && !document.getElementById('cmpModal').classList.contains('hidden');
+    const isCurrentCampaign = document.getElementById('formId') ? document.getElementById('formId').value === cmpId : false;
+    const getVal = (formId, cmpProp) => (isModalOpen && isCurrentCampaign) ? document.getElementById(formId).value : (cmpProp || "");
+
+    try {
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'sendComMail', 
+                id: cmpId, type: cmp.type, 
+                objet: getVal('formObjet', cmp.objet),
+                accroche: getVal('formAccroche', cmp.accroche), 
+                emailsLibres: getVal('formEmailsLibres', cmp.emailsLibres),
+                lienExterne: getVal('formLienExterne', cmp.lienExterne),
+                cible: cmp.cible, pjUrl: cmp.pjUrl, flyerUrl: cmp.flyerUrl, campus: cmp.campus, 
+                dateEvt: cmp.dateEvt, horaires: cmp.horaires,
+                isTest: isTest, testEmail: isTest ? emailList[0] : null,
+                finalEmails: !isTest ? emailList : null
+            }) 
+        });
+        
+        const result = await res.json();
+        alert(result.message);
+
+        // --- LA CORRECTION EST ICI ---
+        if(!isTest) {
+            // 1. On change le statut "en direct" dans la mémoire du navigateur
+            cmp.statut = "Diffusé";
+            // 2. On redessine les cartes immédiatement
+            renderCampaigns();
+            // 3. On recharge quand même depuis le serveur après 1 seconde pour être sûr
+            setTimeout(loadCampaigns, 1000);
+        }
+    } catch(e) {
+        alert("Erreur serveur lors de l'envoi.");
+    }
+}
+        
+        // =====================================
+        // MODULE POINTAGE & PARTICIPANTS
+        // =====================================
+        let currentEventId = null;
+        let currentEventType = null;
+        let currentParticipants = [];
+
+        async function openParticipantsModal(id, nom, type) {
+            if (allStudentsForMatch.length === 0) {
+                const resMatch = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentsMinList' }) });
+                const dMatch = await resMatch.json();
+                if(dMatch.success) allStudentsForMatch = dMatch.data;
+            }
+            currentEventId = id; currentEventType = type;
+            document.getElementById('partModalSubtitle').innerText = nom + " (" + type + ")";
+            document.getElementById('participantsModal').classList.remove('hidden');
+            document.getElementById('participantsModal').classList.add('flex');
+            document.getElementById('participantsLoader').classList.remove('hidden');
+            document.getElementById('participantsList').classList.add('hidden');
+
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getParticipants', eventId: id }) });
+                const d = await res.json();
+                if(d.success) { currentParticipants = d.data; renderParticipants(); }
+            } catch(e) { alert("Erreur réseau"); }
+        }
+
+        function closeParticipantsModal() {
+            document.getElementById('participantsModal').classList.add('hidden');
+            document.getElementById('participantsModal').classList.remove('flex');
+        }
+
+        function renderParticipants() {
+            document.getElementById('partCount').innerText = currentParticipants.length;
+            const listDiv = document.getElementById('participantsList');
+            
+            if(currentParticipants.length === 0) {
+                listDiv.innerHTML = '<div class="text-center text-gray-400 font-bold py-8">Aucun inscrit pour le moment.</div>';
+            } else {
+                listDiv.innerHTML = currentParticipants.map(p => {
+                    const isPresent = p.presence === "Présent";
+                    let actionHtml = isPresent 
+                        ? `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase">✅ Présent</span>`
+                        : `<div class="flex flex-col items-end gap-2" id="actionBox_${p.email}">
+                                <button onclick="markPresence('${p.email}', '${p.nom}', '${p.prenom}')" class="px-4 py-2 bg-[#F26522] text-white rounded-xl text-[10px] font-black uppercase shadow hover:scale-105 transition">Valider Présence</button>
+                                <button onclick="showManualMatch('${p.email}')" class="text-[9px] font-bold text-gray-400 hover:text-[#1A4E8A] underline">Non reconnu ? Rapprochement manuel</button>
+                           </div>
+                           <div id="manualMatchBox_${p.email}" class="hidden mt-2 flex flex-col gap-2 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                <label class="text-[9px] font-black text-blue-500 uppercase">Choisir l'étudiant dans la base :</label>
+                                <select id="manualEmail_${p.email}" class="w-full border-2 border-white p-2 rounded-xl text-xs font-bold outline-none shadow-sm">
+                                    <option value="">-- Sélectionner l'étudiant --</option>
+                                    ${allStudentsForMatch.map(s => `<option value="${s.email}">${s.nom} ${s.prenom} (${s.classe})</option>`).join('')}
+                                </select>
+                                <div class="flex justify-end gap-2">
+                                    <button onclick="cancelManualMatch('${p.email}')" class="text-[9px] font-bold text-gray-400">Annuler</button>
+                                    <button onclick="markPresenceManual('${p.email}', '${p.nom}', '${p.prenom}')" class="px-4 py-1 bg-[#1A4E8A] text-white rounded-lg text-[10px] font-black uppercase shadow-md">Lier & Valider</button>
+                                </div>
+                           </div>`;
+
+                    return `
+                    <div class="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm">
+                        <div>
+                            <h3 class="font-black text-gray-800">${p.prenom} ${p.nom}</h3>
+                            <p class="text-xs font-bold text-gray-500 mt-1">📧 ${p.email} <span class="mx-2">|</span> 📱 ${p.tel || 'N/C'}</p>
+                            ${p.isEtudiant ? '<span class="inline-block mt-2 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase">🎓 Étudiant Trouvé</span>' : '<span class="inline-block mt-2 bg-orange-50 text-orange-600 px-2 py-0.5 rounded text-[9px] font-black uppercase">Externe / Prospect</span>'}
+                        </div>
+                        <div>${actionHtml}</div>
+                    </div>`;
+                }).join('');
+            }
+            document.getElementById('participantsLoader').classList.add('hidden');
+            listDiv.classList.remove('hidden');
+        }
+
+        function showManualMatch(email) {
+            document.getElementById('actionBox_' + email).classList.add('hidden');
+            document.getElementById('manualMatchBox_' + email).classList.remove('hidden');
+        }
+
+        function markPresenceManual(email, nom, prenom) {
+            const overrideEmail = document.getElementById('manualEmail_' + email).value.trim();
+            if(!overrideEmail) return alert("Veuillez saisir l'email exact de l'étudiant dans la base.");
+            markPresence(email, nom, prenom, overrideEmail);
+        }
+
+        async function markPresence(emailOrigine, nom, prenom, emailForcé = null) {
+            try {
+                const res = await fetch(API_URL, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ 
+                        action: 'markPresence', 
+                        eventId: currentEventId,
+                        typeEvt: currentEventType,
+                        emailOriginal: emailOrigine,
+                        emailEtudiant: emailForcé || emailOrigine, // Email utilisé pour chercher dans la base
+                        nom: nom, prenom: prenom
+                    }) 
+                });
+                const d = await res.json();
+                if(d.success) {
+                    const p = currentParticipants.find(x => x.email === emailOrigine);
+                    if(p) p.presence = "Présent";
+                    renderParticipants(); // Recharge la vue
+                } else { alert(d.message || "Erreur."); }
+            } catch(e) { alert("Erreur réseau"); }
+        }
+
+        function exportParticipants() {
+            if(currentParticipants.length === 0) return alert("Aucun inscrit.");
+            let csv = "Nom;Prénom;Email;Téléphone;Statut;Présence\n";
+            currentParticipants.forEach(p => {
+                const statut = p.isEtudiant ? "Étudiant HECG" : "Prospect";
+                csv += `"${p.nom}";"${p.prenom}";"${p.email}";"${p.tel || ''}";"${statut}";"${p.presence || 'Inscrit'}"\n`;
+            });
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+            link.download = "Inscrits_Evenement_" + currentEventId + ".csv"; link.click();
+        }
+        function cancelManualMatch(email) {
+            document.getElementById('actionBox_' + email).classList.remove('hidden');
+            document.getElementById('manualMatchBox_' + email).classList.add('hidden');
+        }
+
+        // ==========================================
+        // MOTEUR DU PANNEAU EN TEMPS RÉEL (PROPRE ET SANS DOUBLONS)
+        // ==========================================
+        async function updateLivePreview() {
+            const listDiv = document.getElementById('livePreviewList');
+            const countSpan = document.getElementById('liveCount');
+            if (!listDiv || !countSpan) return;
+
+            const payload = {
+                action: 'previewComMail',
+                type: document.getElementById('formType').value,
+                campus: document.getElementById('formCampus').value,
+                emailsLibres: document.getElementById('formEmailsLibres').value,
+                cible: {
+                    b2c_prospects: document.getElementById('cb_b2c_prospects')?.checked || false,
+                    b2c_preinscrits: document.getElementById('cb_b2c_preinscrits')?.checked || false,
+                    b2c_inscrits: document.getElementById('cb_b2c_inscrits')?.checked || false,
+                    b2c_sorties: document.getElementById('cb_b2c_sorties')?.checked || false,
+                    b2b_avec: document.getElementById('cb_b2b_avec')?.checked || false,
+                    b2b_sans: document.getElementById('cb_b2b_sans')?.checked || false
+                }
+            };
+
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const d = await res.json();
+                if (d.success) {
+                    countSpan.innerText = d.data.length;
+                    listDiv.innerHTML = d.data.slice(0, 30).map(c => `
+                        <div class="flex justify-between border-b border-slate-100 py-1">
+                            <span class="truncate pr-2">${c.nom}</span>
+                            <span class="text-slate-400 shrink-0 text-[9px]">${c.source}</span>
+                        </div>
+                    `).join('') || "Aucun destinataire.";
+                }
+            } catch(e) { console.error("Erreur de prévisualisation"); }
+        }
+
+        // Branchement UNIQUE des événements (plus de doublons)
+        document.addEventListener('change', function(e) {
+            if (e.target.closest('#cmpModal')) updateLivePreview();
+        });
+        document.getElementById('formEmailsLibres')?.addEventListener('keyup', updateLivePreview);
+    </script>
+<div id="previewModal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4 border-b pb-4">
+            <div>
+                <h2 class="text-2xl font-black text-[#1A4E8A]">🔍 Filet de Sécurité</h2>
+                <p class="text-gray-500 font-bold text-sm">Vérifiez les <span id="previewCount" class="text-orange-500">0</span> destinataires avant l'envoi définitif.</p>
+            </div>
+            <button onclick="closePreviewModal()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+        </div>
+        
+        <div class="overflow-y-auto flex-grow border border-gray-200 rounded-xl">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 sticky top-0">
+                    <tr>
+                        <th class="p-3 text-xs uppercase font-black text-slate-500">Nom / Contact</th>
+                        <th class="p-3 text-xs uppercase font-black text-slate-500">Email</th>
+                        <th class="p-3 text-xs uppercase font-black text-slate-500">Origine</th>
+                        <th class="p-3 text-xs uppercase font-black text-slate-500 text-center">Retirer</th>
+                    </tr>
+                </thead>
+                <tbody id="previewTableBody">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="mt-6 flex justify-end space-x-3 border-t pt-4">
+            <button onclick="closePreviewModal()" class="px-6 py-3 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler l'envoi</button>
+            <button onclick="confirmFinalSend()" id="btnConfirmSend" class="px-10 py-3 bg-red-600 text-white font-black rounded-2xl shadow-xl hover:bg-red-700 transition animate-pulse">🚀 Confirmer & Envoyer à TOUS</button>
+        </div>
+    </div>
+</div>
+</body>
+</html>

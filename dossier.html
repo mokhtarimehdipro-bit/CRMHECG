@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dossier Étudiant - HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-10 relative">
+
+    <div id="student-header" class="hidden w-full bg-white p-4 shadow-sm border-b flex justify-between items-center mb-6">
+        <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-8">
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-4 py-2 rounded-xl hover:bg-red-50 transition text-sm">Se déconnecter</button>
+    </div>
+
+    <nav id="admin-nav" class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50 mb-8">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-bold text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50 transition">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-8">
+        <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement du dossier...</div>
+        
+        <div id="content" class="hidden space-y-8">
+            <div class="flex justify-between items-start bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                <div>
+                    <h1 id="etuNom" class="text-4xl font-black text-[#1A4E8A]">Prénom Nom</h1>
+                    <p id="etuInfo" class="text-gray-500 font-medium mt-2">Classe | Statut</p>
+                    
+                    <div class="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100 inline-block">
+                        <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-1">Mon Référent Pédagogique</p>
+                        <p id="etuRef" class="text-sm font-bold text-slate-700">Chargement...</p>
+                    </div>
+
+                    <div id="badgeZone" class="flex gap-2 mt-4"></div>
+                </div>
+                <button id="btnRetour" onclick="window.location.href='dashboard.html'" class="bg-gray-100 text-gray-600 px-6 py-3 rounded-2xl font-black hover:bg-gray-200 transition">Retour à la liste</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <div class="space-y-6">
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                        <h3 class="font-black text-gray-800 mb-6 border-b pb-2">📞 Coordonnées</h3>
+                        <p class="text-sm font-bold text-gray-600 mb-2">✉️ <a href="" id="etuMail" class="font-normal text-blue-500 hover:underline">...</a></p>
+                        <p class="text-sm font-bold text-gray-600 mb-6">📱 <span id="etuTel" class="font-normal">...</span></p>
+                        
+                        <div class="p-4 bg-orange-50 rounded-2xl mb-6">
+                            <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise / Alternance</h4>
+                            <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
+                        </div>
+
+                        <h4 class="text-[10px] font-black text-[#1A4E8A] uppercase mb-2">Curriculum Vitae</h4>
+                        <a id="etuCV" href="#" target="_blank" class="block w-full text-center bg-[#F26522] text-white py-3 rounded-xl font-black text-sm hover:scale-105 transition shadow-md hidden mb-2">
+                            📄 Consulter le CV
+                        </a>
+                        <p id="etuNoCV" class="text-center text-xs text-gray-400 italic mb-4">Aucun CV déposé</p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                        <h3 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">📝 Carnet de route (Échanges)</h3>
+                        
+                        <div id="zoneSaisieNote" class="flex space-x-2 mb-6 bg-gray-50 p-2 rounded-xl">
+                            <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
+                            <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
+                        </div>
+                        
+                        <div id="suiviTimeline" class="space-y-4 max-h-60 overflow-y-auto pr-4 custom-scrollbar"></div>
+                    </div>
+                    
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                        <div class="flex justify-between items-center mb-6 border-b pb-2">
+                            <h3 class="text-xl font-black text-gray-800">💼 Offres d'alternance ciblées</h3>
+                            <div class="flex gap-2">
+                                <span id="countPartagees" class="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Partagées : 0</span>
+                                <span id="countPostulees" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg text-[10px] font-black uppercase">Postulées : 0</span>
+                            </div>
+                        </div>
+                        <div id="listOffresPartagees" class="grid grid-cols-1 gap-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        let currentUser = null;
+        let studentId = null;
+
+        // --- GESTION DE LA SÉCURITÉ ---
+        window.onload = () => {
+            const stored = localStorage.getItem('user');
+            if (!stored) { window.location.replace('index.html'); return; }
+            
+            currentUser = JSON.parse(stored);
+            
+            if (currentUser.role === 'Etudiant') {
+                // SÉCURITÉ : L'étudiant ne voit que son propre dossier
+                studentId = currentUser.ref; 
+                
+                // On cache les outils d'administration
+                document.getElementById('admin-nav').classList.add('hidden');
+                document.getElementById('btnRetour').classList.add('hidden');
+                document.getElementById('zoneSaisieNote').classList.add('hidden');
+                
+                // On affiche l'en-tête étudiant simple
+                document.getElementById('student-header').classList.remove('hidden');
+            } else {
+                // L'admin charge le dossier demandé dans l'URL
+                studentId = new URLSearchParams(window.location.search).get('id');
+            }
+
+            if (!studentId) { 
+                alert("Accès refusé."); 
+                window.location.replace('dashboard.html'); 
+                return; 
+            }
+            
+            loadDossier();
+        };
+
+        async function loadDossier() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId }) });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('content').classList.remove('hidden');
+
+                    const p = data.profil;
+                    document.getElementById('etuNom').innerText = p.prenom + " " + p.nom;
+                    let campusBadge = '';
+                    if (p.campus === 'HECG') campusBadge = '<span class="bg-blue-100 text-[#1A4E8A] px-2 py-0.5 rounded-md ml-2 text-[10px] uppercase font-black tracking-widest border border-blue-200">Marseille</span>';
+                    else if (p.campus === 'HECG_AIX') campusBadge = '<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md ml-2 text-[10px] uppercase font-black tracking-widest border border-purple-200">Aix-en-P.</span>';
+
+                    document.getElementById('etuInfo').innerHTML = (p.classe || 'Sans classe') + " | " + (p.statut || 'Statut inconnu') + campusBadge;
+                    document.getElementById('etuMail').innerText = p.mail || 'Non renseigné';
+                    document.getElementById('etuMail').href = "mailto:" + p.mail;
+                    document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
+                    document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
+                    document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
+
+                    if(p.cv && p.cv.startsWith('http')) {
+                        document.getElementById('etuCV').href = p.cv;
+                        document.getElementById('etuCV').classList.remove('hidden');
+                        document.getElementById('etuNoCV').classList.add('hidden');
+                    }
+
+                    const badgeCV = p.faitCV === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
+                    const badgeLI = p.faitLI === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
+                    document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI;
+
+                    document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
+                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 border-[#F26522]">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(n.date).toLocaleDateString('fr-FR')} — Par ${n.auteur}</p>
+                            <p class="text-sm text-gray-700 font-medium">${n.texte}</p>
+                        </div>
+                    `).join('') || '<p class="text-gray-400 italic text-center py-2">Aucun échange enregistré.</p>';
+                    
+                    // AFFICHAGE DES OFFRES PARTAGÉES (Déplacé au bon endroit)
+                    const offres = data.offres || [];
+                    const postulees = offres.filter(o => o.etat === 'Postulée');
+                    document.getElementById('countPartagees').innerText = `Partagées : ${offres.length}`;
+                    document.getElementById('countPostulees').innerText = `Postulées : ${postulees.length}`;
+
+                    document.getElementById('listOffresPartagees').innerHTML = offres.map(o => `
+                        <div class="p-5 border border-slate-100 rounded-2xl bg-slate-50 flex justify-between items-center group">
+                            <div>
+                                <p class="text-sm font-black text-[#1A4E8A]">${o.poste}</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">${o.entreprise}</p>
+                            </div>
+                            ${o.etat === 'Postulée' 
+                                ? `<a href="${o.url}" target="_blank" class="px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black shadow-md hover:bg-green-600 transition">POSTULÉE ✔</a>`
+                                : `<button onclick="postuler('${o.id}', '${o.url}')" class="px-4 py-2 bg-[#F26522] text-white rounded-xl text-[10px] font-black shadow-md hover:scale-105 transition">POSTULER</button>`
+                            }
+                        </div>
+                    `).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
+                }
+            } catch (err) { alert("Erreur réseau"); }
+        }
+
+        async function addNote() {
+            const txt = document.getElementById('noteTexte').value;
+            if(!txt.trim()) return;
+            const btn = event.target; btn.innerText = "..."; btn.disabled = true;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addNote', targetId: studentId, auteur: currentUser.nom, contenu: txt }) });
+            document.getElementById('noteTexte').value = ""; 
+            btn.innerText = "Noter"; btn.disabled = false;
+            loadDossier();
+        }
+
+        async function postuler(idOffre, url) {
+            if(!confirm("En cliquant, vous confirmez votre intérêt. Accéder à l'offre ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre }) });
+            window.open(url, '_blank');
+            loadDossier(); // Correction : appelle bien loadDossier()
+        }
+    </script>
+</body>
+</html>

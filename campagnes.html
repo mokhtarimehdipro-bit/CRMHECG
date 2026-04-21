@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>HECG - Super Campagnes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 text-sm overflow-x-auto">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="campagnes.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Campagnes</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex justify-between items-center mb-10">
+            <div>
+                <h1 class="text-3xl font-black text-gray-800">E-mailing Pro</h1>
+                <p class="text-gray-400 text-sm mt-1">Gérez vos envois groupés et ciblés.</p>
+            </div>
+            <button onclick="openModal()" class="bg-[#F26522] text-white px-8 py-3 rounded-2xl font-black shadow-xl hover:scale-105 transition">+ Créer une campagne</button>
+        </div>
+
+        <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A] animate-pulse">Chargement de vos campagnes...</div>
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 w-full mb-8 hover:shadow-lg transition">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-black text-[#1A4E8A]">🤖 Relance Hebdomadaire (Automatique)</h2>
+                    <p class="text-xs text-gray-400 font-bold mt-1">Variables : <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{PRENOM}}</span> <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{NB_OFFRES}}</span> <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{INSERER_VOS_OFFRES_ICI}}</span></p>
+                </div>
+                <div class="flex gap-2 mt-4 md:mt-0">
+                    <button onclick="testTemplate()" class="px-5 py-2 bg-blue-50 text-[#1A4E8A] font-black rounded-xl hover:bg-blue-100 transition shadow-sm">⚡ Tester</button>
+                    <button onclick="saveTemplate()" id="btnSaveTemplate" class="px-5 py-2 bg-[#F26522] text-white font-black rounded-xl hover:bg-orange-600 transition shadow-sm">💾 Sauvegarder</button>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Code HTML de l'email :</label>
+                <textarea id="htmlEditor" class="w-full h-80 p-5 bg-slate-900 text-green-400 font-mono text-xs rounded-2xl shadow-inner focus:outline-none focus:ring-2 focus:ring-[#F26522] custom-scrollbar" spellcheck="false" placeholder="Chargement du code HTML..."></textarea>
+            </div>
+        </div>
+        <div id="campGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+    </main>
+
+    <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-4xl max-h-[95vh] overflow-y-auto custom-scrollbar">
+            <h2 class="text-3xl font-black text-[#1A4E8A] mb-8">🚀 Configurer ma Campagne</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="space-y-6">
+                    <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                        <label class="block text-xs font-black uppercase text-blue-600 mb-4">🎯 Qui doit recevoir ce mail ?</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-gray-700" id="audienceChecks">
+                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbRecherche" value="recherche" class="w-5 h-5 rounded border-blue-300 text-blue-600" checked> Étudiants en recherche</label>
+                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbPreinscrit" value="preinscrit" class="w-5 h-5 rounded border-blue-300 text-blue-600" checked> Étudiants Préinscrits</label>
+                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbProspect" value="prospect" class="w-5 h-5 rounded border-blue-300 text-blue-600"> Étudiants Prospects</label>
+                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbInscrit" value="inscrit" class="w-5 h-5 rounded border-blue-300 text-blue-600"> Inscrits Définitivement</label>
+                            <label class="flex items-center gap-3 cursor-pointer bg-orange-50 p-2 rounded-lg"><input type="checkbox" id="cbEntAvec" value="ent_avec" class="w-5 h-5 rounded border-orange-300 text-orange-600"> Entreprises AVEC alternants</label>
+                            <label class="flex items-center gap-3 cursor-pointer bg-orange-50 p-2 rounded-lg"><input type="checkbox" id="cbEntSans" value="ent_sans" class="w-5 h-5 rounded border-orange-300 text-orange-600"> Entreprises SANS alternants</label>
+                            <div class="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl col-span-full">
+    <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" id="cbSortis" value="Sortis" class="w-5 h-5 rounded text-red-600 focus:ring-red-500" onchange="toggleMotifSortie()">
+        <span class="text-sm font-black text-red-800">❌ Anciens étudiants (Sortis)</span>
+    </label>
+    
+    <div id="divMotifSortie" class="hidden mt-3 ml-7">
+        <label class="block text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Motif de sortie spécifique :</label>
+       <select id="selectMotif" class="w-full text-xs p-2 border border-red-200 rounded-lg focus:ring-red-500 bg-white font-bold outline-none" onchange="updateLivePreview()">
+    <option value="Tous">Tous les motifs</option>
+    <option value="Fin de parcours / Diplôme obtenu">🎓 Diplômé</option>
+    <option value="Démotivation">🏃 Démotivation</option>
+    <option value="Financement">💰 Problème de financement</option>
+    <option value="Réorientation">🔃 Réorientation</option>
+    <option value="Rupture">❌ Rupture de contrat</option>
+    <option value="Exclusion">🚫 Exclusion</option>
+    <option value="Autre">❓ Autre motif</option>
+</select>
+    </div>
+</div>
+                        </div>
+                        
+                        <div class="mt-4 p-4 bg-blue-50/80 rounded-2xl border-2 border-dashed border-blue-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="text-[10px] font-black uppercase text-blue-600">👥 Aperçu des destinataires</h4>
+                                <span id="liveCountCmp" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">0</span>
+                            </div>
+                            <div id="livePreviewListCmp" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
+                                Cochez des critères pour voir la liste...
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 border-t border-blue-100 pt-4">
+                            <label class="block text-[10px] uppercase font-black text-blue-400 mb-2">➕ Ajouter des emails au cas par cas</label>
+                            <textarea id="manualEmails" placeholder="Coller ici vos emails séparés par une virgule..." class="w-full text-xs p-3 rounded-xl border-none bg-white outline-none h-20 shadow-inner"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="bg-orange-50 p-6 rounded-2xl border border-orange-100">
+                        <label class="block text-xs font-black uppercase text-orange-600 mb-4">⏰ Fréquence d'envoi</label>
+                        <select id="cmpFreq" onchange="toggleCountdown()" class="w-full p-3 rounded-xl border-2 border-orange-200 font-bold bg-white mb-4 outline-none">
+                            <option value="Une fois">Une seule fois</option>
+                            <option value="Hebdomadaire">Toutes les semaines</option>
+                            <option value="Mensuelle">Tous les mois</option>
+                            <option value="Compte à rebours">Pendant plusieurs jours (Quotidien)</option>
+                        </select>
+                        <div id="countdownBox" class="hidden">
+                            <label class="block text-[10px] font-black text-orange-400 mb-1">DURÉE (Nombre de jours)</label>
+                            <input type="number" id="nbJours" value="5" class="w-full p-2 border border-orange-200 rounded-lg font-black text-orange-600 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Nom interne de la campagne</label>
+                        <input type="text" id="cmpNom" placeholder="Ex: Relance Alternance Avril" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Objet du mail</label>
+                        <input type="text" id="cmpObjet" placeholder="Sujet accrocheur..." class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold bg-gray-50 outline-none focus:border-[#F26522]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Message (HTML autorisé)</label>
+                        <textarea id="cmpCorps" rows="8" class="w-full border-2 border-gray-100 p-3 rounded-xl bg-gray-50 outline-none focus:border-[#F26522] text-sm custom-scrollbar" placeholder="Bonjour, ..."></textarea>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-xl border border-gray-200">
+                        <label class="block text-[10px] font-black text-gray-500 mb-2 uppercase">📎 Pièce jointe</label>
+                        <input type="file" id="cmpPJ" class="text-xs w-full bg-white p-1 rounded-lg">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 flex justify-end space-x-4 pt-6 border-t">
+                <button onclick="closeModal()" class="px-6 py-3 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="saveCampagne()" id="btnSaveCmp" class="px-10 py-4 bg-[#F26522] text-white font-black rounded-2xl shadow-xl hover:scale-105 transition">🚀 Créer la Campagne</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h2 class="text-2xl font-black text-[#1A4E8A] mb-6">✏️ Modifier la Campagne</h2>
+            <input type="hidden" id="editId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Nom</label>
+                    <input type="text" id="editNom" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Fréquence</label>
+                    <select id="editFreq" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
+                        <option value="Une fois">Une fois</option>
+                        <option value="Hebdomadaire">Hebdomadaire</option>
+                        <option value="Mensuelle">Mensuelle</option>
+                        <option value="Compte à rebours">Compte à rebours</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Statut</label>
+                    <select id="editStatut" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
+                        <option value="À lancer">À lancer 🕒</option>
+                        <option value="Active">Active ✅</option>
+                        <option value="Suspendue">Suspendue ⏸️</option>
+                        <option value="Terminée">Terminée 🏁</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-100">
+    <div class="flex justify-between items-center mb-2">
+        <h4 class="text-[10px] font-black uppercase text-blue-400">👥 Destinataires ciblés (Simulation)</h4>
+        <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+    </div>
+    <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
+        Sélectionnez des cibles pour voir la liste...
+    </div>
+</div>
+            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-200">
+                <div class="flex justify-between items-center mb-2">
+                    <h4 class="text-[10px] font-black uppercase text-blue-500">👥 Destinataires détectés en temps réel</h4>
+                    <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+                </div>
+                <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
+                    Sélectionnez des critères pour voir la liste...
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-8">
+                <button onclick="closeEditModal()" class="px-6 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="saveEdit()" class="bg-[#1A4E8A] text-white px-6 py-3 rounded-xl font-black hover:bg-blue-800 transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ⚠️ REMPLACE PAR TON VRAI LIEN API ⚠️
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
+        
+        let listCampagnes = [];
+        
+        // 1. RÉCUPÉRATION DU RÔLE DE L'UTILISATEUR
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem('user')); } catch(e) {}
+        const userRole = user ? user.role : 'Utilisateur';
+
+        // --- 2. CHARGEMENT ---
+        async function loadCampagnes() {
+            try {
+                document.getElementById('loader').classList.remove('hidden');
+                document.getElementById('campGrid').classList.add('hidden');
+                
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getCampagnes' }) });
+                const data = await res.json();
+                
+                if(data.success) {
+                    listCampagnes = data.data;
+                    renderCampagnes();
+                }
+            } catch(e) { 
+                console.error("Erreur chargement:", e); 
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('campGrid').classList.remove('hidden');
+            }
+        }
+
+        // --- 3. AFFICHAGE DES CARTES (Avec filtre d'Archivage et correction du bouton) ---
+        function renderCampagnes() {
+            const grid = document.getElementById('campGrid');
+            if(!grid) return;
+
+            // FILTRE D'ARCHIVAGE : On cache les "Terminées" si on n'est pas Administrateur
+            const campagnesVisibles = listCampagnes.filter(c => {
+                if (c.statut === "Terminée" && userRole !== "Administrateur") {
+                    return false; 
+                }
+                return true; 
+            });
+
+            grid.innerHTML = campagnesVisibles.map(c => {
+                // CORRECTION DU BOUTON GRISÉ : On utilise l'égalité stricte (===)
+                const statut = c.statut || "À lancer";
+                const estDejaLancee = (statut === "Active" || statut === "Terminée");
+                
+                const btnStyle = estDejaLancee 
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" 
+                    : "bg-green-500 text-white hover:bg-green-600 shadow-md hover:scale-105";
+
+                // Design spécifique pour l'Admin si la campagne est archivée
+                const badgeStatut = statut === "Terminée" 
+                    ? `<span class="px-2 py-1 bg-gray-200 text-gray-600 text-[10px] font-black uppercase rounded">🗄️ ARCHIVÉE</span>`
+                    : `<span class="px-2 py-1 ${estDejaLancee ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} text-[10px] font-black uppercase rounded">${statut}</span>`;
+
+                const opaciteCarte = statut === "Terminée" ? "opacity-75 grayscale-[30%]" : "";
+
+                return `
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-lg transition duration-200 ${opaciteCarte}">
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            ${badgeStatut}
+                            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">${c.frequence}</span>
+                        </div>
+                        <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2">${c.nom || "Campagne sans nom"}</h3>
+                        <p class="text-[10px] text-gray-400 font-bold uppercase truncate">Cibles : ${c.cible || 'Manuelle'}</p>
+                    </div>
+                    
+                    <div class="mt-6 flex flex-wrap gap-2 border-t pt-4">
+                        <button onclick="${estDejaLancee ? '' : `runCampagne('${c.id}')`}" 
+                                class="flex-1 py-3 rounded-xl text-[10px] font-black transition ${btnStyle}"
+                                ${estDejaLancee ? 'disabled' : ''}>
+                            ${estDejaLancee ? '✓ DÉJÀ LANCÉE' : '🚀 LANCER MAINTENANT'}
+                        </button>
+                        
+                        <div class="flex w-full gap-2 mt-2">
+                            <button onclick="testCamp('${c.id}')" class="flex-1 bg-gray-50 text-gray-500 py-2 rounded-xl text-[10px] font-black hover:bg-orange-50 transition" title="Test vers votre mail">⚡ TEST</button>
+                            <button onclick="duplicateCampaign('${c.id}')" class="px-4 py-2 bg-gray-50 text-blue-500 rounded-xl hover:bg-blue-100 transition" title="Dupliquer">👯</button>
+                            <button onclick="openEditModal('${c.id}')" class="px-4 py-2 bg-gray-50 text-gray-400 rounded-xl hover:text-blue-500 transition" title="Éditer">✏️</button>
+                            <button onclick="deleteCampagne('${c.id}')" class="px-4 py-2 bg-gray-50 text-gray-300 rounded-xl hover:text-red-500 transition" title="Supprimer">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('') || '<div class="col-span-full text-center py-20 text-gray-300 font-bold italic">Aucune campagne à afficher.</div>';
+        }
+
+        // --- 4. MODALES DE CRÉATION ---
+        function toggleCountdown() {
+            const isCountdown = document.getElementById('cmpFreq').value === "Compte à rebours";
+            document.getElementById('countdownBox').classList.toggle('hidden', !isCountdown);
+        }
+
+        function openModal() { document.getElementById('cmpModal').classList.replace('hidden', 'flex'); }
+        function closeModal() { document.getElementById('cmpModal').classList.replace('flex', 'hidden'); }
+
+        async function saveCampagne() {
+            const btn = document.getElementById('btnSaveCmp');
+            try {
+                btn.innerText = "Création en cours..."; 
+                btn.disabled = true;
+
+                const cibles = Array.from(document.querySelectorAll('#audienceChecks input:checked')).map(i => i.value);
+                const emailsManuels = document.getElementById('manualEmails')?.value || "";
+                
+                if (cibles.length === 0 && emailsManuels.trim() === "") {
+                    throw new Error("Veuillez choisir au moins une cible ou ajouter des emails manuels.");
+                }
+
+                let pjUrl = "";
+                const pjInput = document.getElementById('cmpPJ');
+                const file = pjInput ? pjInput.files[0] : null;
+                
+                if (file) {
+                    btn.innerText = "Upload de la pièce jointe...";
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                        reader.readAsDataURL(file);
+                    });
+
+                    const uploadRes = await fetch(API_URL, { 
+                        method: 'POST', body: JSON.stringify({ action: 'uploadCV', fileName: "PJ_" + file.name, mimeType: file.type, base64Data: base64 }) 
+                    });
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.success) pjUrl = uploadData.url;
+                }
+
+                btn.innerText = "Enregistrement...";
+                const payload = {
+                    action: 'addCampagne',
+                    nom: document.getElementById('cmpNom')?.value || "Sans nom",
+                    cible: cibles, frequence: document.getElementById('cmpFreq')?.value || "Une fois",
+                    nbJours: document.getElementById('nbJours')?.value || 0, emailsManuels: emailsManuels,
+                    objet: document.getElementById('cmpObjet')?.value || "Sans objet", corps: document.getElementById('cmpCorps')?.value || "", pjUrl: pjUrl
+                };
+
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.success) {
+                    closeModal(); loadCampagnes();
+                } else throw new Error("Erreur serveur");
+            } catch (error) {
+                alert("⚠️ Erreur : " + error.message);
+            } finally {
+                btn.innerText = "🚀 Créer la Campagne"; btn.disabled = false;
+            }
+        }
+
+        // --- 5. ACTIONS SUR LES CARTES ---
+        async function runCampagne(id) {
+            if(!confirm("Confirmer le lancement immédiat ?")) return;
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'runCampagne', id: id }) });
+            const data = await res.json(); 
+            alert(data.message); loadCampagnes();
+        }
+
+        async function testCamp(id) {
+            if(!confirm("Envoyer un test à votre adresse email ?")) return;
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testCampaign', campaignId: id }) });
+            const data = await res.json(); 
+            alert(data.message);
+        }
+
+        async function deleteCampagne(id) {
+            if(!confirm("Supprimer cette campagne définitivement ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteCampagne', campaignId: id }) }); 
+            loadCampagnes();
+        }
+
+        async function duplicateCampaign(id) {
+            if(!confirm("Dupliquer cette campagne ?")) return;
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'duplicateCampaign', campaignId: id }) });
+            const data = await res.json();
+            if(data.success) loadCampagnes();
+        }
+
+        // --- 6. ÉDITION ---
+        function openEditModal(id) {
+            const c = listCampagnes.find(x => x.id === id);
+            if(!c) return;
+            document.getElementById('editId').value = c.id;
+            document.getElementById('editNom').value = c.nom;
+            document.getElementById('editFreq').value = c.frequence;
+            document.getElementById('editStatut').value = c.statut;
+            document.getElementById('editModal').classList.replace('hidden', 'flex');
+        }
+
+        function closeEditModal() { document.getElementById('editModal').classList.replace('flex', 'hidden'); }
+
+        async function saveEdit() {
+            await fetch(API_URL, { 
+                method: 'POST', body: JSON.stringify({ 
+                    action: 'updateCampaign', id: document.getElementById('editId').value, nom: document.getElementById('editNom').value, 
+                    frequence: document.getElementById('editFreq').value, statut: document.getElementById('editStatut').value 
+                }) 
+            });
+            closeEditModal(); loadCampagnes();
+        }
+
+        loadCampagnes();
+       // ==========================================
+        // ⚙️ MOTEUR DU FILET DE SÉCURITÉ EN DIRECT
+        // ==========================================
+        async function updateLivePreview() {
+    // On détecte quelle modale est ouverte pour mettre à jour le bon compteur
+    const isEdit = !document.getElementById('editModal').classList.contains('hidden');
+    const listDiv = document.getElementById(isEdit ? 'livePreviewList' : 'livePreviewListCmp');
+    const countSpan = document.getElementById(isEdit ? 'liveCount' : 'liveCountCmp');
+
+    if (!listDiv || !countSpan) return;
+
+    const ciblesSelectionnees = {
+        target_recherche: document.getElementById('cbRecherche')?.checked || false,
+        b2c_prospects: document.getElementById('cbProspect')?.checked || false,
+        b2c_preinscrits: document.getElementById('cbPreinscrit')?.checked || false,
+        b2c_inscrits: document.getElementById('cbInscrit')?.checked || false,
+        b2c_sortis: document.getElementById('cbSortis')?.checked || false,
+        motif_sortie: document.getElementById('selectMotif')?.value || "Tous",
+        b2b_avec: document.getElementById('cbEntAvec')?.checked || false,
+        b2b_sans: document.getElementById('cbEntSans')?.checked || false
+    };
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'previewComMail', cible: ciblesSelectionnees })
+        });
+        const d = await res.json();
+        if (d.success) {
+            countSpan.innerText = d.data.length;
+            listDiv.innerHTML = d.data.slice(0, 50).map(c => `
+                <div class="flex justify-between border-b border-blue-50 py-1 px-1">
+                    <span class="truncate pr-2 text-[10px]">${c.nom}</span>
+                    <span class="text-blue-400 font-mono text-[9px]">${c.email}</span>
+                </div>
+            `).join('') || "<div class='text-center text-gray-400 italic py-4 text-[10px]'>Aucun destinataire...</div>";
+        }
+    } catch(e) { console.error("Erreur prévisualisation"); }
+}
+
+
+        // Écouter les cases à cocher
+        document.addEventListener('change', (e) => {
+            if (e.target.type === 'checkbox' && e.target.id.startsWith('cb')) {
+                updateLivePreview();
+            }
+        });
+
+        // Calculer automatiquement à l'ouverture de la modale
+        const originalOpenModal = openModal;
+        openModal = function() {
+            originalOpenModal(); // Ouvre la fenêtre normalement
+            setTimeout(updateLivePreview, 200); // Lance le calcul 0.2s plus tard
+        };
+
+   
+// ==========================================
+        // GESTION DU TEMPLATE RELANCE HEBDO
+        // ==========================================
+        async function loadTemplate() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTemplateRelance' }) });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('htmlEditor').value = data.template;
+                }
+            } catch (err) {
+                console.error("Erreur chargement template :", err);
+            }
+        }
+
+        async function saveTemplate() {
+            const btn = document.getElementById('btnSaveTemplate');
+            const htmlCode = document.getElementById('htmlEditor').value;
+            
+            btn.innerText = "⏳ Sauvegarde..."; btn.disabled = true;
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTemplateRelance', template: htmlCode }) });
+                const data = await res.json();
+                alert(data.message);
+            } catch (err) {
+                alert("Erreur lors de la sauvegarde.");
+            } finally {
+                btn.innerText = "💾 Sauvegarder"; btn.disabled = false;
+            }
+        }
+
+        async function testTemplate() {
+            const emailTest = prompt("À quelle adresse email voulez-vous envoyer le test ?");
+            if (!emailTest || !emailTest.includes('@')) return; 
+
+            try {
+                // On met une petite alerte car l'envoi peut prendre 1 ou 2 secondes
+                console.log("Envoi du test en cours...");
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testTemplateRelance', email: emailTest }) });
+                const data = await res.json();
+                alert(data.message);
+            } catch (err) {
+                alert("Erreur lors de l'envoi du test.");
+            }
+        }
+
+        // On charge le template automatiquement quand la page s'ouvre
+        document.addEventListener('DOMContentLoaded', loadTemplate);
+        function toggleMotifSortie() {
+            const isChecked = document.getElementById('cbSortis').checked;
+            document.getElementById('divMotifSortie').classList.toggle('hidden', !isChecked);
+            // On décoche les autres cases si on choisit "Sortis" (pour éviter les mélanges)
+            if (isChecked) {
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    if (cb.id !== 'cbSortis') cb.checked = false;
+                });
+            }
+            updateLivePreview(); 
+        }
+    </script>
+</body>
+</html>

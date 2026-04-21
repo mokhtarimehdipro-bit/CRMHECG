@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portail Privé - HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-[#1A4E8A] to-[#002a5c] min-h-screen flex flex-col justify-center items-center p-4">
+
+    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#F26522] to-orange-400"></div>
+
+        <div class="text-center mb-10">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo HECG" class="h-16 mx-auto mb-4">
+            <h1 class="text-2xl font-black text-[#1A4E8A]">Espace Privé</h1>
+            <p class="text-sm text-gray-400 font-medium">Connectez-vous à votre portail</p>
+        </div>
+
+        <div id="errorBox" class="hidden bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm font-bold text-center mb-6">
+            Identifiants incorrects.
+        </div>
+
+        <div class="space-y-6">
+            <div>
+                <label class="block text-xs font-black uppercase text-gray-400 mb-2 tracking-wide">Identifiant ou Email</label>
+                <input type="text" id="loginId" placeholder=" " class="w-full border-2 border-gray-100 p-4 rounded-xl outline-none focus:border-[#F26522] transition font-bold text-gray-700" onkeypress="handleEnter(event)">
+            </div>
+            
+            <div>
+                <label class="block text-xs font-black uppercase text-gray-400 mb-2 tracking-wide">Mot de passe</label>
+                <input type="password" id="loginPwd" placeholder="••••••••" class="w-full border-2 border-gray-100 p-4 rounded-xl outline-none focus:border-[#F26522] transition font-bold" onkeypress="handleEnter(event)">
+            </div>
+
+            <button onclick="login()" id="btnLogin" class="w-full bg-[#F26522] hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 mt-4">
+                Se connecter
+            </button>
+        </div>
+    </div>
+
+    <p class="text-blue-200 text-xs mt-8 font-medium tracking-wide">© 2026 CFA HECG - Tous droits réservés.</p>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+
+        function handleEnter(e) {
+            if (e.key === "Enter") login();
+        }
+
+        async function login() {
+            const btn = document.getElementById('btnLogin');
+            const errorBox = document.getElementById('errorBox');
+            const identifiant = document.getElementById('loginId').value;
+            const password = document.getElementById('loginPwd').value;
+
+            if (!identifiant || !password) {
+                errorBox.innerText = "Veuillez remplir les deux champs.";
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            btn.innerText = "Vérification en cours...";
+            btn.disabled = true;
+            errorBox.classList.add('hidden');
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'login', identifiant: identifiant, password: password })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    localStorage.setItem('user', JSON.stringify({ role: data.role, nom: data.nom, ref: data.ref }));
+                    
+                    btn.innerText = "Connexion réussie !";
+                    btn.classList.replace('bg-[#F26522]', 'bg-green-500');
+                    
+                    setTimeout(() => {
+                        // --- L'AIGUILLEUR EST ICI ---
+                        if (data.role === 'Etudiant') {
+                            window.location.replace('dossier.html'); // Vers le dossier
+                        } else {
+                            window.location.replace('dashboard.html'); // Vers l'administration
+                        }
+                    }, 500);
+                } else {
+                    errorBox.innerText = data.message || "Identifiants incorrects.";
+                    errorBox.classList.remove('hidden');
+                    btn.innerText = "Se connecter";
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error(error);
+                errorBox.innerText = "Erreur de connexion au serveur.";
+                errorBox.classList.remove('hidden');
+                btn.innerText = "Se connecter";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
