@@ -81,22 +81,25 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         
         async function apiPost(payload) {
-    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    // On envoie 'auteur' pour remplir ta 2ème colonne du Sheet
-    payload.auteur = userSession.nom || "Utilisateur"; 
-    payload.roleAuteur = userSession.role || "N/A";
-    
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
-        });
-        return await response.json();
-    } catch (e) {
-        return { success: false };
-    }
-}
+            const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            // On prépare les étiquettes pour le script Google
+            payload.idAuteur = userSession.nom || "Inconnu";    // Pour l'onglet HISTORIQUE
+            payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
+            payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (e) {
+                console.error("Erreur API :", e);
+                return { success: false, message: "Erreur de connexion" };
+            }
+        }
         
 
         const partId = new URLSearchParams(window.location.search).get('id');
