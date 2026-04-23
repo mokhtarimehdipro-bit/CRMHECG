@@ -109,7 +109,7 @@
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         let allLogs = [];
-        let filteredLogs = []; // Pour l'export CSV
+        let filteredLogs = [];
 
         // 1. IDENTITÉ & SÉCURITÉ
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -121,6 +121,14 @@
                 loadHistory();
             }
         };
+
+        // FONCTION OUTIL : Trouve une colonne peu importe les espaces ou accents
+        function getSafeValue(obj, motsCles) {
+            const trueKey = Object.keys(obj).find(k => 
+                motsCles.some(mot => k.toLowerCase().includes(mot.toLowerCase()))
+            );
+            return trueKey ? obj[trueKey] : null;
+        }
 
         // 2. CHARGEMENT DES DONNÉES
         async function loadHistory() {
@@ -137,7 +145,7 @@
                     allLogs = result.logs;
                     filteredLogs = [...allLogs];
                     populateAuteurFilter();
-                    applyFilters(); // Applique les filtres et met à jour KPI + Tableau
+                    applyFilters(); 
                 } else {
                     document.getElementById('historyTableBody').innerHTML = `<tr><td colspan="5" class="p-10 text-center text-orange-500 font-bold">Erreur : ${result.message}</td></tr>`;
                 }
@@ -149,8 +157,7 @@
         // 3. REMPLISSAGE DYNAMIQUE DU FILTRE AUTEUR
         function populateAuteurFilter() {
             const select = document.getElementById('fAuteur');
-            // Récupère les noms uniques
-            const auteurs = [...new Set(allLogs.map(l => l["Auteur"] || l.auteur || "Inconnu"))].sort();
+            const auteurs = [...new Set(allLogs.map(l => getSafeValue(l, ['auteur', 'nom']) || "Inconnu"))].sort();
             select.innerHTML = '<option value="">Tous les auteurs</option>' + auteurs.map(a => `<option value="${a}">${a}</option>`).join('');
         }
 
@@ -159,24 +166,21 @@
             const fSearch = document.getElementById('fSearch').value.toLowerCase();
             const fAuteur = document.getElementById('fAuteur').value.toLowerCase();
             const fAction = document.getElementById('fAction').value.toLowerCase();
-            const fDate = document.getElementById('fDate').value; // Format YYYY-MM-DD
+            const fDate = document.getElementById('fDate').value; 
 
             filteredLogs = allLogs.filter(log => {
-                // Valeurs du log (tolérance majuscules/minuscules des clés)
-                const auteur = String(log["Auteur"] || log.auteur || "Inconnu").toLowerCase();
-                const type = String(log["Type"] || log["Action"] || log.type || "").toLowerCase();
-                const dateVal = log["Date et Heure"] || log["Date"] || null;
-                const details = String(log["Détails"] || log["Details"] || "").toLowerCase();
-                const cible = String(log["Cible"] || log.cible || "").toLowerCase();
+                const auteur = String(getSafeValue(log, ['auteur']) || "Inconnu").toLowerCase();
+                const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
+                const dateVal = getSafeValue(log, ['date']);
+                const details = String(getSafeValue(log, ['détail', 'detail']) || "").toLowerCase();
+                const cible = String(getSafeValue(log, ['cible']) || "").toLowerCase();
 
-                // Tests de correspondance
                 const matchSearch = fSearch === "" || details.includes(fSearch) || cible.includes(fSearch);
                 const matchAuteur = fAuteur === "" || auteur === fAuteur;
                 const matchAction = fAction === "" || type.includes(fAction);
                 
                 let matchDate = true;
                 if (fDate && dateVal) {
-                    // Convertit la date du log au format YYYY-MM-DD pour la comparer
                     const logDateISO = new Date(dateVal).toISOString().split('T')[0];
                     matchDate = (logDateISO === fDate);
                 }
@@ -202,7 +206,7 @@
             
             let crea = 0, modif = 0, supp = 0;
             logs.forEach(log => {
-                const type = String(log["Type"] || log["Action"] || "").toLowerCase();
+                const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
                 if (type.includes("création") || type.includes("creation")) crea++;
                 if (type.includes("modification")) modif++;
                 if (type.includes("suppression")) supp++;
@@ -222,14 +226,17 @@
             }
             
             tbody.innerHTML = logs.map(log => {
-                const dateVal = log["Date et Heure"] || log["Date"] || null;
+                const dateVal = getSafeValue(log, ['date']);
                 const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
-                const typeAction = log["Type"] || log["Action"] || "Info";
-                const auteur = log["Auteur"] || log.auteur || "Inconnu";
-                const role = log["Rôle"] || log["Role"] || log.role || "N/A";
-                const categorie = log["Catégorie"] || log["Categorie"] || "Général";
-                const cible = log["Cible"] || log.cible || "-";
-                const details = log["Détails"] || log["Details"] || "";
+                
+                // LE COEUR DE LA CORRECTION EST ICI :
+                const typeAction = getSafeValue(log, ['type', 'action']) || "Action Inconnue";
+                
+                const auteur = getSafeValue(log, ['auteur']) || "Inconnu";
+                const role = getSafeValue(log, ['rôle', 'role']) || "N/A";
+                const categorie = getSafeValue(log, ['catégorie', 'categorie']) || "Général";
+                const cible = getSafeValue(log, ['cible']) || "-";
+                const details = getSafeValue(log, ['détail', 'detail']) || "";
 
                 let badge = "bg-gray-100 text-gray-600";
                 if (typeAction.includes("Création")) badge = "bg-green-100 text-green-700 border border-green-200";
@@ -253,29 +260,25 @@
             }).join('');
         }
 
-        // 7. EXPORT CSV (Basé sur filteredLogs)
+        // 7. EXPORT CSV
         function exportCSV() {
             if (filteredLogs.length === 0) return alert("Rien à exporter !");
             
-            // En-têtes du CSV
             let csv = "Date;Auteur;Role;Action;Categorie;Cible;Details\n";
             
             filteredLogs.forEach(log => {
-                const dateVal = log["Date et Heure"] || log["Date"] || null;
+                const dateVal = getSafeValue(log, ['date']);
                 const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR') : '';
-                const typeAction = log["Type"] || log["Action"] || "";
-                const auteur = log["Auteur"] || "";
-                const role = log["Rôle"] || log["Role"] || "";
-                const categorie = log["Catégorie"] || log["Categorie"] || "";
-                const cible = log["Cible"] || "";
-                
-                // Nettoyage des détails pour éviter de casser le CSV avec des points-virgules ou sauts de ligne
-                let details = String(log["Détails"] || log["Details"] || "").replace(/;/g, ',').replace(/\n/g, ' ');
+                const typeAction = getSafeValue(log, ['type', 'action']) || "";
+                const auteur = getSafeValue(log, ['auteur']) || "";
+                const role = getSafeValue(log, ['rôle', 'role']) || "";
+                const categorie = getSafeValue(log, ['catégorie', 'categorie']) || "";
+                const cible = getSafeValue(log, ['cible']) || "";
+                let details = String(getSafeValue(log, ['détail', 'detail']) || "").replace(/;/g, ',').replace(/\n/g, ' ');
 
                 csv += `"${dateStr}";"${auteur}";"${role}";"${typeAction}";"${categorie}";"${cible}";"${details}"\n`;
             });
 
-            // Création du fichier avec gestion des accents (\ufeff)
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
