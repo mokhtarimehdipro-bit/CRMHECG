@@ -52,8 +52,14 @@
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <h3 class="font-black text-gray-800 mb-6 border-b pb-2">📞 Coordonnées</h3>
                         <p class="text-sm font-bold text-gray-600 mb-2">✉️ <a href="" id="etuMail" class="font-normal text-blue-500 hover:underline">...</a></p>
-                        <p class="text-sm font-bold text-gray-600 mb-6">📱 <span id="etuTel" class="font-normal">...</span></p>
+                        <p class="text-sm font-bold text-gray-600 mb-4">📱 <span id="etuTel" class="font-normal">...</span></p>
                         
+                        <div class="mb-6">
+                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Accès personnel)</label>
+                            <input type="text" id="etuMdp" class="w-full border-2 border-orange-100 p-2 rounded-xl bg-orange-50 font-bold text-sm outline-none focus:border-[#F26522]">
+                            <button onclick="updateProfile()" class="mt-2 w-full py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-black transition">Sauvegarder les infos</button>
+                        </div>
+
                         <div class="p-4 bg-orange-50 rounded-2xl mb-6">
                             <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise / Alternance</h4>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
@@ -167,6 +173,7 @@
                     document.getElementById('etuMail').innerText = p.mail || 'Non renseigné';
                     document.getElementById('etuMail').href = "mailto:" + p.mail;
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
+                    document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
                     document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
 
@@ -224,6 +231,29 @@
             await apiPost({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre });
             window.open(url, '_blank');
             loadDossier(); // Correction : appelle bien loadDossier()
+        }
+        async function updateProfile() {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Mise à jour...";
+            btn.disabled = true;
+
+            const payload = {
+                action: 'updateStudent',
+                id_etu: studentId,
+                mdp: document.getElementById('etuMdp').value,
+                nom: document.getElementById('etuNom').innerText.split(' ')[1], // Récupération simple
+                prenom: document.getElementById('etuNom').innerText.split(' ')[0]
+            };
+
+            const res = await apiPost(payload);
+            if(res.success) {
+                alert("✅ Coordonnées mises à jour !");
+            } else {
+                alert("❌ Erreur : " + res.message);
+            }
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     </script>
 </body>
