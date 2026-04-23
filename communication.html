@@ -230,7 +230,7 @@
 
         async function saveSettings() {
             const newEmail = document.getElementById('formTestEmail').value;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSettings', email_test: newEmail }) });
+            await apiPost({ action: 'saveSettings', email_test: newEmail });
             testEmail = newEmail;
             document.getElementById('settingsModal').classList.add('hidden');
             alert("Email de test mis à jour !");
@@ -493,7 +493,7 @@
             };
 
             try {
-                const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const response = await apiPost(payload);
                 const result = await response.json();
                 if (result.success) {
                     closeModal();
@@ -513,10 +513,7 @@
     if (!confirm("Voulez-vous ranger cette campagne dans l'historique ? Elle ne sera plus modifiable mais restera visible en bas de page.")) return;
     
     try {
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ action: 'deleteComEvent', id: id }) 
-        });
+        const res = await apiPost({ action: 'deleteComEvent', id: id });
         const result = await res.json();
         if (result.success) {
             loadCampaigns(); // On recharge la liste pour voir le changement
@@ -628,20 +625,17 @@ async function executeFinalSend(cmpId, isTest, emailList) {
     const getVal = (formId, cmpProp) => (isModalOpen && isCurrentCampaign) ? document.getElementById(formId).value : (cmpProp || "");
 
     try {
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ 
-                action: 'sendComMail', 
-                id: cmpId, type: cmp.type, 
-                objet: getVal('formObjet', cmp.objet),
-                accroche: getVal('formAccroche', cmp.accroche), 
-                emailsLibres: getVal('formEmailsLibres', cmp.emailsLibres),
-                lienExterne: getVal('formLienExterne', cmp.lienExterne),
-                cible: cmp.cible, pjUrl: cmp.pjUrl, flyerUrl: cmp.flyerUrl, campus: cmp.campus, 
-                dateEvt: cmp.dateEvt, horaires: cmp.horaires,
-                isTest: isTest, testEmail: isTest ? emailList[0] : null,
-                finalEmails: !isTest ? emailList : null
-            }) 
+        const res = await apiPost({ 
+            action: 'sendComMail', 
+            id: cmpId, type: cmp.type, 
+            objet: getVal('formObjet', cmp.objet),
+            accroche: getVal('formAccroche', cmp.accroche), 
+            emailsLibres: getVal('formEmailsLibres', cmp.emailsLibres),
+            lienExterne: getVal('formLienExterne', cmp.lienExterne),
+            cible: cmp.cible, pjUrl: cmp.pjUrl, flyerUrl: cmp.flyerUrl, campus: cmp.campus, 
+            dateEvt: cmp.dateEvt, horaires: cmp.horaires,
+            isTest: isTest, testEmail: isTest ? emailList[0] : null,
+            finalEmails: !isTest ? emailList : null
         });
         
         const result = await res.json();
@@ -748,16 +742,13 @@ async function executeFinalSend(cmpId, isTest, emailList) {
 
         async function markPresence(emailOrigine, nom, prenom, emailForcé = null) {
             try {
-                const res = await fetch(API_URL, { 
-                    method: 'POST', 
-                    body: JSON.stringify({ 
-                        action: 'markPresence', 
-                        eventId: currentEventId,
-                        typeEvt: currentEventType,
-                        emailOriginal: emailOrigine,
-                        emailEtudiant: emailForcé || emailOrigine, // Email utilisé pour chercher dans la base
-                        nom: nom, prenom: prenom
-                    }) 
+                const res = await apiPost({ 
+                    action: 'markPresence', 
+                    eventId: currentEventId,
+                    typeEvt: currentEventType,
+                    emailOriginal: emailOrigine,
+                    emailEtudiant: emailForcé || emailOrigine,
+                    nom: nom, prenom: prenom
                 });
                 const d = await res.json();
                 if(d.success) {
