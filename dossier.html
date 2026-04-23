@@ -55,9 +55,9 @@
                         <p class="text-sm font-bold text-gray-600 mb-4">📱 <span id="etuTel" class="font-normal">...</span></p>
                         
                         <div class="mb-6">
-                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Accès personnel)</label>
-                            <input type="text" id="etuMdp" class="w-full border-2 border-orange-100 p-2 rounded-xl bg-orange-50 font-bold text-sm outline-none focus:border-[#F26522]">
-                            <button onclick="updateProfile()" class="mt-2 w-full py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-black transition">Sauvegarder les infos</button>
+                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Consultation)</label>
+                            <input type="text" id="etuMdp" readonly class="w-full border-2 border-gray-100 p-2 rounded-xl bg-gray-50 font-bold text-sm outline-none cursor-not-allowed text-gray-500">
+                            <button id="btnSaveMdp" onclick="updateProfile()" class="hidden mt-2 w-full py-2 bg-[#F26522] text-white text-[10px] font-black uppercase rounded-lg hover:bg-orange-600 transition shadow-md">Modifier mon mot de passe</button>
                         </div>
 
                         <div class="p-4 bg-orange-50 rounded-2xl mb-6">
@@ -123,12 +123,16 @@
         let studentId = null;
 
         // --- GESTION DE LA SÉCURITÉ ---
-        window.onload = () => {
+       window.onload = () => {
             const stored = localStorage.getItem('user');
             if (!stored) { window.location.replace('index.html'); return; }
             
             currentUser = JSON.parse(stored);
             
+            // On cible les éléments du MDP
+            const mdpInput = document.getElementById('etuMdp');
+            const btnSave = document.getElementById('btnSaveMdp');
+
             if (currentUser.role === 'Etudiant') {
                 // SÉCURITÉ : L'étudiant ne voit que son propre dossier
                 studentId = currentUser.ref; 
@@ -140,9 +144,26 @@
                 
                 // On affiche l'en-tête étudiant simple
                 document.getElementById('student-header').classList.remove('hidden');
+
+                // --- LOGIQUE MODIFICATION MDP (ÉLÈVE UNIQUEMENT) ---
+                if(mdpInput) {
+                    mdpInput.readOnly = false; // Permet d'écrire
+                    mdpInput.classList.remove('bg-gray-50', 'cursor-not-allowed', 'text-gray-500', 'border-gray-100');
+                    mdpInput.classList.add('bg-orange-50', 'border-orange-100', 'text-gray-800');
+                }
+                if(btnSave) btnSave.classList.remove('hidden'); // Affiche le bouton de sauvegarde
+
             } else {
-                // L'admin charge le dossier demandé dans l'URL
+                // L'admin/staff charge le dossier demandé dans l'URL
                 studentId = new URLSearchParams(window.location.search).get('id');
+
+                // --- LOGIQUE CONSULTATION MDP (STAFF) ---
+                if(mdpInput) {
+                    mdpInput.readOnly = true; // Verrouille l'écriture
+                    mdpInput.classList.add('bg-gray-50', 'cursor-not-allowed', 'text-gray-500', 'border-gray-100');
+                    mdpInput.classList.remove('bg-orange-50', 'border-orange-100', 'text-gray-800');
+                }
+                if(btnSave) btnSave.classList.add('hidden'); // Cache le bouton de sauvegarde
             }
 
             if (!studentId) { 
