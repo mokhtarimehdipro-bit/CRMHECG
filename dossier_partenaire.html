@@ -131,7 +131,7 @@
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addPartnerNote', targetId: partId, auteur: currentUser.nom, texte: txt }) });
+            await apiPost({ action: 'addPartnerNote', targetId: partId, texte: txt });
             document.getElementById('noteTexte').value = ""; loadDetails();
         }
 
@@ -146,16 +146,13 @@
             const btn = event.target; 
             btn.innerText = "Enregistrement..."; btn.disabled = true;
 
-            await fetch(API_URL, { 
-                method: 'POST', 
-                body: JSON.stringify({ 
-                    action: 'setPartnerAlert', 
-                    targetId: partId, // ID exact de l'entreprise
-                    date: date, 
-                    freq: document.getElementById('alertFreq').value, 
-                    msg: msg,
-                    destinataire: destinataire // Envoi de l'email au serveur
-                }) 
+            await apiPost({ 
+                action: 'setPartnerAlert', 
+                targetId: partId, 
+                date: date, 
+                freq: document.getElementById('alertFreq').value, 
+                msg: msg,
+                destinataire: destinataire 
             });
             
             alert("Alerte programmée avec succès !"); 
@@ -171,7 +168,7 @@
             const poste = prompt("Étape 2/2 : Quel est le titre du poste ?");
             if(!poste) return;
             const btn = event.target; btn.innerText = "Création..."; btn.disabled = true;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" }) });
+            await apiPost({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" });
             btn.innerText = "+ Nouvelle Offre"; btn.disabled = false; loadDetails();
         }
         loadDetails();
