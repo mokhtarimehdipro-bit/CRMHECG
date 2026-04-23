@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historique - HECG</title>
+    <title>Historique & Audit - HECG</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+    
     <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div class="flex items-center space-x-4">
             <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
@@ -25,22 +27,75 @@
     </nav>
 
     <main class="max-w-7xl mx-auto p-8">
+        
         <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-black text-[#1A4E8A]">Journal d'Audit</h1>
-            <div class="flex space-x-2">
-                <input type="text" id="searchLog" placeholder="Rechercher..." class="px-4 py-2 border rounded-lg text-sm w-64 outline-none focus:border-[#1A4E8A]" oninput="filterLogs()">
-                <button onclick="loadHistory()" class="bg-[#1A4E8A] text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-90">🔄</button>
+            <div>
+                <h1 class="text-3xl font-black text-[#1A4E8A]">Journal d'Audit</h1>
+                <p class="text-sm text-gray-400 font-bold mt-1">Traçabilité des actions utilisateurs</p>
             </div>
+            <div class="flex space-x-3">
+                <button onclick="loadHistory()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
+                <button onclick="exportCSV()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-green-700 transition flex items-center gap-2">
+                    📥 Exporter CSV
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Actions</p>
+                <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpi-total">0</p>
+            </div>
+            <div class="bg-green-50 p-5 rounded-2xl shadow-sm border border-green-100">
+                <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Créations</p>
+                <p class="text-3xl font-black text-green-700 mt-1" id="kpi-crea">0</p>
+            </div>
+            <div class="bg-blue-50 p-5 rounded-2xl shadow-sm border border-blue-100">
+                <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Modifications</p>
+                <p class="text-3xl font-black text-blue-700 mt-1" id="kpi-modif">0</p>
+            </div>
+            <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100">
+                <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Suppressions</p>
+                <p class="text-3xl font-black text-red-700 mt-1" id="kpi-supp">0</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Recherche globale</label>
+                <input type="text" id="fSearch" placeholder="Cible, détails..." class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]" oninput="applyFilters()">
+            </div>
+            <div class="w-48">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Auteur</label>
+                <select id="fAuteur" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+                    <option value="">Tous les auteurs</option>
+                </select>
+            </div>
+            <div class="w-40">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Action</label>
+                <select id="fAction" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+                    <option value="">Toutes</option>
+                    <option value="Création">Création</option>
+                    <option value="Modification">Modification</option>
+                    <option value="Suppression">Suppression</option>
+                    <option value="Action">Autre Action</option>
+                </select>
+            </div>
+            <div class="w-40">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Date exacte</label>
+                <input type="date" id="fDate" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+            </div>
+            <button onclick="resetFilters()" class="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition h-[40px]">Reset</button>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
-                    <tr class="bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        <th class="p-4">Date</th>
-                        <th class="p-4">Auteur</th>
-                        <th class="p-4">Action</th>
-                        <th class="p-4">Catégorie / Cible</th>
+                    <tr class="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        <th class="p-4 w-40">Date</th>
+                        <th class="p-4 w-48">Utilisateur</th>
+                        <th class="p-4 w-32">Action</th>
+                        <th class="p-4 w-48">Cible</th>
                         <th class="p-4">Détails</th>
                     </tr>
                 </thead>
@@ -51,13 +106,13 @@
         </div>
     </main>
 
-   <script>
+    <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         let allLogs = [];
+        let filteredLogs = []; // Pour l'export CSV
 
-        // 1. Récupération de l'identité
+        // 1. IDENTITÉ & SÉCURITÉ
         const user = JSON.parse(localStorage.getItem('user') || '{}');
-
         window.onload = () => {
             if (user.role !== "Administrateur") {
                 alert("Accès refusé : Rôle Administrateur requis.");
@@ -67,18 +122,22 @@
             }
         };
 
+        // 2. CHARGEMENT DES DONNÉES
         async function loadHistory() {
+            document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="5" class="p-10 text-center font-bold text-[#1A4E8A] animate-pulse">Synchronisation avec la base...</td></tr>';
             try {
-                // On envoie bien le rôle pour passer la sécurité du backend
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
                 });
                 const result = await response.json();
+                
                 if (result.success) {
                     allLogs = result.logs;
-                    renderLogs(allLogs);
+                    filteredLogs = [...allLogs];
+                    populateAuteurFilter();
+                    applyFilters(); // Applique les filtres et met à jour KPI + Tableau
                 } else {
                     document.getElementById('historyTableBody').innerHTML = `<tr><td colspan="5" class="p-10 text-center text-orange-500 font-bold">Erreur : ${result.message}</td></tr>`;
                 }
@@ -87,22 +146,89 @@
             }
         }
 
+        // 3. REMPLISSAGE DYNAMIQUE DU FILTRE AUTEUR
+        function populateAuteurFilter() {
+            const select = document.getElementById('fAuteur');
+            // Récupère les noms uniques
+            const auteurs = [...new Set(allLogs.map(l => l["Auteur"] || l.auteur || "Inconnu"))].sort();
+            select.innerHTML = '<option value="">Tous les auteurs</option>' + auteurs.map(a => `<option value="${a}">${a}</option>`).join('');
+        }
+
+        // 4. MOTEUR DE FILTRAGE SIMULTANÉ
+        function applyFilters() {
+            const fSearch = document.getElementById('fSearch').value.toLowerCase();
+            const fAuteur = document.getElementById('fAuteur').value.toLowerCase();
+            const fAction = document.getElementById('fAction').value.toLowerCase();
+            const fDate = document.getElementById('fDate').value; // Format YYYY-MM-DD
+
+            filteredLogs = allLogs.filter(log => {
+                // Valeurs du log (tolérance majuscules/minuscules des clés)
+                const auteur = String(log["Auteur"] || log.auteur || "Inconnu").toLowerCase();
+                const type = String(log["Type"] || log["Action"] || log.type || "").toLowerCase();
+                const dateVal = log["Date et Heure"] || log["Date"] || null;
+                const details = String(log["Détails"] || log["Details"] || "").toLowerCase();
+                const cible = String(log["Cible"] || log.cible || "").toLowerCase();
+
+                // Tests de correspondance
+                const matchSearch = fSearch === "" || details.includes(fSearch) || cible.includes(fSearch);
+                const matchAuteur = fAuteur === "" || auteur === fAuteur;
+                const matchAction = fAction === "" || type.includes(fAction);
+                
+                let matchDate = true;
+                if (fDate && dateVal) {
+                    // Convertit la date du log au format YYYY-MM-DD pour la comparer
+                    const logDateISO = new Date(dateVal).toISOString().split('T')[0];
+                    matchDate = (logDateISO === fDate);
+                }
+
+                return matchSearch && matchAuteur && matchAction && matchDate;
+            });
+
+            updateKPIs(filteredLogs);
+            renderLogs(filteredLogs);
+        }
+
+        function resetFilters() {
+            document.getElementById('fSearch').value = "";
+            document.getElementById('fAuteur').value = "";
+            document.getElementById('fAction').value = "";
+            document.getElementById('fDate').value = "";
+            applyFilters();
+        }
+
+        // 5. CALCUL DES KPI
+        function updateKPIs(logs) {
+            document.getElementById('kpi-total').innerText = logs.length;
+            
+            let crea = 0, modif = 0, supp = 0;
+            logs.forEach(log => {
+                const type = String(log["Type"] || log["Action"] || "").toLowerCase();
+                if (type.includes("création") || type.includes("creation")) crea++;
+                if (type.includes("modification")) modif++;
+                if (type.includes("suppression")) supp++;
+            });
+
+            document.getElementById('kpi-crea').innerText = crea;
+            document.getElementById('kpi-modif').innerText = modif;
+            document.getElementById('kpi-supp').innerText = supp;
+        }
+
+        // 6. AFFICHAGE DU TABLEAU
         function renderLogs(logs) {
             const tbody = document.getElementById('historyTableBody');
             if (!logs || logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="p-10 text-center text-gray-400">Aucune activité enregistrée.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="p-10 text-center text-gray-400 font-bold italic">Aucune action ne correspond à ces critères.</td></tr>';
                 return;
             }
             
             tbody.innerHTML = logs.map(log => {
-                // Détection flexible des noms de colonnes (avec ou sans accents)
                 const dateVal = log["Date et Heure"] || log["Date"] || null;
-                const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR') : '-';
+                const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
                 const typeAction = log["Type"] || log["Action"] || "Info";
-                const auteur = log["Auteur"] || "Inconnu";
-                const role = log["Rôle"] || log["Role"] || "N/A";
+                const auteur = log["Auteur"] || log.auteur || "Inconnu";
+                const role = log["Rôle"] || log["Role"] || log.role || "N/A";
                 const categorie = log["Catégorie"] || log["Categorie"] || "Général";
-                const cible = log["Cible"] || "-";
+                const cible = log["Cible"] || log.cible || "-";
                 const details = log["Détails"] || log["Details"] || "";
 
                 let badge = "bg-gray-100 text-gray-600";
@@ -111,28 +237,50 @@
                 if (typeAction.includes("Suppression")) badge = "bg-red-100 text-red-700 border border-red-200";
 
                 return `
-                <tr class="border-b border-gray-50 hover:bg-gray-50 transition">
-                    <td class="p-4 text-xs font-bold text-gray-500">${dateStr}</td>
+                <tr class="border-b border-gray-50 hover:bg-blue-50/30 transition">
+                    <td class="p-4 text-[11px] font-bold text-gray-500">${dateStr}</td>
                     <td class="p-4">
                         <div class="font-bold text-gray-800">${auteur}</div>
-                        <div class="text-[10px] text-gray-400 uppercase font-black">${role}</div>
+                        <div class="text-[9px] text-gray-400 uppercase font-black tracking-widest mt-1">${role}</div>
                     </td>
                     <td class="p-4"><span class="px-2 py-1 rounded-xl text-[10px] font-black uppercase shadow-sm ${badge}">${typeAction}</span></td>
                     <td class="p-4">
                         <div class="font-bold text-[#1A4E8A] text-xs">${categorie}</div>
-                        <div class="font-mono text-[10px] text-gray-400 mt-1">${cible}</div>
+                        <div class="font-mono text-[10px] text-orange-600 font-bold mt-1">${cible}</div>
                     </td>
-                    <td class="p-4 text-xs text-gray-600 italic">${details}</td>
+                    <td class="p-4 text-xs text-gray-600">${details}</td>
                 </tr>`;
             }).join('');
         }
 
-        function filterLogs() {
-            const term = document.getElementById('searchLog').value.toLowerCase();
-            const filtered = allLogs.filter(l => 
-                Object.values(l).some(val => String(val).toLowerCase().includes(term))
-            );
-            renderLogs(filtered);
+        // 7. EXPORT CSV (Basé sur filteredLogs)
+        function exportCSV() {
+            if (filteredLogs.length === 0) return alert("Rien à exporter !");
+            
+            // En-têtes du CSV
+            let csv = "Date;Auteur;Role;Action;Categorie;Cible;Details\n";
+            
+            filteredLogs.forEach(log => {
+                const dateVal = log["Date et Heure"] || log["Date"] || null;
+                const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR') : '';
+                const typeAction = log["Type"] || log["Action"] || "";
+                const auteur = log["Auteur"] || "";
+                const role = log["Rôle"] || log["Role"] || "";
+                const categorie = log["Catégorie"] || log["Categorie"] || "";
+                const cible = log["Cible"] || "";
+                
+                // Nettoyage des détails pour éviter de casser le CSV avec des points-virgules ou sauts de ligne
+                let details = String(log["Détails"] || log["Details"] || "").replace(/;/g, ',').replace(/\n/g, ' ');
+
+                csv += `"${dateStr}";"${auteur}";"${role}";"${typeAction}";"${categorie}";"${cible}";"${details}"\n`;
+            });
+
+            // Création du fichier avec gestion des accents (\ufeff)
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Export_Audit_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
         }
     </script>
 </body>
