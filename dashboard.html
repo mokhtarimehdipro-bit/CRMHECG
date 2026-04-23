@@ -306,21 +306,27 @@ async function apiPost(payload) {
                 if (stored) {
                     user = JSON.parse(stored);
                     
-                    // --- 🔴 SÉCURITÉ : REDIRECTION DES ÉTUDIANTS ---
-                    // Si l'utilisateur est un étudiant, on le bloque et on l'envoie sur son dossier
-                   if (user.role === 'Etudiant') {
+                    // Sécurité Redirection
+                    if (user.role === 'Etudiant') {
                         window.location.href = 'dossier.html';
                         return; 
                     }
                     
-                    if (user.role === 'Administrateur') {
-                        document.getElementById('navHistorique').classList.remove('hidden');
+                    // On vérifie si l'élément existe avant de le toucher
+                    const navHist = document.getElementById('navHistorique');
+                    if (user.role === 'Administrateur' && navHist) {
+                        navHist.classList.remove('hidden');
                     }
 
                     document.getElementById('welcomeMsg').innerText = "Ravi de vous voir, " + (user.nom || "Collaborateur");
                     loadDashboardData();
-                } else { window.location.href = 'index.html'; }
-            } catch(e) { window.location.href = 'index.html'; }
+                } else { 
+                    window.location.href = 'index.html'; 
+                }
+            } catch(e) { 
+                console.error("Erreur Session:", e);
+                window.location.href = 'index.html'; 
+            }
         };
         // --- 1. CHARGEMENT DONNÉES ---
         async function loadDashboardData() {
