@@ -122,12 +122,17 @@
             }
         };
 
-        // FONCTION OUTIL : Trouve une colonne peu importe les espaces ou accents
+        // FONCTION OUTIL : Trouve une colonne par ordre de priorité et ignore les "ID"
         function getSafeValue(obj, motsCles) {
-            const trueKey = Object.keys(obj).find(k => 
-                motsCles.some(mot => k.toLowerCase().includes(mot.toLowerCase()))
-            );
-            return trueKey ? obj[trueKey] : null;
+            // On parcourt les mots-clés un par un (Le 1er mot est prioritaire)
+            for (let mot of motsCles) {
+                const trueKey = Object.keys(obj).find(k => 
+                    k.toLowerCase().includes(mot.toLowerCase()) && 
+                    !k.toLowerCase().includes('id') // SÉCURITÉ : On exclut formellement les colonnes d'ID
+                );
+                if (trueKey) return obj[trueKey];
+            }
+            return null;
         }
 
         // 2. CHARGEMENT DES DONNÉES
