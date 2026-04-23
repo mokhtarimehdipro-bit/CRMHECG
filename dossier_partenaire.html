@@ -81,23 +81,22 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         
         async function apiPost(payload) {
-            const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
-            payload.auteur = userSession.nom || "Utilisateur Inconnu"; 
-            payload.roleAuteur = userSession.role || "N/A";
-            
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify(payload)
-                });
-                return await response.json();
-            } catch (e) {
-                console.error("Erreur API :", e);
-                return { success: false, message: "Erreur de connexion" };
-            }
-        }
+    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+    // On envoie 'auteur' pour remplir ta 2ème colonne du Sheet
+    payload.auteur = userSession.nom || "Utilisateur"; 
+    payload.roleAuteur = userSession.role || "N/A";
+    
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    } catch (e) {
+        return { success: false };
+    }
+}
         
 
         const partId = new URLSearchParams(window.location.search).get('id');
@@ -132,28 +131,25 @@
         }
 
         async function addNote() {
-            const txt = document.getElementById('noteTexte').value;
-            if(!txt.trim()) return;
-            
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerText = "⏳";
+    const txt = document.getElementById('noteTexte').value;
+    if(!txt.trim()) return;
+    
+    const btn = event.target;
+    btn.disabled = true; btn.innerText = "⏳";
 
-            // Envoi vers l'onglet SUIVI_PARTENARIAT
-            // targetId -> ID_Partenaire | idAuteur -> Auteur | texte -> Compte_rendu
-            await apiPost({ 
-                action: 'addPartnerNote', 
-                targetId: partId, 
-                texte: txt 
-            });
+    // ON ENVOIE LES ÉTIQUETTES QUE LE SERVEUR ATTEND
+    await apiPost({ 
+        action: 'addPartnerNote', 
+        targetId: partId,    // Va dans 'ID_Partenaire'
+        texte: txt           // Va dans 'Compte_rendu'
+    });
 
-            document.getElementById('noteTexte').value = ""; 
-            btn.disabled = false;
-            btn.innerText = "Ajouter";
-            
-            // Rechargement des détails pour voir la note apparaître
-            setTimeout(loadDetails, 1000);
-        }
+    document.getElementById('noteTexte').value = ""; 
+    btn.disabled = false; btn.innerText = "Ajouter";
+    
+    // On attend un peu que le Sheet s'actualise avant de recharger l'affichage
+    setTimeout(loadDetails, 1500);
+}
 
         async function saveAlert() {
             const date = document.getElementById('alertDate').value;
