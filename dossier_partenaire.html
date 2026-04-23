@@ -82,12 +82,9 @@
         
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            // On signe avec tous les formats possibles pour être sûr
             payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
             payload.auteur = userSession.nom || "Utilisateur Inconnu"; 
             payload.roleAuteur = userSession.role || "N/A";
-            
-    
             
             try {
                 const response = await fetch(API_URL, {
@@ -100,6 +97,7 @@
                 console.error("Erreur API :", e);
                 return { success: false, message: "Erreur de connexion" };
             }
+        }
         
 
         const partId = new URLSearchParams(window.location.search).get('id');
