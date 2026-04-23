@@ -55,74 +55,74 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         let allLogs = [];
 
-        // 1. On récupère l'utilisateur connecté
+        // 1. Récupération de l'identité
         const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-        // 2. Sécurité : Si pas Administrateur, on dégage
-        if (user.role !== 'Administrateur') {
-            alert("Accès réservé aux administrateurs. Veuillez vous reconnecter.");
-            window.location.href = 'index.html';
-        }
+        window.onload = () => {
+            if (user.role !== "Administrateur") {
+                alert("Accès refusé : Rôle Administrateur requis.");
+                window.location.href = 'dashboard.html';
+            } else {
+                loadHistory();
+            }
+        };
 
-        // 3. Le "Postier" qui signe vos messages avec votre Nom et Rôle
-        async function apiPost(payload) {
-            payload.idAuteur = user.nom || "Inconnu";
-            payload.roleAuteur = user.role || "N/A";
+        async function loadHistory() {
             try {
-                const res = await fetch(API_URL, {
+                // On envoie bien le rôle pour passer la sécurité du backend
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
                 });
-                return await res.json();
-            } catch (e) { 
-                console.error("Erreur Connexion:", e);
-                return { success: false }; 
-            }
-        }
-
-        // 4. Chargement des logs via le Postier
-        async function loadLogs() {
-            const loader = document.getElementById('loader');
-            // On utilise apiPost au lieu de fetch direct !
-            const res = await apiPost({ action: 'getHistory' });
-            
-            if (res.success) {
-                allLogs = res.logs;
-                if (loader) loader.classList.add('hidden');
-                renderLogs(allLogs);
-            } else {
-                alert("Le serveur a refusé l'accès ou est indisponible.");
+                const result = await response.json();
+                if (result.success) {
+                    allLogs = result.logs;
+                    renderLogs(allLogs);
+                } else {
+                    document.getElementById('historyTableBody').innerHTML = `<tr><td colspan="5" class="p-10 text-center text-orange-500 font-bold">Erreur : ${result.message}</td></tr>`;
+                }
+            } catch (e) {
+                document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="5" class="p-10 text-center text-red-500">Impossible de joindre le serveur Google.</td></tr>';
             }
         }
 
         function renderLogs(logs) {
-            const body = document.getElementById('logTableBody');
-            body.innerHTML = logs.map(log => {
-                const dateStr = log.Date ? new Date(log.Date).toLocaleString('fr-FR') : '-';
-                let badge = "bg-gray-100 text-gray-700";
-                if (log.Type === "Création") badge = "bg-green-100 text-green-700 border border-green-200";
-                if (log.Type === "Suppression") badge = "bg-red-100 text-red-700 border border-red-200";
-                
-                // On gère les noms de colonnes avec ou sans accents pour plus de sécurité
-                const auteur = log.Auteur || log.auteur || "Inconnu";
-                const role = log.Rôle || log.Role || log.role || "N/A";
-                const categorie = log.Catégorie || log.Categorie || log.categorie || "Général";
-                const details = log.Détails || log.Details || log.details || "";
+            const tbody = document.getElementById('historyTableBody');
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-10 text-center text-gray-400">Aucune activité enregistrée.</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.map(log => {
+                // Détection flexible des noms de colonnes (avec ou sans accents)
+                const dateVal = log["Date et Heure"] || log["Date"] || null;
+                const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR') : '-';
+                const typeAction = log["Type"] || log["Action"] || "Info";
+                const auteur = log["Auteur"] || "Inconnu";
+                const role = log["Rôle"] || log["Role"] || "N/A";
+                const categorie = log["Catégorie"] || log["Categorie"] || "Général";
+                const cible = log["Cible"] || "-";
+                const details = log["Détails"] || log["Details"] || "";
+
+                let badge = "bg-gray-100 text-gray-600";
+                if (typeAction.includes("Création")) badge = "bg-green-100 text-green-700 border border-green-200";
+                if (typeAction.includes("Modification")) badge = "bg-blue-100 text-blue-700 border border-blue-200";
+                if (typeAction.includes("Suppression")) badge = "bg-red-100 text-red-700 border border-red-200";
 
                 return `
-                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                <tr class="border-b border-gray-50 hover:bg-gray-50 transition">
                     <td class="p-4 text-xs font-bold text-gray-500">${dateStr}</td>
                     <td class="p-4">
                         <div class="font-bold text-gray-800">${auteur}</div>
-                        <div class="text-[10px] text-gray-400 uppercase">${role}</div>
+                        <div class="text-[10px] text-gray-400 uppercase font-black">${role}</div>
                     </td>
-                    <td class="p-4"><span class="px-2 py-1 rounded-xl text-[10px] font-black uppercase shadow-sm ${badge}">${log.Type}</span></td>
+                    <td class="p-4"><span class="px-2 py-1 rounded-xl text-[10px] font-black uppercase shadow-sm ${badge}">${typeAction}</span></td>
                     <td class="p-4">
                         <div class="font-bold text-[#1A4E8A] text-xs">${categorie}</div>
-                        <div class="font-mono text-[10px] text-gray-500 mt-1">${log.Cible || "-"}</div>
+                        <div class="font-mono text-[10px] text-gray-400 mt-1">${cible}</div>
                     </td>
-                    <td class="p-4 text-xs text-gray-600">${details}</td>
+                    <td class="p-4 text-xs text-gray-600 italic">${details}</td>
                 </tr>`;
             }).join('');
         }
@@ -130,13 +130,10 @@
         function filterLogs() {
             const term = document.getElementById('searchLog').value.toLowerCase();
             const filtered = allLogs.filter(l => 
-                (l.Auteur || "").toLowerCase().includes(term) || 
-                (l.Détails || l.details || "").toLowerCase().includes(term)
+                Object.values(l).some(val => String(val).toLowerCase().includes(term))
             );
             renderLogs(filtered);
         }
-
-        loadLogs();
     </script>
 </body>
 </html>
