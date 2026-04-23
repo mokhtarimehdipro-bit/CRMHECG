@@ -70,7 +70,23 @@
     <script>
         // ⚠️ Remplacer par votre lien API 
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
-
+async function apiPost(payload) {
+    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+    payload.idAuteur = userSession.nom || "Inconnu";
+    payload.roleAuteur = userSession.role || "N/A";
+    
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    } catch (e) {
+        console.error("Erreur API :", e);
+        return { success: false, message: "Erreur de connexion" };
+    }
+}
         async function loadAlerts() {
             document.getElementById('loader').classList.remove('hidden');
             document.getElementById('alertGrid').classList.add('hidden');
