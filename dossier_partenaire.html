@@ -82,8 +82,23 @@
         
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            payload.idAuteur = userSession.nom || "Inconnu";
+            // On signe avec tous les formats possibles pour être sûr
+            payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
+            payload.auteur = userSession.nom || "Utilisateur Inconnu"; 
             payload.roleAuteur = userSession.role || "N/A";
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (e) {
+                console.error("Erreur API :", e);
+                return { success: false, message: "Erreur de connexion" };
+            }
+        }
             
             try {
                 const response = await fetch(API_URL, {
@@ -132,9 +147,26 @@
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
-            // On utilise apiPost pour signer la note avec votre nom
-            await apiPost({ action: 'addPartnerNote', id_entreprise: partId, targetId: partId, texte: txt });
-            document.getElementById('noteTexte').value = ""; loadDetails();
+            
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerText = "⏳";
+
+            // On envoie toutes les clés possibles (id_entreprise, targetId, texte, contenu)
+            await apiPost({ 
+                action: 'addPartnerNote', 
+                id_entreprise: partId, 
+                targetId: partId, 
+                texte: txt,
+                contenu: txt 
+            });
+
+            document.getElementById('noteTexte').value = ""; 
+            btn.disabled = false;
+            btn.innerText = "Ajouter";
+            
+            // On attend 2 secondes avant de recharger pour laisser le temps à Google d'écrire
+            setTimeout(loadDetails, 2000);
         }
 
         async function saveAlert() {
