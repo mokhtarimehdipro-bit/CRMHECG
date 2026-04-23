@@ -374,6 +374,8 @@
                 nom: document.getElementById('editContactNom').value,
                 tel: document.getElementById('editContactTel').value,
                 email: document.getElementById('editContactMail').value
+                idAuteur: JSON.parse(localStorage.getItem('user') || '{}').nom,
+    roleAuteur: JSON.parse(localStorage.getItem('user') || '{}').role,
             };
             
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
@@ -412,6 +414,8 @@
                 mail2: document.getElementById('addContMail2').value,
                 tel1: document.getElementById('addContTel1').value,
                 tel2: document.getElementById('addContTel2').value
+                idAuteur: JSON.parse(localStorage.getItem('user') || '{}').nom,
+    roleAuteur: JSON.parse(localStorage.getItem('user') || '{}').role,
             };
 
             if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
