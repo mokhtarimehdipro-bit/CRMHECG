@@ -304,7 +304,7 @@
                 <div class="flex space-x-2">
                     <button onclick="sendMail('${c.id}', true)" class="flex-1 bg-blue-50 text-[#1A4E8A] py-2 rounded-xl font-black text-[10px] hover:bg-blue-100 transition">Test ✉️</button>
                     <button onclick="sendMail('${c.id}', false)" class="flex-1 bg-[#F26522] text-white py-2 rounded-xl font-black text-[10px] hover:scale-105 transition">Envoi 🚀</button>
-                    <button onclick="openParticipantsModal('${c.id}', '${c.nom.replace(/'/g, "\\'")}', '${c.type}')" class="flex-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[10px] hover:bg-green-100 transition">👥 Inscrits</button>
+                    <button onclick="openParticipantsModal('${c.id}', \`${c.nom}\`, '${c.type}')" class="flex-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[10px] hover:bg-green-100 transition">👥 Inscrits</button>
                 </div>
                 ` : ''}
 
