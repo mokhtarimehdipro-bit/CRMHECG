@@ -125,13 +125,14 @@
                     document.getElementById('alertesList').innerHTML = d.alertes.filter(a => a.statut === 'Actif' || a.statut === 'À faire').map(a => `<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ${new Date(a.date).toLocaleDateString()} (${a.freq})</b><br><span class="text-orange-600 truncate block">${a.msg}</span></div>`).join('');
                 }
             } catch(e) {
-                alert("Erreur de chargement. Vérifiez que l'entreprise existe bien.");
+                alert("Erreur de chargement.");
             }
         }
 
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
+            // On utilise apiPost pour signer la note avec votre nom
             await apiPost({ action: 'addPartnerNote', id_entreprise: partId, targetId: partId, texte: txt });
             document.getElementById('noteTexte').value = ""; loadDetails();
         }
@@ -155,21 +156,18 @@
                 destinataire: destinataire 
             });
             
-            alert("Alerte programmée avec succès !"); 
-            document.getElementById('alertDate').value = ""; 
-            document.getElementById('alertMsg').value = ""; 
+            alert("Alerte programmée !"); 
             btn.innerText = "Activer l'alerte"; btn.disabled = false;
             loadDetails();
         }
 
         async function ajouterOffreRapide() {
-            const url = prompt("Étape 1/2 : Collez le lien de l'offre (URL) :");
+            const url = prompt("Lien de l'offre :");
             if(!url) return;
-            const poste = prompt("Étape 2/2 : Quel est le titre du poste ?");
+            const poste = prompt("Titre du poste :");
             if(!poste) return;
-            const btn = event.target; btn.innerText = "Création..."; btn.disabled = true;
             await apiPost({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" });
-            btn.innerText = "+ Nouvelle Offre"; btn.disabled = false; loadDetails();
+            loadDetails();
         }
         
         loadDetails();
