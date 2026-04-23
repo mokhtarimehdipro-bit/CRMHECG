@@ -542,10 +542,7 @@
             const newName = document.getElementById('editEntNom').value.trim();
             if(!newName) return alert("Le nom ne peut pas être vide.");
             
-            await fetch(API_URL, { 
-                method: 'POST', 
-                body: JSON.stringify({ action: 'updateEnterprise', id_entreprise: currentId, nouveauNom: newName }) 
-            });
+            await apiPost({ action: 'updateEnterprise', id_entreprise: currentId, nouveauNom: newName });
             
             loadPartners(); 
             alert("✅ Nom de l'entreprise mis à jour.");
@@ -553,7 +550,7 @@
 
         async function deleteEnterprise() {
             if(!confirm("⚠️ ATTENTION : La suppression de l'entreprise supprimera également TOUS ses contacts. Confirmer ?")) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteEnterprise', id_entreprise: currentId }) });
+            await apiPost({ action: 'deleteEnterprise', id_entreprise: currentId });
             closeDossier();
             loadPartners();
         }
