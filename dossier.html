@@ -213,7 +213,7 @@
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
             const btn = event.target; btn.innerText = "..."; btn.disabled = true;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addNote', targetId: studentId, auteur: currentUser.nom, contenu: txt }) });
+            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt });
             document.getElementById('noteTexte').value = ""; 
             btn.innerText = "Noter"; btn.disabled = false;
             loadDossier();
@@ -221,7 +221,7 @@
 
         async function postuler(idOffre, url) {
             if(!confirm("En cliquant, vous confirmez votre intérêt. Accéder à l'offre ?")) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre }) });
+            await apiPost({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre });
             window.open(url, '_blank');
             loadDossier(); // Correction : appelle bien loadDossier()
         }
