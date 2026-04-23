@@ -167,6 +167,10 @@
             const auteurs = [...new Set(allLogs.map(l => getSafeValue(l, ['auteur', 'nom']) || "Inconnu"))].sort();
             document.getElementById('fAuteur').innerHTML = '<option value="">Tous les auteurs</option>' + auteurs.map(a => `<option value="${a}">${a}</option>`).join('');
             
+            // Catégories (NOUVEAU)
+            const categories = [...new Set(allLogs.map(l => getSafeValue(l, ['catégorie', 'categorie']) || "Général"))].filter(c => c !== "").sort();
+            document.getElementById('fCategorie').innerHTML = '<option value="">Toutes les catégories</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+
             // Cibles (Entreprises, ETU, etc)
             const cibles = [...new Set(allLogs.map(l => getSafeValue(l, ['cible']) || "Sans cible"))].filter(c => c !== "").sort();
             document.getElementById('fCible').innerHTML = '<option value="">Toutes les cibles</option>' + cibles.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -175,6 +179,7 @@
         function applyFilters() {
             const fSearch = document.getElementById('fSearch').value.toLowerCase();
             const fAuteur = document.getElementById('fAuteur').value.toLowerCase();
+            const fCategorie = document.getElementById('fCategorie').value.toLowerCase(); // NOUVEAU
             const fCible = document.getElementById('fCible').value.toLowerCase();
             const fAction = document.getElementById('fAction').value.toLowerCase();
             const fDate = document.getElementById('fDate').value; 
@@ -182,12 +187,14 @@
             filteredLogs = allLogs.filter(log => {
                 const auteur = String(getSafeValue(log, ['auteur']) || "").toLowerCase();
                 const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
+                const categorie = String(getSafeValue(log, ['catégorie', 'categorie']) || "").toLowerCase(); // NOUVEAU
                 const cible = String(getSafeValue(log, ['cible']) || "").toLowerCase();
                 const details = String(getSafeValue(log, ['détail', 'detail']) || "").toLowerCase();
                 const dateVal = getSafeValue(log, ['date']);
 
                 const matchSearch = fSearch === "" || details.includes(fSearch) || cible.includes(fSearch);
                 const matchAuteur = fAuteur === "" || auteur === fAuteur;
+                const matchCategorie = fCategorie === "" || categorie === fCategorie; // NOUVEAU
                 const matchCible = fCible === "" || cible === fCible;
                 const matchAction = fAction === "" || type.includes(fAction);
                 
@@ -197,12 +204,8 @@
                     matchDate = (logDateISO === fDate);
                 }
 
-                return matchSearch && matchAuteur && matchCible && matchAction && matchDate;
+                return matchSearch && matchAuteur && matchCategorie && matchCible && matchAction && matchDate;
             });
-
-            updateKPIs(filteredLogs);
-            renderLogs(filteredLogs);
-        }
 
         function updateKPIs(logs) {
             document.getElementById('kpi-total').innerText = logs.length;
@@ -260,6 +263,7 @@
         function resetFilters() {
             document.getElementById('fSearch').value = "";
             document.getElementById('fAuteur').value = "";
+            document.getElementById('fCategorie').value = ""; // NOUVEAU
             document.getElementById('fCible').value = "";
             document.getElementById('fAction').value = "";
             document.getElementById('fDate').value = "";
