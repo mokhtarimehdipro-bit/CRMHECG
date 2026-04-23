@@ -87,18 +87,7 @@
             payload.auteur = userSession.nom || "Utilisateur Inconnu"; 
             payload.roleAuteur = userSession.role || "N/A";
             
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify(payload)
-                });
-                return await response.json();
-            } catch (e) {
-                console.error("Erreur API :", e);
-                return { success: false, message: "Erreur de connexion" };
-            }
-        }
+    
             
             try {
                 const response = await fetch(API_URL, {
