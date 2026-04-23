@@ -131,8 +131,10 @@
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
-            await apiPost({ action: 'addPartnerNote', targetId: partId, texte: txt });
+            // On utilise apiPost, et on envoie "id_entreprise" ET "targetId" pour être sûr que le serveur le reconnaisse
+            await apiPost({ action: 'addPartnerNote', id_entreprise: partId, targetId: partId, texte: txt });
             document.getElementById('noteTexte').value = ""; loadDetails();
+        }
         }
 
         // LA FONCTION CORRIGÉE QUI ENVOIE L'ID ET L'EMAIL AU SERVEUR
