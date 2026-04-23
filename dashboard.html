@@ -308,11 +308,15 @@ async function apiPost(payload) {
                     
                     // --- 🔴 SÉCURITÉ : REDIRECTION DES ÉTUDIANTS ---
                     // Si l'utilisateur est un étudiant, on le bloque et on l'envoie sur son dossier
-                    if (user.role === 'Etudiant') {
+                   if (user.role === 'Etudiant') {
                         window.location.href = 'dossier.html';
-                        return; // On arrête l'affichage du tableau de bord
+                        return; 
                     }
                     
+                    if (user.role === 'Administrateur') {
+                        document.getElementById('navHistorique').classList.remove('hidden');
+                    }
+
                     document.getElementById('welcomeMsg').innerText = "Ravi de vous voir, " + (user.nom || "Collaborateur");
                     loadDashboardData();
                 } else { window.location.href = 'index.html'; }
