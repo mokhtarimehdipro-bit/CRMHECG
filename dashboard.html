@@ -484,9 +484,11 @@ async function apiPost(payload) {
                 const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
                 
                 let matchAt = true;
-                if(fAt === "CV") matchAt = e.faitCV === "Oui";
-                if(fAt === "LI") matchAt = e.faitLI === "Oui";
-                if(fAt === "BOTH") matchAt = e.faitCV === "Oui" && e.faitLI === "Oui";
+if(fAtelier === "CV") matchAt = e.faitCV === "Oui";
+if(fAtelier === "CV_NON") matchAt = e.faitCV !== "Oui"; // Ajouté
+if(fAtelier === "LI") matchAt = e.faitLI === "Oui";
+if(fAtelier === "LI_NON") matchAt = e.faitLI !== "Oui"; // Ajouté
+if(fAtelier === "BOTH") matchAt = e.faitCV === "Oui" && e.faitLI === "Oui";
 
                 let matchPe = true;
                 if (fPe) {
