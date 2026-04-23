@@ -355,8 +355,7 @@
                     objet: document.getElementById('cmpObjet')?.value || "Sans objet", corps: document.getElementById('cmpCorps')?.value || "", pjUrl: pjUrl
                 };
 
-                const res = await apiPost(payload);
-                const data = await res.json();
+                const data = await apiPost(payload);
                 if (data.success) {
                     closeModal(); loadCampagnes();
                 } else throw new Error("Erreur serveur");
@@ -370,8 +369,7 @@
         // --- 5. ACTIONS SUR LES CARTES ---
         async function runCampagne(id) {
             if(!confirm("Confirmer le lancement immédiat ?")) return;
-            const res = await apiPost({ action: 'runCampagne', id: id });
-            const data = await res.json(); 
+            const data = await apiPost({ action: 'runCampagne', id: id });
             alert(data.message); loadCampagnes();
         }
 
@@ -496,7 +494,7 @@
             btn.innerText = "⏳ Sauvegarde..."; btn.disabled = true;
             try {
                 const res = await apiPost({ action: 'saveTemplateRelance', template: htmlCode });
-                const data = await res.json();
+                
                 alert(data.message);
             } catch (err) {
                 alert("Erreur lors de la sauvegarde.");
