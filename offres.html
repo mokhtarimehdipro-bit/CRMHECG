@@ -31,10 +31,7 @@
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-black text-[#1A4E8A]">Bourse aux Offres</h1>
-            <div class="flex space-x-3">
-                <button onclick="aspirerGmail()" id="btnAspirer" class="bg-white text-[#1A4E8A] border-2 border-[#1A4E8A] px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-blue-50 transition flex items-center gap-2">📥 Aspirer Gmail</button>
-                <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
-            </div>
+            <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
         </div>
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des annonces...</div>
@@ -110,31 +107,31 @@
         </div>
     </div>
 
-    <div id="shareModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[100] p-4">
+   <div id="shareModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[100] p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-md border border-gray-100">
             <h2 class="text-2xl font-black text-[#1A4E8A] mb-2">📡 Partager l'offre</h2>
             <p id="shareOffreTitle" class="text-[#F26522] text-sm mb-4 font-bold truncate"></p>
-            <p class="text-[10px] text-gray-500 mb-6 italic leading-tight">Note: L'envoi est automatiquement restreint aux étudiants <b>Inscrits/Préinscrits</b> ayant le statut <b>En recherche</b>.</p>
+            <p class="text-[10px] text-gray-500 mb-6 italic leading-tight">Note: L'envoi est automatiquement restreint aux <b>Inscrits/Préinscrits</b> ayant le statut <b>En recherche</b>.</p>
             
             <input type="hidden" id="shareOffreId">
             
             <div class="space-y-4">
                 <div class="pb-4 border-b border-gray-100">
                     <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded-xl transition">
-                        <input type="checkbox" id="checkTous" class="w-5 h-5 text-[#1A4E8A] rounded border-gray-300 focus:ring-[#1A4E8A]" checked onchange="toggleClassesSelection()">
+                        <input type="checkbox" id="checkTous" class="w-5 h-5 text-[#1A4E8A] rounded" checked onchange="toggleClassesSelection()">
                         <span class="font-black text-gray-800 text-sm tracking-wide">Toutes les classes éligibles</span>
                     </label>
                 </div>
 
                 <div>
                     <label class="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Ou cibler des classes :</label>
-                    <div id="zoneClasses" class="space-y-1 opacity-50 pointer-events-none transition-opacity max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                    <div id="zoneClasses" class="space-y-1 opacity-50 pointer-events-none max-h-40 overflow-y-auto custom-scrollbar">
                         </div>
                 </div>
 
                 <div class="pt-4 space-y-2">
-                    <button onclick="confirmShare()" id="btnConfirmShare" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black shadow-lg hover:scale-[1.02] active:scale-95 transition-all">🚀 DIFFUSER L'OFFRE</button>
-                    <button onclick="closeShareModal()" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition hover:bg-slate-50 rounded-xl">Annuler</button>
+                    <button onclick="confirmShare()" id="btnConfirmShare" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-all">🚀 DIFFUSER L'OFFRE</button>
+                    <button onclick="closeShareModal()" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 hover:bg-slate-50 rounded-xl">Annuler</button>
                 </div>
             </div>
         </div>
@@ -315,23 +312,20 @@
         }
 
         // 3. GESTION DU NOUVEAU PARTAGE INTELLIGENT
+        // 3. GESTION DU NOUVEAU PARTAGE INTELLIGENT
         async function openShareModal(id, titre) {
             document.getElementById('shareOffreId').value = id;
             document.getElementById('shareOffreTitle').innerText = titre;
             document.getElementById('shareModal').classList.replace('hidden', 'flex');
             
-            // On réinitialise par défaut sur "Tous"
             document.getElementById('checkTous').checked = true;
             toggleClassesSelection();
             
-            // Génération dynamique des vraies classes existantes
             if (listEtu.length === 0) {
-                const d = await apiPost({ action: 'getStudentsMinList' });
+                const d = await apiPost({ action: 'getClassesList' });
                 if (d.success) {
-                    listEtu = d.data;
-                    const classesUniques = [...new Set(listEtu.map(e => e.classe).filter(Boolean))].sort();
-                    
-                    document.getElementById('zoneClasses').innerHTML = classesUniques.map(c => `
+                    listEtu = d.data; 
+                    document.getElementById('zoneClasses').innerHTML = listEtu.map(c => `
                         <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded-xl transition">
                             <input type="checkbox" class="chk-classe w-4 h-4 text-[#1A4E8A] rounded border-gray-300" value="${c}">
                             <span class="text-sm font-bold text-gray-700">${c}</span>
@@ -391,23 +385,7 @@
             }
         }
 
-        // 4. ASPIRATION GMAIL
-        async function aspirerGmail() {
-            const btn = document.getElementById('btnAspirer');
-            btn.disabled = true;
-            btn.innerText = "Recherche en cours... ⏳";
-            
-            try {
-                const res = await apiPost({ action: 'aspirerOffres' });
-                alert(res.message);
-                if (res.success) loadOffres();
-            } catch(e) {
-                alert("Erreur lors de l'aspiration.");
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = "📥 Aspirer Gmail";
-            }
-        }
+       
 
         // INITIALISATION
         loadOffres();
