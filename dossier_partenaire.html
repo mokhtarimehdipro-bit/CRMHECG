@@ -28,20 +28,30 @@
                                 <input type="date" id="alertDate" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
                             </div>
                             <div>
-                                <label class="text-[10px] uppercase font-bold text-gray-400">Répétition</label>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Répétition (Infini)</label>
                                 <select id="alertFreq" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
                                     <option value="Unique">Une seule fois</option>
                                     <option value="Hebdomadaire">Hebdomadaire</option>
                                     <option value="Mensuelle">Mensuelle</option>
+                                    <option value="Trimestrielle">Trimestrielle</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="text-[10px] uppercase font-bold text-gray-400">Destinataire</label>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Email du destinataire</label>
                                 <input type="email" id="alertDest" value="m.mokhtari@hecg.fr" class="w-full border p-2 rounded-lg text-sm bg-gray-50 font-bold text-[#1A4E8A]">
                             </div>
-                            <button onclick="saveAlert()" class="w-full bg-orange-500 text-white py-3 rounded-xl font-black text-sm hover:bg-orange-600 transition">Activer l'alerte</button>
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Message envoyé par mail</label>
+                                <textarea id="alertMsg" placeholder="Rappeler le DRH..." class="w-full border p-2 rounded-lg text-xs bg-gray-50 custom-scrollbar"></textarea>
+                            </div>
+                            <button onclick="saveAlert()" class="w-full bg-orange-500 text-white py-3 rounded-xl font-black text-sm hover:bg-orange-600 transition shadow-md">Activer l'alerte</button>
                         </div>
                         <div id="alertesList" class="mt-4 space-y-2 border-t pt-4"></div>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-[#1A4E8A] to-[#002a5c] p-6 rounded-3xl shadow-lg text-white">
+                        <h3 class="font-black text-blue-100 mb-4 uppercase tracking-wider text-sm">🎓 Alternants en poste</h3>
+                        <div id="listEtu" class="text-sm space-y-3"></div>
                     </div>
                 </div>
 
@@ -50,7 +60,7 @@
                         <h3 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">📝 Historique des échanges</h3>
                         <div class="flex space-x-2 mb-6 bg-gray-50 p-2 rounded-xl">
                             <input type="text" id="noteTexte" placeholder="Ex: Eu le DRH au téléphone..." class="flex-1 bg-transparent p-2 outline-none text-sm">
-                            <button id="btnAddNote" onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-lg font-black text-sm">Ajouter</button>
+                            <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-lg font-black text-sm">Ajouter</button>
                         </div>
                         <div id="suiviTimeline" class="space-y-4 max-h-64 overflow-y-auto pr-4 custom-scrollbar"></div>
                     </div>
@@ -58,7 +68,7 @@
                     <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
                         <div class="flex justify-between items-center mb-6 border-b pb-2">
                             <h3 class="text-xl font-black text-gray-800">💼 Offres d'alternance</h3>
-                            <button onclick="ajouterOffreRapide()" class="text-sm bg-green-50 text-green-600 font-bold px-4 py-2 rounded-lg">+ Nouvelle Offre</button>
+                            <button onclick="ajouterOffreRapide()" class="text-sm bg-green-50 text-green-600 font-bold px-4 py-2 rounded-lg hover:bg-green-100 transition">+ Nouvelle Offre</button>
                         </div>
                         <div id="listOffres" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                     </div>
@@ -69,14 +79,12 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-        const partId = new URLSearchParams(window.location.search).get('id');
-        let nomEntrepriseActuelle = "";
-
-        // --- FONCTION D'ENVOI SÉCURISÉE ---
+        
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+            // On signe avec tous les formats possibles pour être sûr
             payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
-            payload.auteur = userSession.nom || "Utilisateur Inconnu";
+            payload.auteur = userSession.nom || "Utilisateur Inconnu"; 
             payload.roleAuteur = userSession.role || "N/A";
             
             try {
@@ -91,10 +99,28 @@
                 return { success: false, message: "Erreur de connexion" };
             }
         }
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (e) {
+                console.error("Erreur API :", e);
+                return { success: false, message: "Erreur de connexion" };
+            }
+        
 
-        // --- CHARGEMENT DES DONNÉES ---
+        const partId = new URLSearchParams(window.location.search).get('id');
+        let currentUser = null;
+        let nomEntrepriseActuelle = "";
+
+        try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
+        if(!currentUser) currentUser = { nom: "Utilisateur" };
+
         async function loadDetails() {
-            if(!partId) return alert("ID Partenaire manquant");
             try {
                 const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartnerDetails', targetId: partId }) });
                 const data = await res.json();
@@ -106,41 +132,77 @@
                     
                     nomEntrepriseActuelle = d.info.entreprise;
                     document.getElementById('entNom').innerText = d.info.entreprise;
-                    document.getElementById('entContact').innerHTML = `👤 ${d.info.contact || 'Non renseigné'} &nbsp;|&nbsp; ✉️ ${d.info.mail} &nbsp;|&nbsp; 📞 ${d.info.tel || '-'}`;
+                    document.getElementById('entContact').innerHTML = `👤 ${d.info.contact || 'Non renseigné'} &nbsp;|&nbsp; ✉️ <a href="mailto:${d.info.mail}" class="text-blue-500 hover:underline">${d.info.mail}</a> &nbsp;|&nbsp; 📞 ${d.info.tel || '-'}`;
                     
-                    document.getElementById('listOffres').innerHTML = d.offres.map(o => `<div class="p-4 border rounded-2xl bg-gray-50"><p class="font-black text-sm mb-1">${o.poste}</p><span class="text-[10px] uppercase font-bold text-blue-600">${o.etat}</span></div>`).join('') || '<p class="text-gray-400 italic">Aucune offre.</p>';
-                    document.getElementById('suiviTimeline').innerHTML = d.suivi.map(s => `<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase">${new Date(s.date).toLocaleDateString()} — Par ${s.auteur}</p><p class="text-sm">${s.texte}</p></div>`).join('') || '<p class="text-gray-400 italic">Aucun échange.</p>';
+                    document.getElementById('listEtu').innerHTML = d.alternants.map(e => `<div class="bg-white/10 p-3 rounded-xl border border-white/20"><p class="font-bold text-lg leading-tight">${e.nom}</p><p class="text-[10px] text-blue-200 uppercase mt-1 font-black tracking-widest">${e.classe}</p></div>`).join('') || '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>';
+                    document.getElementById('listOffres').innerHTML = d.offres.map(o => `<div class="p-4 border border-gray-100 rounded-2xl bg-gray-50 hover:shadow-md transition"><div class="flex justify-between items-start mb-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase">${o.etat}</span></div><p class="font-black text-gray-800 text-sm mb-3">${o.poste}</p><a href="${o.url}" target="_blank" class="text-[#F26522] text-xs font-bold hover:underline inline-flex items-center gap-1">Voir l'annonce ↗</a></div>`).join('') || '<p class="col-span-2 text-gray-400 italic text-center py-6">Aucune offre associée.</p>';
+                    document.getElementById('suiviTimeline').innerHTML = d.suivi.map(s => `<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(s.date).toLocaleDateString('fr-FR')} — Par ${s.auteur}</p><p class="text-sm text-gray-700">${s.texte}</p></div>`).join('') || '<p class="text-gray-400 italic text-center">Aucun échange enregistré.</p>';
+                    document.getElementById('alertesList').innerHTML = d.alertes.filter(a => a.statut === 'Actif' || a.statut === 'À faire').map(a => `<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ${new Date(a.date).toLocaleDateString()} (${a.freq})</b><br><span class="text-orange-600 truncate block">${a.msg}</span></div>`).join('');
                 }
-            } catch(e) { console.error(e); }
+            } catch(e) {
+                alert("Erreur de chargement.");
+            }
         }
 
-        // --- AJOUT D'UNE NOTE (CIBLE TES 4 COLONNES) ---
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
             
-            const btn = document.getElementById('btnAddNote');
-            btn.disabled = true; btn.innerText = "⏳";
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerText = "⏳";
 
-            // On envoie les données pour remplir : ID_Partenaire | Auteur | Date | Compte_rendu
-            const res = await apiPost({ 
+            // Envoi vers l'onglet SUIVI_PARTENARIAT
+            // targetId -> ID_Partenaire | idAuteur -> Auteur | texte -> Compte_rendu
+            await apiPost({ 
                 action: 'addPartnerNote', 
                 targetId: partId, 
-                texte: txt // Sera utilisé pour "Compte_rendu"
+                texte: txt 
             });
 
-            if(res.success) {
-                document.getElementById('noteTexte').value = "";
-                await loadDetails();
-            }
-            btn.disabled = false; btn.innerText = "Ajouter";
+            document.getElementById('noteTexte').value = ""; 
+            btn.disabled = false;
+            btn.innerText = "Ajouter";
+            
+            // Rechargement des détails pour voir la note apparaître
+            setTimeout(loadDetails, 1000);
         }
 
-        async function saveAlert() { /* Logique Alerte */ }
-        async function ajouterOffreRapide() { /* Logique Offre */ }
+        async function saveAlert() {
+            const date = document.getElementById('alertDate').value;
+            const msg = document.getElementById('alertMsg').value;
+            const destinataire = document.getElementById('alertDest').value;
+            
+            if(!date || !msg) return alert("Veuillez remplir la date et le message.");
+            
+            const btn = event.target; 
+            btn.innerText = "Enregistrement..."; btn.disabled = true;
 
-        // Lancement au démarrage
+            await apiPost({ 
+                action: 'setPartnerAlert', 
+                targetId: partId, 
+                date: date, 
+                freq: document.getElementById('alertFreq').value, 
+                msg: msg,
+                destinataire: destinataire 
+            });
+            
+            alert("Alerte programmée !"); 
+            btn.innerText = "Activer l'alerte"; btn.disabled = false;
+            loadDetails();
+        }
+
+        async function ajouterOffreRapide() {
+            const url = prompt("Lien de l'offre :");
+            if(!url) return;
+            const poste = prompt("Titre du poste :");
+            if(!poste) return;
+            await apiPost({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" });
+            loadDetails();
+        }
+        
         loadDetails();
     </script>
+    <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </body>
 </html>
