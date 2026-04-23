@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historique - HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="historique.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Historique</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-black text-[#1A4E8A]">Journal d'Audit</h1>
+            <div class="flex space-x-2">
+                <input type="text" id="searchLog" placeholder="Rechercher..." class="px-4 py-2 border rounded-lg text-sm w-64 outline-none focus:border-[#1A4E8A]" oninput="filterLogs()">
+                <button onclick="loadHistory()" class="bg-[#1A4E8A] text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-90">🔄</button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        <th class="p-4">Date</th>
+                        <th class="p-4">Auteur</th>
+                        <th class="p-4">Action</th>
+                        <th class="p-4">Catégorie / Cible</th>
+                        <th class="p-4">Détails</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody" class="text-sm">
+                    <tr><td colspan="5" class="p-10 text-center font-bold text-[#1A4E8A] animate-pulse">Chargement de l'historique...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        let allLogs = [];
+
+        window.onload = () => {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (user.role !== "Administrateur") {
+                window.location.href = 'dashboard.html';
+            } else {
+                loadHistory(user);
+            }
+        };
+
+        async function loadHistory(user) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    allLogs = result.logs;
+                    renderLogs(allLogs);
+                }
+            } catch (e) {
+                document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="5" class="p-10 text-center text-red-500">Erreur de connexion</td></tr>';
+            }
+        }
+
+        function renderLogs(logs) {
+            const tbody = document.getElementById('historyTableBody');
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-10 text-center text-gray-400">Aucun historique.</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.map(log => {
+                const dateObj = new Date(log["Date et Heure"]);
+                const dateStr = dateObj.toLocaleDateString('fr-FR') + ' ' + dateObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+                
+                let badge = "bg-gray-100 text-gray-600";
+                if (log.Type === "Création") badge = "bg-green-100 text-green-700 border border-green-200";
+                if (log.Type === "Modification") badge = "bg-blue-100 text-blue-700 border border-blue-200";
+                if (log.Type === "Suppression") badge = "bg-red-100 text-red-700 border border-red-200";
+                if (log.Type === "Connexion") badge = "bg-purple-100 text-purple-700 border border-purple-200";
+
+                return `
+                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                    <td class="p-4 text-xs font-bold text-gray-500">${dateStr}</td>
+                    <td class="p-4"><div class="font-bold text-gray-800">${log.Auteur}</div><div class="text-[10px] text-gray-400 uppercase">${log.Rôle}</div></td>
+                    <td class="p-4"><span class="px-2 py-1 rounded-xl text-[10px] font-black uppercase shadow-sm ${badge}">${log.Type}</span></td>
+                    <td class="p-4"><div class="font-bold text-[#1A4E8A] text-xs">${log.Catégorie}</div><div class="font-mono text-[10px] text-gray-500 mt-1">${log.Cible}</div></td>
+                    <td class="p-4 text-xs text-gray-600">${log.Détails}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function filterLogs() {
+            const term = document.getElementById('searchLog').value.toLowerCase();
+            const filtered = allLogs.filter(l => 
+                (l.Auteur || "").toLowerCase().includes(term) || 
+                (l.Cible || "").toLowerCase().includes(term) || 
+                (l.Détails || "").toLowerCase().includes(term) ||
+                (l.Catégorie || "").toLowerCase().includes(term)
+            );
+            renderLogs(filtered);
+        }
+    </script>
+</body>
+</html>
