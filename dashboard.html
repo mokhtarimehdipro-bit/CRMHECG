@@ -267,7 +267,33 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        // LA STATION D'EXPÉDITION CENTRALE
+async function apiPost(payload) {
+    // 1. On récupère ton identité stockée lors de la connexion
+    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    // 2. On "signe" le colis avec ton nom et ton rôle
+    payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
+    payload.roleAuteur = userSession.role || "Utilisateur";
+
+    // 3. On envoie le colis au script Google
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
         
+        // Petite sécurité : si le serveur dit que ça a échoué
+        if (!result.success) console.error("Erreur API:", result.message);
+        
+        return result;
+    } catch (e) {
+        console.error("Erreur de connexion au serveur:", e);
+        return { success: false, message: "Erreur réseau" };
+    }
+}
         let fullData = [];
         let catalogueTuteurs = [];
         let catalogueReferents = [];
@@ -628,12 +654,7 @@
                 reader.onload = e => r(e.target.result.split(',')[1]); 
                 reader.readAsDataURL(cvFile); 
             });
-            const uploadRes = await fetch(API_URL, { 
-                method: 'POST', 
-                headers: { "Content-Type": "text/plain;charset=utf-8" },
-                body: JSON.stringify({ action: 'uploadCV', userId: idValue || 'NOUVEAU', fileName: `CV_${document.getElementById('formNom').value}.pdf`, mimeType: cvFile.type, base64Data: base64 }) 
-            });
-            const uploadData = await uploadRes.json();
+            const uploadData = await apiPost({ action: 'uploadCV', userId: idValue || 'NOUVEAU', fileName: `CV_${document.getElementById('formNom').value}.pdf`, mimeType: cvFile.type, base64Data: base64 });
             if(uploadData.success) finalCvUrl = uploadData.url;
         } catch(e) { console.error("Upload fail"); }
     }
@@ -669,12 +690,8 @@
     btn.innerText = "Sauvegarde...";
 
     try {
-        // On envoie et on ignore l'erreur CORS (le 200 OK suffit)
-        await fetch(API_URL, { 
-            method: 'POST', 
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload) 
-        });
+        // On envoie le colis au Postier Central (qui ajoute l'identité)
+        await apiPost(payload);
     } catch (erreur) {
         console.log("Note: Erreur d'affichage CORS ignorée (Envoi OK).");
     } finally {
