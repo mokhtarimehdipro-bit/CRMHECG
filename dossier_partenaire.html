@@ -79,25 +79,26 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-        async function apiPost(payload) {
-    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Inconnu";
-    payload.roleAuteur = userSession.role || "N/A";
-    
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
-        });
-        return await response.json();
-    } catch (e) {
-        console.error("Erreur API :", e);
-        return { success: false, message: "Erreur de connexion" };
-    }
-}
-        const partId = new URLSearchParams(window.location.search).get('id');
         
+        async function apiPost(payload) {
+            const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+            payload.idAuteur = userSession.nom || "Inconnu";
+            payload.roleAuteur = userSession.role || "N/A";
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (e) {
+                console.error("Erreur API :", e);
+                return { success: false, message: "Erreur de connexion" };
+            }
+        }
+
+        const partId = new URLSearchParams(window.location.search).get('id');
         let currentUser = null;
         let nomEntrepriseActuelle = "";
 
@@ -131,17 +132,14 @@
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
-            // On utilise apiPost, et on envoie "id_entreprise" ET "targetId" pour être sûr que le serveur le reconnaisse
             await apiPost({ action: 'addPartnerNote', id_entreprise: partId, targetId: partId, texte: txt });
             document.getElementById('noteTexte').value = ""; loadDetails();
         }
-        }
 
-        // LA FONCTION CORRIGÉE QUI ENVOIE L'ID ET L'EMAIL AU SERVEUR
         async function saveAlert() {
             const date = document.getElementById('alertDate').value;
             const msg = document.getElementById('alertMsg').value;
-            const destinataire = document.getElementById('alertDest').value; // Capture de l'email
+            const destinataire = document.getElementById('alertDest').value;
             
             if(!date || !msg) return alert("Veuillez remplir la date et le message.");
             
@@ -173,6 +171,7 @@
             await apiPost({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" });
             btn.innerText = "+ Nouvelle Offre"; btn.disabled = false; loadDetails();
         }
+        
         loadDetails();
     </script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
