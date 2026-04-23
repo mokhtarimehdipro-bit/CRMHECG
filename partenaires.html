@@ -374,11 +374,9 @@
                 nom: document.getElementById('editContactNom').value,
                 tel: document.getElementById('editContactTel').value,
                 email: document.getElementById('editContactMail').value
-                idAuteur: JSON.parse(localStorage.getItem('user') || '{}').nom,
-    roleAuteur: JSON.parse(localStorage.getItem('user') || '{}').role,
             };
             
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            await apiPost(payload);
             closeContactEdit();
             openDossier(currentId);
             loadPartners(); 
@@ -414,16 +412,13 @@
                 mail2: document.getElementById('addContMail2').value,
                 tel1: document.getElementById('addContTel1').value,
                 tel2: document.getElementById('addContTel2').value
-                idAuteur: JSON.parse(localStorage.getItem('user') || '{}').nom,
-    roleAuteur: JSON.parse(localStorage.getItem('user') || '{}').role,
             };
 
             if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
                 return alert("Champs obligatoires : Nom Entreprise, Nom Contact, Mail Principal.");
             }
 
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            const result = await res.json();
+            const result = await apiPost(payload);
             
             if (result.success) {
                 alert("✅ " + result.message);
