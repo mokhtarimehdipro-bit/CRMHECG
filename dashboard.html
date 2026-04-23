@@ -484,11 +484,16 @@ async function apiPost(payload) {
                 const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
                 
                 let matchAt = true;
-if(fAt === "CV") matchAt = e.faitCV === "Oui";
-if(fAt === "CV_NON") matchAt = e.faitCV !== "Oui"; // Ajouté
-if(fAt === "LI") matchAt = e.faitLI === "Oui";
-if(fAt === "LI_NON") matchAt = e.faitLI !== "Oui"; // Ajouté
-if(fAt === "BOTH") matchAt = e.faitCV === "Oui" && e.faitLI === "Oui";
+                
+                // On nettoie le texte (minuscule, sans espace) pour être sûr à 100%
+                const cvFait = String(e.faitCV || "").trim().toLowerCase();
+                const liFait = String(e.faitLI || "").trim().toLowerCase();
+
+                if (fAt === "CV") matchAt = (cvFait === "oui");
+                else if (fAt === "CV_NON") matchAt = (cvFait !== "oui");
+                else if (fAt === "LI") matchAt = (liFait === "oui");
+                else if (fAt === "LI_NON") matchAt = (liFait !== "oui");
+                else if (fAt === "BOTH") matchAt = (cvFait === "oui" && liFait === "oui");
 
                 let matchPe = true;
                 if (fPe) {
