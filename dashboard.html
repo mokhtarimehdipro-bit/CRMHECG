@@ -439,7 +439,8 @@ async function apiPost(payload) {
 
         // --- 3. FILTRES & TABLEAU & KPI ---
         function getFilteredData() {
-            const fSe = document.getElementById('fSearch').value.toLowerCase();
+            // On supprime les tirets et les espaces pour une recherche sans erreur
+            const fSe = document.getElementById('fSearch').value.toLowerCase().replace(/[_ \-]/g, '');
             const fTy = document.getElementById('fTypo').value;
             const fCl = document.getElementById('fClasse').value;
             const fSt = document.getElementById('fStatut').value.toLowerCase();
@@ -450,6 +451,8 @@ async function apiPost(payload) {
             const now = new Date();
 
             return fullData.filter(e => {
+                // Création d'une chaîne de recherche propre (sans tirets/espaces)
+                const stringRecherche = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().replace(/[_ \-]/g, '');
                 // 1. LOGIQUE ALUMNI (PRIORITAIRE)
                 // Si le bouton Alumni est activé, on court-circuite le filtre "Actifs"
                 if (showAlumniOnly) {
