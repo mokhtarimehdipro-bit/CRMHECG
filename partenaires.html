@@ -474,10 +474,23 @@
         }
 
         function filterPartners() {
-            const s = document.getElementById('searchInput').value.toLowerCase();
+            const s = document.getElementById('searchInput').value.toLowerCase().trim();
             const nbAltFilter = document.getElementById('filterNbAlt').value;
 
-            let data = allPartners.filter(p => (p.nom || "").toLowerCase().includes(s));
+            let data = allPartners.filter(p => {
+                // 1. On récupère les infos de l'entreprise
+                const nomEntreprise = (p.nom || "").toLowerCase();
+                const idEntreprise = (p.id || "").toLowerCase();
+                
+                // 2. On récupère les infos de TOUS les contacts de cette entreprise
+                const infosContacts = (p.contacts || []).map(c => 
+                    `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`
+                ).join(" ").toLowerCase();
+
+                // 3. On fusionne tout dans une grande chaîne "invisible" et on cherche dedans
+                const zoneDeRecherche = `${nomEntreprise} ${idEntreprise} ${infosContacts}`;
+                return zoneDeRecherche.includes(s);
+            });
             
             // Filtre via le bouton "Alternants" (si on veut juste > 0)
             if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
@@ -497,10 +510,15 @@
         }
 
         function exportFilteredView() {
-            const s = document.getElementById('searchInput').value.toLowerCase();
+            const s = document.getElementById('searchInput').value.toLowerCase().trim();
             const nbAltFilter = document.getElementById('filterNbAlt').value;
 
-            let data = allPartners.filter(p => (p.nom || "").toLowerCase().includes(s));
+            let data = allPartners.filter(p => {
+                const nomEntreprise = (p.nom || "").toLowerCase();
+                const idEntreprise = (p.id || "").toLowerCase();
+                const infosContacts = (p.contacts || []).map(c => `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`).join(" ").toLowerCase();
+                return `${nomEntreprise} ${idEntreprise} ${infosContacts}`.includes(s);
+            });
             
             if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
 
