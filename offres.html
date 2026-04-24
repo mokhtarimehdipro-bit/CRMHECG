@@ -33,6 +33,22 @@
             <h1 class="text-3xl font-black text-[#1A4E8A]">Bourse aux Offres</h1>
             <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
         </div>
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <input type="text" id="fOffreRecherche" onkeyup="filterOffres()" placeholder="🔍 Chercher un N° (OFR...) ou Titre" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+            
+            <select id="fOffreQualite" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">🎯 Toutes les qualités (Statut)</option>
+                <option value="vérifiée">✅ Vérifiée (Valide)</option>
+                <option value="qualifier">❓ À Qualifier</option>
+                <option value="obsolète">❌ Obsolète</option>
+            </select>
+
+            <select id="fOffrePartage" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">📡 Tous les partages</option>
+                <option value="partagée">Partagée aux étudiants</option>
+                <option value="non partagée">Non partagée</option>
+            </select>
+        </div>
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des annonces...</div>
         
@@ -178,100 +194,108 @@
         }
 
         // 1. CHARGER LES OFFRES
+       // 1. LE CHARGEUR (Récupère la donnée et la stocke)
         async function loadOffres() {
-            const grid = document.getElementById('offresGrid');
             const loader = document.getElementById('loader');
-
             try {
                 loader.classList.remove('hidden');
-                grid.classList.add('hidden');
-
+                document.getElementById('offresGrid').classList.add('hidden');
+                
                 const data = await apiPost({ action: 'getOffres' });
-
+                
                 loader.classList.add('hidden');
-                grid.classList.remove('hidden');
+                document.getElementById('offresGrid').classList.remove('hidden');
 
                 if (data.success && data.data && data.data.length > 0) {
-                    currentOffres = data.data;
-                    grid.innerHTML = currentOffres.map(o => {
-                        let nomPlateforme = o.Plateforme || o.plateforme || "Inconnu";
-                        let pf = nomPlateforme.toLowerCase();
-                        let logoHTML = `<span class="px-2 py-1 text-[10px] font-bold text-gray-600 bg-gray-100 rounded shadow-sm">${nomPlateforme}</span>`; 
-                        
-                        if (pf.includes("linkedin")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=linkedin.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="LinkedIn">`;
-                        else if (pf.includes("indeed")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=indeed.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="Indeed">`;
-                        else if (pf.includes("france travail") || pf.includes("francetravail") || pf.includes("pole emploi")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=francetravail.fr&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="France Travail">`;
-                        else if (pf.includes("google")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=google.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="Google Jobs">`;
-
-                        let brutQualite = o.qualite || "À QUALIFIER";
-                        let qualiteTexte = brutQualite.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                        let bgCarte = "bg-white border-gray-100"; 
-                        let badgeQualite = "bg-gray-100 text-gray-600 border-gray-200";
-
-                        if (qualiteTexte.includes("qualifier")) {
-                            bgCarte = "bg-yellow-50 border-yellow-400";
-                            badgeQualite = "bg-yellow-100 text-yellow-800 border-yellow-300";
-                        } else if (qualiteTexte.includes("obsolete") || qualiteTexte.includes("annule")) {
-                            bgCarte = "bg-red-50 border-red-300 opacity-80";
-                            badgeQualite = "bg-red-100 text-red-800 border-red-200";
-                        } else if (qualiteTexte.includes("valide") || qualiteTexte.includes("vérifiée")) {
-                            bgCarte = "bg-green-50 border-green-400";
-                            badgeQualite = "bg-green-100 text-green-800 border-green-300";
-                        }
-
-                        let brutEtat = o.etat || "Non partagée";
-                        let etatTexte = brutEtat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                        let estPartage = etatTexte.includes("partagee") || etatTexte.includes("partage");
-                        if (etatTexte.includes("non")) estPartage = false; 
-                        let badgePartage = estPartage ? "bg-blue-100 text-blue-800 border-blue-300" : "bg-slate-100 text-slate-500 border-slate-200";
-
-                        const safePoste = (o.poste || "").replace(/'/g, "\\'");
-                        const namesHTML = estPartage && o.destinataires && o.destinataires.length > 0 
-                            ? `<details class="mt-3 group">
-                                 <summary class="text-[9px] font-black text-blue-500 cursor-pointer uppercase list-none focus:outline-none hover:underline">
-                                    👥 Voir les ${o.destinataires.length} partages
-                                 </summary>
-                                 <div class="flex flex-wrap gap-1 mt-2 p-2 bg-white/50 rounded-xl border border-blue-100">
-                                    ${o.destinataires.map(name => `<span class="px-2 py-0.5 bg-white text-[#1A4E8A] rounded text-[9px] font-bold border border-blue-100 shadow-sm">${name}</span>`).join('')}
-                                 </div>
-                               </details>`
-                            : `<p class="text-[9px] text-slate-400 italic mt-3 font-bold uppercase tracking-tighter">Aucun partage effectué</p>`;
-
-                        return `
-                        <div class="${bgCarte} rounded-[2rem] shadow-sm border p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group">
-                            <div>
-                                <div class="flex justify-between items-center mb-4">
-                                    <div class="flex gap-2">
-                                        <span class="px-2 py-1 text-[10px] font-black uppercase rounded border shadow-sm ${badgeQualite}">${brutQualite}</span>
-                                        <span class="px-2 py-1 text-[10px] font-black uppercase rounded border shadow-sm ${badgePartage}">${brutEtat}</span>
-                                    </div>
-                                    <div class="ml-2">${logoHTML}</div>
-                                </div>
-                                <h3 class="text-xl font-black text-gray-800 mb-1 leading-tight group-hover:text-[#1A4E8A] transition-colors">${o.poste || 'Sans titre'}</h3>
-                                <p class="text-[#F26522] font-black text-sm mb-4 uppercase">🏢 ${o.entreprise}</p>
-                                <p class="text-[10px] font-bold text-gray-400 tracking-tighter mb-2">📅 Parue le ${new Date(o.date).toLocaleDateString()}</p>
-                                <div class="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                    <p class="text-[9px] font-black text-gray-400 uppercase mb-1">📝 (notes interne) :</p>
-                                    <p class="text-[11px] text-gray-600 font-medium italic leading-snug">${o.missions || 'Aucune note.'}</p>
-                                </div>
-                                ${namesHTML}
-                            </div>
-                            <div class="flex justify-between items-center mt-8 border-t border-gray-50 pt-4">
-                                <a href="${o.url}" target="_blank" class="text-blue-500 font-black text-[10px] hover:underline uppercase tracking-widest">Voir l'annonce ↗</a>
-                                <div class="flex space-x-1">
-                                    <button onclick="openModal('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-500 hover:bg-white hover:shadow-sm transition" title="Modifier">✏️</button>
-                                    <button onclick="openShareModal('${o.id}', '${safePoste}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white hover:shadow-sm transition" title="Partager">📡</button>
-                                    <button onclick="deleteOffre('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition" title="Supprimer">🗑️</button>
-                                </div>
-                            </div>
-                        </div>`;
-                    }).join('');
+                    currentOffres = data.data; // On stocke en mémoire
+                    filterOffres(); // On lance l'affichage filtré
                 } else {
-                    grid.innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
+                    document.getElementById('offresGrid').innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
                 }
-            } catch (err) { loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>'; }
+            } catch (err) { 
+                loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>'; 
+            }
         }
 
+        // 2. LE MOTEUR DE FILTRAGE
+        function filterOffres() {
+            // Si les filtres n'existent pas dans le HTML, on affiche tout par sécurité
+            const elSearch = document.getElementById('fOffreRecherche');
+            if (!elSearch) return renderOffres(currentOffres);
+
+            const search = document.getElementById('fOffreRecherche').value.toLowerCase().trim();
+            const qualite = document.getElementById('fOffreQualite').value.toLowerCase();
+            const partage = document.getElementById('fOffrePartage').value.toLowerCase();
+
+            const filteredData = currentOffres.filter(o => {
+                // Recherche texte (ID + Poste + Entreprise)
+                const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''}`.toLowerCase();
+                const matchSearch = textGlobal.includes(search);
+
+                // Recherche Qualité
+                const qualiteOffre = (o.qualite || "").toLowerCase();
+                const matchQualite = qualite === "" || qualiteOffre.includes(qualite);
+                
+                // Recherche Partage (On nettoie les accents pour éviter les bugs)
+                let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                let estPartage = etatOffre.includes("partagee") || etatOffre.includes("partage");
+                if (etatOffre.includes("non")) estPartage = false;
+
+                let matchPartage = true;
+                if (partage === "partagée") matchPartage = estPartage === true;
+                if (partage === "non partagée") matchPartage = estPartage === false;
+
+                // Doit correspondre aux 3 filtres
+                return matchSearch && matchQualite && matchPartage;
+            });
+
+            renderOffres(filteredData);
+        }
+
+        // 3. LE DESSINATEUR (Génère le HTML)
+        function renderOffres(data) {
+            const grid = document.getElementById('offresGrid');
+            if(data.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-10"><p class="text-gray-400 font-bold italic">Aucune offre ne correspond à ces filtres.</p></div>';
+                return;
+            }
+            
+            grid.innerHTML = data.map(o => {
+                let nomPlateforme = o.Plateforme || o.plateforme || "Inconnu";
+                let pf = nomPlateforme.toLowerCase();
+                let logoHTML = `<span class="px-2 py-1 text-[10px] font-bold text-gray-600 bg-gray-100 rounded shadow-sm">${nomPlateforme}</span>`; 
+                
+                if (pf.includes("linkedin")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=linkedin.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="LinkedIn">`;
+                else if (pf.includes("indeed")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=indeed.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="Indeed">`;
+                else if (pf.includes("france travail") || pf.includes("francetravail") || pf.includes("pole emploi")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=francetravail.fr&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="France Travail">`;
+                else if (pf.includes("google")) logoHTML = `<img src="https://www.google.com/s2/favicons?domain=google.com&sz=128" class="h-6 w-6 object-contain rounded-md shadow-sm" title="Google Jobs">`;
+
+                let brutQualite = o.qualite || "À QUALIFIER";
+                let qualiteTexte = brutQualite.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                let bgCarte = "bg-white border-gray-100"; 
+                let badgeQualite = "bg-gray-100 text-gray-600 border-gray-200";
+
+                if (qualiteTexte.includes("qualifier")) { bgCarte = "bg-yellow-50 border-yellow-400"; badgeQualite = "bg-yellow-100 text-yellow-800 border-yellow-300"; } 
+                else if (qualiteTexte.includes("obsolete") || qualiteTexte.includes("annule")) { bgCarte = "bg-red-50 border-red-300 opacity-80"; badgeQualite = "bg-red-100 text-red-800 border-red-200"; } 
+                else if (qualiteTexte.includes("valide") || qualiteTexte.includes("vérifiée")) { bgCarte = "bg-green-50 border-green-400"; badgeQualite = "bg-green-100 text-green-800 border-green-300"; }
+
+                let brutEtat = o.etat || "Non partagée";
+                let etatTexte = brutEtat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                let estPartage = etatTexte.includes("partagee") || etatTexte.includes("partage");
+                if (etatTexte.includes("non")) estPartage = false; 
+                let badgePartage = estPartage ? "bg-blue-100 text-blue-800 border-blue-300" : "bg-slate-100 text-slate-500 border-slate-200";
+
+                const safePoste = (o.poste || "").replace(/'/g, "\\'");
+                const namesHTML = estPartage && o.destinataires && o.destinataires.length > 0 
+                    ? `<details class="mt-3 group">
+                         <summary class="text-[9px] font-black text-blue-500 cursor-pointer uppercase list-none focus:outline-none hover:underline">
+                            👥 Voir les ${o.destinataires.length} partages
+                         </summary>
+                         <div class="flex flex-wrap gap-1 mt-2 p-2 bg-white/50 rounded-xl border border-blue-100">
+                            ${o.destinataires.map(name => `<span class="px-2 py-0.5 bg-white text-[#1A4E8A] rounded text-[9px] font-bold border border-blue-100 shadow-sm">${name}</span>`).join('')}
+                         </div>
+                       </details>`
+                    : `<p class="text-[9px] text
         // 2. MODAL AJOUT / MODIF
         function openModal(id = null) { 
             document.getElementById('offreModal').classList.replace('hidden', 'flex'); 
