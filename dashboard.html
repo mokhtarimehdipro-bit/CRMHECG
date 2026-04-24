@@ -458,7 +458,7 @@ async function apiPost(payload) {
                     let isAlumni = motifLow.includes("dipl") && motifLow.includes("obtenu");
                     
                     // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
-                    const matchName = (e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                    const matchName = (e.id + " " + e.nom + " " + e.prenom).toLowerCase().includes(fSe);
                     const matchCampus = !fCa || (e.campus && e.campus === fCa);
                     const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
                     
