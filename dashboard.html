@@ -706,6 +706,8 @@ async function apiPost(payload) {
         sortie: document.getElementById('formSortie').value, 
         motifSortie: document.getElementById('formMotif').value,
         refPerso: document.getElementById('formReferent').value
+        // 🟢 AJOUT POUR LE MOUCHARD : Le détail précis de l'action
+        detailsLog: `Mise à jour Fiche : Statut passé en [${document.getElementById('formStatut').value}]`
     };
 
     btn.innerText = "Sauvegarde...";
