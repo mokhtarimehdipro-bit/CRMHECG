@@ -707,7 +707,7 @@ async function apiPost(payload) {
         motifSortie: document.getElementById('formMotif').value,
         refPerso: document.getElementById('formReferent').value,
         
-        detailsLog: `Mise à jour Fiche : Statut passé en [${document.getElementById('formStatut').value}]`
+        detailsLog: "A modifié le statut en [" + document.getElementById('formStatut').value + "]"
     };
 
     btn.innerText = "Sauvegarde...";
