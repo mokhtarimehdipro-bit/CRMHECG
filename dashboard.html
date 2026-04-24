@@ -479,7 +479,7 @@ async function apiPost(payload) {
                 // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
                 if (fSe.length > 2) matchTypo = true;
 
-                const matchName = (e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                const matchName = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().includes(fSe);
                 const matchClass = !fCl || (e.classe && e.classe === fCl);
                 const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
                 
