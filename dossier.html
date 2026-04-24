@@ -190,7 +190,7 @@
                     if (p.campus === 'HECG') campusBadge = '<span class="bg-blue-100 text-[#1A4E8A] px-2 py-0.5 rounded-md ml-2 text-[10px] uppercase font-black tracking-widest border border-blue-200">Marseille</span>';
                     else if (p.campus === 'HECG_AIX') campusBadge = '<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md ml-2 text-[10px] uppercase font-black tracking-widest border border-purple-200">Aix-en-P.</span>';
 
-                    document.getElementById('etuInfo').innerHTML = (p.classe || 'Sans classe') + " | " + (p.statut || 'Statut inconnu') + campusBadge;
+                    document.getElementById('etuInfo').innerHTML = `<span class="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-[10px] font-black mr-2 uppercase shadow-sm">ID: ${p.id}</span>` + (p.classe || 'Sans classe') + " | " + (p.statut || 'Statut inconnu') + campusBadge;
                     document.getElementById('etuMail').innerText = p.mail || 'Non renseigné';
                     document.getElementById('etuMail').href = "mailto:" + p.mail;
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
