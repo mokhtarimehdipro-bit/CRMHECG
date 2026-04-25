@@ -688,6 +688,21 @@ async function apiPost(payload) {
     const finalClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
 
     // LE COLIS (Payload)
+    // 🟢 Création d'un message d'historique intelligent
+    let logIntelligent = "Mise à jour du dossier étudiant.";
+    if (idValue) {
+        const ancienEtu = fullData.find(x => x.id === idValue);
+        const nouveauStatut = document.getElementById('formStatut').value;
+        if (ancienEtu && ancienEtu.statut !== nouveauStatut) {
+            logIntelligent = `Changement de statut : ${ancienEtu.statut || 'Inconnu'} ➡️ ${nouveauStatut}`;
+        } else {
+            logIntelligent = "Mise à jour des coordonnées / informations.";
+        }
+    } else {
+        logIntelligent = "Création du dossier étudiant.";
+    }
+
+    // LE COLIS (Payload)
     const payload = {
         action: idValue ? 'updateStudent' : 'addStudent',
         id_etu: idValue,
@@ -710,7 +725,7 @@ async function apiPost(payload) {
         motifSortie: document.getElementById('formMotif').value,
         refPerso: document.getElementById('formReferent').value,
         
-        detailsLog: "A modifié le statut en [" + document.getElementById('formStatut').value + "]"
+        detailsLog: logIntelligent
     };
 
     btn.innerText = "Sauvegarde...";
