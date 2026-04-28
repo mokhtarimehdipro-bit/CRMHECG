@@ -659,64 +659,65 @@ async function apiPost(payload) {
 
         function closeModal() { document.getElementById('etuModal').classList.replace('flex', 'hidden'); }
 
-        async function saveStudent() {
+       // ==============================================================
+// BLOC DE SAUVEGARDE ETUDIANT (CORRIGÉ POUR L'ENTREPRISE)
+// ==============================================================
+async function saveStudent() {
     const btn = document.getElementById('btnSave');
-    const idValue = document.getElementById('formId').value.trim();
-    
-    btn.disabled = true; 
-    btn.innerText = "Traitement...";
+    btn.innerText = "Enregistrement...";
+    btn.disabled = true;
 
     let finalCvUrl = document.getElementById('formCVUrl').value;
     const cvFile = document.getElementById('formCVFile').files[0];
-
-    // Upload CV
+    
     if (cvFile) {
-        btn.innerText = "Upload du CV...";
-        try {
-            const base64 = await new Promise(r => { 
-                const reader = new FileReader(); 
-                reader.onload = e => r(e.target.result.split(',')[1]); 
-                reader.readAsDataURL(cvFile); 
+        const reader = new FileReader();
+        reader.onload = async function() {
+            const base64 = reader.result.split(',')[1];
+            const resCV = await apiPost({
+                action: 'uploadCV',
+                fileName: cvFile.name,
+                mimeType: cvFile.type,
+                base64Data: base64,
+                userId: document.getElementById('formId').value || 'NOUVEAU'
             });
-            const uploadData = await apiPost({ action: 'uploadCV', userId: idValue || 'NOUVEAU', fileName: `CV_${document.getElementById('formNom').value}.pdf`, mimeType: cvFile.type, base64Data: base64 });
-            if(uploadData.success) finalCvUrl = uploadData.url;
-        } catch(e) { console.error("Upload fail"); }
+            if (resCV.success) finalCvUrl = resCV.url;
+            await envoyerSaveEtu(finalCvUrl);
+        };
+        reader.readAsDataURL(cvFile);
+    } else {
+        await envoyerSaveEtu(finalCvUrl);
     }
+}
 
-        // --- DÉBUT CORRECTION ENTREPRISE ---
+async function envoyerSaveEtu(finalCvUrl) {
+    // 🟢 1. LECTURE PROPRE DE L'ENTREPRISE
     let rawEntValue = document.getElementById('formTuteurSelect').value.trim();
-    let finalNomEnt = "";
+    let nomEntreprisePourServeur = "";
 
     if (rawEntValue.includes('|')) {
         let parts = rawEntValue.split('|');
-        finalNomEnt = parts.length >= 3 ? parts[2].trim() : "";
+        nomEntreprisePourServeur = parts.length >= 3 ? parts[2].trim() : "";
     } else {
-        finalNomEnt = rawEntValue;
+        nomEntreprisePourServeur = rawEntValue;
         document.getElementById('formIdEnt').value = "";
         document.getElementById('formIdCont').value = "";
     }
-    // --- FIN CORRECTION ENTREPRISE ---
 
-    const finalClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
-
-    // 🟢 Création d'un message d'historique ultra-intelligent
-    let logIntelligent = "Mise à jour du dossier étudiant.";
+    const idValue = document.getElementById('formId').value;
     
+    // 🟢 2. INTELLIGENCE DU MOUCHARD (HISTORIQUE)
+    let logIntelligent = "Mise à jour du dossier étudiant.";
     if (idValue) {
         const ancienEtu = fullData.find(x => x.id === idValue);
-        
-        // On récupère les nouvelles valeurs
         const newStatut = document.getElementById('formStatut').value;
         const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
-        const newEnt = finalNomEnt;
+        const newEnt = nomEntreprisePourServeur; // Utilisation du nom propre
 
-
-        // On prépare les anciennes valeurs (avec sécurité si elles sont vides)
         const oldStatut = ancienEtu.statut || "";
         const oldClasse = ancienEtu.classe || "";
         const oldEnt = ancienEtu.entreprise || "";
 
-        // Comparaisons "nettoyées" (sans majuscules ni espaces autour)
         if (ancienEtu && oldStatut.trim().toLowerCase() !== newStatut.trim().toLowerCase()) {
             logIntelligent = `Changement de statut : ${oldStatut || 'Non défini'} ➡️ ${newStatut}`;
         } 
@@ -733,49 +734,47 @@ async function apiPost(payload) {
         logIntelligent = "Création du dossier étudiant.";
     }
 
-    // LE COLIS (Payload)
-
-    // LE COLIS (Payload)
+    // 🟢 3. CRÉATION DU COLIS POUR GOOGLE SHEET
     const payload = {
         action: idValue ? 'updateStudent' : 'addStudent',
         id_etu: idValue,
-        nom: document.getElementById('formNom').value.trim(), 
-        prenom: document.getElementById('formPrenom').value.trim(),
-        mail: document.getElementById('formMail').value.trim(), 
-        tel: document.getElementById('formTel').value.trim(),
-        cv: finalCvUrl,
-        entreprise: finalNomEnt, 
-        id_ent: document.getElementById('formIdEnt').value, 
-        id_cont: document.getElementById('formIdCont').value,
-        classe: finalClasse,
-        campus: document.getElementById('formCampus') ? document.getElementById('formCampus').value : "",
-        statut: document.getElementById('formStatut').value, 
-        forceTypo: document.getElementById('formForceTypo').value,
-        faitCV: document.getElementById('formFaitCV').value, 
-        faitLI: document.getElementById('formFaitLI').value,
-        entree: document.getElementById('formEntree').value.trim(), 
-        sortie: document.getElementById('formSortie').value, 
-        motifSortie: document.getElementById('formMotif').value,
+        nom: document.getElementById('formNom').value,
+        prenom: document.getElementById('formPrenom').value,
+        mail: document.getElementById('formMail').value,
+        tel: document.getElementById('formTel').value,
         refPerso: document.getElementById('formReferent').value,
-        
-        detailsLog: logIntelligent
+        id_ent: document.getElementById('formIdEnt').value,
+        id_cont: document.getElementById('formIdCont').value,
+        entreprise: nomEntreprisePourServeur, // <-- C'EST ICI QUE LA COLONNE V SE MET À JOUR
+        statut: document.getElementById('formStatut').value,
+        classe: (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim(),
+        campus: document.getElementById('formCampus') ? document.getElementById('formCampus').value : "",
+        forceTypo: document.getElementById('formForceTypo').value,
+        faitCV: document.getElementById('formFaitCV').value,
+        faitLI: document.getElementById('formFaitLI').value,
+        cv: finalCvUrl,
+        entree: document.getElementById('formEntree').value,
+        sortie: document.getElementById('formSortie').value,
+        motifSortie: document.getElementById('formMotif').value,
+        detailsLog: logIntelligent // Envoi de l'historique
     };
 
-    btn.innerText = "Sauvegarde...";
-
-    try {
-        // On envoie le colis au Postier Central (qui ajoute l'identité)
-        await apiPost(payload);
-    } catch (erreur) {
-        console.log("Note: Erreur d'affichage CORS ignorée (Envoi OK).");
-    } finally {
+    // 🟢 4. ENVOI AU SERVEUR
+    const res = await apiPost(payload);
+    
+    const btn = document.getElementById('btnSave');
+    btn.disabled = false; 
+    btn.innerText = "Enregistrer";
+    
+    if (res.success) {
         closeModal();
-        btn.disabled = false; 
-        btn.innerText = "Enregistrer";
-        // On attend 3 secondes que Google finisse d'écrire avant de rafraîchir
         setTimeout(() => { loadDashboardData(); }, 3000); 
+    } else {
+        alert("Erreur : " + res.message);
     }
 }
+// ==============================================================
+
 
         // EXPORT COMPLET (Synchronisé avec les filtres affichés)
         function exportEtudiantsCSV() {
