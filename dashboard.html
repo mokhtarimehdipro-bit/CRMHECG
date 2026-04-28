@@ -683,8 +683,20 @@ async function apiPost(payload) {
         } catch(e) { console.error("Upload fail"); }
     }
 
-    let finalNomEnt = document.getElementById('formTuteurSelect').value;
-    if(finalNomEnt.includes('|')) finalNomEnt = finalNomEnt.split('|')[2];
+        // --- DÉBUT CORRECTION ENTREPRISE ---
+    let rawEntValue = document.getElementById('formTuteurSelect').value.trim();
+    let finalNomEnt = "";
+
+    if (rawEntValue.includes('|')) {
+        let parts = rawEntValue.split('|');
+        finalNomEnt = parts.length >= 3 ? parts[2].trim() : "";
+    } else {
+        finalNomEnt = rawEntValue;
+        document.getElementById('formIdEnt').value = "";
+        document.getElementById('formIdCont').value = "";
+    }
+    // --- FIN CORRECTION ENTREPRISE ---
+
     const finalClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
 
     // 🟢 Création d'un message d'historique ultra-intelligent
@@ -696,7 +708,8 @@ async function apiPost(payload) {
         // On récupère les nouvelles valeurs
         const newStatut = document.getElementById('formStatut').value;
         const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
-        const newEnt = document.getElementById('formTuteurSelect').value.includes('|') ? document.getElementById('formTuteurSelect').value.split('|')[2] : document.getElementById('formTuteurSelect').value;
+        const newEnt = finalNomEnt;
+
 
         // On prépare les anciennes valeurs (avec sécurité si elles sont vides)
         const oldStatut = ancienEtu.statut || "";
