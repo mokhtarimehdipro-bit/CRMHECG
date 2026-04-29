@@ -251,10 +251,11 @@ function handleStudentDetails(params, ss) {
   return createJsonResponse({ success: true, profil: prof, notes: notes.reverse(), offres: studentOffers }); 
 }
 
-function handleAddNote(p, ss) { 
-  getSheetSafe(ss, "Carnet_route").appendRow([p.targetId, p.auteur, new Date(), p.contenu]); 
-  logAction(p.idAuteur, p.roleAuteur, "Création", "Carnet de route", p.targetId, "A ajouté un compte-rendu/note");
-  return createJsonResponse({ success: true }); 
+function handleAddNote(p, ss) {
+  // Écrit dans Carnet_route AVEC le nom de l'auteur (p.idAuteur, pas p.auteur)
+  // Ne remonte PAS dans HISTORIQUE : le carnet de route est pour les échanges, pas les audits
+  getSheetSafe(ss, "Carnet_route").appendRow([p.targetId, p.idAuteur || "Inconnu", new Date(), p.contenu]);
+  return createJsonResponse({ success: true });
 }
 
 function handleUploadCV(p, ss) { 
