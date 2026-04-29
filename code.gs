@@ -233,7 +233,8 @@ function handleStudentDetails(params, ss) {
       break; 
     }
   }
-  const notes = getSheetSafe(ss, "Carnet_route").getDataRange().getValues().filter(r => String(r[0]).trim() === id).map(r => ({ auteur: r[1], date: r[2], texte: r[3] }));
+  const idUpper = String(id).trim().toUpperCase();
+  const notes = getSheetSafe(ss, "Carnet_route").getDataRange().getValues().filter(r => String(r[0]).trim().toUpperCase() === idUpper).map(r => ({ auteur: r[1], date: r[2], texte: r[3] }));
 
   // --- NOUVEAU : RÉCUPÉRATION DES OFFRES PARTAGÉES ---
   const dP = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
@@ -3666,6 +3667,7 @@ function cleanupOldBackups(folder, maxFiles) {
 }
 function handleUpdateStudent(p, ss) {
   const idCherche = String(p.id_etu || "").trim().toUpperCase();
+  let actualIdInSheet = idCherche; // Sera écrasé par la valeur réelle du sheet dans Bloc 1
 
   // Bloc 1 (critique) : écriture des données étudiant. Un échec ici bloque la réponse.
   try {
@@ -3683,6 +3685,7 @@ function handleUpdateStudent(p, ss) {
     if (rowIndex === -1) return createJsonResponse({ success: false, message: "Élève introuvable" });
 
     const oldRow = data[rowIndex - 1];
+    actualIdInSheet = String(oldRow[0]); // ID RÉEL tel que stocké dans la feuille (casse d'origine)
 
     let typoFinale = p.forceTypo;
     if (!typoFinale || typoFinale === "Auto") {
@@ -3724,8 +3727,9 @@ function handleUpdateStudent(p, ss) {
   // Bloc 2 (non-critique) : journalisation isolée. Un échec ici NE bloque PAS la réponse.
   try {
     const msgLog = p.detailsLog || "Mise à jour manuelle de la fiche";
-    logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", idCherche, msgLog);
-    getSheetSafe(ss, "Carnet_route").appendRow([idCherche, p.idAuteur || "Système", new Date(), "🛠️ " + msgLog]);
+    logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", actualIdInSheet, msgLog);
+    // Utilise actualIdInSheet (casse d'origine) pour correspondre au filtre de handleStudentDetails
+    getSheetSafe(ss, "Carnet_route").appendRow([actualIdInSheet, p.idAuteur || "Système", new Date(), "🛠️ " + msgLog]);
   } catch (logErreur) {
     console.error("Erreur de journalisation (non bloquante) : " + logErreur.toString());
   }
