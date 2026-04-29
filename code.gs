@@ -3413,7 +3413,15 @@ function envoyerAlertesSuiviPeda() {
 function logAction(idAuteur, roleAuteur, typeAction, categorie, idCible, details) {
   try {
     const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-    let sheetLog = getSheetSafe(ss, "HISTORIQUE");
+    let sheetLog;
+    try {
+      sheetLog = getSheetSafe(ss, "HISTORIQUE");
+    } catch (e) {
+      // Crée l'onglet HISTORIQUE s'il est absent
+      sheetLog = ss.insertSheet("HISTORIQUE");
+      sheetLog.appendRow(["ID Action", "Date", "Auteur", "Rôle", "Type", "Catégorie", "Cible", "Détails"]);
+      sheetLog.setFrozenRows(1);
+    }
     const idAction = "LOG-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
     sheetLog.appendRow([idAction, new Date(), idAuteur || "Inconnu", roleAuteur || "N/A", typeAction, categorie, idCible || "-", details || ""]);
   } catch (e) { console.error("Erreur Mouchard : " + e.toString()); }
