@@ -722,19 +722,46 @@ async function envoyerSaveEtu(finalCvUrl) {
         const newEnt = finalNomEnt; 
 
         if (ancienEtu) {
+            const newRefPerso = document.getElementById('formReferent').value;
+            const newCampus = document.getElementById('formCampus') ? document.getElementById('formCampus').value : "";
+            const newFaitCV = document.getElementById('formFaitCV').value;
+            const newFaitLI = document.getElementById('formFaitLI').value;
+            const newForceTypo = document.getElementById('formForceTypo').value;
+            const newMotif = document.getElementById('formMotif').value;
+
             const oldStatut = ancienEtu.statut || "";
             const oldClasse = ancienEtu.classe || "";
             const oldEnt = ancienEtu.entreprise || "";
+            const oldRefPerso = ancienEtu.refPerso || "";
+            const oldCampus = ancienEtu.campus || "";
+            const oldFaitCV = ancienEtu.faitCV || "Non";
+            const oldFaitLI = ancienEtu.faitLI || "Non";
+            const oldMotif = ancienEtu.motif || "";
 
-            let listModifs = [];
+            const listModifs = [];
             if (oldStatut.trim().toLowerCase() !== newStatut.trim().toLowerCase()) {
                 listModifs.push(`Statut ➡️ ${newStatut}`);
-            } 
+            }
             if (oldEnt.trim().toLowerCase() !== newEnt.trim().toLowerCase()) {
                 listModifs.push(`Entreprise ➡️ ${newEnt || 'Aucune'}`);
             }
             if (oldClasse.trim().toLowerCase() !== newClasse.trim().toLowerCase()) {
-                listModifs.push(`Classe ➡️ ${newClasse}`);
+                listModifs.push(`Classe ➡️ ${newClasse || 'Aucune'}`);
+            }
+            if (String(oldRefPerso).trim() !== String(newRefPerso).trim()) {
+                listModifs.push(`Référent ➡️ ${newRefPerso || 'Non assigné'}`);
+            }
+            if (oldCampus.trim() !== newCampus.trim()) {
+                listModifs.push(`Campus ➡️ ${newCampus || 'Non défini'}`);
+            }
+            if (oldFaitCV.trim().toLowerCase() !== newFaitCV.trim().toLowerCase()) {
+                listModifs.push(`Atelier CV ➡️ ${newFaitCV}`);
+            }
+            if (oldFaitLI.trim().toLowerCase() !== newFaitLI.trim().toLowerCase()) {
+                listModifs.push(`Atelier LinkedIn ➡️ ${newFaitLI}`);
+            }
+            if (oldMotif.trim() !== newMotif.trim()) {
+                listModifs.push(`Motif sortie ➡️ ${newMotif || 'Aucun'}`);
             }
 
             if (listModifs.length > 0) {
