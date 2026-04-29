@@ -3732,12 +3732,11 @@ function handleUpdateStudent(p, ss) {
     return createJsonResponse({ success: false, message: erreur.toString() });
   }
 
-  // Bloc 2 (non-critique) : journalisation isolée. Un échec ici NE bloque PAS la réponse.
+  // Bloc 2 (non-critique) : journalisation dans HISTORIQUE uniquement.
+  // Le Carnet de route est réservé aux échanges manuels (handleAddNote).
   try {
     const msgLog = p.detailsLog || "Mise à jour manuelle de la fiche";
     logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", actualIdInSheet, msgLog);
-    // Utilise actualIdInSheet (casse d'origine) pour correspondre au filtre de handleStudentDetails
-    getSheetSafe(ss, "Carnet_route").appendRow([actualIdInSheet, p.idAuteur || "Système", new Date(), "🛠️ " + msgLog]);
   } catch (logErreur) {
     console.error("Erreur de journalisation (non bloquante) : " + logErreur.toString());
   }
