@@ -81,10 +81,48 @@
                             <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
                             <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
                         </div>
+                        <div id="zoneSaisieNoteEtu" class="hidden mb-6">
+                            <p class="text-[10px] font-black uppercase text-[#F26522] mb-2">✏️ Ma mise à jour / message</p>
+                            <div class="flex space-x-2 bg-orange-50 border border-orange-100 p-2 rounded-xl">
+                                <input type="text" id="noteTexteEtu" placeholder="Ex: J'ai postulé chez X, entretien le 15..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
+                                <button onclick="addNoteEtu()" class="bg-[#F26522] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-orange-600 transition">Envoyer</button>
+                            </div>
+                        </div>
                         
                         <div id="suiviTimeline" class="space-y-4 max-h-60 overflow-y-auto pr-4 custom-scrollbar"></div>
                     </div>
                     
+                    <div id="panneauAlertes" class="hidden bg-white p-6 rounded-[2rem] shadow-sm border border-orange-100">
+                        <h3 class="font-black text-orange-600 mb-4 flex items-center gap-2">🔔 Programmer une alerte étudiant</h3>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-[10px] uppercase font-bold text-gray-400">Date du rappel</label>
+                                    <input type="date" id="stuAlertDate" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] uppercase font-bold text-gray-400">Répétition</label>
+                                    <select id="stuAlertFreq" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
+                                        <option value="Unique">Une seule fois</option>
+                                        <option value="Hebdomadaire">Hebdomadaire</option>
+                                        <option value="Mensuelle">Mensuelle</option>
+                                        <option value="Trimestrielle">Trimestrielle</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Email du destinataire</label>
+                                <input type="email" id="stuAlertDest" value="m.mokhtari@hecg.fr" class="w-full border p-2 rounded-lg text-sm bg-gray-50 font-bold text-[#1A4E8A]">
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Message / contexte</label>
+                                <textarea id="stuAlertMsg" rows="2" placeholder="Ex: Relancer pour point de situation alternance..." class="w-full border p-2 rounded-lg text-xs bg-gray-50"></textarea>
+                            </div>
+                            <button onclick="saveStudentAlert()" class="w-full bg-orange-500 text-white py-2 rounded-xl font-black text-sm hover:bg-orange-600 transition shadow-md">Activer l'alerte</button>
+                        </div>
+                        <div id="stuAlertesList" class="mt-4 space-y-2 border-t pt-4"></div>
+                    </div>
+
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <div class="flex justify-between items-center mb-6 border-b pb-2">
                             <h3 class="text-xl font-black text-gray-800">💼 Offres d'alternance ciblées</h3>
@@ -134,15 +172,11 @@
             const btnSave = document.getElementById('btnSaveMdp');
 
             if (currentUser.role === 'Etudiant') {
-                // SÉCURITÉ : L'étudiant ne voit que son propre dossier
-                studentId = currentUser.ref; 
-                
-                // On cache les outils d'administration
+                studentId = currentUser.ref;
                 document.getElementById('admin-nav').classList.add('hidden');
                 document.getElementById('btnRetour').classList.add('hidden');
                 document.getElementById('zoneSaisieNote').classList.add('hidden');
-                
-                // On affiche l'en-tête étudiant simple
+                document.getElementById('zoneSaisieNoteEtu').classList.remove('hidden');
                 document.getElementById('student-header').classList.remove('hidden');
 
                 // --- LOGIQUE MODIFICATION MDP (ÉLÈVE UNIQUEMENT) ---
@@ -154,8 +188,11 @@
                 if(btnSave) btnSave.classList.remove('hidden'); // Affiche le bouton de sauvegarde
 
             } else {
-                // L'admin/staff charge le dossier demandé dans l'URL
                 studentId = new URLSearchParams(window.location.search).get('id');
+                // Panneau alertes visible pour admin/superviseur uniquement
+                if (currentUser.role === 'Administrateur' || currentUser.role === 'Superviseur') {
+                    document.getElementById('panneauAlertes').classList.remove('hidden');
+                }
 
                 // --- LOGIQUE CONSULTATION MDP (STAFF) ---
                 if(mdpInput) {
@@ -166,13 +203,14 @@
                 if(btnSave) btnSave.classList.add('hidden'); // Cache le bouton de sauvegarde
             }
 
-            if (!studentId) { 
-                alert("Accès refusé."); 
-                window.location.replace('dashboard.html'); 
-                return; 
+            if (!studentId) {
+                alert("Accès refusé.");
+                window.location.replace('dashboard.html');
+                return;
             }
-            
+
             loadDossier();
+            if (currentUser.role !== 'Etudiant') loadStudentAlerts();
         };
 
         async function loadDossier() {
@@ -242,9 +280,63 @@
             if(!txt.trim()) return;
             const btn = event.target; btn.innerText = "..."; btn.disabled = true;
             await apiPost({ action: 'addNote', targetId: studentId, contenu: txt });
-            document.getElementById('noteTexte').value = ""; 
+            document.getElementById('noteTexte').value = "";
             btn.innerText = "Noter"; btn.disabled = false;
             loadDossier();
+        }
+
+        async function addNoteEtu() {
+            const txt = document.getElementById('noteTexteEtu').value;
+            if(!txt.trim()) return;
+            const btn = event.target; btn.innerText = "..."; btn.disabled = true;
+            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, isStudentNote: true });
+            document.getElementById('noteTexteEtu').value = "";
+            btn.innerText = "Envoyer"; btn.disabled = false;
+            loadDossier();
+        }
+
+        async function saveStudentAlert() {
+            const date = document.getElementById('stuAlertDate').value;
+            const msg = document.getElementById('stuAlertMsg').value;
+            if(!date || !msg) return alert("Veuillez remplir la date et le message.");
+            const btn = event.target; btn.innerText = "..."; btn.disabled = true;
+            const res = await apiPost({
+                action: 'setStudentAlert',
+                targetId: studentId,
+                date: date,
+                freq: document.getElementById('stuAlertFreq').value,
+                message: msg,
+                destinataire: document.getElementById('stuAlertDest').value
+            });
+            alert(res.success ? "Alerte programmée !" : "Erreur : " + res.message);
+            btn.innerText = "Activer l'alerte"; btn.disabled = false;
+            loadStudentAlerts();
+        }
+
+        async function loadStudentAlerts() {
+            try {
+                const res = await apiPost({ action: 'getAllStudentAlerts' });
+                if (!res.success) return;
+                const alertes = (res.data || []).filter(a => a.etuId === studentId);
+                document.getElementById('stuAlertesList').innerHTML = alertes.length === 0
+                    ? '<p class="text-xs text-gray-400 italic text-center">Aucune alerte active.</p>'
+                    : alertes.map(a => {
+                        const isRetard = new Date(a.dateRaw) < new Date();
+                        return `<div class="bg-orange-50 p-3 rounded-xl border border-orange-200 flex justify-between items-start gap-2">
+                            <div>
+                                <p class="text-[10px] font-black text-orange-800 uppercase">${isRetard ? '⚠️ Retard — ' : '📅 '}${a.date} (${a.freq})</p>
+                                <p class="text-xs text-orange-700 mt-1">${a.msg}</p>
+                            </div>
+                            <button onclick="completeStudentAlert('${a.id}')" class="text-[10px] bg-orange-500 text-white px-2 py-1 rounded-lg font-black whitespace-nowrap hover:bg-orange-600">✔ Traitée</button>
+                        </div>`;
+                    }).join('');
+            } catch(e) {}
+        }
+
+        async function completeStudentAlert(id) {
+            if(!confirm("Marquer cette alerte comme traitée ?")) return;
+            await apiPost({ action: 'completeStudentAlert', id: id });
+            loadStudentAlerts();
         }
 
         async function postuler(idOffre, url) {
