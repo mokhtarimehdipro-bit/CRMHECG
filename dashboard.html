@@ -210,12 +210,12 @@
                     <div>
                         <label class="block text-[10px] uppercase font-black text-gray-500 mb-1 ml-2">Typologie</label>
                         <select id="formForceTypo" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none">
-                            <option value="Prospect">🎯 Prospect</option>
-                            <option value="Préinscrit">⏳ Préinscrit</option>
-                            <option value="Inscrit">🎓 Inscrit</option>
-                            <option value="Attente">⏳ En Attente</option>
-                            <option value="Refusé">❌ Refusé</option>
-                            <option value="Sortie">🚪 Sortie</option>
+                            <option value="PROSPECT">🎯 Prospect</option>
+                            <option value="PRÉINSCRIT">⏳ Préinscrit</option>
+                            <option value="INSCRIT">🎓 Inscrit</option>
+                            <option value="ATTENTE">⏳ En Attente</option>
+                            <option value="REFUSE">❌ Refusé</option>
+                            <option value="SORTIE">🚪 Sortie</option>
                         </select>
                     </div>
                 </div>
@@ -478,7 +478,7 @@ async function apiPost(payload) {
                 else if (fTy === "inscrit") matchTypo = (typoLow === "inscrit");
                 else if (fTy === "préinscrit") matchTypo = (typoLow === "préinscrit");
                 else if (fTy === "prospect") matchTypo = (typoLow === "prospect");
-                else if (fTy === "sortie") matchTypo = (typoLow === "sortie" || typoLow === "refusé");
+                else if (fTy === "sortie") matchTypo = (typoLow === "sortie" || typoLow === "refuse");
 
                 // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
                 if (fSe.length > 2) matchTypo = true;
@@ -532,7 +532,7 @@ async function apiPost(payload) {
                 else if(s.includes('initial')) countInit++;
                 else countRech++;
 
-                if(t === 'sortie' || t === 'refusé') countSorties++;
+                if(t === 'sortie' || t === 'refuse') countSorties++;
             });
             
             document.getElementById('kpi-tot').innerText = filtered.length;
@@ -565,7 +565,7 @@ async function apiPost(payload) {
                     </td>
                     <td class="p-5">
                         <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
-                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' || e.typo === 'Refusé' ? 'text-red-500' : ''}">${e.typo || 'Prospect'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'SORTIE' || e.typo === 'REFUSE' ? 'text-red-500' : ''}">${e.typo || 'PROSPECT'}</div>
                     </td>
                     <td class="p-5">${badgeStatut}</td>
                     <td class="p-5 text-[10px] font-bold text-slate-500">
@@ -622,13 +622,13 @@ async function apiPost(payload) {
                 document.getElementById('formNewClasse').value = "";
                 
                 document.getElementById('formStatut').value = e.statut || "En recherche";
-                const t = String(e.typo || "").toLowerCase().trim();
-                let typoSelect = "Prospect";
-                if (t.includes("prein")) typoSelect = "Préinscrit";
-                else if (t === "inscrit") typoSelect = "Inscrit";
-                else if (t.includes("sorti")) typoSelect = "Sortie";
-                else if (t.includes("refus")) typoSelect = "Refusé";
-                else if (t === "attente") typoSelect = "Attente";
+                const t = String(e.typo || "").toUpperCase().trim();
+                let typoSelect = "PROSPECT";
+                if (t === "PRÉINSCRIT") typoSelect = "PRÉINSCRIT";
+                else if (t === "INSCRIT") typoSelect = "INSCRIT";
+                else if (t === "SORTIE") typoSelect = "SORTIE";
+                else if (t === "REFUSE") typoSelect = "REFUSE";
+                else if (t === "ATTENTE") typoSelect = "ATTENTE";
                 document.getElementById('formForceTypo').value = typoSelect;
                 
                 document.getElementById('formFaitCV').value = e.faitCV || "Non";
@@ -658,7 +658,7 @@ async function apiPost(payload) {
                 document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
                 document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
                 if(document.getElementById('formCampus')) document.getElementById('formCampus').value = "";
-                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Prospect";
+                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "PROSPECT";
                 document.getElementById('formFaitCV').value = "Non"; document.getElementById('formFaitLI').value = "Non";
                 document.getElementById('formCVUrl').value = ""; document.getElementById('formCVFile').value = "";
                 document.getElementById('formEntree').value = ""; document.getElementById('formSortie').value = ""; document.getElementById('formMotif').value = "";
@@ -783,7 +783,7 @@ async function envoyerSaveEtu(finalCvUrl) {
     if (res.success) {
         closeModal();
         const savedTypo = document.getElementById('formForceTypo').value;
-        if (savedTypo === 'Sortie' || savedTypo === 'Refusé') {
+        if (savedTypo === 'SORTIE' || savedTypo === 'REFUSE') {
             document.getElementById('fTypo').value = 'tous';
         }
         await loadDashboardData();
