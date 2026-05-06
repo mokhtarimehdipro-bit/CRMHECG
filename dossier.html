@@ -234,7 +234,12 @@
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
-                    document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
+                    if (p.referent && (p.referent.nom || p.referent.prenom)) {
+                        const refMail = p.referent.mail ? ` &nbsp;·&nbsp; <a href="mailto:${p.referent.mail}" class="text-[#1A4E8A] hover:underline">${p.referent.mail}</a>` : '';
+                        document.getElementById('etuRef').innerHTML = `<span class="font-bold">${p.referent.prenom} ${p.referent.nom}</span>${refMail}`;
+                    } else {
+                        document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
+                    }
 
                     if(p.cv && p.cv.startsWith('http')) {
                         document.getElementById('etuCV').href = p.cv;
