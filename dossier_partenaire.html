@@ -118,6 +118,7 @@
         const partId = new URLSearchParams(window.location.search).get('id');
         let currentUser = null;
         let nomEntrepriseActuelle = "";
+        let contactsData = []; // cache global des contacts
 
         try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
         if(!currentUser) currentUser = { nom: "Utilisateur" };
@@ -135,29 +136,35 @@
                     nomEntrepriseActuelle = d.info.entreprise;
                     document.getElementById('entNom').innerText = d.info.entreprise;
 
-                    const contacts = d.contacts || [];
-                    document.getElementById('contactsList').innerHTML = contacts.length === 0
-                        ? '<p class="text-sm text-gray-400 italic">Aucun contact enregistré.</p>'
-                        : contacts.map(c => `
-                            <div class="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                <div class="text-sm">
-                                    <span class="font-bold text-gray-800">👤 ${c.prenom} ${c.nom}</span>
-                                    ${c.mail ? `&nbsp;|&nbsp; <a href="mailto:${c.mail}" class="text-blue-500 hover:underline text-xs">${c.mail}</a>` : ''}
-                                    ${c.tel ? `&nbsp;|&nbsp; <span class="text-gray-500 text-xs">${c.tel}</span>` : ''}
-                                </div>
-                                <div class="flex gap-1 shrink-0">
-                                    <button onclick="editContact('${c.id_contact}','${(c.nom||'').replace(/'/g,"\\'")}','${(c.prenom||'').replace(/'/g,"\\'")}','${(c.mail||'').replace(/'/g,"\\'")}','${(c.tel||'').replace(/'/g,"\\'")}',this)" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>
-                                    <button onclick="deleteContact('${c.id_contact}','${(c.prenom||'')} ${(c.nom||'')}')" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>
-                                </div>
-                            </div>`).join('');
-                    
-                    document.getElementById('listEtu').innerHTML = d.alternants.map(e => `<div class="bg-white/10 p-3 rounded-xl border border-white/20"><p class="font-bold text-lg leading-tight">${e.nom}</p><p class="text-[10px] text-blue-200 uppercase mt-1 font-black tracking-widest">${e.classe}</p></div>`).join('') || '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>';
-                    document.getElementById('listOffres').innerHTML = d.offres.map(o => `<div class="p-4 border border-gray-100 rounded-2xl bg-gray-50 hover:shadow-md transition"><div class="flex justify-between items-start mb-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase">${o.etat}</span></div><p class="font-black text-gray-800 text-sm mb-3">${o.poste}</p><a href="${o.url}" target="_blank" class="text-[#F26522] text-xs font-bold hover:underline inline-flex items-center gap-1">Voir l'annonce ↗</a></div>`).join('') || '<p class="col-span-2 text-gray-400 italic text-center py-6">Aucune offre associée.</p>';
-                    document.getElementById('suiviTimeline').innerHTML = d.suivi.map(s => `<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(s.date).toLocaleDateString('fr-FR')} — Par ${s.auteur}</p><p class="text-sm text-gray-700">${s.texte}</p></div>`).join('') || '<p class="text-gray-400 italic text-center">Aucun échange enregistré.</p>';
-                    document.getElementById('alertesList').innerHTML = d.alertes.filter(a => a.statut === 'Actif' || a.statut === 'À faire').map(a => `<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ${new Date(a.date).toLocaleDateString()} (${a.freq})</b><br><span class="text-orange-600 truncate block">${a.msg}</span></div>`).join('');
+                    // Stockage global + rendu contacts
+                    contactsData = d.contacts || [];
+                    renderContacts();
+
+                    // Alternants
+                    const alt = d.alternants || [];
+                    document.getElementById('listEtu').innerHTML = alt.length === 0
+                        ? '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>'
+                        : alt.map(e => '<div class="bg-white/10 p-3 rounded-xl border border-white/20"><p class="font-bold text-lg leading-tight">' + e.nom + '</p><p class="text-[10px] text-blue-200 uppercase mt-1 font-black tracking-widest">' + e.classe + '</p></div>').join('');
+
+                    // Offres
+                    const offres = d.offres || [];
+                    document.getElementById('listOffres').innerHTML = offres.length === 0
+                        ? '<p class="col-span-2 text-gray-400 italic text-center py-6">Aucune offre associée.</p>'
+                        : offres.map(o => '<div class="p-4 border border-gray-100 rounded-2xl bg-gray-50 hover:shadow-md transition"><div class="flex justify-between items-start mb-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase">' + (o.etat||'-') + '</span></div><p class="font-black text-gray-800 text-sm mb-3">' + (o.poste||'-') + '</p><a href="' + (o.url||'#') + '" target="_blank" class="text-[#F26522] text-xs font-bold hover:underline">Voir l\'annonce ↗</a></div>').join('');
+
+                    // Suivi
+                    const suivi = d.suivi || [];
+                    document.getElementById('suiviTimeline').innerHTML = suivi.length === 0
+                        ? '<p class="text-gray-400 italic text-center">Aucun échange enregistré.</p>'
+                        : suivi.map(s => '<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase mb-1">' + new Date(s.date).toLocaleDateString('fr-FR') + ' — Par ' + (s.auteur||'') + '</p><p class="text-sm text-gray-700">' + (s.texte||'') + '</p></div>').join('');
+
+                    // Alertes programmées
+                    const alertes = (d.alertes || []).filter(a => a.statut === 'Actif' || a.statut === 'À faire');
+                    document.getElementById('alertesList').innerHTML = alertes.map(a => '<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ' + new Date(a.date).toLocaleDateString() + ' (' + a.freq + ')</b><br><span class="text-orange-600 truncate block">' + a.msg + '</span></div>').join('');
                 }
             } catch(e) {
-                alert("Erreur de chargement.");
+                console.error("Erreur chargement dossier partenaire:", e);
+                document.getElementById('loader').innerText = "Erreur de chargement : " + e.message;
             }
         }
 
@@ -206,6 +213,53 @@
             loadDetails();
         }
 
+        function renderContacts() {
+            const el = document.getElementById('contactsList');
+            if (!contactsData || contactsData.length === 0) {
+                el.innerHTML = '<p class="text-sm text-gray-400 italic">Aucun contact enregistré.</p>';
+                return;
+            }
+            el.innerHTML = contactsData.map((c, idx) => {
+                const nom = c.nom || '';
+                const prenom = c.prenom || '';
+                const mail = c.mail || '';
+                const tel = c.tel || '';
+                const mailLink = mail ? ' &nbsp;|&nbsp; <a href="mailto:' + mail + '" class="text-blue-500 hover:underline text-xs">' + mail + '</a>' : '';
+                const telSpan = tel ? ' &nbsp;|&nbsp; <span class="text-gray-500 text-xs">' + tel + '</span>' : '';
+                return '<div class="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
+                    + '<div class="text-sm"><span class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</span>' + mailLink + telSpan + '</div>'
+                    + '<div class="flex gap-1 shrink-0">'
+                    + '<button data-idx="' + idx + '" data-action="edit" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>'
+                    + '<button data-idx="' + idx + '" data-action="delete" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>'
+                    + '</div></div>';
+            }).join('');
+        }
+
+        // Délégation d'événements — évite les problèmes d'echappement dans onclick
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.idx, 10);
+            const c = contactsData[idx];
+            if (!c) return;
+            if (btn.dataset.action === 'edit') {
+                const newNom = prompt('Nom :', c.nom || '');
+                if (newNom === null) return;
+                const newPrenom = prompt('Prénom :', c.prenom || '');
+                if (newPrenom === null) return;
+                const newMail = prompt('Email :', c.mail || '');
+                if (newMail === null) return;
+                const newTel = prompt('Téléphone :', c.tel || '');
+                if (newTel === null) return;
+                const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, tel: newTel });
+                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+            } else if (btn.dataset.action === 'delete') {
+                if (!confirm('Supprimer ' + (c.prenom || '') + ' ' + (c.nom || '') + ' ?')) return;
+                const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact });
+                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+            }
+        });
+
         function toggleAddContactForm() {
             const f = document.getElementById('addContactForm');
             f.classList.toggle('hidden');
@@ -233,22 +287,6 @@
             } else {
                 alert("Erreur : " + res.message);
             }
-        }
-
-        async function editContact(idContact, nom, prenom, mail, tel, btn) {
-            const newNom = prompt("Nom :", nom) ?? nom;
-            const newPrenom = prompt("Prénom :", prenom) ?? prenom;
-            const newMail = prompt("Email :", mail) ?? mail;
-            const newTel = prompt("Téléphone :", tel) ?? tel;
-            if (newNom === nom && newPrenom === prenom && newMail === mail && newTel === tel) return;
-            const res = await apiPost({ action: 'updateContact', id_contact: idContact, nom: newNom, prenom: newPrenom, mail: newMail, tel: newTel });
-            if (res.success) loadDetails(); else alert("Erreur : " + res.message);
-        }
-
-        async function deleteContact(idContact, nomContact) {
-            if (!confirm(`Supprimer le contact "${nomContact}" ?`)) return;
-            const res = await apiPost({ action: 'deleteContact', id_contact: idContact });
-            if (res.success) loadDetails(); else alert("Erreur : " + res.message);
         }
 
         async function editEntrepriseName() {
