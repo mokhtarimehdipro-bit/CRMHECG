@@ -24,13 +24,20 @@
     </nav>
 
     <main class="max-w-7xl mx-auto p-8">
-        <div class="mb-10">
-            <h1 class="text-3xl font-black text-gray-800">Mes Relances & Alertes</h1>
-            <p class="text-gray-400 text-sm mt-1">N'oubliez plus jamais de recontacter un partenaire.</p>
+        <div class="mb-6 flex flex-col md:flex-row justify-between items-start gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-gray-800">Mes Relances & Alertes</h1>
+                <p class="text-gray-400 text-sm mt-1">N'oubliez plus jamais de recontacter un partenaire ou un étudiant.</p>
+            </div>
+            <div class="flex gap-2 bg-gray-100 p-1 rounded-2xl">
+                <button id="tabBtnEnt" onclick="switchTab('ent')" class="px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition">🏢 Entreprises</button>
+                <button id="tabBtnEtu" onclick="switchTab('etu')" class="px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition">🎓 Étudiants</button>
+            </div>
         </div>
 
         <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A] animate-pulse">Chargement de vos alertes...</div>
         <div id="alertGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+        <div id="alertGridEtu" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
     </main>
 
     <div id="editAlertModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
@@ -212,6 +219,116 @@ async function apiPost(payload) {
             closeEditAlert();
             loadAlerts();
         }
+
+        // ==========================================
+        // ONGLETS
+        // ==========================================
+        let currentTab = 'ent';
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('alertGrid').classList.toggle('hidden', tab !== 'ent');
+            document.getElementById('alertGridEtu').classList.toggle('hidden', tab !== 'etu');
+            document.getElementById('tabBtnEnt').className = tab === 'ent'
+                ? 'px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition'
+                : 'px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition';
+            document.getElementById('tabBtnEtu').className = tab === 'etu'
+                ? 'px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition'
+                : 'px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition';
+            if (tab === 'etu') loadStudentAlerts();
+        }
+
+        // ==========================================
+        // ALERTES ÉTUDIANTS
+        // ==========================================
+        async function loadStudentAlerts() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllStudentAlerts' }) });
+                const d = await res.json();
+                if (d.success) renderStudentAlerts(d.data);
+            } catch(e) { console.error(e); }
+        }
+
+        function renderStudentAlerts(data) {
+            const grid = document.getElementById('alertGridEtu');
+            if (!data || data.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm"><p class="text-2xl font-black text-gray-300 mb-2">🎉 Aucune alerte étudiant !</p><p class="text-gray-400 font-bold">Créez des alertes depuis les dossiers étudiants.</p></div>';
+                return;
+            }
+            const today = new Date(); today.setHours(0,0,0,0);
+            grid.innerHTML = data.map(a => {
+                const dateObj = new Date(a.dateRaw);
+                const isRetard = dateObj < today;
+                const isToday = dateObj.getTime() === today.getTime();
+                let badgeDate = `<span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-black">📅 ${a.date}</span>`;
+                if (isRetard) badgeDate = `<span class="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-black">⚠️ Retard (${a.date})</span>`;
+                else if (isToday) badgeDate = `<span class="px-3 py-1 bg-orange-100 text-orange-600 rounded-full text-xs font-black">🔥 Aujourd'hui</span>`;
+                const dateInputFormat = dateObj.toISOString().split('T')[0];
+                const msgSafe = a.msg.replace(/'/g,"\\'").replace(/"/g,"&quot;").replace(/\n/g,"\\n");
+                return `
+                <div class="bg-white p-6 rounded-3xl shadow-sm border ${isRetard ? 'border-red-200' : 'border-gray-100'} hover:shadow-lg transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            ${badgeDate}
+                            <a href="dossier.html?id=${a.etuId}" target="_blank" class="p-2 bg-gray-50 text-[#1A4E8A] rounded-lg border font-bold text-[10px] hover:bg-blue-50 transition">📂 DOSSIER</a>
+                        </div>
+                        <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2 truncate">${a.nomEtudiant}</h3>
+                        <p class="text-sm font-bold text-gray-500 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100 h-20 overflow-y-auto custom-scrollbar">${a.msg}</p>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-gray-100 pt-4">
+                        <span class="text-[10px] font-bold text-gray-400 bg-white border px-2 py-1 rounded-md shadow-sm">🔁 ${a.freq}</span>
+                        <div class="flex space-x-1">
+                            <button onclick="openEditStudentAlert('${a.id}','${dateInputFormat}','${msgSafe}','${a.freq}','${a.destinataire||""}')" class="p-2 text-gray-400 hover:text-blue-500 bg-gray-50 rounded-lg hover:bg-blue-50 transition" title="Modifier">✏️</button>
+                            <button onclick="cancelStudentAlert('${a.id}')" class="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-lg hover:bg-red-50 transition" title="Annuler">❌</button>
+                            <button onclick="completeStudentAlert('${a.id}')" class="px-3 py-2 bg-[#F26522] text-white rounded-lg font-black text-[10px] uppercase hover:scale-105 transition shadow-sm ml-1">✔ Traitée</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function completeStudentAlert(id) {
+            if(!confirm("Alerte traitée ?")) return;
+            await apiPost({ action: 'completeStudentAlert', id: id });
+            loadStudentAlerts();
+        }
+
+        async function cancelStudentAlert(id) {
+            if(!confirm("Annuler cette alerte étudiant ?")) return;
+            await apiPost({ action: 'cancelStudentAlert', id: id });
+            loadStudentAlerts();
+        }
+
+        function openEditStudentAlert(id, date, msg, freq, destinataire) {
+            document.getElementById('editAlertId').value = "STU_" + id;
+            document.getElementById('editAlertDate').value = date;
+            document.getElementById('editAlertDest').value = destinataire || "m.mokhtari@hecg.fr";
+            document.getElementById('editAlertMsg').value = msg;
+            document.getElementById('editAlertFreq').value = freq;
+            document.getElementById('editAlertModal').classList.replace('hidden', 'flex');
+        }
+
+        // Patch saveEditAlert pour gérer les deux types
+        const _origSaveEditAlert = saveEditAlert;
+        saveEditAlert = async function() {
+            const rawId = document.getElementById('editAlertId').value;
+            const isStudentAlert = rawId.startsWith("STU_");
+            const realId = isStudentAlert ? rawId.replace("STU_", "") : rawId;
+            const btn = document.getElementById('btnSaveAlert');
+            btn.innerText = "Enregistrement..."; btn.disabled = true;
+            const payload = {
+                action: isStudentAlert ? 'updateStudentAlert' : 'updateAlert',
+                id: realId,
+                date: document.getElementById('editAlertDate').value,
+                destinataire: document.getElementById('editAlertDest').value,
+                msg: document.getElementById('editAlertMsg').value,
+                freq: document.getElementById('editAlertFreq').value
+            };
+            await apiPost(payload);
+            btn.innerText = "Enregistrer"; btn.disabled = false;
+            closeEditAlert();
+            if (isStudentAlert) loadStudentAlerts(); else loadAlerts();
+        };
 
         // Chargement initial
         loadAlerts();
