@@ -775,7 +775,11 @@ async function envoyerSaveEtu(finalCvUrl) {
     
     if (res.success) {
         closeModal();
-        setTimeout(() => { loadDashboardData(); }, 3000); 
+        const savedTypo = document.getElementById('formForceTypo').value;
+        if (savedTypo === 'Sortie' || savedTypo === 'Refusé') {
+            document.getElementById('fTypo').value = 'tous';
+        }
+        await loadDashboardData();
     } else {
         alert("Erreur : " + res.message);
     }
