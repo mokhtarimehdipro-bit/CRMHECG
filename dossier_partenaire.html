@@ -22,10 +22,12 @@
                 <button onclick="toggleAddContactForm()" class="mt-3 text-sm font-bold text-[#1A4E8A] hover:underline">+ Ajouter un contact</button>
                 <div id="addContactForm" class="hidden mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
                     <div class="grid grid-cols-2 gap-2">
-                        <input type="text" id="newNom" placeholder="Nom" class="border p-2 rounded-lg text-sm bg-white">
-                        <input type="text" id="newPrenom" placeholder="Prénom" class="border p-2 rounded-lg text-sm bg-white">
-                        <input type="email" id="newMail" placeholder="Email" class="border p-2 rounded-lg text-sm bg-white">
-                        <input type="text" id="newTel" placeholder="Téléphone" class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newNom"    placeholder="Nom"           class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newPrenom" placeholder="Prénom"         class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="email" id="newMail"   placeholder="Email 1"        class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="email" id="newMail2"  placeholder="Email 2"        class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newTel"    placeholder="Téléphone 1"    class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newTel2"   placeholder="Téléphone 2"    class="border p-2 rounded-lg text-sm bg-white">
                     </div>
                     <button onclick="addContact()" class="w-full bg-[#1A4E8A] text-white py-2 rounded-xl font-black text-sm hover:bg-blue-800">Enregistrer le contact</button>
                 </div>
@@ -222,12 +224,19 @@
             el.innerHTML = contactsData.map((c, idx) => {
                 const nom = c.nom || '';
                 const prenom = c.prenom || '';
-                const mail = c.mail || '';
-                const tel = c.tel || '';
-                const mailLink = mail ? ' &nbsp;|&nbsp; <a href="mailto:' + mail + '" class="text-blue-500 hover:underline text-xs">' + mail + '</a>' : '';
-                const telSpan = tel ? ' &nbsp;|&nbsp; <span class="text-gray-500 text-xs">' + tel + '</span>' : '';
-                return '<div class="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
-                    + '<div class="text-sm"><span class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</span>' + mailLink + telSpan + '</div>'
+
+                const mails = [c.mail, c.mail2].filter(m => m && m.trim());
+                const tels  = [c.tel,  c.tel2 ].filter(t => t && t.trim());
+
+                const mailsHtml = mails.map(m => '<a href="mailto:' + m + '" class="text-blue-500 hover:underline">' + m + '</a>').join(' &nbsp;·&nbsp; ');
+                const telsHtml  = tels.map(t => '<span>' + t + '</span>').join(' &nbsp;·&nbsp; ');
+
+                return '<div class="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
+                    + '<div class="text-sm space-y-0.5">'
+                    + '<p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>'
+                    + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
+                    + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
+                    + '</div>'
                     + '<div class="flex gap-1 shrink-0">'
                     + '<button data-idx="' + idx + '" data-action="edit" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>'
                     + '<button data-idx="' + idx + '" data-action="delete" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>'
@@ -243,15 +252,13 @@
             const c = contactsData[idx];
             if (!c) return;
             if (btn.dataset.action === 'edit') {
-                const newNom = prompt('Nom :', c.nom || '');
-                if (newNom === null) return;
-                const newPrenom = prompt('Prénom :', c.prenom || '');
-                if (newPrenom === null) return;
-                const newMail = prompt('Email :', c.mail || '');
-                if (newMail === null) return;
-                const newTel = prompt('Téléphone :', c.tel || '');
-                if (newTel === null) return;
-                const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, tel: newTel });
+                const newNom    = prompt('Nom :',         c.nom    || ''); if (newNom    === null) return;
+                const newPrenom = prompt('Prénom :',      c.prenom || ''); if (newPrenom === null) return;
+                const newMail   = prompt('Email 1 :',     c.mail   || ''); if (newMail   === null) return;
+                const newMail2  = prompt('Email 2 :',     c.mail2  || ''); if (newMail2  === null) return;
+                const newTel    = prompt('Téléphone 1 :', c.tel    || ''); if (newTel    === null) return;
+                const newTel2   = prompt('Téléphone 2 :', c.tel2   || ''); if (newTel2   === null) return;
+                const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, mail2: newMail2, tel: newTel, tel2: newTel2 });
                 if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
             } else if (btn.dataset.action === 'delete') {
                 if (!confirm('Supprimer ' + (c.prenom || '') + ' ' + (c.nom || '') + ' ?')) return;
@@ -275,13 +282,17 @@
                 action: 'addPartner',
                 id_entreprise: partId,
                 nom_entreprise: nomEntrepriseActuelle,
-                nom, prenom, mail1: mail, tel1: tel
+                nom, prenom,
+                mail1: mail, mail2: document.getElementById('newMail2').value.trim(),
+                tel1: tel,   tel2:  document.getElementById('newTel2').value.trim()
             });
             if (res.success) {
                 document.getElementById('newNom').value = '';
                 document.getElementById('newPrenom').value = '';
                 document.getElementById('newMail').value = '';
+                document.getElementById('newMail2').value = '';
                 document.getElementById('newTel').value = '';
+                document.getElementById('newTel2').value = '';
                 document.getElementById('addContactForm').classList.add('hidden');
                 loadDetails();
             } else {
