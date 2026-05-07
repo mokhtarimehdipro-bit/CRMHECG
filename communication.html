@@ -135,7 +135,14 @@
             </div>
         </div>
 
-    </div> <div class="mt-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+    </div>
+
+    <div id="boxAtelierExtras" class="hidden bg-blue-50 p-4 rounded-2xl border border-blue-100">
+        <label class="block text-[10px] font-black uppercase text-[#1A4E8A] mb-2">📧 Ajouter des destinataires manuellement (séparés par virgule)</label>
+        <textarea id="formEmailsExtras" rows="2" placeholder="mail1@test.com, mail2@test.com..." class="w-full border-2 border-white p-3 rounded-xl text-xs outline-none focus:border-[#1A4E8A]"></textarea>
+    </div>
+
+    <div class="mt-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
         <div class="flex justify-between items-center mb-2">
             <h4 class="text-[10px] font-black uppercase text-slate-400">👥 Destinataires détectés en temps réel</h4>
             <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
@@ -202,8 +209,10 @@
 }
         let user = null;
         let campaigns = [];
-        let allStudentsForMatch = []; // Pour stocker la liste des étudiants
+        let allStudentsForMatch = [];
         let testEmail = "mokhtarimehdi.pro@gmail.com";
+        let removedEmails = new Set();
+        let livePreviewContacts = [];
 
         window.onload = () => {
             user = JSON.parse(localStorage.getItem('user'));
@@ -325,13 +334,12 @@
         function toggleTargeting() {
             const type = document.getElementById('formType').value;
             const isSalon = (type === "Salon");
+            const isAtelier = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
 
-            // Affichage spécifique Salon
             document.getElementById('boxSalonDetails').classList.toggle('hidden', !isSalon);
             document.getElementById('boxLieuLibre').classList.toggle('hidden', !isSalon);
-            
-            // Affichage spécifique Ateliers/JPO
             document.getElementById('boxCampus').classList.toggle('hidden', isSalon);
+            document.getElementById('boxAtelierExtras').classList.toggle('hidden', !isAtelier);
         }
 
         function unlockSubject() {
@@ -393,6 +401,7 @@
                 document.getElementById('formHoraires').value = c.horaires || "";
                 document.getElementById('formCampus').value = c.campus || "Marseille";
                 document.getElementById('formLienExterne').value = c.lienExterne || "";
+                document.getElementById('formEmailsExtras').value = (c.type !== "Salon") ? (c.emailsLibres || "") : "";
                 
                 // On déverrouille l'objet si c'est une édition pour permettre la correction
                 const objField = document.getElementById('formObjet');
@@ -406,19 +415,21 @@
                 document.getElementById('formDateEvt').value = "";
                 document.getElementById('formHoraires').value = "";
                 document.getElementById('formLienExterne').value = "";
-                
-                // On remet l'objet en mode "Automatique" et verrouillé
+                document.getElementById('formEmailsExtras').value = "";
+
                 const objField = document.getElementById('formObjet');
                 objField.value = "";
                 objField.readOnly = true;
                 objField.classList.add('bg-gray-50', 'text-gray-400');
-                
-                updateAutoSubject(); // On génère l'objet par défaut
+
+                updateAutoSubject();
         }
-        
-        toggleTargeting(); // On ajuste l'affichage des champs (Salon vs Ateliers)
-        
-        // NOUVEAU : On lance la mise à jour en direct après l'ouverture
+
+        // Reset de la gestion manuelle des destinataires
+        removedEmails = new Set();
+        livePreviewContacts = [];
+
+        toggleTargeting();
         setTimeout(updateLivePreview, 500);
     }
 
@@ -487,7 +498,7 @@
                 horaires: document.getElementById('formHoraires').value,
                 accroche: document.getElementById('formAccroche').value,
                 lienExterne: document.getElementById('formLienExterne').value,
-                emailsLibres: document.getElementById('formEmailsLibres').value,
+                emailsLibres: type === "Salon" ? document.getElementById('formEmailsLibres').value : document.getElementById('formEmailsExtras').value,
                 cible: cible,
                 flyerUrl: flyerUrl,
                 pjUrl: pjUrl
@@ -553,9 +564,10 @@ async function sendMail(cmpId, isTest) {
         btns.forEach(b => { b.innerText = "Envoi Réel 🚀"; b.disabled = false; });
 
         if (d.success && d.data.length > 0) {
-            pendingPreviewEmails = d.data;
+            // Pré-filtrer les emails retirés manuellement dans la liste live
+            pendingPreviewEmails = d.data.filter(c => !removedEmails.has(c.email));
             pendingCampaignId = cmpId;
-            openPreviewModal(); // On ouvre le filet de sécurité
+            openPreviewModal();
         } else {
             alert("Aucun étudiant ou partenaire ne correspond à vos critères.");
         }
@@ -775,18 +787,39 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         }
 
         // ==========================================
-        // MOTEUR DU PANNEAU EN TEMPS RÉEL (PROPRE ET SANS DOUBLONS)
+        // MOTEUR DU PANNEAU EN TEMPS RÉEL
         // ==========================================
+        function renderLivePreview() {
+            const listDiv = document.getElementById('livePreviewList');
+            const countSpan = document.getElementById('liveCount');
+            if (!listDiv || !countSpan) return;
+            const type = document.getElementById('formType').value;
+            const isAtelier = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
+            const filtered = livePreviewContacts.filter(c => !removedEmails.has(c.email));
+            countSpan.innerText = filtered.length;
+            listDiv.innerHTML = filtered.slice(0, 60).map(c => `
+                <div class="flex justify-between items-center border-b border-slate-100 py-1">
+                    <span class="truncate pr-2">${c.nom}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="text-slate-400 text-[9px]">${c.source}</span>
+                        ${isAtelier ? `<button data-email="${c.email}" class="preview-remove text-red-400 hover:text-red-600 text-[10px] font-black ml-1" title="Retirer">✕</button>` : ''}
+                    </div>
+                </div>
+            `).join('') || "Aucun destinataire.";
+        }
+
         async function updateLivePreview() {
             const listDiv = document.getElementById('livePreviewList');
             const countSpan = document.getElementById('liveCount');
             if (!listDiv || !countSpan) return;
+            const type = document.getElementById('formType').value;
+            const isAtelier = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
 
             const payload = {
                 action: 'previewComMail',
-                type: document.getElementById('formType').value,
+                type: type,
                 campus: document.getElementById('formCampus').value,
-                emailsLibres: document.getElementById('formEmailsLibres').value,
+                emailsLibres: isAtelier ? (document.getElementById('formEmailsExtras')?.value || "") : (document.getElementById('formEmailsLibres')?.value || ""),
                 cible: {
                     b2c_prospects: document.getElementById('cb_b2c_prospects')?.checked || false,
                     b2c_preinscrits: document.getElementById('cb_b2c_preinscrits')?.checked || false,
@@ -800,23 +833,24 @@ async function executeFinalSend(cmpId, isTest, emailList) {
             try {
                 const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
                 const d = await res.json();
-                if (d.success) {
-                    countSpan.innerText = d.data.length;
-                    listDiv.innerHTML = d.data.slice(0, 30).map(c => `
-                        <div class="flex justify-between border-b border-slate-100 py-1">
-                            <span class="truncate pr-2">${c.nom}</span>
-                            <span class="text-slate-400 shrink-0 text-[9px]">${c.source}</span>
-                        </div>
-                    `).join('') || "Aucun destinataire.";
-                }
+                if (d.success) { livePreviewContacts = d.data; renderLivePreview(); }
             } catch(e) { console.error("Erreur de prévisualisation"); }
         }
 
-        // Branchement UNIQUE des événements (plus de doublons)
+        // Délégation pour le bouton "Retirer" dans la liste live
+        document.getElementById('livePreviewList').addEventListener('click', function(e) {
+            const btn = e.target.closest('.preview-remove');
+            if (!btn) return;
+            removedEmails.add(btn.dataset.email);
+            renderLivePreview();
+        });
+
+        // Branchement UNIQUE des événements
         document.addEventListener('change', function(e) {
             if (e.target.closest('#cmpModal')) updateLivePreview();
         });
         document.getElementById('formEmailsLibres')?.addEventListener('keyup', updateLivePreview);
+        document.getElementById('formEmailsExtras')?.addEventListener('keyup', updateLivePreview);
     </script>
 <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-[60] p-4">
     <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-3xl max-h-[90vh] flex flex-col">
