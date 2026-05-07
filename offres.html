@@ -33,9 +33,9 @@
             <h1 class="text-3xl font-black text-[#1A4E8A]">Bourse aux Offres</h1>
             <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
         </div>
-        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
             <input type="text" id="fOffreRecherche" onkeyup="filterOffres()" placeholder="🔍 Chercher un N° (OFR...) ou Titre" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
-            
+
             <select id="fOffreQualite" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
                 <option value="">🎯 Toutes les qualités (Statut)</option>
                 <option value="vérifiée">✅ Vérifiée (Valide)</option>
@@ -47,6 +47,10 @@
                 <option value="">📡 Tous les partages</option>
                 <option value="partagée">Partagée aux étudiants</option>
                 <option value="non partagée">Non partagée</option>
+            </select>
+
+            <select id="fOffreVille" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">📍 Toutes les villes</option>
             </select>
         </div>
 
@@ -84,12 +88,8 @@
                 
                 <div class="grid grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Contrat</label>
-                        <select id="offreType" class="w-full border p-3 rounded-xl font-bold text-sm">
-                            <option value="Alternance">Alternance</option>
-                            <option value="Stage">Stage</option>
-                            <option value="CDI">CDI</option>
-                        </select>
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">📍 Ville</label>
+                        <input type="text" id="offreVille" placeholder="Ex: Marseille 13e, Aix..." class="w-full border p-3 rounded-xl font-bold text-sm outline-none focus:border-[#1A4E8A]">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">État</label>
@@ -183,53 +183,57 @@
             try {
                 loader.classList.remove('hidden');
                 document.getElementById('offresGrid').classList.add('hidden');
-                
+
                 const data = await apiPost({ action: 'getOffres' });
-                
+
                 loader.classList.add('hidden');
                 document.getElementById('offresGrid').classList.remove('hidden');
 
                 if (data.success && data.data && data.data.length > 0) {
-                    currentOffres = data.data; // On stocke en mémoire
-                    filterOffres(); // On lance l'affichage filtré
+                    currentOffres = data.data;
+                    populateVilleFilter();
+                    filterOffres();
                 } else {
                     document.getElementById('offresGrid').innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
                 }
-            } catch (err) { 
-                loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>'; 
+            } catch (err) {
+                loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>';
             }
+        }
+
+        function populateVilleFilter() {
+            const sel = document.getElementById('fOffreVille');
+            const villes = [...new Set(currentOffres.map(o => (o.ville || "").trim()).filter(Boolean))].sort();
+            sel.innerHTML = '<option value="">📍 Toutes les villes</option>' + villes.map(v => `<option value="${v}">${v}</option>`).join('');
         }
 
         // 2. LE MOTEUR DE FILTRAGE
         function filterOffres() {
-            // Si les filtres n'existent pas dans le HTML, on affiche tout par sécurité
             const elSearch = document.getElementById('fOffreRecherche');
             if (!elSearch) return renderOffres(currentOffres);
 
             const search = document.getElementById('fOffreRecherche').value.toLowerCase().trim();
             const qualite = document.getElementById('fOffreQualite').value.toLowerCase();
             const partage = document.getElementById('fOffrePartage').value.toLowerCase();
+            const villeFilter = (document.getElementById('fOffreVille').value || "").trim();
 
             const filteredData = currentOffres.filter(o => {
-                // Recherche texte (ID + Poste + Entreprise)
-                const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''}`.toLowerCase();
+                const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
                 const matchSearch = textGlobal.includes(search);
 
-                // Recherche Qualité
                 const qualiteOffre = (o.qualite || "").toLowerCase();
                 const matchQualite = qualite === "" || qualiteOffre.includes(qualite);
-                
-                // Recherche Partage (On nettoie les accents pour éviter les bugs)
-                let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
                 let estPartage = etatOffre.includes("partagee") || etatOffre.includes("partage");
                 if (etatOffre.includes("non")) estPartage = false;
-
                 let matchPartage = true;
                 if (partage === "partagée") matchPartage = estPartage === true;
                 if (partage === "non partagée") matchPartage = estPartage === false;
 
-                // Doit correspondre aux 3 filtres
-                return matchSearch && matchQualite && matchPartage;
+                const matchVille = !villeFilter || (o.ville || "") === villeFilter;
+
+                return matchSearch && matchQualite && matchPartage && matchVille;
             });
 
             renderOffres(filteredData);
@@ -292,7 +296,8 @@
                         </div>
                         <span class="text-[10px] font-black text-slate-400 mb-1 block">N° ${o.id || '-'}</span>
                         <h3 class="text-xl font-black text-gray-800 mb-1 leading-tight group-hover:text-[#1A4E8A] transition-colors">${o.poste || 'Sans titre'}</h3>
-                        <p class="text-[#F26522] font-black text-sm mb-4 uppercase">🏢 ${o.entreprise}</p>
+                        <p class="text-[#F26522] font-black text-sm mb-1 uppercase">🏢 ${o.entreprise}</p>
+                        ${o.ville ? `<p class="text-[10px] font-bold text-slate-500 mb-3">📍 ${o.ville}</p>` : '<p class="mb-3"></p>'}
                         <p class="text-[10px] font-bold text-gray-400 tracking-tighter mb-2">📅 Parue le ${new Date(o.date).toLocaleDateString()}</p>
                         <div class="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
                             <p class="text-[9px] font-black text-gray-400 uppercase mb-1">📝 (notes interne) :</p>
@@ -323,7 +328,7 @@
                 document.getElementById('offreEnt').value = o.entreprise;
                 document.getElementById('offreUrl').value = o.url;
                 document.getElementById('offrePlateforme').value = o.plateforme;
-                document.getElementById('offreType').value = o.type;
+                document.getElementById('offreVille').value = o.ville || '';
                 document.getElementById('offreMissions').value = o.missions;
                 document.getElementById('offreEtat').value = o.etat;
                 document.getElementById('offreQualite').value = o.qualite;
@@ -349,7 +354,7 @@
                 entreprise: document.getElementById('offreEnt').value,
                 url: document.getElementById('offreUrl').value,
                 plateforme: document.getElementById('offrePlateforme').value,
-                type: document.getElementById('offreType').value,
+                ville: document.getElementById('offreVille').value,
                 missions: document.getElementById('offreMissions').value,
                 etat: document.getElementById('offreEtat').value,
                 qualite: document.getElementById('offreQualite').value
