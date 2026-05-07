@@ -12,9 +12,15 @@
         <div id="content" class="hidden space-y-8">
             <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                 <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-3">
-                        <h1 id="entNom" class="text-4xl font-black text-[#1A4E8A]">Entreprise</h1>
-                        <button onclick="editEntrepriseName()" class="text-gray-400 hover:text-[#1A4E8A] text-lg" title="Renommer l'entreprise">✏️</button>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 id="entNom" class="text-4xl font-black text-[#1A4E8A]">Entreprise</h1>
+                            <button onclick="editEntrepriseName()" class="text-gray-400 hover:text-[#1A4E8A] text-lg" title="Renommer l'entreprise">✏️</button>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p id="entAdresse" class="text-sm text-gray-400 font-medium"></p>
+                            <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse">✏️</button>
+                        </div>
                     </div>
                     <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
                 </div>
@@ -120,7 +126,8 @@
         const partId = new URLSearchParams(window.location.search).get('id');
         let currentUser = null;
         let nomEntrepriseActuelle = "";
-        let contactsData = []; // cache global des contacts
+        let contactsData = [];
+        let adresseData = { adresse: "", cp: "", ville: "" };
 
         try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
         if(!currentUser) currentUser = { nom: "Utilisateur" };
@@ -137,6 +144,9 @@
                     
                     nomEntrepriseActuelle = d.info.entreprise;
                     document.getElementById('entNom').innerText = d.info.entreprise;
+                    adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
+                    const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
+                    document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
 
                     // Stockage global + rendu contacts
                     contactsData = d.contacts || [];
@@ -307,6 +317,14 @@
             const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, nouveauNom: newName });
             if (res.success) { nomEntrepriseActuelle = newName; loadDetails(); }
             else alert("Erreur : " + res.message);
+        }
+
+        async function editAdresse() {
+            const newAdresse = prompt("Adresse (rue, n°...) :", adresseData.adresse); if (newAdresse === null) return;
+            const newCp = prompt("Code postal :", adresseData.cp); if (newCp === null) return;
+            const newVille = prompt("Ville :", adresseData.ville); if (newVille === null) return;
+            const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: newAdresse, cp: newCp, ville: newVille });
+            if (res.success) loadDetails(); else alert("Erreur : " + res.message);
         }
 
         async function ajouterOffreRapide() {
