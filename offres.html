@@ -93,19 +93,10 @@
                     <input type="url" id="offreUrl" class="w-full border p-3 rounded-xl text-blue-500 font-medium" required>
                 </div>
                 
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">📍 Ville</label>
                         <input type="text" id="offreVille" placeholder="Ex: Marseille 13e, Aix..." class="w-full border p-3 rounded-xl font-bold text-sm outline-none focus:border-[#1A4E8A]">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">État</label>
-                        <select id="offreEtat" class="w-full border p-3 rounded-xl font-bold text-sm">
-                            <option value="Reçue">Reçue</option>
-                            <option value="En cours">En cours</option>
-                            <option value="Pourvue">Pourvue</option>
-                            <option value="Annulée">Annulée</option>
-                        </select>
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Qualité</label>
@@ -370,7 +361,6 @@
                 document.getElementById('offrePlateforme').value = o.plateforme;
                 document.getElementById('offreVille').value = o.ville || '';
                 document.getElementById('offreMissions').value = o.missions;
-                document.getElementById('offreEtat').value = o.etat;
                 document.getElementById('offreQualite').value = o.qualite;
             } else {
                 document.getElementById('modalTitle').innerText = "Ajouter une Offre";
@@ -379,7 +369,6 @@
                 document.getElementById('offreEnt').value = "";
                 document.getElementById('offreUrl').value = "";
                 document.getElementById('offrePlateforme').value = "";
-                document.getElementById('offreEtat').value = "Non partagée";
                 document.getElementById('offreQualite').value = "À Qualifier";
             }
         }
@@ -396,7 +385,6 @@
                 plateforme: document.getElementById('offrePlateforme').value,
                 ville: document.getElementById('offreVille').value,
                 missions: document.getElementById('offreMissions').value,
-                etat: document.getElementById('offreEtat').value,
                 qualite: document.getElementById('offreQualite').value
             };
             if(!payload.poste || !payload.entreprise || !payload.url) return alert("Veuillez remplir les champs obligatoires.");
