@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>HECG - CRM Partenaires</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -54,6 +59,7 @@
 
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
                 <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
             </div>
         </div>
@@ -61,6 +67,10 @@
         <div id="loader" class="text-center py-24">
             <div class="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#1A4E8A] rounded-full animate-spin mb-4"></div>
             <p class="font-black text-slate-400 text-sm animate-pulse">SYNCHRONISATION GOOGLE SHEETS...</p>
+        </div>
+
+        <div id="mapContainer" class="hidden mb-8">
+            <div id="mapView" style="height:480px;border-radius:1.5rem;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(0,0,0,.08)"></div>
         </div>
 
         <div id="partnersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
@@ -528,6 +538,7 @@
 
             lastFilteredPartners = data;
             renderPartners(data);
+            refreshMapMarkers();
         }
 
         function exportFilteredView() {
@@ -576,6 +587,159 @@
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteContact', id_contact: id_contact }) });
             openDossier(currentId);
             loadPartners();
+        }
+
+        // --- CARTE INTERACTIVE ---
+        let _map = null, _markerGroup = null, _mapVisible = false;
+
+        const GEO = {
+            "marseille": [43.2965, 5.3698],
+            "marseille 1": [43.2965, 5.3698], "marseille 2": [43.3047, 5.3660],
+            "marseille 3": [43.3107, 5.3714], "marseille 4": [43.3003, 5.3910],
+            "marseille 5": [43.2944, 5.3997], "marseille 6": [43.2904, 5.3772],
+            "marseille 7": [43.2762, 5.3570], "marseille 8": [43.2616, 5.3762],
+            "marseille 9": [43.2470, 5.3922], "marseille 10": [43.2757, 5.4135],
+            "marseille 11": [43.2949, 5.4318], "marseille 12": [43.3086, 5.4157],
+            "marseille 13": [43.3372, 5.4132], "marseille 14": [43.3396, 5.3701],
+            "marseille 15": [43.3487, 5.3587], "marseille 16": [43.3622, 5.3313],
+            "paris": [48.8566, 2.3522],
+            "paris 1": [48.8600, 2.3477], "paris 2": [48.8639, 2.3497],
+            "paris 3": [48.8627, 2.3577], "paris 4": [48.8534, 2.3543],
+            "paris 5": [48.8462, 2.3448], "paris 6": [48.8496, 2.3345],
+            "paris 7": [48.8558, 2.3134], "paris 8": [48.8742, 2.3070],
+            "paris 9": [48.8765, 2.3450], "paris 10": [48.8765, 2.3643],
+            "paris 11": [48.8590, 2.3776], "paris 12": [48.8448, 2.3878],
+            "paris 13": [48.8310, 2.3637], "paris 14": [48.8297, 2.3275],
+            "paris 15": [48.8418, 2.3001], "paris 16": [48.8638, 2.2756],
+            "paris 17": [48.8848, 2.3111], "paris 18": [48.8901, 2.3479],
+            "paris 19": [48.8817, 2.3787], "paris 20": [48.8642, 2.3968],
+            "lyon": [45.7640, 4.8357], "bordeaux": [44.8378, -0.5792],
+            "toulouse": [43.6047, 1.4442], "nice": [43.7102, 7.2620],
+            "nantes": [47.2184, -1.5536], "strasbourg": [48.5734, 7.7521],
+            "montpellier": [43.6108, 3.8767], "rennes": [48.1173, -1.6778],
+            "grenoble": [45.1885, 5.7245], "lille": [50.6292, 3.0573],
+            "toulon": [43.1242, 5.9280], "aix-en-provence": [43.5297, 5.4474],
+            "aix en provence": [43.5297, 5.4474], "avignon": [43.9493, 4.8055],
+            "nimes": [43.8367, 4.3601], "nimes": [43.8367, 4.3601],
+            "cannes": [43.5528, 7.0174], "antibes": [43.5804, 7.1283],
+            "vitrolles": [43.4615, 5.2456], "aubagne": [43.2930, 5.5710],
+            "istres": [43.5158, 4.9878], "martigues": [43.4061, 5.0486],
+            "la ciotat": [43.1727, 5.6082], "cassis": [43.2140, 5.5390],
+            "pertuis": [43.6918, 5.5031], "salon-de-provence": [43.6396, 5.0974],
+            "salon de provence": [43.6396, 5.0974], "arles": [43.6767, 4.6277],
+            "marignane": [43.4179, 5.2153], "gardanne": [43.4565, 5.4762],
+            "hyeres": [43.1204, 6.1283], "frejus": [43.4329, 6.7360],
+            "saint-raphael": [43.4252, 6.7688], "draguignan": [43.5378, 6.4660],
+            "brignoles": [43.4057, 6.0600], "gap": [44.5594, 6.0773],
+            "digne-les-bains": [44.0922, 6.2358], "metz": [49.1193, 6.1757],
+            "nancy": [48.6921, 6.1844], "reims": [49.2583, 4.0317],
+            "rouen": [49.4432, 1.0993], "amiens": [49.8941, 2.2958],
+            "caen": [49.1829, -0.3707], "dijon": [47.3220, 5.0415],
+            "clermont-ferrand": [45.7772, 3.0870], "clermont ferrand": [45.7772, 3.0870],
+            "limoges": [45.8336, 1.2611], "besancon": [47.2378, 6.0241],
+            "poitiers": [46.5802, 0.3404], "orleans": [47.9029, 1.9090],
+            "tours": [47.3941, 0.6848], "angers": [47.4784, -0.5632],
+            "le mans": [48.0027, 0.1984], "brest": [48.3904, -4.4861],
+            "le havre": [49.4944, 0.1079], "mulhouse": [47.7508, 7.3359],
+            "perpignan": [42.6976, 2.8954], "beziers": [43.3441, 3.2154],
+            "sete": [43.4025, 3.6975], "montauban": [44.0180, 1.3530],
+            "pau": [43.2951, -0.3708], "bayonne": [43.4929, -1.4748],
+            "la rochelle": [46.1603, -1.1511], "saint-etienne": [45.4347, 4.3922],
+            "saint etienne": [45.4347, 4.3922], "valence": [44.9334, 4.8924],
+            "annecy": [45.8992, 6.1294], "chambery": [45.5646, 5.9178],
+            "france": [46.2276, 2.2137]
+        };
+
+        function _normCity(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        }
+
+        function getCoordsForLocation(ville, cp) {
+            const cpStr = String(cp || "").trim();
+            // Marseille arrondissements via CP (130XX)
+            if (cpStr.match(/^130\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                const k = "marseille " + arr;
+                return GEO[k] || GEO["marseille"];
+            }
+            // Paris arrondissements via CP (750XX)
+            if (cpStr.match(/^750\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                const k = "paris " + arr;
+                return GEO[k] || GEO["paris"];
+            }
+            const v = _normCity(ville);
+            if (!v) return null;
+            if (GEO[v]) return GEO[v];
+            // Partial match: "marseille 13e arrondissement" → "marseille 13"
+            for (const key of Object.keys(GEO)) {
+                if (v.startsWith(key) || key.startsWith(v)) return GEO[key];
+            }
+            return null;
+        }
+
+        function toggleMap() {
+            _mapVisible = !_mapVisible;
+            const container = document.getElementById('mapContainer');
+            const btn = document.getElementById('btnToggleMap');
+            if (_mapVisible) {
+                container.classList.remove('hidden');
+                btn.classList.add('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-200');
+                if (!_map) {
+                    _map = L.map('mapView').setView([43.3965, 5.2698], 9);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 18
+                    }).addTo(_map);
+                    _markerGroup = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false });
+                    _map.addLayer(_markerGroup);
+                }
+                refreshMapMarkers();
+                setTimeout(() => _map.invalidateSize(), 200);
+            } else {
+                container.classList.add('hidden');
+                btn.classList.remove('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.add('bg-white', 'text-slate-500', 'border-slate-200');
+            }
+        }
+
+        function refreshMapMarkers() {
+            if (!_map || !_mapVisible) return;
+            _markerGroup.clearLayers();
+            const bounds = [];
+            lastFilteredPartners.forEach(p => {
+                const coords = getCoordsForLocation(p.ville, p.cp);
+                if (!coords) return;
+                const jitter = () => (Math.random() - 0.5) * 0.0015;
+                const ll = [coords[0] + jitter(), coords[1] + jitter()];
+                bounds.push(ll);
+                const nbAlt = (p.alternants || []).length;
+                const altEmoji = nbAlt >= 2 ? '🔥' : nbAlt === 1 ? '🟢' : '⚪';
+                const c = p.contacts[0] || {};
+                const cName = [c.prenom, c.nom].filter(Boolean).join(' ') || '—';
+                const label = p.nom.length > 22 ? p.nom.slice(0, 20) + '…' : p.nom;
+                const marker = L.marker(ll, {
+                    icon: L.divIcon({
+                        html: `<div style="background:#1A4E8A;color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
+                        className: '', iconAnchor: [0, 10]
+                    })
+                });
+                marker.bindPopup(`
+                    <div style="font-family:sans-serif;min-width:200px;padding:4px">
+                        <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
+                        <div style="font-size:11px;color:#666;margin-bottom:6px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
+                        <div style="font-size:11px;color:#333">👤 ${cName}</div>
+                        ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
+                        ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
+                        <div style="font-size:12px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px solid #eee">${altEmoji} ${nbAlt} alternant${nbAlt !== 1 ? 's' : ''}</div>
+                    </div>`);
+                _markerGroup.addLayer(marker);
+            });
+            if (bounds.length > 0) {
+                try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
+            }
+            setTimeout(() => _map.invalidateSize(), 100);
         }
 
     </script>
