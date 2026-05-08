@@ -222,6 +222,7 @@
     }
 }
         let allPartners = [];
+        let lastFilteredPartners = [];
         let filterOnlyAlt = false;
         let currentId = null;
         let currentContactId = null;
@@ -244,7 +245,7 @@
                 
                 if(data.success) {
                     allPartners = data.data;
-                    renderPartners(allPartners);
+                    filterPartners(); // applique les filtres actifs et initialise lastFilteredPartners
                 } else {
                     alert("Erreur Serveur : " + data.message);
                 }
@@ -525,33 +526,12 @@
                 });
             }
 
+            lastFilteredPartners = data;
             renderPartners(data);
         }
 
         function exportFilteredView() {
-            const s = document.getElementById('searchInput').value.toLowerCase().trim();
-            const nbAltFilter = document.getElementById('filterNbAlt').value;
-
-            let data = allPartners.filter(p => {
-                const nomEntreprise = (p.nom || "").toLowerCase();
-                const idEntreprise = (p.id || "").toLowerCase();
-                const infosContacts = (p.contacts || []).map(c => `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`).join(" ").toLowerCase();
-                return `${nomEntreprise} ${idEntreprise} ${infosContacts}`.includes(s);
-            });
-            
-            if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
-
-            if (nbAltFilter !== "all") {
-                data = data.filter(p => {
-                    const count = (p.alternants || []).length;
-                    if (nbAltFilter === "0") return count === 0;
-                    if (nbAltFilter === "1") return count === 1;
-                    if (nbAltFilter === "2+") return count >= 2;
-                    return true;
-                });
-            }
-
-            downloadCSV(data, "HECG_Export_Filtre_Partenaires.csv");
+            downloadCSV(lastFilteredPartners, "HECG_Export_Filtre_Partenaires.csv");
         }
 
         function exportIndividualDossier() {
@@ -560,11 +540,11 @@
         }
 
         function downloadCSV(data, filename) {
-            let csv = "ID;Entreprise;Contact Principal;Email;Tel;Email2;Tel2;Alternants\n";
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants\n";
             data.forEach(p => {
                 const c = p.contacts[0] || {};
                 const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
-                csv += `"${p.id}";"${p.nom}";"${c.prenom} ${c.nom}";"${c.email}";"${c.tel}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}"\n`;
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}"\n`;
             });
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
