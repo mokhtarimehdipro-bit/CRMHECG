@@ -29,10 +29,16 @@
     </nav>
 
     <main class="max-w-7xl mx-auto p-8">
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-black text-[#1A4E8A]">Bourse aux Offres</h1>
-            <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
+            <div class="flex gap-3 items-center">
+                <button id="btnToggleObsolete" onclick="toggleObsolete()" class="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Voir les obsolètes (0)</button>
+                <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
+            </div>
         </div>
+
+        <div id="statsSection" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6"></div>
+
         <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
             <input type="text" id="fOffreRecherche" onkeyup="filterOffres()" placeholder="🔍 Chercher un N° (OFR...) ou Titre" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
 
@@ -153,11 +159,24 @@
         </div>
     </div>
 
+    <!-- MODAL STATS DETAIL -->
+    <div id="statsModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
+                <h3 id="statsModalTitle" class="text-xl font-black text-[#1A4E8A]"></h3>
+                <button onclick="closeStatsModal()" class="text-gray-300 hover:text-gray-600 font-black text-2xl leading-none">×</button>
+            </div>
+            <div id="statsModalList" class="overflow-y-auto flex-1 custom-scrollbar pr-2 space-y-0"></div>
+        </div>
+    </div>
+
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         
         let currentOffres = [];
         let listEtu = [];
+        let showObsolete = false;
+        let _statsClickData = [];
 
         // --- POSTIER CENTRAL ---
         async function apiPost(payload) {
@@ -192,6 +211,8 @@
                 if (data.success && data.data && data.data.length > 0) {
                     currentOffres = data.data;
                     populateVilleFilter();
+                    renderStats(computeStats());
+                    updateToggleObsoleteBtn();
                     filterOffres();
                 } else {
                     document.getElementById('offresGrid').innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
@@ -217,7 +238,7 @@
             const partage = document.getElementById('fOffrePartage').value.toLowerCase();
             const villeFilter = (document.getElementById('fOffreVille').value || "").trim();
 
-            const filteredData = currentOffres.filter(o => {
+            let filteredData = currentOffres.filter(o => {
                 const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
                 const matchSearch = textGlobal.includes(search);
 
@@ -235,6 +256,14 @@
 
                 return matchSearch && matchQualite && matchPartage && matchVille;
             });
+
+            // Masquer les obsolètes par défaut
+            if (!showObsolete) {
+                filteredData = filteredData.filter(o => {
+                    const q = (o.qualite || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                    return !q.includes("obsolete");
+                });
+            }
 
             renderOffres(filteredData);
         }
@@ -444,6 +473,134 @@
                 btn.disabled = false; 
                 btn.innerText = "🚀 DIFFUSER L'OFFRE";
             }
+        }
+
+        // ==========================================
+        // STATS & KPIs
+        // ==========================================
+
+        function normalizeStr(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        }
+
+        function computeStats() {
+            const now = new Date();
+            const dow = now.getDay(); // 0=dim
+            const diffToMon = (dow === 0 ? -6 : 1 - dow);
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() + diffToMon);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const cetteSemaine = currentOffres.filter(o => {
+                const d = new Date(o.date);
+                return !isNaN(d) && d >= weekStart;
+            });
+            const aQualifier = currentOffres.filter(o => normalizeStr(o.qualite).includes("qualifier"));
+            const partagees   = currentOffres.filter(o => {
+                const e = normalizeStr(o.etat);
+                return e.includes("partag") && !e.includes("non");
+            });
+            const obsoletes  = currentOffres.filter(o => normalizeStr(o.qualite).includes("obsolete"));
+            const verifiees  = currentOffres.filter(o => normalizeStr(o.qualite).includes("verifi"));
+
+            let moyParSemaine = "—";
+            const validDates = currentOffres.map(o => new Date(o.date)).filter(d => !isNaN(d));
+            if (validDates.length > 0) {
+                const firstDate = new Date(Math.min(...validDates.map(d => d.getTime())));
+                const weeksSince = Math.max(1, (now - firstDate) / (7 * 24 * 60 * 60 * 1000));
+                moyParSemaine = (currentOffres.length / weeksSince).toFixed(1);
+            }
+
+            return { cetteSemaine, total: currentOffres.length, moyParSemaine, aQualifier, partagees, obsoletes, verifiees };
+        }
+
+        function renderStats(st) {
+            const kpis = [
+                { label: "Cette semaine",   value: st.cetteSemaine.length, sub: "captées",       color: "blue",    data: st.cetteSemaine },
+                { label: "Total captées",   value: st.total,               sub: "depuis le début",color: "indigo",  data: currentOffres  },
+                { label: "Moy. / semaine",  value: st.moyParSemaine,       sub: "offres/sem.",   color: "violet",  data: null           },
+                { label: "À qualifier",     value: st.aQualifier.length,   sub: "en attente",    color: "amber",   data: st.aQualifier  },
+                { label: "Partagées",       value: st.partagees.length,    sub: "diffusées",     color: "teal",    data: st.partagees   },
+                { label: "Obsolètes",       value: st.obsoletes.length,    sub: "à archiver",    color: "red",     data: st.obsoletes   },
+                { label: "Vérifiées",       value: st.verifiees.length,    sub: "validées",      color: "emerald", data: st.verifiees   },
+            ];
+
+            const cm = {
+                blue:    { bg: "bg-blue-50",    border: "border-blue-200",    val: "text-blue-700",    sub: "text-blue-400",    h: "hover:bg-blue-100"    },
+                indigo:  { bg: "bg-indigo-50",  border: "border-indigo-200",  val: "text-indigo-700",  sub: "text-indigo-400",  h: "hover:bg-indigo-100"  },
+                violet:  { bg: "bg-violet-50",  border: "border-violet-200",  val: "text-violet-700",  sub: "text-violet-400",  h: ""                     },
+                amber:   { bg: "bg-amber-50",   border: "border-amber-200",   val: "text-amber-700",   sub: "text-amber-400",   h: "hover:bg-amber-100"   },
+                teal:    { bg: "bg-teal-50",    border: "border-teal-200",    val: "text-teal-700",    sub: "text-teal-400",    h: "hover:bg-teal-100"    },
+                red:     { bg: "bg-red-50",     border: "border-red-200",     val: "text-red-700",     sub: "text-red-400",     h: "hover:bg-red-100"     },
+                emerald: { bg: "bg-emerald-50", border: "border-emerald-200", val: "text-emerald-700", sub: "text-emerald-400", h: "hover:bg-emerald-100" },
+            };
+
+            _statsClickData = kpis.map(k => ({ data: k.data, label: k.label }));
+
+            const section = document.getElementById('statsSection');
+            if (!section) return;
+            section.innerHTML = kpis.map((k, idx) => {
+                const c = cm[k.color];
+                const isClickable = k.data !== null;
+                const clickAttr = isClickable ? `onclick="openStatsDetail(${idx})"` : '';
+                return `
+                <div ${clickAttr} class="${c.bg} ${c.border} border rounded-2xl p-4 flex flex-col transition-all shadow-sm ${isClickable ? c.h + ' hover:shadow-md cursor-pointer' : ''}">
+                    <span class="text-[9px] font-black uppercase tracking-widest ${c.sub} mb-1 leading-none">${k.label}</span>
+                    <span class="text-4xl font-black ${c.val} leading-none my-2">${k.value}</span>
+                    <span class="text-[9px] ${c.sub} font-bold">${k.sub}</span>
+                    ${isClickable ? `<span class="text-[8px] ${c.sub} opacity-50 mt-1">Voir le listing →</span>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function openStatsDetail(idx) {
+            const { data, label } = _statsClickData[idx];
+            if (!data || data.length === 0) { alert("Aucune offre dans cette catégorie."); return; }
+            document.getElementById('statsModalTitle').innerText = label + " — " + data.length + " offre" + (data.length > 1 ? "s" : "");
+            document.getElementById('statsModalList').innerHTML = data.map(o => {
+                const q = o.qualite || "—";
+                const qn = normalizeStr(q);
+                let qCol = "text-gray-400";
+                if (qn.includes("qualifier")) qCol = "text-amber-600";
+                else if (qn.includes("obsolete")) qCol = "text-red-500";
+                else if (qn.includes("verifi")) qCol = "text-emerald-600";
+                const dateStr = !isNaN(new Date(o.date)) ? new Date(o.date).toLocaleDateString('fr-FR') : "—";
+                const safeId = (o.id || "").replace(/'/g, "\\'");
+                return `
+                <div class="flex items-center gap-3 border-b border-gray-100 py-3 hover:bg-gray-50 px-2 rounded-xl transition-colors group">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-black text-gray-800 text-sm truncate">${o.poste || 'Sans titre'}</div>
+                        <div class="text-[10px] text-gray-500 font-bold">${o.entreprise || ''}${o.ville ? ' · ' + o.ville : ''}</div>
+                        <div class="text-[9px] text-gray-400">N° ${o.id} · ${dateStr}</div>
+                    </div>
+                    <span class="text-[9px] font-black ${qCol} shrink-0 hidden group-hover:block">${q}</span>
+                    <button onclick="closeStatsModal(); openModal('${safeId}')" class="text-[10px] text-blue-400 hover:text-blue-600 font-bold shrink-0 p-1 opacity-0 group-hover:opacity-100 transition" title="Modifier">✏️</button>
+                </div>`;
+            }).join('');
+            document.getElementById('statsModal').classList.replace('hidden', 'flex');
+        }
+
+        function closeStatsModal() {
+            document.getElementById('statsModal').classList.replace('flex', 'hidden');
+        }
+
+        function updateToggleObsoleteBtn() {
+            const cnt = currentOffres.filter(o => normalizeStr(o.qualite).includes("obsolete")).length;
+            const btn = document.getElementById('btnToggleObsolete');
+            if (!btn) return;
+            if (showObsolete) {
+                btn.textContent = `Masquer les obsolètes (${cnt})`;
+                btn.className = "px-4 py-3 bg-red-100 text-red-700 border border-red-200 rounded-xl font-bold text-sm hover:bg-red-200 transition";
+            } else {
+                btn.textContent = `Voir les obsolètes (${cnt})`;
+                btn.className = "px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition";
+            }
+        }
+
+        function toggleObsolete() {
+            showObsolete = !showObsolete;
+            updateToggleObsoleteBtn();
+            filterOffres();
         }
 
         // INITIALISATION
