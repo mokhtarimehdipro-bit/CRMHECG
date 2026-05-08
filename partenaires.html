@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -71,6 +71,7 @@
 
         <div id="mapContainer" class="hidden mb-8">
             <div id="mapView" style="height:480px;border-radius:1.5rem;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(0,0,0,.08)"></div>
+            <div id="mapStatus" class="text-[10px] font-bold text-slate-400 mt-2 text-right h-4"></div>
         </div>
 
         <div id="partnersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
@@ -591,6 +592,12 @@
 
         // --- CARTE INTERACTIVE ---
         let _map = null, _markerGroup = null, _mapVisible = false;
+        let _geocodingToken = 0;
+
+        // Cache persistant adresse → coords dans localStorage
+        let _geocache = {};
+        try { _geocache = JSON.parse(localStorage.getItem('_hecg_geo') || '{}'); } catch(e) {}
+        function _saveGeoCache() { try { localStorage.setItem('_hecg_geo', JSON.stringify(_geocache)); } catch(e) {} }
 
         const GEO = {
             "marseille": [43.2965, 5.3698],
@@ -704,42 +711,106 @@
             }
         }
 
+        async function _nominatim(query) {
+            try {
+                const r = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=fr`,
+                    { headers: { 'Accept-Language': 'fr,fr-FR' } }
+                );
+                const d = await r.json();
+                if (d && d[0]) return [parseFloat(d[0].lat), parseFloat(d[0].lon)];
+            } catch(e) {}
+            return null;
+        }
+
+        function _buildMarker(p, coords, precise) {
+            const jitter = () => precise ? 0 : (Math.random() - 0.5) * 0.0015;
+            const ll = [coords[0] + jitter(), coords[1] + jitter()];
+            const nbAlt = (p.alternants || []).length;
+            const altEmoji = nbAlt >= 2 ? '🔥' : nbAlt === 1 ? '🟢' : '⚪';
+            const c = p.contacts[0] || {};
+            const cName = [c.prenom, c.nom].filter(Boolean).join(' ') || '—';
+            const label = p.nom.length > 22 ? p.nom.slice(0, 20) + '…' : p.nom;
+            const borderCol = precise ? '#F26522' : '#fff';
+            const marker = L.marker(ll, {
+                icon: L.divIcon({
+                    html: `<div style="background:#1A4E8A;color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid ${borderCol};box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
+                    className: '', iconAnchor: [0, 10]
+                })
+            });
+            marker.bindPopup(`
+                <div style="font-family:sans-serif;min-width:200px;padding:4px">
+                    <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
+                    <div style="font-size:11px;color:#666;margin-bottom:4px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
+                    ${precise ? '<div style="font-size:9px;color:#F26522;font-weight:700;margin-bottom:4px">📡 Position précise (géocodée)</div>' : ''}
+                    <div style="font-size:11px;color:#333">👤 ${cName}</div>
+                    ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
+                    ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
+                    <div style="font-size:12px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px solid #eee">${altEmoji} ${nbAlt} alternant${nbAlt !== 1 ? 's' : ''}</div>
+                </div>`);
+            return { marker, ll };
+        }
+
+        function _setMapStatus(msg) {
+            const el = document.getElementById('mapStatus');
+            if (el) el.textContent = msg;
+        }
+
         function refreshMapMarkers() {
             if (!_map || !_mapVisible) return;
+            _geocodingToken++;
+            const token = _geocodingToken;
             _markerGroup.clearLayers();
+            _setMapStatus('');
+
             const bounds = [];
+            const toGeocode = [];
+
             lastFilteredPartners.forEach(p => {
-                const coords = getCoordsForLocation(p.ville, p.cp);
+                const cacheKey = `geo_p_${p.id}`;
+                const cachedCoords = _geocache[cacheKey];
+                const fallback = getCoordsForLocation(p.ville, p.cp);
+                const coords = cachedCoords || fallback;
                 if (!coords) return;
-                const jitter = () => (Math.random() - 0.5) * 0.0015;
-                const ll = [coords[0] + jitter(), coords[1] + jitter()];
+
+                const { marker, ll } = _buildMarker(p, coords, !!cachedCoords);
                 bounds.push(ll);
-                const nbAlt = (p.alternants || []).length;
-                const altEmoji = nbAlt >= 2 ? '🔥' : nbAlt === 1 ? '🟢' : '⚪';
-                const c = p.contacts[0] || {};
-                const cName = [c.prenom, c.nom].filter(Boolean).join(' ') || '—';
-                const label = p.nom.length > 22 ? p.nom.slice(0, 20) + '…' : p.nom;
-                const marker = L.marker(ll, {
-                    icon: L.divIcon({
-                        html: `<div style="background:#1A4E8A;color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
-                        className: '', iconAnchor: [0, 10]
-                    })
-                });
-                marker.bindPopup(`
-                    <div style="font-family:sans-serif;min-width:200px;padding:4px">
-                        <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
-                        <div style="font-size:11px;color:#666;margin-bottom:6px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
-                        <div style="font-size:11px;color:#333">👤 ${cName}</div>
-                        ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
-                        ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
-                        <div style="font-size:12px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px solid #eee">${altEmoji} ${nbAlt} alternant${nbAlt !== 1 ? 's' : ''}</div>
-                    </div>`);
                 _markerGroup.addLayer(marker);
+
+                if (!cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
             });
+
             if (bounds.length > 0) {
                 try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
             }
             setTimeout(() => _map.invalidateSize(), 100);
+
+            if (toGeocode.length > 0) _geocodeBatch(toGeocode, token);
+        }
+
+        async function _geocodeBatch(partners, token) {
+            let done = 0;
+            for (const p of partners) {
+                if (_geocodingToken !== token) return;
+                const cacheKey = `geo_p_${p.id}`;
+                if (_geocache[cacheKey]) { done++; continue; }
+
+                const q = p.adresse && p.cp && p.ville
+                    ? `${p.adresse}, ${p.cp} ${p.ville}, France`
+                    : p.cp && p.ville ? `${p.cp} ${p.ville}, France`
+                    : p.ville ? `${p.ville}, France` : null;
+
+                if (q) {
+                    _setMapStatus(`⟳ Géocodage ${done + 1}/${partners.length}…`);
+                    const coords = await _nominatim(q);
+                    if (coords) { _geocache[cacheKey] = coords; _saveGeoCache(); }
+                    await new Promise(r => setTimeout(r, 1100));
+                }
+                done++;
+            }
+            if (_geocodingToken !== token) return;
+            _setMapStatus('');
+            refreshMapMarkers();
         }
 
     </script>
