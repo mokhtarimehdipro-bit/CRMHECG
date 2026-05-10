@@ -110,6 +110,12 @@
                             <h3 class="font-black text-green-700 uppercase text-[10px] tracking-widest mb-4">🎓 Alternants HECG en poste</h3>
                             <div id="dossierAlternants" class="flex flex-wrap gap-2"></div>
                         </div>
+
+                        <div id="dossierAnciensBlock" class="hidden bg-amber-50/60 p-6 rounded-3xl border border-amber-200">
+                            <h3 class="font-black text-amber-700 uppercase text-[10px] tracking-widest mb-1">⚠️ Anciens alternants détectés</h3>
+                            <p class="text-[9px] text-amber-600 italic mb-4">Ces étudiants ont quitté cette entreprise (changement d'entreprise détecté). Confirmez ou signalez une erreur de saisie.</p>
+                            <div id="dossierAnciensAlternants" class="space-y-2"></div>
+                        </div>
                     </div>
 
                     <div class="lg:col-span-8 space-y-8">
@@ -328,13 +334,56 @@
                 <span class="px-4 py-2 bg-white border border-green-200 rounded-xl font-black text-green-700 text-xs shadow-sm">🎓 ${a.prenom} ${a.nom}</span>
             `).join('') || "<p class='text-xs text-slate-300 italic'>Aucun alternant HECG en poste.</p>";
 
+            // Anciens alternants
+            const anciens = (ent.anciensAlternants || []);
+            const anciensBlock = document.getElementById('dossierAnciensBlock');
+            if (anciens.length > 0) {
+                anciensBlock.classList.remove('hidden');
+                document.getElementById('dossierAnciensAlternants').innerHTML = anciens.map(a => {
+                    const dateStr = a.date ? new Date(a.date).toLocaleDateString('fr-FR') : '—';
+                    const isConfirmed = a.status === 'Confirmé';
+                    return `
+                    <div class="flex items-center justify-between gap-3 p-3 rounded-2xl border ${isConfirmed ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-amber-200 shadow-sm'}">
+                        <div>
+                            <p class="font-black text-slate-800 text-sm">${a.prenom} ${a.nom}</p>
+                            <p class="text-[9px] text-slate-400 font-bold">Détecté le ${dateStr} · <span class="${isConfirmed ? 'text-slate-400' : 'text-amber-600 font-black'}">${a.status}</span></p>
+                        </div>
+                        ${isConfirmed ? `<span class="text-[9px] text-slate-400 font-bold italic">✓ Confirmé</span>` : `
+                        <div class="flex gap-2 shrink-0">
+                            <button onclick="confirmFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-green-100 text-green-700 rounded-xl text-[10px] font-black hover:bg-green-200 transition">✓ Confirmer départ</button>
+                            <button onclick="removeFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-red-50 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-100 transition">✗ Erreur de saisie</button>
+                        </div>`}
+                    </div>`;
+                }).join('');
+            } else {
+                anciensBlock.classList.add('hidden');
+            }
+
             loadHistory(id);
             document.getElementById('dossierModal').classList.add('modal-active');
         }
 
-        function closeDossier() { 
-            document.getElementById('dossierModal').classList.remove('modal-active'); 
+        function closeDossier() {
+            document.getElementById('dossierModal').classList.remove('modal-active');
             currentId = null;
+        }
+
+        async function confirmFormerAlternant(id) {
+            await apiPost({ action: 'confirmFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) {
+                const a = (ent.anciensAlternants || []).find(x => x.id === id);
+                if (a) a.status = 'Confirmé';
+            }
+            openDossier(currentId);
+        }
+
+        async function removeFormerAlternant(id) {
+            if (!confirm("Marquer comme erreur de saisie ? L'entrée sera masquée définitivement.")) return;
+            await apiPost({ action: 'removeFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) ent.anciensAlternants = (ent.anciensAlternants || []).filter(x => x.id !== id);
+            openDossier(currentId);
         }
 
         // --- 3. HISTORIQUE & NOTES ---
