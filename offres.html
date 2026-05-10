@@ -44,9 +44,9 @@
             </div>
         </div>
 
-        <div id="statsSection" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6"></div>
+        <div id="statsSection" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6"></div>
 
-        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-center">
             <input type="text" id="fOffreRecherche" onkeyup="filterOffres()" placeholder="🔍 Chercher un N° (OFR...) ou Titre" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
 
             <select id="fOffreQualite" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
@@ -65,6 +65,12 @@
             <select id="fOffreVille" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
                 <option value="">📍 Toutes les villes</option>
             </select>
+
+            <select id="fOffreEntreprise" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">🏢 Toutes les entreprises</option>
+            </select>
+
+            <input type="date" id="fOffreDate" onchange="filterOffres()" title="Filtrer par date de parution" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A] text-gray-500">
         </div>
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des annonces...</div>
@@ -221,6 +227,7 @@
                 if (data.success && data.data && data.data.length > 0) {
                     currentOffres = data.data;
                     populateVilleFilter();
+                    populateEntrepriseFilter();
                     renderStats(computeStats());
                     updateToggleBtns();
                     filterOffres();
@@ -238,6 +245,12 @@
             sel.innerHTML = '<option value="">📍 Toutes les villes</option>' + villes.map(v => `<option value="${v}">${v}</option>`).join('');
         }
 
+        function populateEntrepriseFilter() {
+            const sel = document.getElementById('fOffreEntreprise');
+            const entreprises = [...new Set(currentOffres.map(o => (o.entreprise || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+            sel.innerHTML = '<option value="">🏢 Toutes les entreprises</option>' + entreprises.map(e => `<option value="${e}">${e}</option>`).join('');
+        }
+
         // 2. LE MOTEUR DE FILTRAGE
         function filterOffres() {
             const elSearch = document.getElementById('fOffreRecherche');
@@ -247,6 +260,8 @@
             const qualite = document.getElementById('fOffreQualite').value.toLowerCase();
             const partage = document.getElementById('fOffrePartage').value.toLowerCase();
             const villeFilter = (document.getElementById('fOffreVille').value || "").trim();
+            const entrepriseFilter = (document.getElementById('fOffreEntreprise').value || "").trim();
+            const dateFilter = document.getElementById('fOffreDate').value; // "YYYY-MM-DD" ou ""
 
             let filteredData = currentOffres.filter(o => {
                 const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
@@ -263,8 +278,20 @@
                 if (partage === "non partagée") matchPartage = estPartage === false;
 
                 const matchVille = !villeFilter || (o.ville || "") === villeFilter;
+                const matchEntreprise = !entrepriseFilter || (o.entreprise || "").trim() === entrepriseFilter;
 
-                return matchSearch && matchQualite && matchPartage && matchVille;
+                let matchDate = true;
+                if (dateFilter) {
+                    const d = new Date(o.date);
+                    if (isNaN(d)) {
+                        matchDate = false;
+                    } else {
+                        const [y, m, day] = dateFilter.split('-').map(Number);
+                        matchDate = d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() === day;
+                    }
+                }
+
+                return matchSearch && matchQualite && matchPartage && matchVille && matchEntreprise && matchDate;
             });
 
             // Masquer les obsolètes par défaut
@@ -506,12 +533,17 @@
 
         function computeStats() {
             const now = new Date();
-            const dow = now.getDay(); // 0=dim
+            const dow = now.getDay();
             const diffToMon = (dow === 0 ? -6 : 1 - dow);
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() + diffToMon);
             weekStart.setHours(0, 0, 0, 0);
 
+            const todayY = now.getFullYear(), todayM = now.getMonth(), todayD = now.getDate();
+            const aujourdhui = currentOffres.filter(o => {
+                const d = new Date(o.date);
+                return !isNaN(d) && d.getFullYear() === todayY && d.getMonth() === todayM && d.getDate() === todayD;
+            });
             const cetteSemaine = currentOffres.filter(o => {
                 const d = new Date(o.date);
                 return !isNaN(d) && d >= weekStart;
@@ -532,21 +564,23 @@
                 moyParSemaine = (currentOffres.length / weeksSince).toFixed(1);
             }
 
-            return { cetteSemaine, total: currentOffres.length, moyParSemaine, aQualifier, partagees, obsoletes, verifiees };
+            return { aujourdhui, cetteSemaine, total: currentOffres.length, moyParSemaine, aQualifier, partagees, obsoletes, verifiees };
         }
 
         function renderStats(st) {
             const kpis = [
-                { label: "Cette semaine",   value: st.cetteSemaine.length, sub: "captées",       color: "blue",    data: st.cetteSemaine },
+                { label: "Aujourd'hui",     value: st.aujourdhui.length,   sub: "ajoutées",       color: "orange",  data: st.aujourdhui  },
+                { label: "Cette semaine",   value: st.cetteSemaine.length, sub: "captées",        color: "blue",    data: st.cetteSemaine },
                 { label: "Total captées",   value: st.total,               sub: "depuis le début",color: "indigo",  data: currentOffres  },
-                { label: "Moy. / semaine",  value: st.moyParSemaine,       sub: "offres/sem.",   color: "violet",  data: null           },
-                { label: "À qualifier",     value: st.aQualifier.length,   sub: "en attente",    color: "amber",   data: st.aQualifier  },
-                { label: "Partagées",       value: st.partagees.length,    sub: "diffusées",     color: "teal",    data: st.partagees   },
-                { label: "Obsolètes",       value: st.obsoletes.length,    sub: "à archiver",    color: "red",     data: st.obsoletes   },
-                { label: "Vérifiées",       value: st.verifiees.length,    sub: "validées",      color: "emerald", data: st.verifiees   },
+                { label: "Moy. / semaine",  value: st.moyParSemaine,       sub: "offres/sem.",    color: "violet",  data: null           },
+                { label: "À qualifier",     value: st.aQualifier.length,   sub: "en attente",     color: "amber",   data: st.aQualifier  },
+                { label: "Partagées",       value: st.partagees.length,    sub: "diffusées",      color: "teal",    data: st.partagees   },
+                { label: "Obsolètes",       value: st.obsoletes.length,    sub: "à archiver",     color: "red",     data: st.obsoletes   },
+                { label: "Vérifiées",       value: st.verifiees.length,    sub: "validées",       color: "emerald", data: st.verifiees   },
             ];
 
             const cm = {
+                orange:  { bg: "bg-orange-50",  border: "border-orange-300",  val: "text-orange-700",  sub: "text-orange-400",  h: "hover:bg-orange-100"  },
                 blue:    { bg: "bg-blue-50",    border: "border-blue-200",    val: "text-blue-700",    sub: "text-blue-400",    h: "hover:bg-blue-100"    },
                 indigo:  { bg: "bg-indigo-50",  border: "border-indigo-200",  val: "text-indigo-700",  sub: "text-indigo-400",  h: "hover:bg-indigo-100"  },
                 violet:  { bg: "bg-violet-50",  border: "border-violet-200",  val: "text-violet-700",  sub: "text-violet-400",  h: ""                     },
