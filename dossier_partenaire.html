@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -73,6 +73,12 @@
                     <div class="bg-gradient-to-br from-[#1A4E8A] to-[#002a5c] p-6 rounded-3xl shadow-lg text-white">
                         <h3 class="font-black text-blue-100 mb-4 uppercase tracking-wider text-sm">🎓 Alternants en poste</h3>
                         <div id="listEtu" class="text-sm space-y-3"></div>
+                    </div>
+
+                    <div id="anciensAlternantsBlock" class="hidden bg-amber-50 p-6 rounded-3xl border border-amber-200">
+                        <h3 class="font-black text-amber-700 mb-2 text-sm uppercase tracking-wider">⚠️ Anciens alternants — À confirmer</h3>
+                        <p class="text-xs text-amber-600 mb-4">Ces étudiants semblent avoir quitté cette entreprise. Confirmez leur départ ou signalez une erreur de saisie.</p>
+                        <div id="anciensAlternantsListDP" class="space-y-3"></div>
                     </div>
                 </div>
 
@@ -157,6 +163,30 @@
                     document.getElementById('listEtu').innerHTML = alt.length === 0
                         ? '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>'
                         : alt.map(e => '<div class="bg-white/10 p-3 rounded-xl border border-white/20"><p class="font-bold text-lg leading-tight">' + e.nom + '</p><p class="text-[10px] text-blue-200 uppercase mt-1 font-black tracking-widest">' + e.classe + '</p></div>').join('');
+
+                    // Anciens alternants
+                    const anc = d.anciensAlternants || [];
+                    const ancBlock = document.getElementById('anciensAlternantsBlock');
+                    if (anc.length > 0) {
+                        ancBlock.classList.remove('hidden');
+                        document.getElementById('anciensAlternantsListDP').innerHTML = anc.map(a => {
+                            const dateStr = a.date ? new Date(a.date).toLocaleDateString('fr-FR') : '?';
+                            const isPending = a.status === 'À_confirmer';
+                            return '<div class="bg-white p-3 rounded-xl border border-amber-200 space-y-2">'
+                                + '<div class="flex justify-between items-start gap-2">'
+                                + '<div><p class="font-bold text-gray-800 text-sm">' + (a.prenom||'') + ' ' + (a.nom||'') + '</p>'
+                                + '<p class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">Détecté le ' + dateStr + '</p></div>'
+                                + '<span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black ' + (isPending ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700') + '">' + (isPending ? 'À confirmer' : a.status) + '</span>'
+                                + '</div>'
+                                + (isPending ? '<div class="flex gap-2">'
+                                + '<button onclick="confirmFormerAlternant(\'' + a.id + '\')" class="flex-1 text-xs bg-green-100 text-green-700 font-bold py-1.5 rounded-lg hover:bg-green-200 transition">✓ Confirmer le départ</button>'
+                                + '<button onclick="removeFormerAlternant(\'' + a.id + '\')" class="flex-1 text-xs bg-red-100 text-red-600 font-bold py-1.5 rounded-lg hover:bg-red-200 transition">✗ Erreur de saisie</button>'
+                                + '</div>' : '')
+                                + '</div>';
+                        }).join('');
+                    } else {
+                        ancBlock.classList.add('hidden');
+                    }
 
                     // Offres
                     const offres = d.offres || [];
@@ -325,6 +355,23 @@
             const newVille = prompt("Ville :", adresseData.ville); if (newVille === null) return;
             const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: newAdresse, cp: newCp, ville: newVille });
             if (res.success) loadDetails(); else alert("Erreur : " + res.message);
+        }
+
+        async function confirmFormerAlternant(id) {
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "⏳";
+            const res = await apiPost({ action: 'confirmFormerAlternant', id });
+            if (res.success) loadDetails();
+            else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✓ Confirmer le départ"; }
+        }
+
+        async function removeFormerAlternant(id) {
+            if (!confirm("Marquer cet enregistrement comme erreur de saisie ?")) return;
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "⏳";
+            const res = await apiPost({ action: 'removeFormerAlternant', id });
+            if (res.success) loadDetails();
+            else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✗ Erreur de saisie"; }
         }
 
         async function ajouterOffreRapide() {
