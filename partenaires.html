@@ -538,9 +538,8 @@
             }
 
             lastFilteredPartners = data;
-            _userHasInteracted = false;
             renderPartners(data);
-            refreshMapMarkers();
+            refreshMapMarkers(true);
         }
 
         function exportFilteredView() {
@@ -594,7 +593,6 @@
         // --- CARTE INTERACTIVE ---
         let _map = null, _markerGroup = null, _mapVisible = false;
         let _geocodingToken = 0;
-        let _userHasInteracted = false;
 
         // Cache persistant adresse → coords dans localStorage
         let _geocache = {};
@@ -738,13 +736,8 @@
                     }).addTo(_map);
                     _markerGroup = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false });
                     _map.addLayer(_markerGroup);
-                    // Dès que l'utilisateur zoom ou déplace la carte manuellement, on bloque le fitBounds automatique
-                    _map.on('zoomstart movestart', function(e) {
-                        if (e.originalEvent) _userHasInteracted = true;
-                    });
                 }
-                _userHasInteracted = false;
-                refreshMapMarkers();
+                refreshMapMarkers(true);
                 setTimeout(() => _map.invalidateSize(), 200);
             } else {
                 container.classList.add('hidden');
@@ -798,7 +791,7 @@
             if (el) el.textContent = msg;
         }
 
-        function refreshMapMarkers() {
+        function refreshMapMarkers(fitView = false) {
             if (!_map || !_mapVisible) return;
             _geocodingToken++;
             const token = _geocodingToken;
@@ -822,7 +815,7 @@
                 if (!cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
             });
 
-            if (bounds.length > 0 && !_userHasInteracted) {
+            if (bounds.length > 0 && fitView) {
                 try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
             }
             setTimeout(() => _map.invalidateSize(), 100);
