@@ -596,7 +596,13 @@
 
         // Cache persistant adresse → coords dans localStorage
         let _geocache = {};
-        try { _geocache = JSON.parse(localStorage.getItem('_hecg_geo') || '{}'); } catch(e) {}
+        try {
+            const raw = JSON.parse(localStorage.getItem('_hecg_geo') || '{}');
+            // Purge les anciennes clés basées sur l'ID (format "geo_p_*") invalides
+            for (const k of Object.keys(raw)) {
+                if (!k.startsWith('geo_p_')) _geocache[k] = raw[k];
+            }
+        } catch(e) {}
         function _saveGeoCache() { try { localStorage.setItem('_hecg_geo', JSON.stringify(_geocache)); } catch(e) {} }
 
         const GEO = {
@@ -663,26 +669,55 @@
 
         function getCoordsForLocation(ville, cp) {
             const cpStr = String(cp || "").trim();
-            // Marseille arrondissements via CP (130XX)
+            // Arrondissements Marseille via CP (130XX)
             if (cpStr.match(/^130\d{2}$/)) {
                 const arr = parseInt(cpStr.slice(-2));
-                const k = "marseille " + arr;
-                return GEO[k] || GEO["marseille"];
+                return GEO["marseille " + arr] || GEO["marseille"];
             }
-            // Paris arrondissements via CP (750XX)
+            // Arrondissements Paris via CP (750XX)
             if (cpStr.match(/^750\d{2}$/)) {
                 const arr = parseInt(cpStr.slice(-2));
-                const k = "paris " + arr;
-                return GEO[k] || GEO["paris"];
+                return GEO["paris " + arr] || GEO["paris"];
             }
             const v = _normCity(ville);
             if (!v) return null;
+
+            // 1. Correspondance exacte
             if (GEO[v]) return GEO[v];
-            // Partial match: "marseille 13e arrondissement" → "marseille 13"
-            for (const key of Object.keys(GEO)) {
-                if (v.startsWith(key) || key.startsWith(v)) return GEO[key];
+
+            // 2. Nettoyer suffixe département : "Marignane - 13", "Nice (06)"
+            const stripped = v.replace(/\s*[-–,]\s*\d+.*$/, '').replace(/\s*\(\d+\).*$/, '').trim();
+            if (stripped !== v && GEO[stripped]) return GEO[stripped];
+
+            // 3. Supprimer ordinaux d'arrondissement : "8ème" → "8", "3e" → "3"
+            const stripOrdinal = s => s.replace(/(\d+)\s*(i?eme|ieme|ière|iere|ère|ere|er|e)\b/g, '$1').trim();
+            const vNoOrd = stripOrdinal(v);
+            if (vNoOrd !== v && GEO[vNoOrd]) return GEO[vNoOrd];
+            const strippedNoOrd = stripOrdinal(stripped);
+            if (GEO[strippedNoOrd]) return GEO[strippedNoOrd];
+
+            // 4. Préfixe avec frontière de mot (clés longues en premier)
+            const candidates = [v, stripped, vNoOrd, strippedNoOrd].filter((s, i, a) => s && a.indexOf(s) === i);
+            const sortedKeys = Object.keys(GEO).sort((a, b) => b.length - a.length);
+            for (const c of candidates) {
+                for (const key of sortedKeys) {
+                    if (c === key) continue;
+                    if (c.length > key.length) {
+                        const ch = c[key.length];
+                        if (c.startsWith(key) && (ch === ' ' || ch === '-' || ch === ',' || ch === '(')) return GEO[key];
+                    } else if (key.length > c.length) {
+                        const ch = key[c.length];
+                        if (key.startsWith(c) && (ch === ' ' || ch === '-')) return GEO[key];
+                    }
+                }
             }
             return null;
+        }
+
+        // Clé de cache basée sur l'adresse (invalidation automatique si l'adresse change)
+        function _geocacheKey(p) {
+            const addr = [p.adresse, p.cp, p.ville].filter(Boolean).join('|').toLowerCase().replace(/\s+/g, ' ').trim();
+            return 'geo_addr_' + addr.replace(/[^a-z0-9|]/g, '_').slice(0, 120);
         }
 
         function toggleMap() {
@@ -767,7 +802,7 @@
             const toGeocode = [];
 
             lastFilteredPartners.forEach(p => {
-                const cacheKey = `geo_p_${p.id}`;
+                const cacheKey = _geocacheKey(p);
                 const cachedCoords = _geocache[cacheKey];
                 const fallback = getCoordsForLocation(p.ville, p.cp);
                 const coords = cachedCoords || fallback;
@@ -792,7 +827,7 @@
             let done = 0;
             for (const p of partners) {
                 if (_geocodingToken !== token) return;
-                const cacheKey = `geo_p_${p.id}`;
+                const cacheKey = _geocacheKey(p);
                 if (_geocache[cacheKey]) { done++; continue; }
 
                 const q = p.adresse && p.cp && p.ville
