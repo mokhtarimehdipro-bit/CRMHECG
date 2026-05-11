@@ -77,9 +77,15 @@
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <h3 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">📝 Carnet de route (Échanges)</h3>
                         
-                        <div id="zoneSaisieNote" class="flex space-x-2 mb-6 bg-gray-50 p-2 rounded-xl">
-                            <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
-                            <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
+                        <div id="zoneSaisieNote" class="flex flex-col space-y-1 mb-6 bg-gray-50 p-2 rounded-xl">
+                            <div class="flex space-x-2">
+                                <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
+                                <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
+                            </div>
+                            <label class="flex items-center gap-2 text-[10px] font-bold text-gray-400 cursor-pointer px-2 pb-1 select-none">
+                                <input type="checkbox" id="noteVisible" checked class="rounded accent-[#1A4E8A]">
+                                Visible pour l'étudiant
+                            </label>
                         </div>
                         <div id="zoneSaisieNoteEtu" class="hidden mb-6">
                             <p class="text-[10px] font-black uppercase text-[#F26522] mb-2">✏️ Ma mise à jour / message</p>
@@ -215,7 +221,7 @@
 
         async function loadDossier() {
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId }) });
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId, requesterRole: currentUser.role }) });
                 const data = await res.json();
                 
                 if (data.success) {
@@ -252,8 +258,11 @@
                     document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI;
 
                     document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
-                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 border-[#F26522]">
-                            <p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(n.date).toLocaleDateString('fr-FR')} — Par ${n.auteur}</p>
+                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${n.visible === false ? 'border-gray-300 opacity-60' : 'border-[#F26522]'}">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase mb-1">
+                                ${new Date(n.date).toLocaleDateString('fr-FR')} — Par ${n.auteur}
+                                ${n.visible === false ? '<span class="ml-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full text-[9px] normal-case">🙈 Masqué pour l\'étudiant</span>' : ''}
+                            </p>
                             <p class="text-sm text-gray-700 font-medium">${n.texte}</p>
                         </div>
                     `).join('') || '<p class="text-gray-400 italic text-center py-2">Aucun échange enregistré.</p>';
@@ -284,7 +293,8 @@
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
             const btn = event.target; btn.innerText = "..."; btn.disabled = true;
-            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt });
+            const visible = document.getElementById('noteVisible').checked;
+            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, visibleEtudiant: visible });
             document.getElementById('noteTexte').value = "";
             btn.innerText = "Noter"; btn.disabled = false;
             loadDossier();
