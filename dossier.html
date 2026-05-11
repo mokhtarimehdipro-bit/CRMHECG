@@ -357,11 +357,9 @@
             btn.disabled = true;
 
             const payload = {
-                action: 'updateStudent',
+                action: 'changeStudentMdp',
                 id_etu: studentId,
-                mdp: document.getElementById('etuMdp').value,
-                nom: document.getElementById('etuNom').innerText.split(' ')[1], // Récupération simple
-                prenom: document.getElementById('etuNom').innerText.split(' ')[0]
+                mdp: document.getElementById('etuMdp').value
             };
 
             const res = await apiPost(payload);
