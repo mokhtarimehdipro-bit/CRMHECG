@@ -122,7 +122,7 @@
                 </section>
 
                 <section class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
-                    <div class="flex justify-between items-center mb-6 border-b pb-2 cursor-pointer group" onclick="openDetail('Tous les étudiants sortis', rawData.sorties)">
+                    <div class="flex justify-between items-center mb-6 border-b pb-2 cursor-pointer group" onclick="openDetail('Tous les étudiants sortis', filteredData.sorties)">
                         <h2 class="text-xl font-black text-gray-800 group-hover:text-red-500 transition">4. Sorties (Attrition)</h2>
                         <span class="bg-red-100 text-red-600 font-black px-4 py-1 rounded-xl text-sm" id="kpi-sorties-tot">0 Sorties</span>
                     </div>
@@ -171,7 +171,7 @@ let chartSortiesInst = null;
                 if(elements.length > 0) {
                     const idx = elements[0].index; const label = chart.data.labels[idx];
                     const datasetName = chart.canvas.id;
-                    if(datasetName === 'chartSorties') openDetail(`Sorties : ${label}`, rawData.sorties.filter(x => x.motif === label));
+                    if(datasetName === 'chartSorties') openDetail(`Sorties : ${label}`, filteredData.sorties.filter(x => (x.motif || "Non précisé") === label));
                 }
             }
         };
@@ -230,7 +230,7 @@ function applyCampusFilter() {
             document.getElementById('kpi-sorties-tot').innerText = d.sorties.length + " Sorties";
 
             const motifMap = {};
-            d.sorties.forEach(e => { motifMap[e.motif] = (motifMap[e.motif] || 0) + 1; });
+            d.sorties.forEach(e => { const m = e.motif || "Non précisé"; motifMap[m] = (motifMap[m] || 0) + 1; });
             
             if(chartSortiesInst) chartSortiesInst.destroy();
             chartSortiesInst = new Chart(document.getElementById('chartSorties'), { 
