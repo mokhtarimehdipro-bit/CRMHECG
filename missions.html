@@ -49,6 +49,7 @@
         </div>
         <div class="flex gap-3 flex-wrap">
             <button onclick="loadMissions()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition text-sm">🔄 Rafraîchir</button>
+            <button id="btnAspirer" onclick="aspirerMaintenant()" class="hidden bg-amber-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-amber-600 transition text-sm">📬 Aspirer mes mails</button>
             <button id="btnExportCurrent" onclick="exportCSV(false)" class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition text-sm">📥 Exporter la vue</button>
             <button id="btnExportAll" onclick="exportCSV(true)" class="hidden bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition text-sm">📦 Export global (toutes)</button>
         </div>
@@ -191,6 +192,9 @@ window.onload = () => {
         document.getElementById('navHistorique').classList.remove('hidden');
         document.getElementById('btnExportAll').classList.remove('hidden');
     }
+    if (isAdmin) {
+        document.getElementById('btnAspirer').classList.remove('hidden');
+    }
     if (!isAdmin) {
         // Collaborateur : masque le filtre collab (inutile, vue filtrée serveur)
         document.getElementById('wrapCollab').classList.add('hidden');
@@ -205,6 +209,40 @@ async function apiPost(payload) {
     payload.emailAuteur = user.email || "";
     const r = await fetch(API_URL, { method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
     return r.json();
+}
+
+// ── ASPIRATION À LA DEMANDE ────────────────────────────────────────────────
+async function aspirerMaintenant() {
+    const btn = document.getElementById('btnAspirer');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Aspiration en cours…';
+    try {
+        const res = await apiPost({ action: 'aspirerMissionsNow' });
+        if (res.success) {
+            if (res.nb === 0) {
+                showToast('Aucun nouveau mail #mission trouvé (déjà traités ou absents).', 'info');
+            } else {
+                showToast(`✅ ${res.nb} mission(s) importée(s) depuis Gmail !`, 'success');
+                await loadMissions();
+            }
+        } else {
+            showToast('Erreur : ' + res.message, 'error');
+        }
+    } catch(e) {
+        showToast('Erreur réseau : ' + e.message, 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = orig;
+}
+
+function showToast(msg, type) {
+    const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-gray-600' };
+    const t = document.createElement('div');
+    t.className = `fixed bottom-6 right-6 z-[100] ${colors[type]||'bg-gray-700'} text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold transition-all`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
 }
 
 // ── CHARGEMENT ─────────────────────────────────────────────────────────────
