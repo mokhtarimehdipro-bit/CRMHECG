@@ -73,7 +73,7 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    localStorage.setItem('user', JSON.stringify({ role: data.role, nom: data.nom, ref: data.ref }));
+                    localStorage.setItem('user', JSON.stringify({ role: data.role, nom: data.nom, ref: data.ref, email: data.email || "" }));
                     
                     btn.innerText = "Connexion réussie !";
                     btn.classList.replace('bg-[#F26522]', 'bg-green-500');
