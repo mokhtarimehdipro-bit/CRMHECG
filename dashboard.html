@@ -275,29 +275,34 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         // LA STATION D'EXPÉDITION CENTRALE
 async function apiPost(payload) {
-    // 1. On récupère ton identité stockée lors de la connexion
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    
-    // 2. On "signe" le colis avec ton nom et ton rôle
     payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
     payload.roleAuteur = userSession.role || "Utilisateur";
 
-    // 3. On envoie le colis au script Google
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
-        const result = await response.json();
-        
-        // Petite sécurité : si le serveur dit que ça a échoué
-        if (!result.success) console.error("Erreur API:", result.message);
-        
-        return result;
+        clearTimeout(timeoutId);
+        const text = await response.text();
+        try {
+            const result = JSON.parse(text);
+            if (!result.success) console.error("Erreur API:", result.message);
+            return result;
+        } catch(parseErr) {
+            console.error("Réponse non-JSON du serveur:", text.substring(0, 200));
+            return { success: false, message: "Réponse invalide du serveur (non-JSON). Vérifiez l'autorisation GAS." };
+        }
     } catch (e) {
+        clearTimeout(timeoutId);
         console.error("Erreur de connexion au serveur:", e);
-        return { success: false, message: "Erreur réseau" };
+        return { success: false, message: e.name === 'AbortError' ? "Timeout 35s — le serveur GAS ne répond pas" : "Erreur réseau : " + e.message };
     }
 }
         let fullData = [];
@@ -679,26 +684,40 @@ async function saveStudent() {
     btn.innerText = "Enregistrement...";
     btn.disabled = true;
 
-    let finalCvUrl = document.getElementById('formCVUrl').value;
-    const cvFile = document.getElementById('formCVFile').files[0];
-    
-    if (cvFile) {
-        const reader = new FileReader();
-        reader.onload = async function() {
-            const base64 = reader.result.split(',')[1];
-            const resCV = await apiPost({
-                action: 'uploadCV',
-                fileName: cvFile.name,
-                mimeType: cvFile.type,
-                base64Data: base64,
-                userId: document.getElementById('formId').value || 'NOUVEAU'
-            });
-            if (resCV.success) finalCvUrl = resCV.url;
+    try {
+        let finalCvUrl = document.getElementById('formCVUrl').value;
+        const cvFile = document.getElementById('formCVFile').files[0];
+
+        if (cvFile) {
+            const reader = new FileReader();
+            reader.onload = async function() {
+                try {
+                    const base64 = reader.result.split(',')[1];
+                    const resCV = await apiPost({
+                        action: 'uploadCV',
+                        fileName: cvFile.name,
+                        mimeType: cvFile.type,
+                        base64Data: base64,
+                        userId: document.getElementById('formId').value || 'NOUVEAU'
+                    });
+                    if (resCV.success) finalCvUrl = resCV.url;
+                    await envoyerSaveEtu(finalCvUrl);
+                } catch(e) {
+                    btn.disabled = false;
+                    btn.innerText = "Enregistrer";
+                    alert("Erreur lors de la sauvegarde (CV) : " + e.message);
+                    console.error(e);
+                }
+            };
+            reader.readAsDataURL(cvFile);
+        } else {
             await envoyerSaveEtu(finalCvUrl);
-        };
-        reader.readAsDataURL(cvFile);
-    } else {
-        await envoyerSaveEtu(finalCvUrl);
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.innerText = "Enregistrer";
+        alert("Erreur lors de la sauvegarde : " + e.message);
+        console.error(e);
     }
 }
 
@@ -726,20 +745,16 @@ async function envoyerSaveEtu(finalCvUrl) {
     let logIntelligent = "Création du dossier étudiant.";
     if (idValue) {
         const ancienEtu = fullData.find(x => x.id === idValue);
-        const newStatut = document.getElementById('formStatut').value;
-        const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
-        const newEnt = finalNomEnt; 
 
         if (ancienEtu) {
-            let listModifs = [];
             const newStatut = document.getElementById('formStatut').value;
+            const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
+            let listModifs = [];
             if ((ancienEtu.statut || "").trim() !== newStatut.trim())
                 listModifs.push(`Statut: ${ancienEtu.statut || '—'} → ${newStatut}`);
 
             if ((ancienEtu.entreprise || "").trim() !== finalNomEnt.trim())
                 listModifs.push(`Entreprise: ${ancienEtu.entreprise || 'Aucune'} → ${finalNomEnt || 'Aucune'}`);
-
-            const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
             if ((ancienEtu.classe || "").trim() !== newClasse)
                 listModifs.push(`Classe: ${ancienEtu.classe || '—'} → ${newClasse}`);
 
