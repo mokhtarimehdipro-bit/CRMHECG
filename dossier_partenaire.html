@@ -385,6 +385,7 @@
         
         loadDetails();
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </body>
 </html>
