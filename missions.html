@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HECG - Pilotage des Missions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .card-mission { transition: transform .15s, box-shadow .15s; }
+        .card-mission:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,.10); }
+        .toggle-btn.active { background: #1A4E8A; color: #fff; }
+        .toggle-btn-green.active  { background: #16a34a; color: #fff; }
+        .toggle-btn-blue.active   { background: #2563eb; color: #fff; }
+        .toggle-btn-red.active    { background: #dc2626; color: #fff; }
+        @keyframes fadeInUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        .card-anim { animation: fadeInUp .2s ease both; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- NAV -->
+<nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+    <div class="flex items-center space-x-4">
+        <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+        <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+            <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+            <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+            <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+            <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+            <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+            <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
+            <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+            <a href="missions.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Missions</a>
+            <a href="historique.html" id="navHistorique" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
+        </div>
+    </div>
+    <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+</nav>
+
+<main class="max-w-7xl mx-auto p-8">
+
+    <!-- TITRE + ACTIONS -->
+    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <div>
+            <h1 class="text-3xl font-black text-[#1A4E8A]">Pilotage des Missions</h1>
+            <p id="subtitleCollab" class="text-sm text-gray-400 font-bold mt-1">Toutes les missions</p>
+        </div>
+        <div class="flex gap-3 flex-wrap">
+            <button onclick="loadMissions()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition text-sm">🔄 Rafraîchir</button>
+            <button id="btnExportCurrent" onclick="exportCSV(false)" class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition text-sm">📥 Exporter la vue</button>
+            <button id="btnExportAll" onclick="exportCSV(true)" class="hidden bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition text-sm">📦 Export global (toutes)</button>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition" onclick="switchView('tous')">
+            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
+            <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpiTotal">0</p>
+        </div>
+        <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-200 cursor-pointer hover:shadow-md transition" onclick="switchView('Attribué')">
+            <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">En cours</p>
+            <p class="text-3xl font-black text-amber-700 mt-1" id="kpiAttribue">0</p>
+        </div>
+        <div class="bg-green-50 p-5 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Clôturé')">
+            <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Clôturées</p>
+            <p class="text-3xl font-black text-green-700 mt-1" id="kpiCloture">0</p>
+        </div>
+        <div class="bg-blue-50 p-5 rounded-2xl shadow-sm border border-blue-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Annulé')">
+            <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Annulées</p>
+            <p class="text-3xl font-black text-blue-700 mt-1" id="kpiAnnule">0</p>
+        </div>
+        <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Problématique')">
+            <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Problématiques</p>
+            <p class="text-3xl font-black text-red-700 mt-1" id="kpiProbleme">0</p>
+        </div>
+    </div>
+
+    <!-- BARRE FILTRES + TOGGLE VUES -->
+    <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-6">
+        <!-- Filtres -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Recherche</label>
+                <input type="text" id="fSearch" placeholder="Objet, collaborateur, note..." oninput="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+            </div>
+            <div id="wrapCollab">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Collaborateur</label>
+                <select id="fCollab" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                    <option value="">Tous</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Du</label>
+                <input type="date" id="fDateDebut" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Au</label>
+                <input type="date" id="fDateFin" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+            </div>
+        </div>
+        <!-- Toggles vues -->
+        <div class="flex flex-wrap gap-2 pt-3 border-t border-gray-50 items-center">
+            <span class="text-[10px] font-black text-gray-400 uppercase mr-1">Vue :</span>
+            <button id="btn-Attribué" onclick="switchView('Attribué')" class="toggle-btn active px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-amber-400 text-amber-700 bg-amber-50 transition">🟡 En cours</button>
+            <button id="btn-Clôturé" onclick="switchView('Clôturé')" class="toggle-btn-green px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-green-300 text-green-700 bg-white transition">✅ Clôturées</button>
+            <button id="btn-Annulé" onclick="switchView('Annulé')" class="toggle-btn-blue px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-blue-300 text-blue-700 bg-white transition">🔵 Annulées</button>
+            <button id="btn-Problématique" onclick="switchView('Problématique')" class="toggle-btn-red px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-red-300 text-red-700 bg-white transition">🔴 Problématiques</button>
+            <button onclick="resetFilters()" class="ml-auto px-4 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Réinitialiser</button>
+        </div>
+    </div>
+
+    <!-- ZONE CARTES -->
+    <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des missions...</div>
+    <div id="emptyState" class="hidden text-center py-20">
+        <p class="text-5xl mb-4">📭</p>
+        <p class="text-gray-400 font-bold text-lg">Aucune mission dans cette catégorie.</p>
+        <p class="text-gray-300 text-sm mt-1">Les missions aspirées depuis Gmail apparaîtront ici.</p>
+    </div>
+    <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+
+</main>
+
+<!-- ========== MODALE DETAIL ========== -->
+<div id="modalDetail" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-10 px-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <!-- Header modale -->
+        <div id="modalHeader" class="p-6 rounded-t-3xl flex justify-between items-start gap-4">
+            <div class="flex-1 min-w-0">
+                <p class="text-[9px] font-black uppercase tracking-widest text-white/70 mb-1" id="modalCollab">—</p>
+                <h2 class="text-lg font-black text-white leading-tight" id="modalObjet">—</h2>
+                <p class="text-xs text-white/70 mt-1" id="modalMeta">—</p>
+            </div>
+            <button onclick="closeModal()" class="text-white/60 hover:text-white text-2xl font-black flex-shrink-0">✕</button>
+        </div>
+        <!-- Body modale scrollable -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5">
+            <!-- CC -->
+            <div id="sectionCC" class="hidden">
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Copies (CC)</p>
+                <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCC">—</p>
+            </div>
+            <!-- Corps -->
+            <div>
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Corps du message</p>
+                <pre class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-2xl p-4 whitespace-pre-wrap font-sans border border-gray-100 max-h-52 overflow-y-auto custom-scrollbar" id="modalCorps">—</pre>
+            </div>
+            <!-- Statut (admin seulement) -->
+            <div id="sectionStatut" class="hidden">
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Modifier le statut</p>
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="changeStatut('Attribué')"    class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">🟡 Attribué</button>
+                    <button onclick="changeStatut('Clôturé')"     class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition">✅ Clôturé</button>
+                    <button onclick="changeStatut('Annulé')"      class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition">🔵 Annulé</button>
+                    <button onclick="changeStatut('Problématique')" class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition">🔴 Problématique</button>
+                </div>
+            </div>
+            <!-- Notes historique -->
+            <div>
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Notes & suivi</p>
+                <div id="modalNotes" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar"></div>
+            </div>
+            <!-- Ajouter une note -->
+            <div class="pt-3 border-t border-gray-100">
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Ajouter une note</p>
+                <div class="flex gap-2">
+                    <textarea id="inputNote" rows="2" placeholder="Ex : Mission complétée, retour client positif..." class="flex-1 px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
+                    <button onclick="saveNote()" id="btnSaveNote" class="bg-[#1A4E8A] text-white px-5 rounded-xl font-black text-sm hover:bg-blue-800 transition self-stretch">Envoyer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+const isAdmin = user.role === "Administrateur" || (user.email || "").toLowerCase() === "m.mokhtari@hecg.fr";
+
+let allMissions = [];     // données brutes
+let filteredMissions = []; // après filtres texte/date/collab
+let currentView = "Attribué"; // vue active
+let currentMissionId = null;
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+window.onload = () => {
+    if (!user || !user.role) { window.location.href = 'index.html'; return; }
+    if (user.role === "Administrateur") {
+        document.getElementById('navHistorique').classList.remove('hidden');
+        document.getElementById('btnExportAll').classList.remove('hidden');
+    }
+    if (!isAdmin) {
+        // Collaborateur : masque le filtre collab (inutile, vue filtrée serveur)
+        document.getElementById('wrapCollab').classList.add('hidden');
+        document.getElementById('subtitleCollab').textContent = "Mes missions";
+    }
+    loadMissions();
+};
+
+async function apiPost(payload) {
+    payload.idAuteur    = user.nom || "Inconnu";
+    payload.roleAuteur  = user.role || "N/A";
+    payload.emailAuteur = user.email || "";
+    const r = await fetch(API_URL, { method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
+    return r.json();
+}
+
+// ── CHARGEMENT ─────────────────────────────────────────────────────────────
+async function loadMissions() {
+    document.getElementById('loader').classList.remove('hidden');
+    document.getElementById('cardsGrid').innerHTML = '';
+    document.getElementById('emptyState').classList.add('hidden');
+    try {
+        const res = await apiPost({ action: 'getMissions' });
+        if (res.success) {
+            allMissions = res.data || [];
+            buildCollabFilter();
+            updateKPIs();
+            applyFilters();
+        }
+    } catch(e) { console.error(e); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ── FILTRES ────────────────────────────────────────────────────────────────
+function buildCollabFilter() {
+    const collabs = [...new Set(allMissions.map(m => m.collab).filter(Boolean))].sort();
+    const sel = document.getElementById('fCollab');
+    sel.innerHTML = '<option value="">Tous</option>' + collabs.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function applyFilters() {
+    const search    = document.getElementById('fSearch').value.toLowerCase();
+    const collab    = document.getElementById('fCollab').value;
+    const dateDebut = document.getElementById('fDateDebut').value;
+    const dateFin   = document.getElementById('fDateFin').value;
+
+    // D'abord : filtre statut (vue active)
+    let base = currentView === 'tous'
+        ? allMissions
+        : allMissions.filter(m => m.statut === currentView);
+
+    // Puis : filtres texte / collab / date
+    filteredMissions = base.filter(m => {
+        const txt = (m.objet + ' ' + m.collab + ' ' + m.corps + ' ' + m.notes).toLowerCase();
+        if (search && !txt.includes(search)) return false;
+        if (collab && m.collab !== collab) return false;
+        if (dateDebut || dateFin) {
+            // Date stockée en dd/MM/yyyy
+            const parts = (m.date || '').split('/');
+            if (parts.length === 3) {
+                const d = new Date(parts[2], parts[1]-1, parts[0]);
+                if (dateDebut && d < new Date(dateDebut)) return false;
+                if (dateFin   && d > new Date(dateFin + 'T23:59:59')) return false;
+            }
+        }
+        return true;
+    });
+
+    renderCards(filteredMissions);
+    updateKPIs();
+}
+
+function resetFilters() {
+    document.getElementById('fSearch').value = '';
+    document.getElementById('fCollab').value = '';
+    document.getElementById('fDateDebut').value = '';
+    document.getElementById('fDateFin').value = '';
+    applyFilters();
+}
+
+// ── VUE (TOGGLE) ───────────────────────────────────────────────────────────
+const VIEW_MAP = {
+    'Attribué':      { btn:'btn-Attribué',      cls:'toggle-btn',       activeCls:'active', label:'🟡 En cours' },
+    'Clôturé':       { btn:'btn-Clôturé',       cls:'toggle-btn-green', activeCls:'active', label:'✅ Clôturées' },
+    'Annulé':        { btn:'btn-Annulé',        cls:'toggle-btn-blue',  activeCls:'active', label:'🔵 Annulées' },
+    'Problématique': { btn:'btn-Problématique', cls:'toggle-btn-red',   activeCls:'active', label:'🔴 Problématiques' },
+};
+
+function switchView(view) {
+    currentView = view;
+    // Réinitialise tous les boutons
+    Object.values(VIEW_MAP).forEach(v => {
+        const el = document.getElementById(v.btn);
+        if (el) el.classList.remove('active');
+    });
+    if (VIEW_MAP[view]) {
+        const el = document.getElementById(VIEW_MAP[view].btn);
+        if (el) el.classList.add('active');
+    }
+    applyFilters();
+}
+
+// ── KPIs ───────────────────────────────────────────────────────────────────
+function updateKPIs() {
+    document.getElementById('kpiTotal').textContent    = allMissions.length;
+    document.getElementById('kpiAttribue').textContent = allMissions.filter(m => m.statut === 'Attribué').length;
+    document.getElementById('kpiCloture').textContent  = allMissions.filter(m => m.statut === 'Clôturé').length;
+    document.getElementById('kpiAnnule').textContent   = allMissions.filter(m => m.statut === 'Annulé').length;
+    document.getElementById('kpiProbleme').textContent = allMissions.filter(m => m.statut === 'Problématique').length;
+}
+
+// ── RENDU CARTES ───────────────────────────────────────────────────────────
+const STATUT_STYLE = {
+    'Attribué':      { card:'border-amber-300 bg-white',       badge:'bg-amber-100 text-amber-800 border border-amber-300',    header:'bg-amber-500' },
+    'Clôturé':       { card:'border-green-300 bg-white',       badge:'bg-green-100 text-green-800 border border-green-300',    header:'bg-green-600' },
+    'Annulé':        { card:'border-blue-300 bg-white',        badge:'bg-blue-100 text-blue-800 border border-blue-300',       header:'bg-blue-600' },
+    'Problématique': { card:'border-red-400 bg-red-50',        badge:'bg-red-100 text-red-800 border border-red-400',          header:'bg-red-600' },
+};
+const STATUT_ICON = { 'Attribué':'🟡', 'Clôturé':'✅', 'Annulé':'🔵', 'Problématique':'🔴' };
+
+function renderCards(missions) {
+    const grid = document.getElementById('cardsGrid');
+    const empty = document.getElementById('emptyState');
+    if (!missions.length) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+    grid.innerHTML = missions.map((m, idx) => {
+        const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
+        const icon = STATUT_ICON[m.statut] || '🟡';
+        const bodyPreview = m.corps.replace(/\n/g,' ').substring(0, 120) + (m.corps.length > 120 ? '…' : '');
+        const nbNotes = m.notes ? m.notes.split('\n').filter(l => l.trim().startsWith('[')).length : 0;
+        return `
+        <div class="card-mission card-anim border-2 ${st.card} rounded-3xl p-5 cursor-pointer"
+             style="animation-delay:${idx * 30}ms"
+             onclick="openModal('${m.id}')">
+            <div class="flex justify-between items-start mb-3 gap-2">
+                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">${m.date} ${m.heure ? '· ' + m.heure : ''}</span>
+                <span class="text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${st.badge} flex-shrink-0">${icon} ${m.statut}</span>
+            </div>
+            <h3 class="font-black text-gray-800 text-sm leading-snug mb-2 line-clamp-2">${escHtml(m.objet)}</h3>
+            <div class="flex items-center gap-2 mb-3">
+                <span class="inline-block w-7 h-7 rounded-full bg-[#1A4E8A] text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">${initials(m.collab)}</span>
+                <span class="text-xs font-bold text-gray-600 truncate">${escHtml(m.collab)}</span>
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed line-clamp-2">${escHtml(bodyPreview)}</p>
+            ${nbNotes ? `<p class="mt-3 text-[9px] text-gray-400 font-black uppercase">💬 ${nbNotes} note${nbNotes > 1 ? 's' : ''}</p>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function initials(name) {
+    if (!name) return '?';
+    return name.trim().split(/\s+/).map(w => w[0]).join('').substring(0,2).toUpperCase();
+}
+function escHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── MODALE ─────────────────────────────────────────────────────────────────
+function openModal(id) {
+    const m = allMissions.find(x => x.id === id);
+    if (!m) return;
+    currentMissionId = id;
+    const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
+
+    // Header couleur
+    document.getElementById('modalHeader').className = `p-6 rounded-t-3xl flex justify-between items-start gap-4 ${st.header}`;
+    document.getElementById('modalCollab').textContent = m.collab || '—';
+    document.getElementById('modalObjet').textContent  = m.objet  || '(Sans objet)';
+    document.getElementById('modalMeta').textContent   = `📅 ${m.date} ${m.heure ? '· ' + m.heure : ''} ${m.dateMaj ? '· Mis à jour ' + m.dateMaj : ''}`;
+
+    // CC
+    if (m.cc && m.cc.trim()) {
+        document.getElementById('modalCC').textContent = m.cc;
+        document.getElementById('sectionCC').classList.remove('hidden');
+    } else {
+        document.getElementById('sectionCC').classList.add('hidden');
+    }
+
+    // Corps
+    document.getElementById('modalCorps').textContent = m.corps || '(Aucun contenu)';
+
+    // Statut (admin seulement)
+    document.getElementById('sectionStatut').classList.toggle('hidden', !isAdmin);
+
+    // Notes
+    renderNotes(m.notes);
+    document.getElementById('inputNote').value = '';
+    document.getElementById('modalDetail').classList.remove('hidden');
+}
+
+function renderNotes(notesRaw) {
+    const container = document.getElementById('modalNotes');
+    if (!notesRaw || !notesRaw.trim()) {
+        container.innerHTML = '<p class="text-xs text-gray-300 italic">Aucune note pour l\'instant.</p>';
+        return;
+    }
+    const lines = notesRaw.split('\n').filter(l => l.trim());
+    container.innerHTML = lines.map(l => {
+        const isNote = l.trim().startsWith('[');
+        return `<div class="text-xs ${isNote ? 'bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-gray-700' : 'text-gray-500 italic px-1'}">${escHtml(l)}</div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+}
+
+function closeModal() {
+    document.getElementById('modalDetail').classList.add('hidden');
+    currentMissionId = null;
+}
+document.getElementById('modalDetail').addEventListener('click', e => {
+    if (e.target === document.getElementById('modalDetail')) closeModal();
+});
+
+// ── CHANGEMENT STATUT ──────────────────────────────────────────────────────
+async function changeStatut(newStatut) {
+    if (!currentMissionId) return;
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '…';
+    const res = await apiPost({ action: 'updateMissionStatus', id: currentMissionId, statut: newStatut });
+    btn.disabled = false; btn.textContent = orig;
+    if (res.success) {
+        // Met à jour localement et ferme
+        const m = allMissions.find(x => x.id === currentMissionId);
+        if (m) { m.statut = newStatut; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
+        closeModal();
+        updateKPIs();
+        applyFilters(); // La carte disparaît de la vue actuelle si statut différent
+    } else {
+        alert('Erreur : ' + res.message);
+    }
+}
+
+// ── AJOUT NOTE ─────────────────────────────────────────────────────────────
+async function saveNote() {
+    const note = document.getElementById('inputNote').value.trim();
+    if (!note || !currentMissionId) return;
+    const btn = document.getElementById('btnSaveNote');
+    btn.disabled = true; btn.textContent = '…';
+    const res = await apiPost({ action: 'addMissionNote', id: currentMissionId, note: note });
+    btn.disabled = false; btn.textContent = 'Envoyer';
+    if (res.success) {
+        // Mise à jour locale des notes
+        const m = allMissions.find(x => x.id === currentMissionId);
+        if (m) {
+            const now = new Date().toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+            const ligne = `[${now} — ${user.nom || '?'}] ${note}`;
+            m.notes = m.notes ? m.notes + '\n' + ligne : ligne;
+            m.dateMaj = new Date().toLocaleDateString('fr-FR');
+            renderNotes(m.notes);
+        }
+        document.getElementById('inputNote').value = '';
+    } else {
+        alert('Erreur : ' + res.message);
+    }
+}
+
+// ── EXPORT CSV ─────────────────────────────────────────────────────────────
+function exportCSV(global) {
+    const liste = global ? allMissions : filteredMissions;
+    if (!liste.length) { alert('Aucune mission à exporter.'); return; }
+    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Mise à jour'];
+    const escape = v => '"' + String(v||'').replace(/"/g,'""') + '"';
+    let csv = headers.map(escape).join(';') + '\n';
+    liste.forEach(m => {
+        csv += [m.id, m.date, m.heure, m.email, m.collab, m.cc, m.objet, m.corps, m.statut, m.notes, m.dateMaj].map(escape).join(';') + '\n';
+    });
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global ? '_GLOBAL' : '_vue'}.csv`;
+    a.click();
+}
+</script>
+</body>
+</html>
