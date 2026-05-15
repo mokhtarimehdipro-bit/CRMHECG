@@ -731,22 +731,36 @@ async function envoyerSaveEtu(finalCvUrl) {
 
         if (ancienEtu) {
             let listModifs = [];
-            if ((ancienEtu.statut || "").trim() !== document.getElementById('formStatut').value.trim()) 
-                listModifs.push(`Statut: ${document.getElementById('formStatut').value}`);
-            
-            if ((ancienEtu.entreprise || "").trim() !== finalNomEnt.trim()) 
-                listModifs.push(`Entreprise: ${finalNomEnt || 'Aucune'}`);
-            
-            if ((ancienEtu.classe || "").trim() !== (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim())
-                listModifs.push(`Classe: ${document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value}`);
+            const newStatut = document.getElementById('formStatut').value;
+            if ((ancienEtu.statut || "").trim() !== newStatut.trim())
+                listModifs.push(`Statut: ${ancienEtu.statut || '—'} → ${newStatut}`);
+
+            if ((ancienEtu.entreprise || "").trim() !== finalNomEnt.trim())
+                listModifs.push(`Entreprise: ${ancienEtu.entreprise || 'Aucune'} → ${finalNomEnt || 'Aucune'}`);
+
+            const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
+            if ((ancienEtu.classe || "").trim() !== newClasse)
+                listModifs.push(`Classe: ${ancienEtu.classe || '—'} → ${newClasse}`);
 
             const newMotif = document.getElementById('formMotif').value;
-            if ((ancienEtu.motif || "").trim() !== newMotif.trim())
-                listModifs.push(`Motif sortie: ${newMotif || 'Retiré'}`);
+            if ((ancienEtu.motif || "").trim() !== newMotif.trim() && (ancienEtu.motif || newMotif))
+                listModifs.push(`Motif sortie: ${ancienEtu.motif || '—'} → ${newMotif || 'Retiré'}`);
 
             const newTypo = document.getElementById('formForceTypo').value;
             if ((ancienEtu.typo || "").trim().toUpperCase() !== newTypo.trim().toUpperCase())
-                listModifs.push(`Typo: ${newTypo}`);
+                listModifs.push(`Typo: ${ancienEtu.typo || '—'} → ${newTypo}`);
+
+            const newMail = document.getElementById('formMail').value;
+            if ((ancienEtu.mail || "").trim() !== newMail.trim())
+                listModifs.push(`Mail: ${ancienEtu.mail || '—'} → ${newMail}`);
+
+            const newTel = document.getElementById('formTel').value;
+            if ((ancienEtu.tel || "").trim() !== newTel.trim() && newTel)
+                listModifs.push(`Tél: ${ancienEtu.tel || '—'} → ${newTel}`);
+
+            const newCampus = document.getElementById('formCampus') ? document.getElementById('formCampus').value : "";
+            if ((ancienEtu.campus || "").trim() !== newCampus.trim() && newCampus)
+                listModifs.push(`Campus: ${ancienEtu.campus || '—'} → ${newCampus}`);
 
             if (listModifs.length > 0) {
                 logIntelligent = "Modif: " + listModifs.join(" | ");
@@ -796,7 +810,7 @@ async function envoyerSaveEtu(finalCvUrl) {
         }
         await loadDashboardData();
     } else {
-        alert("Erreur : " + res.message);
+        alert("Erreur : " + (res.message || "Inconnue"));
     }
 }
 // ==============================================================
