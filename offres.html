@@ -469,10 +469,13 @@
         let selectedClassesSet = new Set(); // vide = TOUTES
 
         function estEligibleOffre(etu) {
-            const enRecherche = etu.statut.includes("recherche");
-            const legitime    = etu.typo.includes("inscrit");
-            const exclu       = etu.typo.includes("sorti") || etu.typo.includes("refus") ||
-                                etu.statut.includes("alternance") || etu.statut.includes("initial") || etu.statut.includes("placé");
+            const statut = (etu.statut || "").toLowerCase();
+            const typo   = (etu.typo   || "").toLowerCase();
+            if (!statut && !typo) return true; // données incomplètes : on inclut par défaut
+            const enRecherche = statut.includes("recherche");
+            const legitime    = typo.includes("inscrit");
+            const exclu       = typo.includes("sorti") || typo.includes("refus") ||
+                                statut.includes("alternance") || statut.includes("initial") || statut.includes("placé");
             return enRecherche && legitime && !exclu;
         }
 
