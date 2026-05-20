@@ -6,31 +6,47 @@
   <title>HECG - Vie Scolaire</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .nav-btn { @apply flex items-center gap-3 w-full px-4 py-3 rounded-xl text-left text-sm font-semibold text-gray-500 hover:bg-blue-50 hover:text-[#1A4E8A] transition; }
-    .nav-btn.active { @apply bg-[#1A4E8A] text-white; }
-    .badge { @apply inline-block px-2 py-0.5 rounded-full text-xs font-bold; }
-    .badge-admis    { @apply bg-green-100 text-green-700; }
-    .badge-ratt     { @apply bg-yellow-100 text-yellow-700; }
-    .badge-recale   { @apply bg-red-100 text-red-700; }
-    .badge-cours    { @apply bg-blue-100 text-blue-700; }
-    .modal-overlay  { @apply fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4; }
-    .modal-box      { @apply bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto; }
-    .section        { display: none; }
-    .section.active { display: block; }
-    input, select, textarea { @apply w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#1A4E8A] transition; }
-    label           { @apply block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1; }
-    .btn-primary    { @apply bg-[#1A4E8A] text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-900 transition text-sm; }
-    .btn-orange     { @apply bg-[#F26522] text-white px-5 py-2.5 rounded-xl font-bold hover:bg-orange-600 transition text-sm; }
-    .btn-ghost      { @apply bg-gray-100 text-gray-600 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition text-sm; }
-    .btn-danger     { @apply bg-red-50 text-red-600 px-4 py-2 rounded-xl font-bold hover:bg-red-100 transition text-xs; }
-    .kpi-card       { @apply bg-white p-5 rounded-2xl shadow-sm border border-gray-100 text-center; }
-    table           { @apply w-full text-sm border-collapse; }
-    th              { @apply text-left text-xs font-black text-gray-400 uppercase tracking-wide py-3 px-4 bg-gray-50 border-b border-gray-100; }
-    td              { @apply py-3 px-4 border-b border-gray-50 text-gray-700; }
-    tr:hover td     { @apply bg-blue-50/30; }
-    .ged-item       { @apply flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition; }
-    .qualiopi-card  { @apply bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-4; }
-    .qualiopi-badge { @apply inline-block px-3 py-1 rounded-full text-xs font-bold; }
+    /* nav sidebar */
+    .nav-btn { display:flex; align-items:center; gap:0.75rem; width:100%; padding:0.75rem 1rem; border-radius:0.75rem; text-align:left; font-size:0.875rem; font-weight:600; color:#6b7280; background:transparent; border:none; cursor:pointer; transition:background 0.15s, color 0.15s; }
+    .nav-btn:hover { background:#eff6ff; color:#1A4E8A; }
+    .nav-btn.active { background:#1A4E8A; color:#fff; }
+    /* badges */
+    .badge { display:inline-block; padding:0.125rem 0.5rem; border-radius:9999px; font-size:0.75rem; font-weight:700; }
+    .badge-admis  { background:#dcfce7; color:#15803d; }
+    .badge-ratt   { background:#fef9c3; color:#a16207; }
+    .badge-recale { background:#fee2e2; color:#dc2626; }
+    .badge-cours  { background:#dbeafe; color:#1d4ed8; }
+    /* modals */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; padding:1rem; }
+    .modal-box { background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:90vh; overflow-y:auto; }
+    /* sections */
+    .section { display:none; }
+    .section.active { display:block; }
+    /* form controls */
+    input, select, textarea { width:100%; border:1px solid #e5e7eb; border-radius:0.75rem; padding:0.625rem 1rem; font-size:0.875rem; outline:none; transition:border-color 0.15s; font-family:inherit; }
+    input:focus, select:focus, textarea:focus { border-color:#1A4E8A; }
+    label { display:block; font-size:0.75rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem; }
+    /* buttons */
+    .btn-primary { background:#1A4E8A; color:#fff; padding:0.625rem 1.25rem; border-radius:0.75rem; font-weight:700; font-size:0.875rem; border:none; cursor:pointer; transition:background 0.15s; }
+    .btn-primary:hover { background:#163f6e; }
+    .btn-orange  { background:#F26522; color:#fff; padding:0.625rem 1.25rem; border-radius:0.75rem; font-weight:700; font-size:0.875rem; border:none; cursor:pointer; transition:background 0.15s; }
+    .btn-orange:hover { background:#d4541a; }
+    .btn-ghost   { background:#f3f4f6; color:#4b5563; padding:0.625rem 1rem; border-radius:0.75rem; font-weight:700; font-size:0.875rem; border:none; cursor:pointer; transition:background 0.15s; }
+    .btn-ghost:hover { background:#e5e7eb; }
+    .btn-danger  { background:#fef2f2; color:#dc2626; padding:0.5rem 1rem; border-radius:0.75rem; font-weight:700; font-size:0.75rem; border:none; cursor:pointer; transition:background 0.15s; }
+    .btn-danger:hover { background:#fee2e2; }
+    /* cards & table */
+    .kpi-card { background:#fff; padding:1.25rem; border-radius:1rem; box-shadow:0 1px 3px rgba(0,0,0,.07); border:1px solid #f3f4f6; text-align:center; }
+    table { width:100%; font-size:0.875rem; border-collapse:collapse; }
+    th { text-align:left; font-size:0.75rem; font-weight:900; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; padding:0.75rem 1rem; background:#f9fafb; border-bottom:1px solid #f3f4f6; }
+    td { padding:0.75rem 1rem; border-bottom:1px solid #f9fafb; color:#374151; }
+    tr:hover td { background:rgba(239,246,255,0.4); }
+    /* GED */
+    .ged-item { display:flex; align-items:center; gap:0.75rem; padding:0.75rem; border-radius:0.75rem; cursor:pointer; border:1px solid transparent; transition:all 0.15s; }
+    .ged-item:hover { background:#f9fafb; border-color:#e5e7eb; }
+    /* Qualiopi */
+    .qualiopi-card  { background:#fff; border:1px solid #f3f4f6; border-radius:1rem; padding:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,.07); margin-bottom:1rem; }
+    .qualiopi-badge { display:inline-block; padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.75rem; font-weight:700; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
