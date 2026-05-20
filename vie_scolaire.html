@@ -47,6 +47,11 @@
     /* Qualiopi */
     .qualiopi-card  { background:#fff; border:1px solid #f3f4f6; border-radius:1rem; padding:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,.07); margin-bottom:1rem; }
     .qualiopi-badge { display:inline-block; padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.75rem; font-weight:700; }
+    /* Planning - Siren for priority 4 & 5 */
+    @keyframes siren-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+    .siren-task { animation: siren-blink 0.7s ease-in-out infinite; }
+    /* Autocomplete dropdown */
+    .etu-dropdown-item:hover { background:#eff6ff; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -218,7 +223,10 @@
     <div id="section-planning" class="section">
       <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-black text-[#1A4E8A]">Planning équipes</h1>
-        <button id="btnAddTache" onclick="openTacheModal(null,null,null)" class="btn-orange hidden">+ Nouvelle tâche</button>
+        <div class="flex gap-3">
+          <button id="btnPlanPriorities" onclick="openRefTacheModal()" class="btn-ghost hidden">⚙ Types de tâches</button>
+          <button id="btnAddTache" onclick="openTacheModal(null,null,null)" class="btn-orange hidden">+ Nouvelle tâche</button>
+        </div>
       </div>
       <!-- Navigation semaine -->
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4 flex items-center justify-between">
@@ -294,7 +302,11 @@
       <!-- Étape 1 : sélection -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
         <div class="col-span-2"><label>Étudiant</label>
-          <select id="noteEtu" onchange="onBulkEtuChange()"><option value="">— Sélectionner —</option></select>
+          <div style="position:relative">
+            <input type="text" id="noteEtuSearch" placeholder="Tapez un nom pour chercher…" oninput="filterEtuSuggestions()" autocomplete="off">
+            <input type="hidden" id="noteEtuId">
+            <div id="noteEtuDropdown" class="hidden" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;z-index:200;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12)"></div>
+          </div>
         </div>
         <div><label>Diplôme</label>
           <select id="noteDiplome" onchange="onBulkDiplomeChange()"><option value="">—</option>
@@ -431,7 +443,14 @@
     <h3 class="text-xl font-black text-[#1A4E8A] mb-6" id="tacheModalTitle">Tâche</h3>
     <input type="hidden" id="tacheId">
     <div class="space-y-4">
-      <div><label>Titre</label><input type="text" id="tacheTitre"></div>
+      <div>
+        <label>Type de tâche</label>
+        <select id="tacheTacheRefSel" onchange="onTacheTypeChange()"><option value="">— Sélectionner —</option></select>
+      </div>
+      <div id="tacheTitreDiv" class="hidden">
+        <label>Titre libre</label>
+        <input type="text" id="tacheTitre" placeholder="Décrivez la tâche…">
+      </div>
       <div><label>Description (optionnel)</label><textarea id="tacheDesc" rows="2"></textarea></div>
       <div class="grid grid-cols-2 gap-4">
         <div><label>Personne assignée</label>
@@ -456,6 +475,21 @@
     <div class="flex justify-end gap-3 mt-6">
       <button onclick="closeTacheModal()" class="btn-ghost">Annuler</button>
       <button onclick="saveTache()" class="btn-orange">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- RefTache Priorités Modal -->
+<div id="refTacheModal" class="modal-overlay hidden">
+  <div class="modal-box p-6 max-w-md">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-black text-[#1A4E8A]">Types de tâches & priorités</h3>
+      <button onclick="closeRefTacheModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+    </div>
+    <div id="refTacheList" class="space-y-2 max-h-80 overflow-y-auto mb-4"></div>
+    <p class="text-xs text-gray-400">🚨 Priorité 4 et 5 : affichage clignotant sur le planning</p>
+    <div class="flex justify-end mt-4">
+      <button onclick="closeRefTacheModal()" class="btn-ghost">Fermer</button>
     </div>
   </div>
 </div>
@@ -578,6 +612,22 @@ function badgeRes(r){
   return `<span class="badge ${map[r]||'bg-gray-100 text-gray-500'}">${r||'—'}</span>`;
 }
 
+const JOURS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const MOIS_FR  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+function fmtDateFr(val){
+  if (!val) return '—';
+  const d = new Date(val); if (isNaN(d)) return String(val);
+  return JOURS_FR[d.getDay()]+' '+d.getDate()+' '+MOIS_FR[d.getMonth()]+' '+d.getFullYear();
+}
+function fmtDateTimeFr(val){
+  if (!val) return '—';
+  const d = new Date(val); if (isNaN(d)) return String(val);
+  const h = d.getHours().toString().padStart(2,'0');
+  const m = d.getMinutes().toString().padStart(2,'0');
+  const timeStr = (h==='00'&&m==='00') ? '' : ' à '+h+'h'+m;
+  return JOURS_FR[d.getDay()]+' '+d.getDate()+' '+MOIS_FR[d.getMonth()]+' '+d.getFullYear()+timeStr;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════
@@ -648,23 +698,34 @@ async function loadNotes(){
 function getStudentGroups(notes){
   const groups = {};
   notes.forEach(n => {
-    const key = n.idEtu + '|' + n.annee + '|' + (n.classe||'').split(' ')[0];
-    if (!groups[key]) groups[key] = { idEtu:n.idEtu, nomPrenom:n.nomPrenom, classe:n.classe, annee:n.annee, diplome:(n.classe||'').split(' ')[0], notes:[], resultat:n.resultat };
+    const diplome = (n.classe||'').split(' ')[0] || '';
+    const key = n.idEtu + '|' + diplome;
+    if (!groups[key]) groups[key] = { idEtu:n.idEtu, nomPrenom:n.nomPrenom, classe:n.classe, diplome, notes:[], resultat:n.resultat, annees:[], lastAnnee:'' };
     groups[key].notes.push(n);
+    if (n.annee && !groups[key].annees.includes(n.annee)) groups[key].annees.push(n.annee);
+    // Track latest year for classe/résultat
+    if ((n.annee||'') >= groups[key].lastAnnee) { groups[key].lastAnnee=n.annee||''; groups[key].classe=n.classe; }
     if (n.resultat) groups[key].resultat = n.resultat;
   });
-  return Object.values(groups);
+  const result = Object.values(groups);
+  result.forEach(g => g.annees.sort());
+  return result;
 }
 
 function calcGroupStats(g){
   const diplome = g.diplome;
+  let notesWithVal = g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='');
+  // DCG/DSCG: best grade per UE across all years
+  if (diplome==='DCG'||diplome==='DSCG') {
+    const bestByUE = {};
+    notesWithVal.forEach(n=>{
+      const k=(n.matiere||'').toLowerCase();
+      if (bestByUE[k]===undefined||n.note>bestByUE[k].note) bestByUE[k]=n;
+    });
+    notesWithVal = Object.values(bestByUE);
+  }
   let totalPts=0, totalCoeff=0, ueOk=0;
-  g.notes.forEach(n=>{
-    if (n.note===null||n.note===undefined) return;
-    totalPts   += (n.points??0);
-    totalCoeff += (n.coeff??0);
-    if (n.note >= 10) ueOk++;
-  });
+  notesWithVal.forEach(n=>{ totalPts+=(n.points??0); totalCoeff+=(n.coeff??0); if(n.note>=10) ueOk++; });
   const moy = totalCoeff>0 ? Math.round(totalPts/totalCoeff*100)/100 : null;
   let diff = null;
   if (diplome==='BTS CG' && moy!==null) diff = Math.round((moy-10)*100)/100;
@@ -674,43 +735,49 @@ function calcGroupStats(g){
 }
 
 function renderNotesGrouped(){
-  const qEtu = (document.getElementById('filterEtu').value||'').toLowerCase();
-  const qMat = (document.getElementById('filterMatiere').value||'').toLowerCase();
-  // Filtrer par matière si besoin
+  const qEtu   = (document.getElementById('filterEtu').value||'').toLowerCase();
+  const qMat   = (document.getElementById('filterMatiere').value||'').toLowerCase();
+  const qAnnee = document.getElementById('filterAnnee').value||'';
   let notes = allNotes;
-  if (qMat) notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
-  if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
-  const groups = getStudentGroups(notes);
+  if (qMat)  notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  if (qEtu)  notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  let groups = getStudentGroups(notes);
+  if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
   const tbody = document.getElementById('notesTbody');
   if (!groups.length){ tbody.innerHTML='<tr><td colspan="11" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
   let html='';
   groups.sort((a,b)=>(a.nomPrenom||'').localeCompare(b.nomPrenom||'')).forEach(g=>{
     const {totalPts, moy, diff, ueOk} = calcGroupStats(g);
-    const nbUE = g.notes.filter(n=>n.note!==null&&n.note!==undefined).length;
+    const nbUE = g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='').length;
     const diffHtml = diff===null?'—': diff>=0
       ? `<span style="color:#15803d;font-weight:700">+${diff}</span>`
       : `<span style="color:#dc2626;font-weight:700">${diff}</span>`;
-    const gid = CSS.escape(g.idEtu+'_'+g.annee);
-    html+=`<tr style="cursor:pointer" onclick="toggleGroup('${g.idEtu+'_'+g.annee}')">
+    const anneeLabel = g.annees.length>1 ? g.annees[0]+'→'+g.annees[g.annees.length-1] : (g.annees[0]||'—');
+    const latestAnnee = g.annees[g.annees.length-1]||'';
+    const gkey = g.idEtu+'_'+g.diplome;
+    const gid  = CSS.escape(gkey);
+    html+=`<tr style="cursor:pointer" onclick="toggleGroup('${gkey}')">
       <td><span id="icon_${gid}" style="font-size:0.7rem;color:#9ca3af">▶</span></td>
       <td style="font-weight:600">${g.nomPrenom}</td>
-      <td>${g.diplome||'—'}</td><td>${g.classe||'—'}</td><td>${g.annee||'—'}</td>
+      <td>${g.diplome||'—'}</td><td>${g.classe||'—'}</td>
+      <td style="font-size:0.75rem;color:#6b7280">${anneeLabel}</td>
       <td>${nbUE}</td>
       <td>${totalPts?totalPts.toFixed(2):'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${moy!==null?moy.toFixed(2)+'/20':'—'}</td>
       <td>${diffHtml}</td>
       <td>${badgeRes(g.resultat)}</td>
       <td>
-        ${canWrite('notes')?`<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}','${g.annee}')" class="btn-ghost py-1 text-xs" title="Modifier les notes">✏</button>
-        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${g.annee}','${g.diplome}')" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>`:''}
+        ${canWrite('notes')?`<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
+        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}')" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>`:''}
       </td>
     </tr>
     <tr id="detail_${gid}" style="display:none">
       <td colspan="11" style="padding:0;background:#f8fafc">
         <table style="width:100%;background:transparent">
-          <thead><tr style="background:#f1f5f9"><th></th><th>Matière</th><th>Note</th><th>Coeff</th><th>Points</th><th>Résultat</th><th></th></tr></thead>
-          <tbody>${g.notes.map(n=>`<tr style="background:transparent">
-            <td></td><td>${n.matiere}</td>
+          <thead><tr style="background:#f1f5f9"><th></th><th>Année</th><th>Matière</th><th>Note</th><th>Coeff</th><th>Points</th><th>Résultat</th><th></th></tr></thead>
+          <tbody>${g.notes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>`<tr style="background:transparent">
+            <td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td>
+            <td>${n.matiere}</td>
             <td style="font-weight:700;color:#1A4E8A">${fmtNote(n.note)}</td>
             <td>${n.coeff??'—'}</td>
             <td>${n.points!==null?n.points.toFixed(2):'—'}</td>
@@ -745,7 +812,7 @@ function exportNotesCSV(){
   const rows = [['Étudiant','Diplôme','Classe','Année','Matière','Note','Coeff','Points','Résultat']];
   groups.forEach(g=>{
     g.notes.forEach(n=>{
-      rows.push([g.nomPrenom, g.diplome, g.classe, g.annee, n.matiere, n.note??'', n.coeff??'', n.points??'', n.resultat||'']);
+      rows.push([g.nomPrenom, g.diplome, g.classe, n.annee||'', n.matiere, n.note??'', n.coeff??'', n.points??'', n.resultat||'']);
     });
   });
   const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
@@ -784,61 +851,93 @@ async function showStats(){
 // ── Bulk Note Modal ────────────────────────────────────────────────
 let bulkCurrentEtu = null;
 
-function openBulkNoteModal(prefillIdEtu=null, prefillAnnee=null){
+function filterEtuSuggestions(){
+  const q=(document.getElementById('noteEtuSearch').value||'').toLowerCase().trim();
+  const dd=document.getElementById('noteEtuDropdown');
+  if (!q||q.length<2){ dd.classList.add('hidden'); return; }
+  const matches=allEtudiants.filter(e=>{
+    const full=(e.nom+' '+e.prenom).toLowerCase();
+    const rev=(e.prenom+' '+e.nom).toLowerCase();
+    return full.includes(q)||rev.includes(q);
+  }).slice(0,10);
+  if (!matches.length){ dd.classList.add('hidden'); return; }
+  dd.innerHTML=matches.map(e=>`<div class="etu-dropdown-item" onclick="selectEtu('${e.id}','${(e.nom+' '+e.prenom).replace(/'/g,"\\'")}','${(e.classe||'').replace(/'/g,"\\'")}')" style="padding:0.5rem 0.75rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6">
+    ${e.nom} ${e.prenom} <span style="color:#9ca3af;font-size:0.78rem">— ${e.classe||'?'}</span>
+  </div>`).join('');
+  dd.classList.remove('hidden');
+}
+function selectEtu(id, nom, classe){
+  document.getElementById('noteEtuSearch').value=nom;
+  document.getElementById('noteEtuId').value=id;
+  document.getElementById('noteEtuDropdown').classList.add('hidden');
+  document.getElementById('noteClasse').value=classe||'';
+  document.getElementById('noteDiplome').value=(classe||'').split(' ')[0]||'';
+}
+document.addEventListener('click',function(e){
+  if (!e.target.closest('#noteEtuSearch')&&!e.target.closest('#noteEtuDropdown'))
+    document.getElementById('noteEtuDropdown')?.classList.add('hidden');
+});
+
+function openBulkNoteModal(prefillIdEtu=null){
   hide('bulkUEGrid'); hide('bulkAfterSave');
   document.getElementById('noteModal').classList.remove('hidden');
-  document.getElementById('noteAnnee').value   = prefillAnnee||'';
+  document.getElementById('noteAnnee').value   = '';
   document.getElementById('noteClasse').value  = '';
   document.getElementById('noteDiplome').value = '';
-  const selEtu = document.getElementById('noteEtu');
-  selEtu.innerHTML='<option value="">— Sélectionner —</option>'+allEtudiants.map(e=>`<option value="${e.id}" data-nom="${(e.nom||'')} ${(e.prenom||'')}" data-classe="${e.classe||''}" ${prefillIdEtu&&e.id===prefillIdEtu?'selected':''}>${e.nom} ${e.prenom} — ${e.classe||'?'}</option>`).join('');
-  if (prefillIdEtu){ onBulkEtuChange(); }
-  else { document.getElementById('noteClasse').value=''; document.getElementById('noteDiplome').value=''; }
+  document.getElementById('noteEtuId').value   = '';
+  document.getElementById('noteEtuSearch').value = '';
+  if (prefillIdEtu){
+    const etu = allEtudiants.find(e=>e.id===prefillIdEtu);
+    if (etu){
+      document.getElementById('noteEtuSearch').value = etu.nom+' '+etu.prenom;
+      document.getElementById('noteEtuId').value     = etu.id;
+      document.getElementById('noteClasse').value    = etu.classe||'';
+      document.getElementById('noteDiplome').value   = (etu.classe||'').split(' ')[0]||'';
+    }
+  }
 }
 
-function onBulkEtuChange(){
-  const opt = document.getElementById('noteEtu').selectedOptions[0];
-  if (!opt||!opt.value){ return; }
-  const classe = opt.dataset.classe||'';
-  const dip    = classe.split(' ')[0]||'';
-  document.getElementById('noteClasse').value  = classe;
-  document.getElementById('noteDiplome').value = dip;
-}
-
-function onBulkDiplomeChange(){
-  // Si diplôme changé manuellement, on ne touche pas à la classe
-}
+function onBulkDiplomeChange(){ /* diplôme changé manuellement */ }
 
 async function chargerUEs(){
-  const idEtu  = document.getElementById('noteEtu').value;
+  const idEtu  = document.getElementById('noteEtuId').value;
   const annee  = document.getElementById('noteAnnee').value.trim();
-  const opt    = document.getElementById('noteEtu').selectedOptions[0];
   let diplome  = document.getElementById('noteDiplome').value||'';
   let classe   = document.getElementById('noteClasse').value||'';
   if (!idEtu || !annee){ toast('Sélectionnez un étudiant et une année.',false); return; }
-  if (!diplome && opt) diplome = (opt.dataset.classe||'').split(' ')[0];
-  if (!diplome){ toast('Diplôme non identifiable.',false); return; }
+  if (!diplome){ toast('Diplôme non identifiable. Vérifiez la fiche étudiant.',false); return; }
   const mats = refMatieres[diplome];
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
-  // Charger notes existantes pour pré-remplir
-  const r = await api('getNotes',{idEtu,annee});
-  const existing = r.success ? r.data : [];
-  const existMap = {};
-  existing.forEach(n=>{ existMap[(n.matiere||'').toLowerCase()] = n; });
-  bulkCurrentEtu = { idEtu, nomPrenom: opt?.dataset?.nom||'', classe, annee, diplome };
+  // DCG/DSCG : charger toutes les années pour l'historique
+  const isMultiYear = diplome==='DCG'||diplome==='DSCG';
+  const r = await api('getNotes', isMultiYear ? {idEtu} : {idEtu, annee});
+  const allExisting = r.success ? r.data : [];
+  // Note de l'année courante
+  const currMap = {};
+  allExisting.filter(n=>n.annee===annee).forEach(n=>{ currMap[(n.matiere||'').toLowerCase()]=n; });
+  // Meilleure note toutes années confondues
+  const bestMap = {};
+  allExisting.forEach(n=>{
+    const k=(n.matiere||'').toLowerCase();
+    if (!bestMap[k]||n.note>bestMap[k].note) bestMap[k]=n;
+  });
+  bulkCurrentEtu = { idEtu, nomPrenom: document.getElementById('noteEtuSearch').value, classe, annee, diplome };
   const tbody = document.getElementById('bulkUETbody');
   tbody.innerHTML = mats.map((m,idx)=>{
-    const ex = existMap[(m.matiere||'').toLowerCase()];
-    const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.includes('mémoire');
+    const k=(m.matiere||'').toLowerCase();
+    const curr = currMap[k];
+    const best = bestMap[k];
+    const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
+    const histHtml = (isMultiYear&&best&&best.annee!==annee&&best.note!==null)
+      ? `<br><span style="font-size:0.7rem;color:#15803d;font-weight:700">✓ ${best.note}/20 (${best.annee})</span>` : '';
     return `<tr>
-      <td style="font-weight:600">${m.matiere}</td>
+      <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
-      <td><input type="number" id="ue_note_${idx}" min="0" max="20" step="0.5" value="${ex?.note??''}" placeholder="—" style="width:110px;padding:0.4rem 0.6rem"></td>
-      <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${ex?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
+      <td><input type="number" id="ue_note_${idx}" min="0" max="20" step="0.5" value="${curr?.note??''}" placeholder="—" style="width:110px;padding:0.4rem 0.6rem"></td>
+      <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${curr?.sujetMemoire||best?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
     </tr>`;
   }).join('');
   show('bulkUEGrid');
-  // Stocker les mats pour la sauvegarde
   document.getElementById('bulkUEGrid').dataset.mats = JSON.stringify(mats);
 }
 
@@ -851,8 +950,9 @@ async function saveNotesBulk(){
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
     notes.push({ matiere:m.matiere, coeff:m.coeff, note:val, sujetMemoire:sujet });
   });
+  const nomPrenom = bulkCurrentEtu.nomPrenom || document.getElementById('noteEtuSearch').value || '';
   const r = await api('saveNotesBulk',{
-    idEtu: bulkCurrentEtu.idEtu, nomPrenom: bulkCurrentEtu.nomPrenom,
+    idEtu: bulkCurrentEtu.idEtu, nomPrenom,
     classe: bulkCurrentEtu.classe, annee: bulkCurrentEtu.annee, notes
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
@@ -939,8 +1039,8 @@ async function loadDelegues(){
   document.getElementById('deleguesTbody').innerHTML = data.map(c=>`<tr>
     <td class="font-bold">${c.classe}</td><td>${c.pp||'—'}</td><td>${c.del1||'—'}</td><td>${c.del2||'—'}</td>
     <td>${c.sup1||'—'}</td><td>${c.sup2||'—'}</td>
-    <td class="text-xs">${c.arretS1||'—'}</td><td class="text-xs">${c.conseilS1||'—'}</td>
-    <td class="text-xs">${c.arretS2||'—'}</td><td class="text-xs">${c.conseilS2||'—'}</td>
+    <td class="text-xs">${fmtDateFr(c.arretS1)}</td><td class="text-xs">${fmtDateTimeFr(c.conseilS1)}</td>
+    <td class="text-xs">${fmtDateFr(c.arretS2)}</td><td class="text-xs">${fmtDateTimeFr(c.conseilS2)}</td>
     <td><button onclick='openClasseModal(${JSON.stringify(c)})' class="btn-ghost py-1 text-xs">✏</button></td>
   </tr>`).join('') || '<tr><td colspan="11" class="text-center text-gray-400 py-8">Aucune classe.</td></tr>';
 }
@@ -1039,6 +1139,7 @@ function exportFormateurs(){
 // PLANNING — CALENDRIER HEBDOMADAIRE
 // ══════════════════════════════════════════════════════════════════
 let weekOffset = 0;
+let allRefTaches = [];
 const JOURS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
 const STATUT_COLORS = {'À faire':'#dbeafe','En cours':'#fef9c3','Terminé':'#dcfce7','Annulé':'#f1f5f9'};
 
@@ -1061,10 +1162,11 @@ function fmtDay(d){ return d.getDate()+'/'+(d.getMonth()+1); }
 
 function buildPersonColors(){
   personColorMap={};
-  allFormateurs.forEach((f,i)=>{
-    const name=f.nom+' '+f.prenom;
-    personColorMap[f.mailPro||name]=PERSON_PALETTE[i%PERSON_PALETTE.length];
-    personColorMap[name]=PERSON_PALETTE[i%PERSON_PALETTE.length];
+  const people = allPersonnel.length ? allPersonnel : allFormateurs.map((f,i)=>({ref:f.mailPro||f.nom+' '+f.prenom,email:f.mailPro||'',nom:f.nom+' '+f.prenom}));
+  people.forEach((p,i)=>{
+    const c=PERSON_PALETTE[i%PERSON_PALETTE.length];
+    personColorMap[p.ref]=c;
+    if(p.email) personColorMap[p.email]=c;
   });
 }
 
@@ -1073,7 +1175,17 @@ function hexToRgba(hex,a){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.sl
 
 async function loadPlanning(){
   if (canWrite('planning')) show('btnAddTache');
-  const r = await api('getPlanningTaches');
+  if (vieScRole==='Super-admin') show('btnPlanPriorities');
+  // Load personnel if not yet done
+  if (!allPersonnel.length){
+    const rp = await api('getPersonnelList');
+    if (rp.success) allPersonnel = rp.data;
+  }
+  // Load reference tasks
+  const rr = await api('getRefTaches');
+  if (rr.success) allRefTaches = rr.data;
+  // Load planning tasks (pass userRef for personal view filtering)
+  const r = await api('getPlanningTaches', { userRef: user.ref });
   if (!r.success){ toast('Erreur chargement planning',false); return; }
   allTaches = r.data;
   buildPersonColors();
@@ -1086,10 +1198,10 @@ function changeWeek(d){ weekOffset+=d; renderWeek(); }
 
 function populateTacheReferentSelect(){
   const sel=document.getElementById('tacheReferent');
-  sel.innerHTML='<option value="">— Sélectionner —</option>'+allFormateurs.map(f=>{
-    const val=f.mailPro||f.nom+' '+f.prenom;
-    const c=getPersonColor(val);
-    return `<option value="${val}" style="border-left:4px solid ${c}">${f.nom} ${f.prenom}</option>`;
+  const people = allPersonnel.length ? allPersonnel : allFormateurs.map(f=>({ref:f.mailPro||f.nom+' '+f.prenom, email:f.mailPro||'', nom:f.nom+' '+f.prenom}));
+  sel.innerHTML='<option value="">— Sélectionner —</option>'+people.map(p=>{
+    const c=getPersonColor(p.ref);
+    return `<option value="${p.ref}" data-email="${p.email||''}" data-nom="${p.nom||''}">${p.nom}</option>`;
   }).join('');
 }
 
@@ -1099,13 +1211,17 @@ function renderWeek(){
   const endLabel=fmtDay(dates[5]);
   const year=dates[0].getFullYear();
   document.getElementById('weekLabel').textContent=`Semaine du ${startLabel} au ${endLabel} ${year}`;
-  // Légende
+  // Légende — uniquement les personnes qui ont des tâches
   const legend=document.getElementById('planLegend');
-  legend.innerHTML=allFormateurs.map(f=>{
-    const val=f.mailPro||f.nom+' '+f.prenom;
-    const c=getPersonColor(val);
+  const usedRefs=new Set(allTaches.map(t=>t.referentRef||t.referent));
+  const people=allPersonnel.length
+    ? allPersonnel.filter(p=>usedRefs.has(p.ref)||usedRefs.has(p.email))
+    : allFormateurs.filter(f=>usedRefs.has(f.mailPro)||usedRefs.has(f.nom+' '+f.prenom));
+  legend.innerHTML=people.map(p=>{
+    const ref=p.ref||(p.mailPro||p.nom+' '+p.prenom);
+    const c=getPersonColor(ref);
     return `<span style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;font-weight:600;color:#374151">
-      <span style="width:12px;height:12px;border-radius:50%;background:${c};display:inline-block;flex-shrink:0"></span>${f.nom} ${f.prenom}
+      <span style="width:12px;height:12px;border-radius:50%;background:${c};display:inline-block;flex-shrink:0"></span>${p.nom||(p.nom+' '+p.prenom)}
     </span>`;
   }).join('');
   // Grille
@@ -1131,11 +1247,14 @@ function renderWeek(){
       const today=fmtDate(new Date())===dateStr;
       html+=`<td style="vertical-align:top;padding:0.4rem;border-left:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:${today?'#fafcff':'white'};min-width:110px;min-height:80px">`;
       cell.slice(0,3).forEach(t=>{
-        const pc=getPersonColor(t.referent);
+        const pc=getPersonColor(t.referentRef||t.referent);
         const bg=hexToRgba(pc,0.15);
-        html+=`<div onclick='openTacheModal(${JSON.stringify(t).replace(/'/g,"&#39;")},null,null)' style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:pointer;font-size:0.75rem">
-          <div style="font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="${t.titre}">${t.titre}</div>
-          <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">${t.referent||''}</div>
+        const prio=t.priorite||1;
+        const sirenCls=prio>=4?'siren-task':'';
+        const sirenIcon=prio>=4?'🚨 ':'';
+        html+=`<div onclick='openTacheModal(${JSON.stringify(t).replace(/'/g,"&#39;")},null,null)' class="${sirenCls}" style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:pointer;font-size:0.75rem">
+          <div style="font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="${t.titre}">${sirenIcon}${t.titre}</div>
+          <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">${t.referentNom||t.referent||''}</div>
         </div>`;
       });
       if(cell.length>3) html+=`<div style="font-size:0.65rem;color:#9ca3af;padding:0 0.3rem">+${cell.length-3} de plus</div>`;
@@ -1153,27 +1272,63 @@ function renderWeek(){
 function openTacheModal(t, preDate=null, preDJ=null){
   document.getElementById('tacheModal').classList.remove('hidden');
   document.getElementById('tacheModalTitle').textContent = t ? 'Modifier la tâche' : 'Nouvelle tâche';
-  document.getElementById('tacheId').value         = t?.id||'';
-  document.getElementById('tacheTitre').value      = t?.titre||'';
-  document.getElementById('tacheDesc').value       = t?.description||'';
-  document.getElementById('tacheDebut').value      = t?.dateDebut || preDate||'';
-  document.getElementById('tacheDemiJournee').value= t?.demiJournee || preDJ||'Matin';
-  document.getElementById('tacheReferent').value   = t?.referent||'';
-  document.getElementById('tacheStatut').value     = t?.statut||'À faire';
+  document.getElementById('tacheId').value          = t?.id||'';
+  document.getElementById('tacheDesc').value        = t?.description||'';
+  document.getElementById('tacheDebut').value       = t?.dateDebut || preDate||'';
+  document.getElementById('tacheDemiJournee').value = t?.demiJournee || preDJ||'Matin';
+  document.getElementById('tacheStatut').value      = t?.statut||'À faire';
+  // Populate REFTACHE dropdown
+  const sel=document.getElementById('tacheTacheRefSel');
+  sel.innerHTML='<option value="">— Sélectionner —</option>'+allRefTaches.map(r=>`<option value="${r.id}" data-prio="${r.priorite}">${r.nom}${r.priorite>=4?' 🚨':''} (Prio ${r.priorite})</option>`).join('')+'<option value="AUTRE">✍ Autre (titre libre)</option>';
+  const savedRef = t?.tacheRef||'';
+  if (savedRef && allRefTaches.find(r=>r.id===savedRef)) {
+    sel.value = savedRef; hide('tacheTitreDiv');
+  } else if (t?.titre) {
+    sel.value = 'AUTRE'; document.getElementById('tacheTitre').value=t.titre; show('tacheTitreDiv');
+  } else {
+    sel.value = ''; document.getElementById('tacheTitre').value=''; hide('tacheTitreDiv');
+  }
+  // Set referent (by ref)
+  document.getElementById('tacheReferent').value = t?.referentRef||t?.referent||'';
 }
 function closeTacheModal(){ document.getElementById('tacheModal').classList.add('hidden'); }
+
+function onTacheTypeChange(){
+  const val=document.getElementById('tacheTacheRefSel').value;
+  if (val==='AUTRE'){ show('tacheTitreDiv'); document.getElementById('tacheTitre').value=''; }
+  else { hide('tacheTitreDiv'); }
+}
+
 async function saveTache(){
-  const titre=document.getElementById('tacheTitre').value.trim();
-  if (!titre){ toast('Le titre est requis.',false); return; }
+  const sel   = document.getElementById('tacheTacheRefSel');
+  const tRef  = sel.value;
+  if (!tRef){ toast('Sélectionnez un type de tâche.',false); return; }
+  let titre = '';
+  if (tRef==='AUTRE'){
+    titre = document.getElementById('tacheTitre').value.trim();
+    if (!titre){ toast('Saisissez un titre.',false); return; }
+  } else {
+    const found = allRefTaches.find(r=>r.id===tRef);
+    titre = found ? found.nom : tRef;
+  }
+  const refSel       = document.getElementById('tacheReferent');
+  const refOpt       = refSel.selectedOptions[0];
+  const referentRef  = refSel.value;
+  const referentNom  = refOpt?.dataset?.nom||refOpt?.textContent?.trim()||'';
+  const referentEmail= refOpt?.dataset?.email||'';
+  const prio = allRefTaches.find(r=>r.id===tRef)?.priorite||1;
   const r = await api('savePlanningTache',{
-    id:           document.getElementById('tacheId').value||undefined,
+    id:            document.getElementById('tacheId').value||undefined,
     titre,
-    description:  document.getElementById('tacheDesc').value,
-    dateDebut:    document.getElementById('tacheDebut').value,
-    dateFin:      document.getElementById('tacheDebut').value, // même jour
-    demiJournee:  document.getElementById('tacheDemiJournee').value,
-    referent:     document.getElementById('tacheReferent').value,
-    statut:       document.getElementById('tacheStatut').value,
+    description:   document.getElementById('tacheDesc').value,
+    dateDebut:     document.getElementById('tacheDebut').value,
+    dateFin:       document.getElementById('tacheDebut').value,
+    demiJournee:   document.getElementById('tacheDemiJournee').value,
+    referentRef,   referentNom,   referentEmail,
+    referent:      referentEmail||referentRef,
+    statut:        document.getElementById('tacheStatut').value,
+    tacheRef:      tRef==='AUTRE'?'':tRef,
+    priorite:      prio,
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   toast('Tâche enregistrée ✓'); closeTacheModal(); loadPlanning();
@@ -1457,6 +1612,39 @@ async function deleteQualiopiPreuve(indicateur, nomPreuve, urlFichier){
   const r=await api('deleteQualiopiPreuve',{indicateur,nomPreuve,urlFichier});
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   toast('Preuve supprimée'); loadQualiopi();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REFTACHE — GESTION DES TYPES DE TÂCHES
+// ══════════════════════════════════════════════════════════════════
+function openRefTacheModal(){
+  document.getElementById('refTacheModal').classList.remove('hidden');
+  renderRefTacheList();
+}
+function closeRefTacheModal(){ document.getElementById('refTacheModal').classList.add('hidden'); }
+
+function renderRefTacheList(){
+  const el=document.getElementById('refTacheList');
+  if (!allRefTaches.length){
+    el.innerHTML='<p style="text-align:center;color:#9ca3af;font-size:0.85rem;padding:1rem">Aucun type de tâche chargé.<br>Vérifiez que l\'onglet REFTACHE existe dans le classeur.</p>';
+    return;
+  }
+  el.innerHTML=allRefTaches.map(r=>`<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:0.75rem;background:#f9fafb;border:1px solid #f3f4f6">
+    <span style="font-size:0.85rem;font-weight:600;flex:1;color:#374151">${r.id} — ${r.nom}</span>
+    <label style="font-size:0.75rem;font-weight:700;color:#6b7280;white-space:nowrap;margin:0">Priorité</label>
+    <select onchange="updateRefTachePrio('${r.id}',this.value)" style="width:80px;padding:0.25rem 0.4rem;border:1px solid #e5e7eb;border-radius:0.5rem;font-size:0.8rem">
+      ${[1,2,3,4,5].map(n=>`<option value="${n}" ${n===r.priorite?'selected':''}>${n}${n>=4?' 🚨':''}</option>`).join('')}
+    </select>
+  </div>`).join('');
+}
+
+async function updateRefTachePrio(id, prio){
+  const r=await api('saveRefTache',{id,priorite:Number(prio)});
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  const found=allRefTaches.find(t=>t.id===id);
+  if (found) found.priorite=Number(prio);
+  toast('Priorité mise à jour ✓');
+  renderRefTacheList();
 }
 
 // ── Démarrage ────────────────────────────────────────────────────
