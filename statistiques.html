@@ -23,12 +23,15 @@
                 <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Offres</a>
                 <a href="statistiques.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1 whitespace-nowrap">Stats</a>
                 <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Campagnes</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">🏫 Vie Scolaire</a>
                 <a href="#" id="navHistorique" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium" onclick="showSection('historique')">Historique</a>
 
             </div>
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <h1 class="text-3xl font-black text-[#1A4E8A] mb-2">Centre de Pilotage 360°</h1>
@@ -274,5 +277,6 @@ function applyCampusFilter() {
 
         initDashboard();
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
