@@ -134,16 +134,16 @@
             </select>
           </div>
           <div><label>Année</label>
-            <select id="filterAnnee"><option value="">Toutes</option></select>
+            <select id="filterAnnee" onchange="if(allNotes.length) loadNotes()"><option value="">Toutes</option></select>
           </div>
           <div><label>Classe</label>
-            <select id="filterClasse"><option value="">Toutes</option></select>
+            <select id="filterClasse" onchange="if(allNotes.length) loadNotes()"><option value="">Toutes</option></select>
           </div>
           <div><label>Étudiant</label>
             <input type="text" id="filterEtu" placeholder="Nom ou prénom..." oninput="renderNotesGrouped()">
           </div>
           <div><label>Matière</label>
-            <select id="filterMatiere"><option value="">Toutes</option></select>
+            <select id="filterMatiere" onchange="if(allNotes.length) renderNotesGrouped()"><option value="">Toutes</option></select>
           </div>
         </div>
         <button onclick="loadNotes()" class="mt-4 btn-primary">🔍 Afficher</button>
@@ -996,28 +996,43 @@ function toggleGroup(key){
 }
 
 function exportNotesCSV(){
-  const qEtu = (document.getElementById('filterEtu').value||'').toLowerCase();
-  const qMat = matKey(document.getElementById('filterMatiere').value);
+  const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
+  const qMat     = matKey(document.getElementById('filterMatiere').value);
+  const qAnnee   = document.getElementById('filterAnnee').value||'';
+  const qDiplome = document.getElementById('filterDiplome').value||'';
+  const qClasse  = document.getElementById('filterClasse').value||'';
+  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
-  if (qMat) notes = notes.filter(n=>matKey(n.matiere)===qMat);
-  if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
-  const groups = getStudentGroups(notes);
+  if (qMat)    notes = notes.filter(n=>matKey(n.matiere)===qMat);
+  if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
+  let groups = getStudentGroups(notes);
+  if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
+  if (qClasse) groups = groups.filter(g=>(g.classe||'')===qClasse);
+  // En-tête : indiquer les filtres actifs dans le nom du fichier
+  const parts = [qDiplome,qAnnee,qClasse,qMat?document.getElementById('filterMatiere').value:''].filter(Boolean);
+  const filename = 'notes'+(parts.length?'_'+parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_'):'')+'.csv';
   const rows = [['Étudiant','Diplôme','Classe','Année','Matière','Note','Coeff','Points','Résultat']];
   groups.forEach(g=>{
-    g.notes.forEach(n=>{
+    // Pour DCG : n'exporter que les notes dans l'intervalle du filtre
+    const notesFiltered = (qAnnee && isDCGview)
+      ? g.notes.filter(n=>(n.annee||'')<=qAnnee)
+      : (qAnnee && !isDCGview ? g.notes.filter(n=>n.annee===qAnnee) : g.notes);
+    notesFiltered.forEach(n=>{
       rows.push([g.nomPrenom, g.diplome, g.classe, n.annee||'', n.matiere, n.note??'', n.coeff??'', n.points??'', n.resultat||'']);
     });
   });
   const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download='notes_export.csv'; a.click();
+  a.download=filename; a.click();
 }
 
 async function showStats(){
   const diplome = document.getElementById('filterDiplome').value;
   const annee   = document.getElementById('filterAnnee').value;
+  const classe  = document.getElementById('filterClasse').value||'';
   if (!diplome || !annee){ toast('Sélectionnez un diplôme et une année pour les stats',false); return; }
-  const r = await api('getStatsNotes',{diplome,annee});
+  const r = await api('getStatsNotes',{diplome, annee, classe});
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   const p = r.promo; const s = r.students;
   document.getElementById('statsKpis').innerHTML = [
