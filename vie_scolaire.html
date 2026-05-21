@@ -1026,12 +1026,20 @@ function filterEtuSuggestions(){
   </div>`).join('');
   dd.classList.remove('hidden');
 }
+function diplomeFromClasse(classe){
+  const c=(classe||'').toUpperCase();
+  if (c.startsWith('BTS CG')) return 'BTS CG';
+  if (c.startsWith('DSCG'))   return 'DSCG';
+  if (c.startsWith('DCG'))    return 'DCG';
+  return (classe||'').split(' ')[0]||'';
+}
+
 function selectEtu(id, nom, classe){
   document.getElementById('noteEtuSearch').value=nom;
   document.getElementById('noteEtuId').value=id;
   document.getElementById('noteEtuDropdown').classList.add('hidden');
   document.getElementById('noteClasse').value=classe||'';
-  document.getElementById('noteDiplome').value=(classe||'').split(' ')[0]||'';
+  document.getElementById('noteDiplome').value=diplomeFromClasse(classe);
   // Auto-chargement dès que l'étudiant et le diplôme sont connus
   if (document.getElementById('noteDiplome').value && document.getElementById('noteAnnee').value) chargerUEs();
 }
@@ -1071,7 +1079,7 @@ function openBulkNoteModal(prefillIdEtu=null){
       document.getElementById('noteEtuSearch').value = etu.nom+' '+etu.prenom;
       document.getElementById('noteEtuId').value     = etu.id;
       document.getElementById('noteClasse').value    = etu.classe||'';
-      document.getElementById('noteDiplome').value   = (etu.classe||'').split(' ')[0]||'';
+      document.getElementById('noteDiplome').value   = diplomeFromClasse(etu.classe);
       chargerUEs(); // Auto-chargement
     }
   }
@@ -1091,10 +1099,17 @@ async function chargerUEs(){
   const mats = refMatieres[diplome];
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
 
-  const nomPrenom = document.getElementById('noteEtuSearch').value.trim();
-  const r = await api('getNotes', {idEtu, nomPrenom});
-  const allExisting = r.success ? r.data : [];
-  console.log('[chargerUEs] idEtu='+idEtu+' nomPrenom='+nomPrenom+' → '+allExisting.length+' notes trouvées', allExisting.slice(0,3));
+  const nomPrenom = (document.getElementById('noteEtuSearch').value||'').trim().toLowerCase();
+  // Charger toutes les notes du diplôme (même logique que la vue principale qui fonctionne)
+  // puis filtrer côté client par idEtu OU nomPrenom pour retrouver cet étudiant
+  const r = await api('getNotes', {diplome});
+  const allExisting = r.success
+    ? r.data.filter(n=>{
+        if (idEtu && String(n.idEtu||'').trim()===String(idEtu).trim()) return true;
+        if (nomPrenom && String(n.nomPrenom||'').trim().toLowerCase()===nomPrenom) return true;
+        return false;
+      })
+    : [];
 
   // Notes de l'année sélectionnée (cible d'enregistrement + détection écrasement)
   const currMap = {};
