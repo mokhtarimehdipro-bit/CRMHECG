@@ -1091,8 +1091,10 @@ async function chargerUEs(){
   const mats = refMatieres[diplome];
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
 
-  const r = await api('getNotes', {idEtu});
+  const nomPrenom = document.getElementById('noteEtuSearch').value.trim();
+  const r = await api('getNotes', {idEtu, nomPrenom});
   const allExisting = r.success ? r.data : [];
+  console.log('[chargerUEs] idEtu='+idEtu+' nomPrenom='+nomPrenom+' → '+allExisting.length+' notes trouvées', allExisting.slice(0,3));
 
   // Notes de l'année sélectionnée (cible d'enregistrement + détection écrasement)
   const currMap = {};
