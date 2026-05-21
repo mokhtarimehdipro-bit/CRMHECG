@@ -307,6 +307,7 @@
           <nav id="gedBreadcrumb" class="flex gap-2 mt-1 text-sm text-gray-400 font-medium"></nav>
         </div>
         <div class="flex gap-3" id="gedActions">
+          <button id="btnGedScanEtu" onclick="gedScanStudents()" class="btn-ghost hidden">🔍 Lier dossiers étudiants</button>
           <button id="btnGedNewFolder" onclick="openGedNewFolderModal()" class="btn-ghost hidden">📁 Nouveau dossier</button>
           <button id="btnGedUpload"    onclick="openGedUploadModal()"    class="btn-primary hidden">⬆ Importer</button>
           <button id="btnGedDroits"    onclick="openGedDroitsModal()"    class="btn-ghost hidden">🔐 Droits</button>
@@ -1673,6 +1674,15 @@ async function aspirerInscriptions(){
 // ══════════════════════════════════════════════════════════════════
 // GED
 // ══════════════════════════════════════════════════════════════════
+async function gedScanStudents(){
+  const btn=document.getElementById('btnGedScanEtu');
+  btn.textContent='⏳ Scan en cours…'; btn.disabled=true;
+  const r=await api('gedAutoScanStudents');
+  btn.textContent='🔍 Lier dossiers étudiants'; btn.disabled=false;
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  toast(`Scan terminé : ${r.matched} dossier(s) lié(s) sur ${r.total} trouvé(s) ✓`);
+}
+
 async function loadGed(folderId){
   gedCurrentFolderId = folderId || null;
   document.getElementById('gedContent').innerHTML='<div class="text-center text-gray-400 py-16">Chargement…</div>';
@@ -1681,7 +1691,7 @@ async function loadGed(folderId){
   gedCurrentFolderId   = r.folderId;
   gedCurrentFolderName = r.folderName;
   // Boutons
-  if (canWrite('ged')){ show('btnGedNewFolder'); show('btnGedUpload'); show('btnGedDroits'); }
+  if (canWrite('ged')){ show('btnGedScanEtu'); show('btnGedNewFolder'); show('btnGedUpload'); show('btnGedDroits'); }
   // Breadcrumb
   document.getElementById('gedBreadcrumb').innerHTML = (r.breadcrumb||[]).map((b,i)=>
     `<span class="cursor-pointer hover:text-[#1A4E8A]" onclick="loadGed('${b.id}')">${b.name}</span>${i<(r.breadcrumb.length-1)?'<span class="mx-1">/</span>':''}`
