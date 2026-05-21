@@ -354,7 +354,7 @@
           </select>
         </div>
         <div><label>Année scolaire</label>
-          <select id="noteAnnee"></select>
+          <select id="noteAnnee" onchange="if(document.getElementById('noteEtuId').value&&document.getElementById('noteDiplome').value)chargerUEs()"></select>
         </div>
       </div>
       <div class="flex gap-3 mb-5 items-end">
@@ -1032,6 +1032,8 @@ function selectEtu(id, nom, classe){
   document.getElementById('noteEtuDropdown').classList.add('hidden');
   document.getElementById('noteClasse').value=classe||'';
   document.getElementById('noteDiplome').value=(classe||'').split(' ')[0]||'';
+  // Auto-chargement dès que l'étudiant et le diplôme sont connus
+  if (document.getElementById('noteDiplome').value && document.getElementById('noteAnnee').value) chargerUEs();
 }
 document.addEventListener('click',function(e){
   if (!e.target.closest('#noteEtuSearch')&&!e.target.closest('#noteEtuDropdown'))
@@ -1062,6 +1064,7 @@ function openBulkNoteModal(prefillIdEtu=null){
   document.getElementById('noteDiplome').value = '';
   document.getElementById('noteEtuId').value   = '';
   document.getElementById('noteEtuSearch').value = '';
+  bulkCurrentEtu = null; bulkCurrMap = {};
   if (prefillIdEtu){
     const etu = allEtudiants.find(e=>e.id===prefillIdEtu);
     if (etu){
@@ -1069,108 +1072,164 @@ function openBulkNoteModal(prefillIdEtu=null){
       document.getElementById('noteEtuId').value     = etu.id;
       document.getElementById('noteClasse').value    = etu.classe||'';
       document.getElementById('noteDiplome').value   = (etu.classe||'').split(' ')[0]||'';
+      chargerUEs(); // Auto-chargement
     }
   }
 }
 
-function onBulkDiplomeChange(){ /* diplôme changé manuellement */ }
+function onBulkDiplomeChange(){
+  if (document.getElementById('noteEtuId').value && document.getElementById('noteAnnee').value) chargerUEs();
+}
 
 async function chargerUEs(){
   const idEtu  = document.getElementById('noteEtuId').value;
-  const annee  = document.getElementById('noteAnnee').value.trim();
+  const annee  = document.getElementById('noteAnnee').value;
   let diplome  = document.getElementById('noteDiplome').value||'';
   let classe   = document.getElementById('noteClasse').value||'';
-  if (!idEtu || !annee){ toast('Sélectionnez un étudiant et une année.',false); return; }
-  if (!diplome){ toast('Diplôme non identifiable. Vérifiez la fiche étudiant.',false); return; }
+  if (!idEtu) return;
+  if (!diplome){ toast('Sélectionnez un diplôme.',false); return; }
   const mats = refMatieres[diplome];
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
-  // Toujours charger toutes les notes pour afficher l'historique complet
+
   const r = await api('getNotes', {idEtu});
   const allExisting = r.success ? r.data : [];
-  // Note de l'année courante
+
+  // Notes de l'année sélectionnée (cible d'enregistrement + détection écrasement)
   const currMap = {};
   allExisting.filter(n=>n.annee===annee).forEach(n=>{ currMap[(n.matiere||'').toLowerCase()]=n; });
-  // Meilleure note toutes années confondues
+
+  // Note la plus récente par matière (toutes années confondues) → pour pré-remplissage
+  const latestMap = {};
+  allExisting.forEach(n=>{
+    const k=(n.matiere||'').toLowerCase();
+    if (!latestMap[k] || (n.annee||'') >= (latestMap[k].annee||'')) latestMap[k]=n;
+  });
+
+  // Meilleure note (pour sujet mémoire fallback)
   const bestMap = {};
   allExisting.forEach(n=>{
     const k=(n.matiere||'').toLowerCase();
-    if (!bestMap[k]||n.note>bestMap[k].note) bestMap[k]=n;
+    if (!bestMap[k]||parseFloat(n.note||0)>parseFloat(bestMap[k].note||0)) bestMap[k]=n;
   });
+
   bulkCurrentEtu = { idEtu, nomPrenom: document.getElementById('noteEtuSearch').value, classe, annee, diplome };
   bulkCurrMap = currMap;
-  // Historique complet par matière (hors année courante)
+
+  // Historique complet par matière (toutes années triées)
   const histByUE = {};
-  allExisting.filter(n=>n.annee!==annee).forEach(n=>{
+  allExisting.forEach(n=>{
     const k=(n.matiere||'').toLowerCase();
     if (!histByUE[k]) histByUE[k]=[];
     histByUE[k].push(n);
   });
+
   const tbody = document.getElementById('bulkUETbody');
   tbody.innerHTML = mats.map((m,idx)=>{
     const k=(m.matiere||'').toLowerCase();
-    const curr = currMap[k];
-    const best = bestMap[k];
+    const latest = latestMap[k];   // Note la plus récente (pré-remplissage)
+    const best   = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
-    // Historique toutes années précédentes (tous diplômes)
-    const prevNotes = (histByUE[k]||[]).sort((a,b)=>(a.annee||'').localeCompare(b.annee||''));
-    const histHtml = prevNotes.length
-      ? '<br>' + prevNotes.map(h=>{
-          const hNE = String(h.note).toUpperCase()==='NE';
-          const hNum = parseFloat(h.note);
-          const hColor = hNE?'#4338ca':(hNum>=10?'#15803d':hNum>=6?'#d97706':'#dc2626');
-          return `<span style="font-size:0.68rem;font-weight:700;color:${hColor}">${h.annee}: ${hNE?'NE':h.note+'/20'}</span>`;
+
+    // Pré-remplissage : note la plus récente (qu'elle soit de l'année courante ou passée)
+    const prefillNote = latest?.note??'';
+    const prefillYear = latest?.annee||'';
+    const prefillIsNE = String(prefillNote).toUpperCase()==='NE';
+    const hasExisting = prefillNote!==''&&prefillNote!==null&&prefillNote!==undefined;
+
+    // Style grisé si note pré-existante
+    const existStyle = hasExisting
+      ? 'background:#f3f4f6;color:'+(prefillIsNE?'#4338ca':'#6b7280')+';border-color:#e5e7eb'
+      : (prefillIsNE?'color:#4338ca':'');
+
+    // Historique : toutes les saisies triées (pour affichage sous la matière)
+    const allYears = (histByUE[k]||[]).sort((a,b)=>(a.annee||'').localeCompare(b.annee||''));
+    const histHtml = allYears.length
+      ? '<br>' + allYears.map(h=>{
+          const hNE=String(h.note).toUpperCase()==='NE';
+          const hNum=parseFloat(h.note);
+          const hColor=hNE?'#4338ca':(hNum>=10?'#15803d':hNum>=6?'#d97706':'#dc2626');
+          return `<span style="font-size:0.68rem;font-weight:700;color:${hColor}">${h.annee} : ${hNE?'NE':h.note+'/20'}</span>`;
         }).join(' · ')
       : '';
-    const currNoteVal = curr?.note??'';
-    const isNEcurr = String(currNoteVal).toUpperCase()==='NE';
-    // Badge indiquant l'année de la note déjà saisie pour l'année courante
-    const currYearBadge = (currNoteVal!==''&&currNoteVal!==null)
-      ? `<span style="font-size:0.65rem;color:#9ca3af;font-weight:600;white-space:nowrap">(${curr?.annee||annee})</span>` : '';
+
     return `<tr>
       <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
       <td>
         <div style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap">
-          <input type="text" id="ue_note_${idx}" value="${isNEcurr?'NE':currNoteVal}" placeholder="— ou NE"
-            style="width:90px;padding:0.4rem 0.6rem;color:${isNEcurr?'#4338ca':''}"
-            oninput="this.style.color=this.value.toUpperCase()==='NE'?'#4338ca':''"
-            onchange="if(this.value!=='' && this.value.toUpperCase()!=='NE' && (isNaN(parseFloat(this.value))||parseFloat(this.value)<0||parseFloat(this.value)>20)){this.value='';}"
+          <input type="text" id="ue_note_${idx}"
+            value="${prefillIsNE?'NE':prefillNote}"
+            data-original="${prefillNote}"
+            data-original-year="${prefillYear}"
+            placeholder="—"
+            style="width:90px;padding:0.4rem 0.6rem;${existStyle}"
+            oninput="onNoteInput(this,${idx})"
+            onchange="if(this.value!==''&&this.value.toUpperCase()!=='NE'&&(isNaN(parseFloat(this.value))||parseFloat(this.value)<0||parseFloat(this.value)>20)){this.value=this.dataset.original||'';}"
           >
-          <button type="button" onclick="document.getElementById('ue_note_${idx}').value='NE';document.getElementById('ue_note_${idx}').style.color='#4338ca';"
+          <span id="note_year_${idx}" style="font-size:0.65rem;font-weight:600;white-space:nowrap;color:${hasExisting?'#9ca3af':'#d1d5db'}">${prefillYear||''}</span>
+          <button type="button" onclick="document.getElementById('ue_note_${idx}').value='NE';onNoteInput(document.getElementById('ue_note_${idx}'),${idx});"
             style="font-size:0.65rem;background:#e0e7ff;color:#4338ca;border:none;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.4rem;font-weight:700;white-space:nowrap">NE</button>
-          ${currYearBadge}
         </div>
       </td>
-      <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${curr?.sujetMemoire||best?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
+      <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${best?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
     </tr>`;
   }).join('');
   show('bulkUEGrid');
   document.getElementById('bulkUEGrid').dataset.mats = JSON.stringify(mats);
 }
 
+function onNoteInput(input, idx){
+  // Retirer le grisé : la note est en cours de modification
+  input.style.background = '#fff';
+  input.style.borderColor = '#1A4E8A';
+  input.style.color = input.value.toUpperCase()==='NE' ? '#4338ca' : '#374151';
+  // Mettre à jour l'étiquette d'année → année de saisie sélectionnée
+  const badge = document.getElementById('note_year_'+idx);
+  if (badge) {
+    const yr = document.getElementById('noteAnnee').value||'';
+    badge.textContent = yr;
+    badge.style.color = '#1A4E8A';
+    badge.style.fontWeight = '700';
+  }
+}
+
 async function saveNotesBulk(){
   if (!bulkCurrentEtu){ toast('Aucune session active.',false); return; }
   const mats = JSON.parse(document.getElementById('bulkUEGrid').dataset.mats||'[]');
   const notes = [];
-  const overwrites = []; // { matiere, ancienne, nouvelle }
+  const overwrites = []; // { matiere, ancienne, ancienneAnnee, nouvelle }
   mats.forEach((m,idx)=>{
-    let val = (document.getElementById('ue_note_'+idx)?.value||'').trim();
+    const inp = document.getElementById('ue_note_'+idx);
+    if (!inp) return;
+    let val = inp.value.trim();
+    if (!val) return; // vide → pas d'envoi
     if (val.toUpperCase()==='NE') val='NE';
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
-    // Détecter un écrasement : note existante différente de la nouvelle valeur saisie
-    if (val !== '') {
-      const k = (m.matiere||'').toLowerCase();
-      const existing = bulkCurrMap[k];
-      const existNote = existing ? String(existing.note??'') : '';
-      if (existNote !== '' && existNote.toUpperCase() !== val.toUpperCase()) {
-        overwrites.push({ matiere: m.matiere, ancienne: existNote, nouvelle: val });
-      }
+    const k = (m.matiere||'').toLowerCase();
+
+    // Vérifier si la note a été modifiée (comparaison avec l'original stocké)
+    const original = inp.dataset.original??'';
+    const originalYear = inp.dataset.originalYear||'';
+    const valChanged = val.toUpperCase() !== String(original).toUpperCase();
+
+    // Note pour l'année cible déjà en base ?
+    const existCurr = bulkCurrMap[k];
+    const existCurrNote = existCurr ? String(existCurr.note??'') : '';
+
+    // Si la note n'a pas changé ET qu'elle est déjà enregistrée pour cette année → ignorer
+    if (!valChanged && existCurrNote.toUpperCase()===val.toUpperCase()) return;
+
+    // Écrasement : note pour l'année cible existe ET nouvelle valeur ≠ existante
+    if (existCurrNote!=='' && existCurrNote.toUpperCase()!==val.toUpperCase()) {
+      overwrites.push({ matiere: m.matiere, ancienne: existCurrNote, ancienneAnnee: existCurr?.annee||'', nouvelle: val });
     }
+
     notes.push({ matiere:m.matiere, coeff:m.coeff, note:val, sujetMemoire:sujet });
   });
+  if (!notes.length){ toast('Aucune modification détectée.',false); return; }
   // Demander confirmation si des notes vont être écrasées
   if (overwrites.length > 0) {
-    const lignes = overwrites.map(o=>`• ${o.matiere} : ${o.ancienne}/20 → ${o.nouvelle==='NE'?'NE':o.nouvelle+'/20'}`).join('\n');
+    const lignes = overwrites.map(o=>`• ${o.matiere} (${o.ancienneAnnee}) : ${o.ancienne==='NE'?'NE':o.ancienne+'/20'} → ${o.nouvelle==='NE'?'NE':o.nouvelle+'/20'}`).join('\n');
     const ok = confirm(`⚠️ ${overwrites.length} note(s) vont être modifiées :\n\n${lignes}\n\nConfirmer l'enregistrement ?`);
     if (!ok) return;
   }
