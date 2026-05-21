@@ -1100,6 +1100,12 @@ function diplomeFromClasse(classe){
   if (c.startsWith('DCG'))    return 'DCG';
   return (classe||'').split(' ')[0]||'';
 }
+// Normalise un nom de matière pour la comparaison : "UE 2 - Droit des sociétés" et "UE 2" → "ue2"
+function matKey(name){
+  const s = (name||'').trim();
+  const m = s.match(/^(UE\s*\d+[a-zA-Z]*)/i);
+  return m ? m[1].toLowerCase().replace(/\s+/g,'') : s.toLowerCase();
+}
 
 function selectEtu(id, nom, classe){
   document.getElementById('noteEtuSearch').value=nom;
@@ -1187,19 +1193,19 @@ async function chargerUEs(){
 
   // Notes de l'année sélectionnée (cible d'enregistrement + détection écrasement)
   const currMap = {};
-  allExisting.filter(n=>n.annee===annee).forEach(n=>{ currMap[(n.matiere||'').toLowerCase()]=n; });
+  allExisting.filter(n=>n.annee===annee).forEach(n=>{ currMap[matKey(n.matiere)]=n; });
 
   // Note la plus récente par matière (toutes années confondues) → pour pré-remplissage
   const latestMap = {};
   allExisting.forEach(n=>{
-    const k=(n.matiere||'').toLowerCase();
+    const k=matKey(n.matiere);
     if (!latestMap[k] || (n.annee||'') >= (latestMap[k].annee||'')) latestMap[k]=n;
   });
 
   // Meilleure note (pour sujet mémoire fallback)
   const bestMap = {};
   allExisting.forEach(n=>{
-    const k=(n.matiere||'').toLowerCase();
+    const k=matKey(n.matiere);
     if (!bestMap[k]||parseFloat(n.note||0)>parseFloat(bestMap[k].note||0)) bestMap[k]=n;
   });
 
@@ -1209,14 +1215,14 @@ async function chargerUEs(){
   // Historique complet par matière (toutes années triées)
   const histByUE = {};
   allExisting.forEach(n=>{
-    const k=(n.matiere||'').toLowerCase();
+    const k=matKey(n.matiere);
     if (!histByUE[k]) histByUE[k]=[];
     histByUE[k].push(n);
   });
 
   const tbody = document.getElementById('bulkUETbody');
   tbody.innerHTML = mats.map((m,idx)=>{
-    const k=(m.matiere||'').toLowerCase();
+    const k=matKey(m.matiere);
     const latest = latestMap[k];   // Note la plus récente (pré-remplissage)
     const best   = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
@@ -1296,7 +1302,7 @@ async function saveNotesBulk(){
     if (!val) return; // vide → pas d'envoi
     if (val.toUpperCase()==='NE') val='NE';
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
-    const k = (m.matiere||'').toLowerCase();
+    const k = matKey(m.matiere);
 
     // Vérifier si la note a été modifiée (comparaison avec l'original stocké)
     const original = inp.dataset.original??'';
