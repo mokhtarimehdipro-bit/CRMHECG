@@ -174,7 +174,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis2"></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <table>
-            <thead><tr><th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale</th><th>Moy. Pro</th><th>Résultat Auto</th><th>Résultat Final</th><th></th></tr></thead>
+            <thead><tr><th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat Auto</th><th>Résultat Final</th><th></th></tr></thead>
             <tbody id="statsTbody"></tbody>
           </table>
         </div>
@@ -353,8 +353,8 @@
             <option>BTS CG</option><option>DCG</option><option>DSCG</option>
           </select>
         </div>
-        <div><label>Année</label>
-          <input type="text" id="noteAnnee" placeholder="ex: 2025-2026">
+        <div><label>Année scolaire</label>
+          <select id="noteAnnee"></select>
         </div>
       </div>
       <div class="flex gap-3 mb-5 items-end">
@@ -963,9 +963,19 @@ async function showStats(){
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   const isDCGstats = diplome==='DCG'||diplome==='DSCG';
   const isBTSstats = diplome.startsWith('BTS');
-  document.querySelector('#statsPanel table thead tr').innerHTML = isDCGstats
-    ? '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th>Résultat Auto</th><th>Résultat Final</th><th></th>'
-    : '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale</th><th>Moy. Tronc</th><th>Moy. Pro</th><th>Résultat Auto</th><th>Résultat Final</th><th></th>';
+  // Déterminer si on a des sous-moyennes pertinentes pour BTS (tronc ou pro différents de général)
+  const hasTroncCol = !isDCGstats && s.some(x=>x.moyGeneral!==null);
+  const hasProCol   = !isDCGstats && s.some(x=>x.moyPro!==null);
+  if (isDCGstats) {
+    document.querySelector('#statsPanel table thead tr').innerHTML =
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th>Résultat Auto</th><th>Résultat Final</th><th></th>';
+  } else {
+    let btsHead = '<th>Rang</th><th>Étudiant</th><th>Classe</th><th title="Classement basé sur cette moyenne">Moy. Générale ↑</th>';
+    if (hasTroncCol) btsHead += '<th>Moy. Tronc</th>';
+    if (hasProCol)   btsHead += '<th>Moy. Pro</th>';
+    btsHead += '<th>Résultat Auto</th><th>Résultat Final</th><th></th>';
+    document.querySelector('#statsPanel table thead tr').innerHTML = btsHead;
+  }
   document.getElementById('statsTbody').innerHTML = s.map(x=>{
     const diffHtml = x.differentiels===null?'—': x.differentiels>=0
       ? `<span style="color:#15803d;font-weight:700">+${x.differentiels}</span>`
@@ -981,12 +991,13 @@ async function showStats(){
       <td>${x.resultatManuel?badgeRes(x.resultatManuel):badgeRes(x.resultatAuto)}</td>
       <td>${canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${x.nomPrenom.replace(/'/g,"\\'")}','${x.annee}','${diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:''}</td>
     </tr>`;
+    let btsCols = `<td style="font-weight:700;color:#1A4E8A">${x.moyGen!==null?x.moyGen.toFixed(2)+'/20':'—'}</td>`;
+    if (hasTroncCol) btsCols += `<td>${x.moyGeneral!==null?x.moyGeneral.toFixed(2)+'/20':'—'}</td>`;
+    if (hasProCol)   btsCols += `<td>${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`;
     return `<tr>
       <td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
-      <td style="font-weight:700">${x.moyGen!==null?x.moyGen.toFixed(2)+'/20':'—'}</td>
-      <td>${x.moyGeneral!==null?x.moyGeneral.toFixed(2)+'/20':'—'}</td>
-      <td>${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>
+      ${btsCols}
       <td>${badgeRes(x.resultatAuto)}</td>
       <td>${x.resultatManuel?badgeRes(x.resultatManuel):badgeRes(x.resultatAuto)}</td>
       <td>${canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${x.nomPrenom.replace(/'/g,"\\'")}','${x.annee}','${diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:''}</td>
@@ -1027,10 +1038,26 @@ document.addEventListener('click',function(e){
     document.getElementById('noteEtuDropdown')?.classList.add('hidden');
 });
 
+function buildAnneeSelect(selectId){
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const today = new Date();
+  const y = today.getFullYear();
+  const startYear = today.getMonth() >= 8 ? y : y - 1; // sept. = début d'année scolaire
+  sel.innerHTML = '';
+  for (let i = startYear + 1; i >= startYear - 6; i--) {
+    const val = `${i}-${i+1}`;
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val;
+    if (i === startYear) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 function openBulkNoteModal(prefillIdEtu=null){
   hide('bulkUEGrid'); hide('bulkAfterSave');
   document.getElementById('noteModal').classList.remove('hidden');
-  document.getElementById('noteAnnee').value   = '';
+  buildAnneeSelect('noteAnnee');
   document.getElementById('noteClasse').value  = '';
   document.getElementById('noteDiplome').value = '';
   document.getElementById('noteEtuId').value   = '';
@@ -1057,9 +1084,8 @@ async function chargerUEs(){
   if (!diplome){ toast('Diplôme non identifiable. Vérifiez la fiche étudiant.',false); return; }
   const mats = refMatieres[diplome];
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
-  // DCG/DSCG : charger toutes les années pour l'historique
-  const isMultiYear = diplome==='DCG'||diplome==='DSCG';
-  const r = await api('getNotes', isMultiYear ? {idEtu} : {idEtu, annee});
+  // Toujours charger toutes les notes pour afficher l'historique complet
+  const r = await api('getNotes', {idEtu});
   const allExisting = r.success ? r.data : [];
   // Note de l'année courante
   const currMap = {};
@@ -1085,9 +1111,9 @@ async function chargerUEs(){
     const curr = currMap[k];
     const best = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
-    // Afficher toutes les notes des années précédentes
+    // Historique toutes années précédentes (tous diplômes)
     const prevNotes = (histByUE[k]||[]).sort((a,b)=>(a.annee||'').localeCompare(b.annee||''));
-    const histHtml = (isMultiYear && prevNotes.length)
+    const histHtml = prevNotes.length
       ? '<br>' + prevNotes.map(h=>{
           const hNE = String(h.note).toUpperCase()==='NE';
           const hNum = parseFloat(h.note);
@@ -1097,18 +1123,22 @@ async function chargerUEs(){
       : '';
     const currNoteVal = curr?.note??'';
     const isNEcurr = String(currNoteVal).toUpperCase()==='NE';
+    // Badge indiquant l'année de la note déjà saisie pour l'année courante
+    const currYearBadge = (currNoteVal!==''&&currNoteVal!==null)
+      ? `<span style="font-size:0.65rem;color:#9ca3af;font-weight:600;white-space:nowrap">(${curr?.annee||annee})</span>` : '';
     return `<tr>
       <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
       <td>
-        <div style="display:flex;gap:0.3rem;align-items:center">
+        <div style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap">
           <input type="text" id="ue_note_${idx}" value="${isNEcurr?'NE':currNoteVal}" placeholder="— ou NE"
-            style="width:90px;padding:0.4rem 0.6rem"
+            style="width:90px;padding:0.4rem 0.6rem;color:${isNEcurr?'#4338ca':''}"
             oninput="this.style.color=this.value.toUpperCase()==='NE'?'#4338ca':''"
             onchange="if(this.value!=='' && this.value.toUpperCase()!=='NE' && (isNaN(parseFloat(this.value))||parseFloat(this.value)<0||parseFloat(this.value)>20)){this.value='';}"
           >
           <button type="button" onclick="document.getElementById('ue_note_${idx}').value='NE';document.getElementById('ue_note_${idx}').style.color='#4338ca';"
             style="font-size:0.65rem;background:#e0e7ff;color:#4338ca;border:none;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.4rem;font-weight:700;white-space:nowrap">NE</button>
+          ${currYearBadge}
         </div>
       </td>
       <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${curr?.sujetMemoire||best?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
