@@ -164,6 +164,21 @@
         </div>
       </div>
 
+      <!-- Panneau stats par matière (s'affiche quand filtre Matière actif) -->
+      <div id="matiereStatsPanel" class="hidden mt-4 bg-blue-50 border border-blue-200 rounded-2xl p-5">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-base font-black text-[#1A4E8A]" id="matiereStatsPanelTitle">Stats — matière</h3>
+          <button onclick="document.getElementById('filterMatiere').value='';renderNotesGrouped()" class="btn-ghost text-xs">✕ Effacer filtre</button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4" id="matiereStatsKpis"></div>
+        <div class="bg-white rounded-xl overflow-hidden">
+          <table>
+            <thead><tr><th>#</th><th>Étudiant</th><th>Classe</th><th>Année</th><th>Note</th><th>Résultat</th></tr></thead>
+            <tbody id="matiereStatsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Stats Panel -->
       <div id="statsPanel" class="hidden mt-6">
         <div class="flex justify-between items-center mb-4">
@@ -375,6 +390,7 @@
           <p class="text-xs text-gray-400">Laissez vide les matières non encore passées.</p>
           <div class="flex gap-3">
             <button onclick="closeNoteModal()" class="btn-ghost">Annuler</button>
+            <button onclick="openReleveModal()" class="btn-ghost">📎 Joindre un relevé</button>
             <button onclick="saveNotesBulk()" class="btn-orange">Enregistrer toutes les notes</button>
           </div>
         </div>
@@ -681,6 +697,7 @@ const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
 let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
+let inscriptionPreviews = [];
 let gedCurrentFolderId = null; let gedCurrentFolderName = "GED"; let gedDroitsCurrentMembers = [];
 let qualiopiPreuves = [];
 
@@ -916,6 +933,56 @@ function renderNotesGrouped(){
     </tr>`;
   });
   tbody.innerHTML = html;
+  renderMatiereStats();
+}
+
+function renderMatiereStats(){
+  const qMat     = (document.getElementById('filterMatiere').value||'').toLowerCase();
+  const qDiplome = document.getElementById('filterDiplome').value||'';
+  const qAnnee   = document.getElementById('filterAnnee').value||'';
+  const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
+  const panel    = document.getElementById('matiereStatsPanel');
+  if (!panel) return;
+  if (!qMat || !allNotes.length){ panel.classList.add('hidden'); return; }
+  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
+  let notes = allNotes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
+  else if (qAnnee && !isDCGview) notes = notes.filter(n=>n.annee===qAnnee);
+  if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  if (!notes.length){ panel.classList.add('hidden'); return; }
+  // Une note par étudiant : la plus récente pour DCG (cumulatif), exacte pour BTS
+  const byEtu = {};
+  notes.forEach(n=>{
+    const k = n.idEtu||n.nomPrenom;
+    if (!byEtu[k] || (n.annee||'')>(byEtu[k].annee||'')) byEtu[k]=n;
+  });
+  const etuNotes = Object.values(byEtu);
+  const numNotes = etuNotes.map(n=>parseFloat(n.note)).filter(v=>!isNaN(v));
+  const neCount  = etuNotes.filter(n=>String(n.note).toUpperCase()==='NE').length;
+  const nbCandidats = etuNotes.length;
+  const nbReussite  = numNotes.filter(v=>v>=10).length;
+  const moyenne = numNotes.length ? (numNotes.reduce((a,b)=>a+b,0)/numNotes.length).toFixed(2) : '—';
+  const taux    = numNotes.length ? Math.round(nbReussite/numNotes.length*100)+'%' : '—';
+  const noteMax = numNotes.length ? Math.max(...numNotes).toFixed(2) : '—';
+  const noteMin = numNotes.length ? Math.min(...numNotes).toFixed(2) : '—';
+  const matLabel = document.getElementById('filterMatiere').options[document.getElementById('filterMatiere').selectedIndex]?.text || qMat;
+  document.getElementById('matiereStatsPanelTitle').textContent = 'Stats — '+matLabel;
+  document.getElementById('matiereStatsKpis').innerHTML = [
+    [nbCandidats,'Candidats','#1A4E8A'],
+    [nbReussite,'Reçus ≥10','#15803d'],
+    [taux,'Taux réussite','#374151'],
+    [moyenne+'/20','Moyenne','#374151'],
+    [noteMax+' / '+noteMin,'Max / Min','#6b7280'],
+    ...(neCount?[[neCount,'Dispensés NE','#4338ca']]:[]),
+  ].map(([v,l,c])=>`<div class="kpi-card"><p class="text-xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
+  const sorted = etuNotes.slice().sort((a,b)=>(parseFloat(b.note)||0)-(parseFloat(a.note)||0));
+  document.getElementById('matiereStatsTbody').innerHTML = sorted.map((n,i)=>{
+    const isNE=String(n.note).toUpperCase()==='NE';
+    const num=parseFloat(n.note);
+    const c=isNE?'#4338ca':(isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626'));
+    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNE?'NE':isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
+  }).join('');
+  panel.classList.remove('hidden');
 }
 
 function toggleGroup(key){
@@ -1100,13 +1167,20 @@ async function chargerUEs(){
   if (!mats||!mats.length){ toast('Référentiel matières non chargé pour '+diplome,false); return; }
 
   const nomPrenom = (document.getElementById('noteEtuSearch').value||'').trim().toLowerCase();
-  // Charger toutes les notes du diplôme (même logique que la vue principale qui fonctionne)
-  // puis filtrer côté client par idEtu OU nomPrenom pour retrouver cet étudiant
+  // Lookup nom/prénom séparés dans allEtudiants pour matching souple (ordre variable dans la feuille)
+  const etuObj = (window.allEtudiants||[]).find(e=>String(e.id).trim()===String(idEtu).trim());
+  const nomParts = etuObj
+    ? [(etuObj.nom||'').trim().toLowerCase(),(etuObj.prenom||'').trim().toLowerCase()].filter(p=>p.length>1)
+    : [];
   const r = await api('getNotes', {diplome});
   const allExisting = r.success
     ? r.data.filter(n=>{
-        if (idEtu && String(n.idEtu||'').trim()===String(idEtu).trim()) return true;
-        if (nomPrenom && String(n.nomPrenom||'').trim().toLowerCase()===nomPrenom) return true;
+        const nIdEtu = String(n.idEtu||'').trim();
+        const nName  = String(n.nomPrenom||'').trim().toLowerCase();
+        if (idEtu && nIdEtu && nIdEtu===String(idEtu).trim()) return true;
+        if (nomPrenom && nName===nomPrenom) return true;
+        // Matching souple : nom ET prénom tous présents dans la chaîne (ordre NOM/Prénom indifférent)
+        if (nomParts.length>=2 && nomParts.every(part=>nName.includes(part))) return true;
         return false;
       })
     : [];
@@ -1129,7 +1203,7 @@ async function chargerUEs(){
     if (!bestMap[k]||parseFloat(n.note||0)>parseFloat(bestMap[k].note||0)) bestMap[k]=n;
   });
 
-  bulkCurrentEtu = { idEtu, nomPrenom: document.getElementById('noteEtuSearch').value, classe, annee, diplome };
+  bulkCurrentEtu = { idEtu, nomPrenom: document.getElementById('noteEtuSearch').value, nom: etuObj?.nom||'', prenom: etuObj?.prenom||'', classe, annee, diplome };
   bulkCurrMap = currMap;
 
   // Historique complet par matière (toutes années triées)
@@ -1284,7 +1358,9 @@ async function uploadReleve(){
     const b64=e.target.result.split(',')[1];
     const r=await api('uploadReleveNote',{
       base64Data:b64, mimeType:file.type, fileName:file.name,
-      nomPrenom:bulkCurrentEtu?.nomPrenom||'', classe:bulkCurrentEtu?.classe||'',
+      nomPrenom:bulkCurrentEtu?.nomPrenom||'',
+      nom:bulkCurrentEtu?.nom||'', prenom:bulkCurrentEtu?.prenom||'',
+      classe:bulkCurrentEtu?.classe||'',
       annee:bulkCurrentEtu?.annee||'', diplome:bulkCurrentEtu?.diplome||''
     });
     btn.textContent='⬆ Envoyer'; btn.disabled=false;
@@ -1753,18 +1829,22 @@ async function previewInscriptions(){
   document.getElementById('inscriptionResult').classList.add('hidden');
   if (!r.success){ prev.innerHTML=`<p class="text-red-500 text-sm">Erreur : ${r.message}</p>`; return; }
   const list=r.previews||[];
+  inscriptionPreviews = list;
   if (!list.length){ prev.innerHTML='<p class="text-gray-400 text-sm text-center py-4">Aucun mail d\'inscription en attente.</p>'; document.getElementById('btnAspirer').disabled=true; return; }
   const newCount=list.filter(x=>!x.doublon).length;
   document.getElementById('btnAspirer').disabled=(newCount===0);
-  prev.innerHTML=`<p class="text-sm font-bold text-gray-600 mb-3">${list.length} mail(s) trouvé(s) — <span style="color:#15803d">${newCount} nouveau(x)</span>, <span style="color:#dc2626">${list.length-newCount} doublon(s)</span></p>
-  <div class="space-y-2">${list.map(x=>`<div style="border-radius:0.75rem;padding:0.75rem 1rem;border:1px solid ${x.doublon?'#fecaca':'#bbf7d0'};background:${x.doublon?'#fef2f2':'#f0fdf4'}">
-    <div class="flex justify-between items-start">
-      <div>
-        <p class="font-bold text-gray-800 text-sm">${x.prenom} ${x.nom}</p>
-        <p class="text-xs text-gray-500">${x.email||'—'} · ${x.tel||'—'}</p>
-        <p class="text-xs text-gray-500">${x.formation||'—'} · ${x.campus||'—'}</p>
+  prev.innerHTML=`<p class="text-sm font-bold text-gray-600 mb-3">${list.length} mail(s) trouvé(s) — <span style="color:#15803d">${newCount} nouveau(x) — cochez ceux à importer</span>, <span style="color:#dc2626">${list.length-newCount} doublon(s) ignoré(s)</span></p>
+  <div class="space-y-2">${list.map((x,i)=>`<div style="border-radius:0.75rem;padding:0.75rem 1rem;border:1px solid ${x.doublon?'#fecaca':'#bbf7d0'};background:${x.doublon?'#fef2f2':'#f0fdf4'}">
+    <div class="flex justify-between items-start gap-3">
+      <div class="flex items-start gap-3">
+        ${!x.doublon?`<input type="checkbox" id="chk_msg_${i}" checked style="width:16px;height:16px;margin-top:2px;cursor:pointer" onchange="document.getElementById('btnAspirer').disabled=inscriptionPreviews.filter((p,j)=>!p.doublon&&document.getElementById('chk_msg_'+j)?.checked).length===0">` : '<div style="width:16px"></div>'}
+        <div>
+          <p class="font-bold text-gray-800 text-sm">${x.prenom} ${x.nom}</p>
+          <p class="text-xs text-gray-500">${x.email||'—'} · ${x.tel||'—'}</p>
+          <p class="text-xs text-gray-500">${x.formation||'—'} · ${x.campus||'—'}</p>
+        </div>
       </div>
-      <span style="font-size:0.72rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;${x.doublon?'background:#fee2e2;color:#dc2626':'background:#dcfce7;color:#15803d'}">${x.doublon?'DOUBLON':'NOUVEAU'}</span>
+      <span style="font-size:0.72rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;white-space:nowrap;${x.doublon?'background:#fee2e2;color:#dc2626':'background:#dcfce7;color:#15803d'}">${x.doublon?'DOUBLON':'NOUVEAU'}</span>
     </div>
   </div>`).join('')}</div>`;
 }
@@ -1772,7 +1852,10 @@ async function previewInscriptions(){
 async function aspirerInscriptions(){
   const btn=document.getElementById('btnAspirer');
   btn.textContent='⏳ Aspiration en cours…'; btn.disabled=true;
-  const r = await api('aspirerInscriptions');
+  const selectedMsgIds = inscriptionPreviews
+    .filter((x,i)=>!x.doublon && document.getElementById('chk_msg_'+i)?.checked)
+    .map(x=>x.msgId);
+  const r = await api('aspirerInscriptions', {selectedMsgIds});
   btn.textContent='📬 Confirmer et aspirer'; btn.disabled=true;
   document.getElementById('inscriptionPreview').classList.add('hidden');
   const res=document.getElementById('inscriptionResult');
