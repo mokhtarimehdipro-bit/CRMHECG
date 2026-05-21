@@ -134,10 +134,10 @@
             </select>
           </div>
           <div><label>Année</label>
-            <select id="filterAnnee" onchange="if(allNotes.length) loadNotes()"><option value="">Toutes</option></select>
+            <select id="filterAnnee"><option value="">Toutes</option></select>
           </div>
           <div><label>Classe</label>
-            <select id="filterClasse" onchange="if(allNotes.length) loadNotes()"><option value="">Toutes</option></select>
+            <select id="filterClasse"><option value="">Toutes</option></select>
           </div>
           <div><label>Étudiant</label>
             <input type="text" id="filterEtu" placeholder="Nom ou prénom..." oninput="renderNotesGrouped()">
@@ -797,24 +797,29 @@ function filterMatieresUpdate(){
   selA.innerHTML='<option value="">Toutes</option>'+years.map(a=>`<option ${a===prevA?'selected':''}>${a}</option>`).join('');
 }
 
+let _loadNotesRunning = false;
 async function loadNotes(){
-  const diplome = document.getElementById('filterDiplome').value;
-  const annee   = document.getElementById('filterAnnee').value;
-  const classe  = document.getElementById('filterClasse').value;
-  const isDCG   = diplome==='DCG'||diplome==='DSCG';
-  loading('notesTbody', 11);
-  // Pour DCG/DSCG : récupérer toutes les années jusqu'à l'année sélectionnée (cumulatif)
-  const params = isDCG ? { diplome, classe, maxAnnee: annee||'' } : { diplome, annee, classe };
-  const r = await api('getNotes', params);
-  if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  allNotes = r.data;
-  // Peupler filtre classes dynamiquement (années déjà pré-remplies)
-  const classes = [...new Set(allNotes.map(n=>n.classe).filter(Boolean))].sort();
-  const selC = document.getElementById('filterClasse');
-  const prevC = selC.value;
-  selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
-  hide('statsPanel');
-  renderNotesGrouped();
+  if (_loadNotesRunning) return;
+  _loadNotesRunning = true;
+  try {
+    const diplome = document.getElementById('filterDiplome').value;
+    const annee   = document.getElementById('filterAnnee').value;
+    const classe  = document.getElementById('filterClasse').value;
+    const isDCG   = diplome==='DCG'||diplome==='DSCG';
+    loading('notesTbody', 11);
+    const params = isDCG ? { diplome, classe, maxAnnee: annee||'' } : { diplome, annee, classe };
+    const r = await api('getNotes', params);
+    if (!r.success){ toast('Erreur : '+r.message,false); return; }
+    allNotes = r.data;
+    const classes = [...new Set(allNotes.map(n=>n.classe).filter(Boolean))].sort();
+    const selC = document.getElementById('filterClasse');
+    const prevC = selC.value;
+    selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
+    hide('statsPanel');
+    renderNotesGrouped();
+  } finally {
+    _loadNotesRunning = false;
+  }
 }
 
 function getStudentGroups(notes){
