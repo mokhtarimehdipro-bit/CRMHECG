@@ -47,9 +47,7 @@
     /* Qualiopi */
     .qualiopi-card  { background:#fff; border:1px solid #f3f4f6; border-radius:1rem; padding:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,.07); margin-bottom:1rem; }
     .qualiopi-badge { display:inline-block; padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.75rem; font-weight:700; }
-    /* Planning - Siren for priority 4 & 5 */
-    @keyframes siren-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
-    .siren-task { animation: siren-blink 0.7s ease-in-out infinite; }
+    /* Planning - Siren for priority 4 & 5 - icône 🚨 uniquement, pas de clignotement */
     /* Autocomplete dropdown */
     .etu-dropdown-item:hover { background:#eff6ff; }
     .ac-drop { position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;z-index:300;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12); }
@@ -212,20 +210,17 @@
         </div>
       </div>
       <!-- Filtres -->
-      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 space-y-3">
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
           <input type="text" id="filterFormateurNom" placeholder="Nom / prénom…" oninput="renderFormateurs()">
+          <input type="text" id="filterFormateurMatiere" placeholder="Matière…" oninput="renderFormateurs()">
           <input type="text" id="filterFormateurVille" placeholder="Ville…" oninput="renderFormateurs()">
           <div class="flex flex-col gap-1 text-xs">
             <label class="flex items-center gap-1"><input type="checkbox" id="fltEnPoste" onchange="renderFormateurs()" style="width:auto"> En poste</label>
             <label class="flex items-center gap-1"><input type="checkbox" id="fltSorti"   onchange="renderFormateurs()" style="width:auto"> Sortis</label>
-            <label class="flex items-center gap-1"><input type="checkbox" id="fltFormateur" onchange="renderFormateurs()" style="width:auto"> Formateurs seult</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="fltFormateur"    onchange="renderFormateurs()" style="width:auto"> Formateurs seult</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="fltNonFormateur" onchange="renderFormateurs()" style="width:auto"> NON formateurs</label>
           </div>
-        </div>
-        <!-- Filtre matières par cases à cocher -->
-        <div>
-          <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Matières</p>
-          <div id="matiereCheckboxes" class="flex flex-wrap gap-2" style="max-height:120px;overflow-y:auto"></div>
         </div>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -747,7 +742,7 @@ async function init(){
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
   // Formateurs
-  try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; buildMatiereCheckboxes(); } } catch(e){}
+  try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; renderFormateurs(); } } catch(e){}
 }
 
 function showModule(m){
@@ -757,7 +752,7 @@ function showModule(m){
   document.getElementById('section-'+m)?.classList.add('active');
   if (m==='notes')       initNotes();
   if (m==='delegues')    loadDelegues();
-  if (m==='formateurs')  { buildMatiereCheckboxes(); renderFormateurs(); }
+  if (m==='formateurs')  { renderFormateurs(); }
   if (m==='planning')    loadPlanning();
   if (m==='ged')         loadGed();
   if (m==='qualiopi')    loadQualiopi();
@@ -892,7 +887,7 @@ function renderNotesGrouped(){
       <td style="font-weight:600">${g.nomPrenom}</td>
       <td>${g.diplome||'—'}</td><td>${g.classe||'—'}</td>
       <td style="font-size:0.75rem;color:#6b7280">${anneeLabel}</td>
-      <td>${isDCGrow ? `<span title="validées">${ueOk}✔</span> <span title="reçues" style="color:#d97706">${ueRecu}≈</span> <span title="éliminées" style="color:#dc2626">${ueElim}✘</span>` : nbUE}</td>
+      <td>${isDCGrow ? `<span title="saisies" style="color:#6b7280;font-size:0.8rem">${ueTotal} saisies</span> <span title="validées">${ueOk}✔</span> <span title="reçues" style="color:#d97706">${ueRecu}≈</span> <span title="éliminées" style="color:#dc2626">${ueElim}✘</span>` : nbUE}</td>
       <td>${totalPts?totalPts.toFixed(2):'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${moy!==null?moy.toFixed(2)+'/20':'—'}</td>
       <td>${diffHtml}</td>
@@ -1003,6 +998,7 @@ async function showStats(){
 
 // ── Bulk Note Modal ────────────────────────────────────────────────
 let bulkCurrentEtu = null;
+let bulkCurrMap = {};  // notes déjà saisies pour l'année courante (pour détection écrasement)
 
 function filterEtuSuggestions(){
   const q=(document.getElementById('noteEtuSearch').value||'').toLowerCase().trim();
@@ -1075,16 +1071,29 @@ async function chargerUEs(){
     if (!bestMap[k]||n.note>bestMap[k].note) bestMap[k]=n;
   });
   bulkCurrentEtu = { idEtu, nomPrenom: document.getElementById('noteEtuSearch').value, classe, annee, diplome };
+  bulkCurrMap = currMap;
+  // Historique complet par matière (hors année courante)
+  const histByUE = {};
+  allExisting.filter(n=>n.annee!==annee).forEach(n=>{
+    const k=(n.matiere||'').toLowerCase();
+    if (!histByUE[k]) histByUE[k]=[];
+    histByUE[k].push(n);
+  });
   const tbody = document.getElementById('bulkUETbody');
   tbody.innerHTML = mats.map((m,idx)=>{
     const k=(m.matiere||'').toLowerCase();
     const curr = currMap[k];
-    const best = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
-    const bestNote = best?.note??'';
-    const bestIsNE = String(bestNote).toUpperCase()==='NE';
-    const histHtml = (isMultiYear&&best&&best.annee!==annee&&bestNote!==null&&bestNote!=='')
-      ? `<br><span style="font-size:0.7rem;color:#15803d;font-weight:700">✓ ${bestIsNE?'NE':bestNote+'/20'} (${best.annee})</span>` : '';
+    // Afficher toutes les notes des années précédentes
+    const prevNotes = (histByUE[k]||[]).sort((a,b)=>(a.annee||'').localeCompare(b.annee||''));
+    const histHtml = (isMultiYear && prevNotes.length)
+      ? '<br>' + prevNotes.map(h=>{
+          const hNE = String(h.note).toUpperCase()==='NE';
+          const hNum = parseFloat(h.note);
+          const hColor = hNE?'#4338ca':(hNum>=10?'#15803d':hNum>=6?'#d97706':'#dc2626');
+          return `<span style="font-size:0.68rem;font-weight:700;color:${hColor}">${h.annee}: ${hNE?'NE':h.note+'/20'}</span>`;
+        }).join(' · ')
+      : '';
     const currNoteVal = curr?.note??'';
     const isNEcurr = String(currNoteVal).toUpperCase()==='NE';
     return `<tr>
@@ -1112,12 +1121,28 @@ async function saveNotesBulk(){
   if (!bulkCurrentEtu){ toast('Aucune session active.',false); return; }
   const mats = JSON.parse(document.getElementById('bulkUEGrid').dataset.mats||'[]');
   const notes = [];
+  const overwrites = []; // { matiere, ancienne, nouvelle }
   mats.forEach((m,idx)=>{
     let val = (document.getElementById('ue_note_'+idx)?.value||'').trim();
     if (val.toUpperCase()==='NE') val='NE';
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
+    // Détecter un écrasement : note existante différente de la nouvelle valeur saisie
+    if (val !== '') {
+      const k = (m.matiere||'').toLowerCase();
+      const existing = bulkCurrMap[k];
+      const existNote = existing ? String(existing.note??'') : '';
+      if (existNote !== '' && existNote.toUpperCase() !== val.toUpperCase()) {
+        overwrites.push({ matiere: m.matiere, ancienne: existNote, nouvelle: val });
+      }
+    }
     notes.push({ matiere:m.matiere, coeff:m.coeff, note:val, sujetMemoire:sujet });
   });
+  // Demander confirmation si des notes vont être écrasées
+  if (overwrites.length > 0) {
+    const lignes = overwrites.map(o=>`• ${o.matiere} : ${o.ancienne}/20 → ${o.nouvelle==='NE'?'NE':o.nouvelle+'/20'}`).join('\n');
+    const ok = confirm(`⚠️ ${overwrites.length} note(s) vont être modifiées :\n\n${lignes}\n\nConfirmer l'enregistrement ?`);
+    if (!ok) return;
+  }
   const nomPrenom = bulkCurrentEtu.nomPrenom || document.getElementById('noteEtuSearch').value || '';
   const r = await api('saveNotesBulk',{
     idEtu: bulkCurrentEtu.idEtu, nomPrenom,
@@ -1131,6 +1156,7 @@ async function saveNotesBulk(){
 function closeNoteModal(){
   document.getElementById('noteModal').classList.add('hidden');
   bulkCurrentEtu = null;
+  bulkCurrMap = {};
 }
 
 // ── Relevé de Note ────────────────────────────────────────────────
@@ -1285,41 +1311,21 @@ document.addEventListener('click', e=>{
 // ══════════════════════════════════════════════════════════════════
 // FORMATEURS / PERSONNEL ENCADRANT
 // ══════════════════════════════════════════════════════════════════
-function buildMatiereCheckboxes(){
-  const all = new Set();
-  allFormateurs.forEach(f=>(f.matieres||'').split(',').map(m=>m.trim()).filter(Boolean).forEach(m=>all.add(m)));
-  const sorted=[...all].sort((a,b)=>a.localeCompare(b));
-  const prev=getSelectedMatieres();
-  const container=document.getElementById('matiereCheckboxes');
-  if(!container) return;
-  if(!sorted.length){container.innerHTML='<span class="text-xs text-gray-400 italic">Aucune matière enregistrée</span>';return;}
-  container.innerHTML=sorted.map(m=>{
-    const id='fltMat_'+m.replace(/[^a-zA-Z0-9]/g,'_');
-    const checked=prev.includes(m)?'checked':'';
-    return `<label class="flex items-center gap-1 text-xs cursor-pointer" style="background:#f9fafb;border:1px solid #e5e7eb;padding:0.2rem 0.6rem;border-radius:9999px">
-      <input type="checkbox" id="${id}" value="${m}" ${checked} onchange="renderFormateurs()" style="width:auto">${m}
-    </label>`;
-  }).join('');
-}
-function getSelectedMatieres(){
-  const checks=document.querySelectorAll('#matiereCheckboxes input[type=checkbox]:checked');
-  return [...checks].map(c=>c.value);
-}
-
 function renderFormateurs(){
   const qn = (document.getElementById('filterFormateurNom').value||'').toLowerCase();
+  const qm = (document.getElementById('filterFormateurMatiere').value||'').toLowerCase();
   const qv = (document.getElementById('filterFormateurVille').value||'').toLowerCase();
-  const fEnPoste    = document.getElementById('fltEnPoste')?.checked;
-  const fSorti      = document.getElementById('fltSorti')?.checked;
-  const fFormateur  = document.getElementById('fltFormateur')?.checked;
-  const selMats     = getSelectedMatieres();
-  const anyStatus   = fEnPoste||fSorti;
+  const fEnPoste       = document.getElementById('fltEnPoste')?.checked;
+  const fSorti         = document.getElementById('fltSorti')?.checked;
+  const fFormateur     = document.getElementById('fltFormateur')?.checked;
+  const fNonFormateur  = document.getElementById('fltNonFormateur')?.checked;
+  const anyStatus      = fEnPoste||fSorti;
   const filtered = allFormateurs.filter(f=>{
     const nom=((f.nom||'')+' '+(f.prenom||'')).toLowerCase();
     if (qn && !nom.includes(qn)) return false;
-    if (selMats.length){
-      const fMats=(f.matieres||'').split(',').map(m=>m.trim());
-      if (!selMats.some(sm=>fMats.some(fm=>fm.toLowerCase()===sm.toLowerCase()))) return false;
+    if (qm){
+      const fMats=(f.matieres||'').toLowerCase();
+      if (!fMats.includes(qm)) return false;
     }
     if (qv && !(f.ville||'').toLowerCase().includes(qv)) return false;
     const sorti = !!(f.dateSortie && f.dateSortie.trim());
@@ -1327,7 +1333,10 @@ function renderFormateurs(){
       if (fEnPoste && !fSorti && sorti) return false;
       if (!fEnPoste && fSorti && !sorti) return false;
     }
-    if (fFormateur && f.etatFormateur!=='OUI') return false;
+    const onlyFormateur    = fFormateur && !fNonFormateur;
+    const onlyNonFormateur = fNonFormateur && !fFormateur;
+    if (onlyFormateur    && f.etatFormateur!=='OUI') return false;
+    if (onlyNonFormateur && f.etatFormateur==='OUI') return false;
     return true;
   });
   document.getElementById('formateursTbody').innerHTML = filtered.map(f=>{
@@ -1400,7 +1409,7 @@ async function saveFormateur(){
   });
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Enregistré ✓'); closeFormateurModal();
-  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; buildMatiereCheckboxes(); renderFormateurs(); }
+  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; renderFormateurs(); }
 }
 async function deleteFormateur(id){
   if (!id) return;
@@ -1408,7 +1417,7 @@ async function deleteFormateur(id){
   const r = await api('deletePersonnel',{id});
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Supprimé');
-  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; buildMatiereCheckboxes(); renderFormateurs(); }
+  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; renderFormateurs(); }
 }
 function exportPersonnel(){
   const header='ID,Nom,Prénom,Mail pro,Mail perso,Tél,Adresse,CP,Ville,Matières,Date entrée,Date sortie,Formateur';
@@ -1535,9 +1544,8 @@ function renderWeek(){
         const pc=getPersonColor(t.referentRef||t.referent);
         const bg=hexToRgba(pc,0.15);
         const prio=t.priorite||1;
-        const sirenCls=prio>=4?'siren-task':'';
         const sirenIcon=prio>=4?'🚨 ':'';
-        html+=`<div onclick='openTacheModal(${JSON.stringify(t).replace(/'/g,"&#39;")},null,null)' class="${sirenCls}" style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:pointer;font-size:0.75rem">
+        html+=`<div onclick='openTacheModal(${JSON.stringify(t).replace(/'/g,"&#39;")},null,null)' style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:pointer;font-size:0.75rem">
           <div style="font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="${t.titre}">${sirenIcon}${t.titre}</div>
           <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">${t.referentNom||t.referent||''}</div>
         </div>`;
