@@ -52,6 +52,9 @@
     .siren-task { animation: siren-blink 0.7s ease-in-out infinite; }
     /* Autocomplete dropdown */
     .etu-dropdown-item:hover { background:#eff6ff; }
+    .ac-drop { position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;z-index:300;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12); }
+    .ac-item { padding:0.5rem 1rem;cursor:pointer;font-size:0.8rem;color:#374151; }
+    .ac-item:hover { background:#eff6ff;color:#1A4E8A; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -209,14 +212,20 @@
         </div>
       </div>
       <!-- Filtres -->
-      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <input type="text" id="filterFormateurNom" placeholder="Nom / prénom…" oninput="renderFormateurs()">
-        <input type="text" id="filterFormateurMatiere" placeholder="Matière…" oninput="renderFormateurs()">
-        <input type="text" id="filterFormateurVille" placeholder="Ville…" oninput="renderFormateurs()">
-        <div class="flex flex-col gap-1 text-xs">
-          <label class="flex items-center gap-1"><input type="checkbox" id="fltEnPoste" onchange="renderFormateurs()" style="width:auto"> En poste</label>
-          <label class="flex items-center gap-1"><input type="checkbox" id="fltSorti"   onchange="renderFormateurs()" style="width:auto"> Sortis</label>
-          <label class="flex items-center gap-1"><input type="checkbox" id="fltFormateur" onchange="renderFormateurs()" style="width:auto"> Formateurs seult</label>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 space-y-3">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <input type="text" id="filterFormateurNom" placeholder="Nom / prénom…" oninput="renderFormateurs()">
+          <input type="text" id="filterFormateurVille" placeholder="Ville…" oninput="renderFormateurs()">
+          <div class="flex flex-col gap-1 text-xs">
+            <label class="flex items-center gap-1"><input type="checkbox" id="fltEnPoste" onchange="renderFormateurs()" style="width:auto"> En poste</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="fltSorti"   onchange="renderFormateurs()" style="width:auto"> Sortis</label>
+            <label class="flex items-center gap-1"><input type="checkbox" id="fltFormateur" onchange="renderFormateurs()" style="width:auto"> Formateurs seult</label>
+          </div>
+        </div>
+        <!-- Filtre matières par cases à cocher -->
+        <div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Matières</p>
+          <div id="matiereCheckboxes" class="flex flex-wrap gap-2" style="max-height:120px;overflow-y:auto"></div>
         </div>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -433,11 +442,11 @@
     <h3 class="text-xl font-black text-[#1A4E8A] mb-6">Informations de classe</h3>
     <div class="grid grid-cols-2 gap-4">
       <div class="col-span-2"><label>Classe</label><input type="text" id="classeNom" placeholder="ex: DCG 1A"></div>
-      <div class="col-span-2"><label>Professeur principal</label><input type="text" id="classePP" placeholder="Nom Prénom (formateur)"></div>
-      <div><label>Délégué 1</label><input type="text" id="classeDel1" placeholder="Nom Prénom (étudiant)"></div>
-      <div><label>Délégué 2</label><input type="text" id="classeDel2" placeholder="Nom Prénom (étudiant)"></div>
-      <div><label>Suppléant 1</label><input type="text" id="classeSup1"></div>
-      <div><label>Suppléant 2</label><input type="text" id="classeSup2"></div>
+      <div class="col-span-2" style="position:relative"><label>Professeur principal</label><input type="text" id="classePP" placeholder="Tapez un nom de formateur…" autocomplete="off" oninput="acFilter('classePP','pp')"><div id="classePP_drop" class="ac-drop hidden"></div></div>
+      <div style="position:relative"><label>Délégué 1</label><input type="text" id="classeDel1" placeholder="Tapez un étudiant…" autocomplete="off" oninput="acFilter('classeDel1','etu')"><div id="classeDel1_drop" class="ac-drop hidden"></div></div>
+      <div style="position:relative"><label>Délégué 2</label><input type="text" id="classeDel2" placeholder="Tapez un étudiant…" autocomplete="off" oninput="acFilter('classeDel2','etu')"><div id="classeDel2_drop" class="ac-drop hidden"></div></div>
+      <div style="position:relative"><label>Suppléant 1</label><input type="text" id="classeSup1" placeholder="Tapez un étudiant…" autocomplete="off" oninput="acFilter('classeSup1','etu')"><div id="classeSup1_drop" class="ac-drop hidden"></div></div>
+      <div style="position:relative"><label>Suppléant 2</label><input type="text" id="classeSup2" placeholder="Tapez un étudiant…" autocomplete="off" oninput="acFilter('classeSup2','etu')"><div id="classeSup2_drop" class="ac-drop hidden"></div></div>
       <div><label>Arrêt notes S1</label><input type="date" id="classeArretS1"></div>
       <div><label>Date conseil S1</label><input type="date" id="classeConseilS1"></div>
       <div><label>Heure conseil S1</label><input type="time" id="classeHeureConseilS1"></div>
@@ -693,7 +702,11 @@ async function api(action, extra={}){
     body: JSON.stringify({action, emailAuteur: user.email||user.ref, vieScRole, roleAuteur: vieScRole, ...extra}) });
   return res.json();
 }
-function fmtNote(n){ return n===null||n===undefined||n===""?'—':`${parseFloat(n).toFixed(2)}/20`; }
+function fmtNote(n){
+  if(n===null||n===undefined||n==='') return '—';
+  if(String(n).toUpperCase()==='NE') return '<span style="background:#e0e7ff;color:#4338ca;padding:0.1rem 0.45rem;border-radius:0.4rem;font-size:0.75rem;font-weight:700">NE</span>';
+  const f=parseFloat(n); return isNaN(f)?'—':`${f.toFixed(2)}/20`;
+}
 function badgeRes(r){
   const map={'Admis':'badge-admis','Rattrapage':'badge-ratt','Recalé':'badge-recale','Non admis':'badge-recale','En cours':'badge-cours'};
   return `<span class="badge ${map[r]||'bg-gray-100 text-gray-500'}">${r||'—'}</span>`;
@@ -733,7 +746,7 @@ async function init(){
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
   // Formateurs
-  try { const r = await api('getPersonnel'); if (r.success) allFormateurs = r.data; } catch(e){}
+  try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; buildMatiereCheckboxes(); } } catch(e){}
 }
 
 function showModule(m){
@@ -743,7 +756,7 @@ function showModule(m){
   document.getElementById('section-'+m)?.classList.add('active');
   if (m==='notes')       initNotes();
   if (m==='delegues')    loadDelegues();
-  if (m==='formateurs')  renderFormateurs();
+  if (m==='formateurs')  { buildMatiereCheckboxes(); renderFormateurs(); }
   if (m==='planning')    loadPlanning();
   if (m==='ged')         loadGed();
   if (m==='qualiopi')    loadQualiopi();
@@ -816,15 +829,26 @@ function calcGroupStats(g){
     const bestByUE = {};
     notesWithVal.forEach(n=>{
       const k=(n.matiere||'').toLowerCase();
-      if (bestByUE[k]===undefined||n.note>bestByUE[k].note) bestByUE[k]=n;
+      const isNE = String(n.note).toUpperCase()==='NE';
+      const existing = bestByUE[k];
+      if (!existing) { bestByUE[k]=n; }
+      else {
+        // Une note numérique bat toujours NE ; sinon garder la meilleure
+        const exNE = String(existing.note).toUpperCase()==='NE';
+        if (!isNE && (exNE || parseFloat(n.note)>parseFloat(existing.note))) bestByUE[k]=n;
+      }
     });
     notesWithVal = Object.values(bestByUE);
   }
   let totalPts=0, totalCoeff=0, ueOk=0, ueElim=0, ueRecu=0, ueTotal=0;
   notesWithVal.forEach(n=>{
-    totalPts+=(n.points??0); totalCoeff+=(n.coeff??0); ueTotal++;
-    if(n.note>=10) ueOk++;
-    else if(n.note>=6) ueRecu++;
+    const isNE = String(n.note).toUpperCase()==='NE';
+    if (isNE) { ueTotal++; ueOk++; return; } // NE = dispensé = UE validée, pas dans les points
+    const noteNum = parseFloat(n.note);
+    if (isNaN(noteNum)) return;
+    totalPts+=parseFloat(n.points??0); totalCoeff+=parseFloat(n.coeff??0); ueTotal++;
+    if(noteNum>=10) ueOk++;
+    else if(noteNum>=6) ueRecu++;
     else ueElim++;
   });
   const moy = totalCoeff>0 ? Math.round(totalPts/totalCoeff*100)/100 : null;
@@ -884,7 +908,7 @@ function renderNotesGrouped(){
           <tbody>${g.notes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>`<tr style="background:transparent">
             <td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td>
             <td>${n.matiere}</td>
-            <td style="font-weight:700;${n.note===null||n.note===undefined?'':'color:'+((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A')}">${fmtNote(n.note)}</td>
+            <td style="font-weight:700;${n.note===null||n.note===undefined?'':'color:'+(String(n.note).toUpperCase()==='NE'?'#4338ca':((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A'))}">${fmtNote(n.note)}</td>
             <td>${n.coeff??'—'}</td>
             <td>${n.points!==null?n.points.toFixed(2):'—'}</td>
             <td>${badgeRes(n.resultat)}</td>
@@ -1056,12 +1080,26 @@ async function chargerUEs(){
     const curr = currMap[k];
     const best = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
-    const histHtml = (isMultiYear&&best&&best.annee!==annee&&best.note!==null)
-      ? `<br><span style="font-size:0.7rem;color:#15803d;font-weight:700">✓ ${best.note}/20 (${best.annee})</span>` : '';
+    const bestNote = best?.note??'';
+    const bestIsNE = String(bestNote).toUpperCase()==='NE';
+    const histHtml = (isMultiYear&&best&&best.annee!==annee&&bestNote!==null&&bestNote!=='')
+      ? `<br><span style="font-size:0.7rem;color:#15803d;font-weight:700">✓ ${bestIsNE?'NE':bestNote+'/20'} (${best.annee})</span>` : '';
+    const currNoteVal = curr?.note??'';
+    const isNEcurr = String(currNoteVal).toUpperCase()==='NE';
     return `<tr>
       <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
-      <td><input type="number" id="ue_note_${idx}" min="0" max="20" step="0.5" value="${curr?.note??''}" placeholder="—" style="width:110px;padding:0.4rem 0.6rem"></td>
+      <td>
+        <div style="display:flex;gap:0.3rem;align-items:center">
+          <input type="text" id="ue_note_${idx}" value="${isNEcurr?'NE':currNoteVal}" placeholder="— ou NE"
+            style="width:90px;padding:0.4rem 0.6rem"
+            oninput="this.style.color=this.value.toUpperCase()==='NE'?'#4338ca':''"
+            onchange="if(this.value!=='' && this.value.toUpperCase()!=='NE' && (isNaN(parseFloat(this.value))||parseFloat(this.value)<0||parseFloat(this.value)>20)){this.value='';}"
+          >
+          <button type="button" onclick="document.getElementById('ue_note_${idx}').value='NE';document.getElementById('ue_note_${idx}').style.color='#4338ca';"
+            style="font-size:0.65rem;background:#e0e7ff;color:#4338ca;border:none;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.4rem;font-weight:700;white-space:nowrap">NE</button>
+        </div>
+      </td>
       <td class="${isMemo?'':'hidden'}"><input type="text" id="ue_sujet_${idx}" value="${curr?.sujetMemoire||best?.sujetMemoire||''}" placeholder="Sujet mémoire…" style="font-size:0.8rem"></td>
     </tr>`;
   }).join('');
@@ -1074,7 +1112,8 @@ async function saveNotesBulk(){
   const mats = JSON.parse(document.getElementById('bulkUEGrid').dataset.mats||'[]');
   const notes = [];
   mats.forEach((m,idx)=>{
-    const val   = document.getElementById('ue_note_'+idx)?.value;
+    let val = (document.getElementById('ue_note_'+idx)?.value||'').trim();
+    if (val.toUpperCase()==='NE') val='NE';
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
     notes.push({ matiere:m.matiere, coeff:m.coeff, note:val, sujetMemoire:sujet });
   });
@@ -1207,23 +1246,79 @@ async function saveClasse(){
   toast('Classe enregistrée ✓'); closeClasseModal(); loadDelegues();
 }
 
+// ── Autocomplete helpers pour le modal Délégués ──────────────────
+function acFilter(inputId, type){
+  const q=(document.getElementById(inputId).value||'').toLowerCase().trim();
+  const drop=document.getElementById(inputId+'_drop');
+  if(!q){drop.classList.add('hidden');return;}
+  let items=[];
+  if(type==='pp'){
+    items=allFormateurs.filter(f=>{
+      const n=((f.nom||'')+' '+(f.prenom||'')).toLowerCase();
+      const n2=((f.prenom||'')+' '+(f.nom||'')).toLowerCase();
+      return n.includes(q)||n2.includes(q);
+    }).slice(0,8).map(f=>f.prenom+' '+f.nom);
+  } else {
+    items=allEtudiants.filter(e=>{
+      const n=((e.nom||'')+' '+(e.prenom||'')).toLowerCase();
+      const n2=((e.prenom||'')+' '+(e.nom||'')).toLowerCase();
+      return n.includes(q)||n2.includes(q);
+    }).slice(0,8).map(e=>e.nom+' '+e.prenom);
+  }
+  if(!items.length){drop.classList.add('hidden');return;}
+  drop.innerHTML=items.map(v=>`<div class="ac-item" onmousedown="acSelect('${inputId}','${v.replace(/'/g,"\\'")}')">
+    ${v}
+  </div>`).join('');
+  drop.classList.remove('hidden');
+}
+function acSelect(inputId, value){
+  document.getElementById(inputId).value=value;
+  document.getElementById(inputId+'_drop').classList.add('hidden');
+}
+document.addEventListener('click', e=>{
+  document.querySelectorAll('.ac-drop').forEach(d=>{
+    if(!d.previousElementSibling?.contains(e.target)&&!d.contains(e.target)) d.classList.add('hidden');
+  });
+});
+
 // ══════════════════════════════════════════════════════════════════
 // FORMATEURS / PERSONNEL ENCADRANT
 // ══════════════════════════════════════════════════════════════════
+function buildMatiereCheckboxes(){
+  const all = new Set();
+  allFormateurs.forEach(f=>(f.matieres||'').split(',').map(m=>m.trim()).filter(Boolean).forEach(m=>all.add(m)));
+  const sorted=[...all].sort((a,b)=>a.localeCompare(b));
+  const prev=getSelectedMatieres();
+  const container=document.getElementById('matiereCheckboxes');
+  if(!container) return;
+  if(!sorted.length){container.innerHTML='<span class="text-xs text-gray-400 italic">Aucune matière enregistrée</span>';return;}
+  container.innerHTML=sorted.map(m=>{
+    const id='fltMat_'+m.replace(/[^a-zA-Z0-9]/g,'_');
+    const checked=prev.includes(m)?'checked':'';
+    return `<label class="flex items-center gap-1 text-xs cursor-pointer" style="background:#f9fafb;border:1px solid #e5e7eb;padding:0.2rem 0.6rem;border-radius:9999px">
+      <input type="checkbox" id="${id}" value="${m}" ${checked} onchange="renderFormateurs()" style="width:auto">${m}
+    </label>`;
+  }).join('');
+}
+function getSelectedMatieres(){
+  const checks=document.querySelectorAll('#matiereCheckboxes input[type=checkbox]:checked');
+  return [...checks].map(c=>c.value);
+}
+
 function renderFormateurs(){
   const qn = (document.getElementById('filterFormateurNom').value||'').toLowerCase();
-  const qm = (document.getElementById('filterFormateurMatiere').value||'').toLowerCase();
   const qv = (document.getElementById('filterFormateurVille').value||'').toLowerCase();
   const fEnPoste    = document.getElementById('fltEnPoste')?.checked;
   const fSorti      = document.getElementById('fltSorti')?.checked;
   const fFormateur  = document.getElementById('fltFormateur')?.checked;
+  const selMats     = getSelectedMatieres();
   const anyStatus   = fEnPoste||fSorti;
   const filtered = allFormateurs.filter(f=>{
-    const nom=(f.nom+' '+f.prenom).toLowerCase();
+    const nom=((f.nom||'')+' '+(f.prenom||'')).toLowerCase();
     if (qn && !nom.includes(qn)) return false;
-    if (qm) {
-      const mats=(f.matieres||'').toLowerCase();
-      if (!mats.includes(qm)) return false;
+    if (selMats.length){
+      const fMats=(f.matieres||'').split(',').map(m=>m.trim());
+      if (!selMats.some(sm=>fMats.some(fm=>fm.toLowerCase()===sm.toLowerCase()))) return false;
     }
     if (qv && !(f.ville||'').toLowerCase().includes(qv)) return false;
     const sorti = !!(f.dateSortie && f.dateSortie.trim());
@@ -1304,7 +1399,7 @@ async function saveFormateur(){
   });
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Enregistré ✓'); closeFormateurModal();
-  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; renderFormateurs(); }
+  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; buildMatiereCheckboxes(); renderFormateurs(); }
 }
 async function deleteFormateur(id){
   if (!id) return;
@@ -1312,7 +1407,7 @@ async function deleteFormateur(id){
   const r = await api('deletePersonnel',{id});
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Supprimé');
-  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; renderFormateurs(); }
+  const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; buildMatiereCheckboxes(); renderFormateurs(); }
 }
 function exportPersonnel(){
   const header='ID,Nom,Prénom,Mail pro,Mail perso,Tél,Adresse,CP,Ville,Matières,Date entrée,Date sortie,Formateur';
