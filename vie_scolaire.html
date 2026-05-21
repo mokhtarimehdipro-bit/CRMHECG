@@ -1083,6 +1083,7 @@ async function chargerUEs(){
   tbody.innerHTML = mats.map((m,idx)=>{
     const k=(m.matiere||'').toLowerCase();
     const curr = currMap[k];
+    const best = bestMap[k];
     const isMemo = m.matiere.includes('UE 13')||m.matiere.includes('UE 6 - Relations')||m.matiere.toLowerCase().includes('mémoire');
     // Afficher toutes les notes des années précédentes
     const prevNotes = (histByUE[k]||[]).sort((a,b)=>(a.annee||'').localeCompare(b.annee||''));
