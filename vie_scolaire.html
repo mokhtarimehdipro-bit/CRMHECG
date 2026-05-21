@@ -873,12 +873,12 @@ function calcGroupStats(g){
 
 function renderNotesGrouped(){
   const qEtu   = (document.getElementById('filterEtu').value||'').toLowerCase();
-  const qMat   = (document.getElementById('filterMatiere').value||'').toLowerCase();
+  const qMat   = matKey(document.getElementById('filterMatiere').value);
   const qAnnee = document.getElementById('filterAnnee').value||'';
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
-  if (qMat)    notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  if (qMat)    notes = notes.filter(n=>matKey(n.matiere)===qMat);
   if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   // Pour DCG/DSCG : filtre cumulatif (notes jusqu'à l'année sélectionnée)
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
@@ -937,7 +937,7 @@ function renderNotesGrouped(){
 }
 
 function renderMatiereStats(){
-  const qMat     = (document.getElementById('filterMatiere').value||'').toLowerCase();
+  const qMat     = matKey(document.getElementById('filterMatiere').value);
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
@@ -945,7 +945,7 @@ function renderMatiereStats(){
   if (!panel) return;
   if (!qMat || !allNotes.length){ panel.classList.add('hidden'); return; }
   const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
-  let notes = allNotes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  let notes = allNotes.filter(n=>matKey(n.matiere)===qMat);
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
   else if (qAnnee && !isDCGview) notes = notes.filter(n=>n.annee===qAnnee);
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
@@ -997,9 +997,9 @@ function toggleGroup(key){
 
 function exportNotesCSV(){
   const qEtu = (document.getElementById('filterEtu').value||'').toLowerCase();
-  const qMat = (document.getElementById('filterMatiere').value||'').toLowerCase();
+  const qMat = matKey(document.getElementById('filterMatiere').value);
   let notes = allNotes;
-  if (qMat) notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  if (qMat) notes = notes.filter(n=>matKey(n.matiere)===qMat);
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   const groups = getStudentGroups(notes);
   const rows = [['Étudiant','Diplôme','Classe','Année','Matière','Note','Coeff','Points','Résultat']];
@@ -1259,12 +1259,14 @@ async function chargerUEs(){
             data-original="${prefillNote}"
             data-original-year="${prefillYear}"
             placeholder="—"
-            style="width:90px;padding:0.4rem 0.6rem;${existStyle}"
+            ${hasExisting?'readonly':''}
+            style="width:90px;padding:0.4rem 0.6rem;${existStyle}${hasExisting?';cursor:not-allowed':''}"
             oninput="onNoteInput(this,${idx})"
             onchange="if(this.value!==''&&this.value.toUpperCase()!=='NE'&&(isNaN(parseFloat(this.value))||parseFloat(this.value)<0||parseFloat(this.value)>20)){this.value=this.dataset.original||'';}"
           >
           <span id="note_year_${idx}" style="font-size:0.65rem;font-weight:600;white-space:nowrap;color:${hasExisting?'#9ca3af':'#d1d5db'}">${prefillYear||''}</span>
-          <button type="button" onclick="document.getElementById('ue_note_${idx}').value='NE';onNoteInput(document.getElementById('ue_note_${idx}'),${idx});"
+          ${hasExisting?`<button type="button" id="unlock_${idx}" onclick="unlockNote(this,${idx})" style="font-size:0.65rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.4rem;font-weight:700;white-space:nowrap" title="Modifier cette note">✏</button>`:''}
+          <button type="button" id="ne_btn_${idx}" onclick="if(document.getElementById('ue_note_${idx}').readOnly){unlockNote(document.getElementById('unlock_${idx}'),${idx},true);}else{document.getElementById('ue_note_${idx}').value='NE';onNoteInput(document.getElementById('ue_note_${idx}'),${idx});}"
             style="font-size:0.65rem;background:#e0e7ff;color:#4338ca;border:none;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.4rem;font-weight:700;white-space:nowrap">NE</button>
         </div>
       </td>
@@ -1276,11 +1278,11 @@ async function chargerUEs(){
 }
 
 function onNoteInput(input, idx){
-  // Retirer le grisé : la note est en cours de modification
+  if (input.readOnly) return;
   input.style.background = '#fff';
   input.style.borderColor = '#1A4E8A';
   input.style.color = input.value.toUpperCase()==='NE' ? '#4338ca' : '#374151';
-  // Mettre à jour l'étiquette d'année → année de saisie sélectionnée
+  input.style.cursor = '';
   const badge = document.getElementById('note_year_'+idx);
   if (badge) {
     const yr = document.getElementById('noteAnnee').value||'';
@@ -1288,6 +1290,21 @@ function onNoteInput(input, idx){
     badge.style.color = '#1A4E8A';
     badge.style.fontWeight = '700';
   }
+}
+
+function unlockNote(btn, idx, setNE=false){
+  const inp = document.getElementById('ue_note_'+idx);
+  if (!inp) return;
+  const orig = inp.dataset.original||'';
+  const yr   = inp.dataset.originalYear||'?';
+  const label = orig.toUpperCase()==='NE' ? 'NE' : (orig ? orig+'/20' : '—');
+  if (!confirm(`Modifier la note existante ${label} (${yr}) ?\n\nLa valeur sera écrasée à l'enregistrement.`)) return;
+  inp.removeAttribute('readonly');
+  inp.style.cursor = '';
+  if (setNE){ inp.value='NE'; onNoteInput(inp, idx); }
+  else { onNoteInput(inp, idx); inp.focus(); inp.select(); }
+  const unlockBtn = document.getElementById('unlock_'+idx);
+  if (unlockBtn) unlockBtn.style.display='none';
 }
 
 async function saveNotesBulk(){
