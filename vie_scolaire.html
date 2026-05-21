@@ -190,10 +190,11 @@
         <table>
           <thead><tr>
             <th>Classe</th><th>Prof Principal</th><th>Délégué 1</th><th>Délégué 2</th>
-            <th>Suppléant 1</th><th>Suppléant 2</th><th>Arrêt notes S1</th><th>Conseil S1</th>
-            <th>Arrêt notes S2</th><th>Conseil S2</th><th></th>
+            <th>Suppléant 1</th><th>Suppléant 2</th><th>Arrêt notes S1</th>
+            <th>Conseil S1</th><th>Heure S1</th>
+            <th>Arrêt notes S2</th><th>Conseil S2</th><th>Heure S2</th><th></th>
           </tr></thead>
-          <tbody id="deleguesTbody"><tr><td colspan="11" class="text-center text-gray-400 py-8">Chargement...</td></tr></tbody>
+          <tbody id="deleguesTbody"><tr><td colspan="13" class="text-center text-gray-400 py-8">Chargement...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -244,6 +245,15 @@
         <div id="planningContent"></div>
       </div>
 
+      <!-- ── Stats globales objectifs ── -->
+      <div class="mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-black text-[#1A4E8A]">Bilan objectifs — tous les mois</h2>
+          <button onclick="loadObjectifsStats()" class="btn-ghost text-sm">↻ Actualiser</button>
+        </div>
+        <div id="objectifsStatsContent"><p class="text-center text-gray-400 py-6 text-sm">Cliquez "Actualiser" pour charger le bilan.</p></div>
+      </div>
+
       <!-- ── Objectifs de la semaine ── -->
       <div class="mt-6">
         <div class="flex justify-between items-center mb-3">
@@ -262,9 +272,13 @@
     <!-- ===================== INSCRIPTIONS ===================== -->
     <div id="section-inscription" class="section">
       <h1 class="text-2xl font-black text-[#1A4E8A] mb-6">Aspiration des inscriptions web</h1>
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-xl">
-        <p class="text-gray-500 text-sm mb-6">Le script analyse les mails reçus à <strong>m.mokhtari@hecg.fr</strong> contenant un formulaire d'inscription (expéditeur <code>email@hecg.fr</code>) et crée automatiquement les nouveaux étudiants en statut <strong>Prospect</strong>.</p>
-        <button onclick="aspirerInscriptions()" id="btnAspirer" class="btn-orange w-full py-4 text-base">📬 Aspirer les inscriptions maintenant</button>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-2xl">
+        <p class="text-gray-500 text-sm mb-6">Le script analyse les mails reçus à <strong>m.mokhtari@hecg.fr</strong> contenant un formulaire d'inscription. Il détecte les doublons (email déjà dans l'application) et archive chaque mail après traitement.</p>
+        <div class="flex gap-3 mb-6">
+          <button onclick="previewInscriptions()" id="btnPreview" class="btn-ghost flex-1 py-3">🔍 Prévisualiser les mails</button>
+          <button onclick="aspirerInscriptions()" id="btnAspirer" class="btn-orange flex-1 py-3" disabled>📬 Confirmer et aspirer</button>
+        </div>
+        <div id="inscriptionPreview" class="hidden mb-5"></div>
         <div id="inscriptionResult" class="hidden mt-5 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800"></div>
       </div>
     </div>
@@ -418,9 +432,11 @@
       <div><label>Suppléant 1</label><input type="text" id="classeSup1"></div>
       <div><label>Suppléant 2</label><input type="text" id="classeSup2"></div>
       <div><label>Arrêt notes S1</label><input type="date" id="classeArretS1"></div>
-      <div><label>Conseil de classe S1</label><input type="datetime-local" id="classeConseilS1"></div>
+      <div><label>Date conseil S1</label><input type="date" id="classeConseilS1"></div>
+      <div><label>Heure conseil S1</label><input type="time" id="classeHeureConseilS1"></div>
       <div><label>Arrêt notes S2</label><input type="date" id="classeArretS2"></div>
-      <div><label>Conseil de classe S2</label><input type="datetime-local" id="classeConseilS2"></div>
+      <div><label>Date conseil S2</label><input type="date" id="classeConseilS2"></div>
+      <div><label>Heure conseil S2</label><input type="time" id="classeHeureConseilS2"></div>
     </div>
     <div class="flex justify-end gap-3 mt-6">
       <button onclick="closeClasseModal()" class="btn-ghost">Annuler</button>
@@ -722,6 +738,7 @@ function showModule(m){
 // ══════════════════════════════════════════════════════════════════
 function initNotes(){
   if (canWrite('notes')) show('btnAddNote');
+  filterMatieresUpdate(); // pré-remplir les années dès l'ouverture
 }
 
 function filterMatieresUpdate(){
@@ -729,22 +746,30 @@ function filterMatieresUpdate(){
   const mats = refMatieres[d]||[];
   const sel = document.getElementById('filterMatiere');
   sel.innerHTML='<option value="">Toutes</option>'+mats.map(m=>`<option value="${m.matiere}">${m.matiere}</option>`).join('');
+  // Pré-remplir les années sans attendre "Afficher"
+  const curYear = new Date().getFullYear();
+  const years = [];
+  for(let y=curYear+1; y>=2020; y--) years.push(`${y-1}-${y}`);
+  const selA = document.getElementById('filterAnnee');
+  const prevA = selA.value;
+  selA.innerHTML='<option value="">Toutes</option>'+years.map(a=>`<option ${a===prevA?'selected':''}>${a}</option>`).join('');
 }
 
 async function loadNotes(){
   const diplome = document.getElementById('filterDiplome').value;
   const annee   = document.getElementById('filterAnnee').value;
   const classe  = document.getElementById('filterClasse').value;
+  const isDCG   = diplome==='DCG'||diplome==='DSCG';
   loading('notesTbody', 11);
-  const r = await api('getNotes', { diplome, annee, classe });
+  // Pour DCG/DSCG : récupérer toutes les années jusqu'à l'année sélectionnée (cumulatif)
+  const params = isDCG ? { diplome, classe, maxAnnee: annee||'' } : { diplome, annee, classe };
+  const r = await api('getNotes', params);
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   allNotes = r.data;
-  // Peupler filtres dynamiques
-  const annees  = [...new Set(allNotes.map(n=>n.annee).filter(Boolean))].sort().reverse();
+  // Peupler filtre classes dynamiquement (années déjà pré-remplies)
   const classes = [...new Set(allNotes.map(n=>n.classe).filter(Boolean))].sort();
-  const selA = document.getElementById('filterAnnee'), selC = document.getElementById('filterClasse');
-  const prevA=selA.value, prevC=selC.value;
-  selA.innerHTML='<option value="">Toutes</option>'+annees.map(a=>`<option ${a===prevA?'selected':''}>${a}</option>`).join('');
+  const selC = document.getElementById('filterClasse');
+  const prevC = selC.value;
   selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
   hide('statsPanel');
   renderNotesGrouped();
@@ -779,13 +804,16 @@ function calcGroupStats(g){
     });
     notesWithVal = Object.values(bestByUE);
   }
-  let totalPts=0, totalCoeff=0, ueOk=0;
-  notesWithVal.forEach(n=>{ totalPts+=(n.points??0); totalCoeff+=(n.coeff??0); if(n.note>=10) ueOk++; });
+  let totalPts=0, totalCoeff=0, ueOk=0, totalPtsOk=0;
+  notesWithVal.forEach(n=>{
+    totalPts+=(n.points??0); totalCoeff+=(n.coeff??0);
+    if(n.note>=10){ ueOk++; totalPtsOk+=(n.points??0); }
+  });
   const moy = totalCoeff>0 ? Math.round(totalPts/totalCoeff*100)/100 : null;
   let diff = null;
   if (diplome==='BTS CG' && moy!==null) diff = Math.round((moy-10)*100)/100;
-  else if (diplome==='DCG') diff = ueOk - 13;
-  else if (diplome==='DSCG') diff = ueOk - 6;
+  else if (diplome==='DCG')  diff = ueOk>0 ? Math.round((totalPtsOk - ueOk*10)*100)/100 : null;
+  else if (diplome==='DSCG') diff = ueOk>0 ? Math.round((totalPtsOk - ueOk*10)*100)/100 : null;
   return { totalPts, totalCoeff, moy, diff, ueOk };
 }
 
@@ -793,11 +821,16 @@ function renderNotesGrouped(){
   const qEtu   = (document.getElementById('filterEtu').value||'').toLowerCase();
   const qMat   = (document.getElementById('filterMatiere').value||'').toLowerCase();
   const qAnnee = document.getElementById('filterAnnee').value||'';
+  const qDiplome = document.getElementById('filterDiplome').value||'';
+  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
-  if (qMat)  notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
-  if (qEtu)  notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  if (qMat)    notes = notes.filter(n=>(n.matiere||'').toLowerCase()===qMat);
+  if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  // Pour DCG/DSCG : filtre cumulatif (notes jusqu'à l'année sélectionnée)
+  if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
   let groups = getStudentGroups(notes);
-  if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
+  // Pour BTS : filtre exact par année de promo
+  if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
   const tbody = document.getElementById('notesTbody');
   if (!groups.length){ tbody.innerHTML='<tr><td colspan="11" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
   let html='';
@@ -890,15 +923,35 @@ async function showStats(){
     ['Moyenne',p.moyenne],['Taux réussite',p.tauxReussite+'%'],
     ['Note max',p.noteMax],['Note min',p.noteMin],['Écart-type',p.ecartType],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
-  document.getElementById('statsTbody').innerHTML = s.map(x=>`<tr>
-    <td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>
-    <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
-    <td style="font-weight:700">${x.moyGen!==null?x.moyGen.toFixed(2)+'/20':'—'}</td>
-    <td>${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>
-    <td>${badgeRes(x.resultatAuto)}</td>
-    <td>${x.resultatManuel?badgeRes(x.resultatManuel):badgeRes(x.resultatAuto)}</td>
-    <td>${canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${x.nomPrenom.replace(/'/g,"\\'")}','${x.annee}','${diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:''}</td>
-  </tr>`).join('');
+  const isDCGstats = diplome==='DCG'||diplome==='DSCG';
+  const isBTSstats = diplome.startsWith('BTS');
+  document.querySelector('#statsPanel table thead tr').innerHTML = isDCGstats
+    ? '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>UE validées</th><th>Différentiel</th><th>Résultat Auto</th><th>Résultat Final</th><th></th>'
+    : '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale</th><th>Moy. Tronc</th><th>Moy. Pro</th><th>Résultat Auto</th><th>Résultat Final</th><th></th>';
+  document.getElementById('statsTbody').innerHTML = s.map(x=>{
+    const diffHtml = x.differentiels===null?'—': x.differentiels>=0
+      ? `<span style="color:#15803d;font-weight:700">+${x.differentiels}</span>`
+      : `<span style="color:#dc2626;font-weight:700">${x.differentiels}</span>`;
+    if (isDCGstats) return `<tr>
+      <td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>
+      <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700">${x.ueOk}/${isDCGstats&&diplome==='DCG'?13:6}</td>
+      <td>${diffHtml}</td>
+      <td>${badgeRes(x.resultatAuto)}</td>
+      <td>${x.resultatManuel?badgeRes(x.resultatManuel):badgeRes(x.resultatAuto)}</td>
+      <td>${canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${x.nomPrenom.replace(/'/g,"\\'")}','${x.annee}','${diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:''}</td>
+    </tr>`;
+    return `<tr>
+      <td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>
+      <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700">${x.moyGen!==null?x.moyGen.toFixed(2)+'/20':'—'}</td>
+      <td>${x.moyGeneral!==null?x.moyGeneral.toFixed(2)+'/20':'—'}</td>
+      <td>${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>
+      <td>${badgeRes(x.resultatAuto)}</td>
+      <td>${x.resultatManuel?badgeRes(x.resultatManuel):badgeRes(x.resultatAuto)}</td>
+      <td>${canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${x.nomPrenom.replace(/'/g,"\\'")}','${x.annee}','${diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:''}</td>
+    </tr>`;
+  }).join('');
   show('statsPanel');
   document.getElementById('statsPanel').scrollIntoView({behavior:'smooth'});
 }
@@ -1089,15 +1142,19 @@ async function loadDelegues(){
   if (canWrite('delegues')) show('btnAddClasse');
   loading('deleguesTbody',11);
   const r = await api('getClassesInfo');
-  if (!r.success){document.getElementById('deleguesTbody').innerHTML='<tr><td colspan="11" class="text-center text-red-400 py-8">Erreur chargement.</td></tr>';return;}
+  if (!r.success){document.getElementById('deleguesTbody').innerHTML='<tr><td colspan="13" class="text-center text-red-400 py-8">Erreur chargement.</td></tr>';return;}
   const data = r.data;
   document.getElementById('deleguesTbody').innerHTML = data.map(c=>`<tr>
     <td class="font-bold">${c.classe}</td><td>${c.pp||'—'}</td><td>${c.del1||'—'}</td><td>${c.del2||'—'}</td>
     <td>${c.sup1||'—'}</td><td>${c.sup2||'—'}</td>
-    <td class="text-xs">${fmtDateFr(c.arretS1)}</td><td class="text-xs">${fmtDateTimeFr(c.conseilS1)}</td>
-    <td class="text-xs">${fmtDateFr(c.arretS2)}</td><td class="text-xs">${fmtDateTimeFr(c.conseilS2)}</td>
+    <td class="text-xs">${fmtDateFr(c.arretS1)}</td>
+    <td class="text-xs">${fmtDateFr(c.conseilS1)}</td>
+    <td class="text-xs font-bold text-[#1A4E8A]">${c.heureConseilS1||'—'}</td>
+    <td class="text-xs">${fmtDateFr(c.arretS2)}</td>
+    <td class="text-xs">${fmtDateFr(c.conseilS2)}</td>
+    <td class="text-xs font-bold text-[#1A4E8A]">${c.heureConseilS2||'—'}</td>
     <td><button onclick='openClasseModal(${JSON.stringify(c)})' class="btn-ghost py-1 text-xs">✏</button></td>
-  </tr>`).join('') || '<tr><td colspan="11" class="text-center text-gray-400 py-8">Aucune classe.</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="13" class="text-center text-gray-400 py-8">Aucune classe.</td></tr>';
 }
 
 function openClasseModal(c){
@@ -1110,8 +1167,10 @@ function openClasseModal(c){
   document.getElementById('classeSup2').value     = c?.sup2||'';
   document.getElementById('classeArretS1').value  = c?.arretS1||'';
   document.getElementById('classeConseilS1').value= c?.conseilS1||'';
-  document.getElementById('classeArretS2').value  = c?.arretS2||'';
-  document.getElementById('classeConseilS2').value= c?.conseilS2||'';
+  document.getElementById('classeArretS2').value      = c?.arretS2||'';
+  document.getElementById('classeConseilS2').value    = c?.conseilS2||'';
+  document.getElementById('classeHeureConseilS1').value= c?.heureConseilS1||'';
+  document.getElementById('classeHeureConseilS2').value= c?.heureConseilS2||'';
 }
 function closeClasseModal(){ document.getElementById('classeModal').classList.add('hidden'); }
 async function saveClasse(){
@@ -1119,8 +1178,10 @@ async function saveClasse(){
     classe: document.getElementById('classeNom').value, pp: document.getElementById('classePP').value,
     del1: document.getElementById('classeDel1').value,  del2: document.getElementById('classeDel2').value,
     sup1: document.getElementById('classeSup1').value,  sup2: document.getElementById('classeSup2').value,
-    arretS1: document.getElementById('classeArretS1').value, conseilS1: document.getElementById('classeConseilS1').value,
-    arretS2: document.getElementById('classeArretS2').value, conseilS2: document.getElementById('classeConseilS2').value,
+    arretS1: document.getElementById('classeArretS1').value,    conseilS1: document.getElementById('classeConseilS1').value,
+    arretS2: document.getElementById('classeArretS2').value,    conseilS2: document.getElementById('classeConseilS2').value,
+    heureConseilS1: document.getElementById('classeHeureConseilS1').value,
+    heureConseilS2: document.getElementById('classeHeureConseilS2').value,
   });
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Classe enregistrée ✓'); closeClasseModal(); loadDelegues();
@@ -1399,16 +1460,43 @@ async function deleteTache(id){
 // ══════════════════════════════════════════════════════════════════
 // INSCRIPTIONS
 // ══════════════════════════════════════════════════════════════════
+async function previewInscriptions(){
+  const btn=document.getElementById('btnPreview');
+  btn.textContent='⏳ Analyse des mails…'; btn.disabled=true;
+  const r=await api('previewInscriptions');
+  btn.textContent='🔍 Prévisualiser les mails'; btn.disabled=false;
+  const prev=document.getElementById('inscriptionPreview');
+  prev.classList.remove('hidden');
+  document.getElementById('inscriptionResult').classList.add('hidden');
+  if (!r.success){ prev.innerHTML=`<p class="text-red-500 text-sm">Erreur : ${r.message}</p>`; return; }
+  const list=r.previews||[];
+  if (!list.length){ prev.innerHTML='<p class="text-gray-400 text-sm text-center py-4">Aucun mail d\'inscription en attente.</p>'; document.getElementById('btnAspirer').disabled=true; return; }
+  const newCount=list.filter(x=>!x.doublon).length;
+  document.getElementById('btnAspirer').disabled=(newCount===0);
+  prev.innerHTML=`<p class="text-sm font-bold text-gray-600 mb-3">${list.length} mail(s) trouvé(s) — <span style="color:#15803d">${newCount} nouveau(x)</span>, <span style="color:#dc2626">${list.length-newCount} doublon(s)</span></p>
+  <div class="space-y-2">${list.map(x=>`<div style="border-radius:0.75rem;padding:0.75rem 1rem;border:1px solid ${x.doublon?'#fecaca':'#bbf7d0'};background:${x.doublon?'#fef2f2':'#f0fdf4'}">
+    <div class="flex justify-between items-start">
+      <div>
+        <p class="font-bold text-gray-800 text-sm">${x.prenom} ${x.nom}</p>
+        <p class="text-xs text-gray-500">${x.email||'—'} · ${x.tel||'—'}</p>
+        <p class="text-xs text-gray-500">${x.formation||'—'} · ${x.campus||'—'}</p>
+      </div>
+      <span style="font-size:0.72rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;${x.doublon?'background:#fee2e2;color:#dc2626':'background:#dcfce7;color:#15803d'}">${x.doublon?'DOUBLON':'NOUVEAU'}</span>
+    </div>
+  </div>`).join('')}</div>`;
+}
+
 async function aspirerInscriptions(){
   const btn=document.getElementById('btnAspirer');
   btn.textContent='⏳ Aspiration en cours…'; btn.disabled=true;
   const r = await api('aspirerInscriptions');
-  btn.textContent='📬 Aspirer les inscriptions maintenant'; btn.disabled=false;
+  btn.textContent='📬 Confirmer et aspirer'; btn.disabled=true;
+  document.getElementById('inscriptionPreview').classList.add('hidden');
   const res=document.getElementById('inscriptionResult');
   res.classList.remove('hidden');
   if (r.success){
     res.className='mt-5 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800';
-    res.innerHTML=`<strong>${r.nb} inscription(s) importée(s)</strong>${r.inseres?.length?'<ul class="mt-2 list-disc list-inside">'+r.inseres.map(x=>`<li>${x}</li>`).join('')+'</ul>':''}`;
+    res.innerHTML=`<strong>${r.nb} inscription(s) importée(s) et mail(s) archivé(s)</strong>${r.inseres?.length?'<ul class="mt-2 list-disc list-inside">'+r.inseres.map(x=>`<li>${x}</li>`).join('')+'</ul>':''}`;
   } else {
     res.className='mt-5 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800';
     res.innerHTML='Erreur : '+r.message;
@@ -1714,6 +1802,69 @@ function getWeekNumber(d){
   date.setDate(date.getDate()+3-(date.getDay()+6)%7);
   const w1=new Date(date.getFullYear(),0,4);
   return 1+Math.round(((date.getTime()-w1.getTime())/86400000-3+(w1.getDay()+6)%7)/7);
+}
+
+async function loadObjectifsStats(){
+  const el=document.getElementById('objectifsStatsContent');
+  el.innerHTML='<p class="text-center text-gray-400 py-6 text-sm">Chargement…</p>';
+  const r=await api('getObjectifsStats');
+  if (!r.success){ el.innerHTML='<p class="text-center text-red-400 py-6 text-sm">Erreur : '+r.message+'</p>'; return; }
+  const {byMonth,months,totaux}=r;
+  const moisNoms=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const fmtMois=m=>{ const [y,mo]=m.split('-'); return moisNoms[parseInt(mo)-1]+' '+y; };
+  // KPIs globaux
+  let html=`<div class="grid grid-cols-4 gap-4 mb-5">
+    ${[['Total objectifs',totaux.total,'#1A4E8A'],['Atteints ✔',totaux.ok,'#15803d'],['Non atteints ✘',totaux.nok,'#dc2626'],['En cours',totaux.enCours,'#d97706']].map(([l,v,c])=>`
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+      <p class="text-2xl font-black" style="color:${c}">${v}</p>
+      <p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p>
+    </div>`).join('')}
+  </div>`;
+  // Tableau mensuel
+  if (!months.length){ html+='<p class="text-center text-gray-400 py-8 text-sm">Aucun objectif enregistré.</p>'; el.innerHTML=html; return; }
+  html+=`<div class="space-y-4">`;
+  months.slice().reverse().forEach(m=>{
+    const mo=byMonth[m];
+    html+=`<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="flex justify-between items-center px-5 py-3 bg-gray-50 border-b border-gray-100 cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+        <div class="flex items-center gap-4">
+          <span class="font-black text-[#1A4E8A]">${fmtMois(m)}</span>
+          <span class="text-xs font-bold text-gray-400">${mo.total} objectif${mo.total>1?'s':''}</span>
+        </div>
+        <div class="flex gap-3 text-xs font-bold">
+          <span style="color:#15803d">✔ ${mo.ok} atteint${mo.ok>1?'s':''}</span>
+          <span style="color:#dc2626">✘ ${mo.nok} non atteint${mo.nok>1?'s':''}</span>
+          <span style="color:#d97706">⏳ ${mo.enCours} en cours</span>
+        </div>
+      </div>
+      <div class="hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+          <thead><tr style="background:#f9fafb">
+            <th style="padding:0.5rem 1rem;text-align:left;color:#9ca3af;font-size:0.72rem;font-weight:900;text-transform:uppercase">Semaine</th>
+            <th style="padding:0.5rem 1rem;text-align:left;color:#9ca3af;font-size:0.72rem;font-weight:900;text-transform:uppercase">Objectif</th>
+            <th style="padding:0.5rem 1rem;text-align:left;color:#9ca3af;font-size:0.72rem;font-weight:900;text-transform:uppercase">État fin</th>
+            <th style="padding:0.5rem 1rem;text-align:center;color:#9ca3af;font-size:0.72rem;font-weight:900;text-transform:uppercase">Statut</th>
+          </tr></thead>
+          <tbody>
+          ${mo.detail.map(d=>{
+            const valide=d.valide==='TRUE';
+            const statut=valide?'<span style="color:#15803d;font-weight:700">✔ Atteint</span>':d.etatFinSemaine?'<span style="color:#dc2626;font-weight:700">✘ Non atteint</span>':'<span style="color:#d97706;font-weight:700">⏳ En cours</span>';
+            // Semaine → date courte
+            const semLabel=d.semaineDebut?'S '+getWeekNumber(new Date(d.semaineDebut+' 12:00')):'—';
+            return `<tr style="border-bottom:1px solid #f3f4f6;${valide?'opacity:0.65;text-decoration:line-through':''}">
+              <td style="padding:0.5rem 1rem;color:#6b7280">${semLabel}</td>
+              <td style="padding:0.5rem 1rem;font-weight:600">${d.priorite>=4?'🚨 ':''}${d.nom}${d.quantite?' (×'+d.quantite+')':''}</td>
+              <td style="padding:0.5rem 1rem;color:#4b5563;font-style:italic">${d.etatFinSemaine||'—'}</td>
+              <td style="padding:0.5rem 1rem;text-align:center">${statut}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 async function loadObjectifs(){
