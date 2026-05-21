@@ -60,9 +60,14 @@
                             <button id="btnSaveMdp" onclick="updateProfile()" class="hidden mt-2 w-full py-2 bg-[#F26522] text-white text-[10px] font-black uppercase rounded-lg hover:bg-orange-600 transition shadow-md">Modifier mon mot de passe</button>
                         </div>
 
-                        <div class="p-4 bg-orange-50 rounded-2xl mb-6">
-                            <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise / Alternance</h4>
+                        <div class="p-4 bg-orange-50 rounded-2xl mb-3">
+                            <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise actuelle / Alternance</h4>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
+                        </div>
+                        <!-- Historique alternance -->
+                        <div id="alternanceHistoryBlock" class="hidden mb-6">
+                            <h4 class="text-[10px] font-black text-gray-500 uppercase mb-2">🏢 Anciennes entreprises</h4>
+                            <div id="alternanceHistoryList" class="space-y-1"></div>
                         </div>
 
                         <h4 class="text-[10px] font-black text-[#1A4E8A] uppercase mb-2">Curriculum Vitae</h4>
@@ -141,6 +146,49 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ═══ SECTION DOCUMENTS (GED étudiant) ═══ -->
+            <div id="gedEtuSection" class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-5 border-b pb-3">
+                    <h3 class="text-xl font-black text-gray-800">📁 Documents</h3>
+                    <div class="flex gap-2" id="gedEtuAdminActions">
+                        <button id="btnGedScan" onclick="gedAutoScan()" class="hidden text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl font-bold hover:bg-gray-200">🔍 Scanner les dossiers</button>
+                        <button id="btnGedLink" onclick="document.getElementById('gedLinkPanel').classList.toggle('hidden')" class="hidden text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl font-bold hover:bg-blue-100">🔗 Lier un dossier</button>
+                        <button id="btnGedUploadAdmin" onclick="document.getElementById('gedUploadPanel').classList.remove('hidden')" class="hidden text-xs bg-[#F26522] text-white px-3 py-1.5 rounded-xl font-bold hover:bg-orange-600">⬆ Déposer</button>
+                    </div>
+                </div>
+                <!-- Lier un dossier -->
+                <div id="gedLinkPanel" class="hidden mb-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                    <p class="text-[10px] font-black text-blue-700 uppercase mb-2">Lier le dossier Drive de l'étudiant</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="gedFolderInput" placeholder="URL ou ID du dossier Drive…" class="flex-1 border border-blue-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400">
+                        <button onclick="gedLinkFolder()" class="bg-blue-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-blue-700">Lier</button>
+                    </div>
+                </div>
+                <!-- Upload -->
+                <div id="gedUploadPanel" class="hidden mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                    <p class="text-[10px] font-black text-orange-600 uppercase mb-2">Déposer un document dans le dossier étudiant</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="file" id="gedFileInputEtu" class="flex-1 text-sm">
+                        <button onclick="gedUploadFile()" id="btnGedUploadConfirmEtu" class="bg-[#F26522] text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-orange-600 whitespace-nowrap">Envoyer</button>
+                        <button onclick="document.getElementById('gedUploadPanel').classList.add('hidden')" class="bg-gray-100 text-gray-500 px-3 py-2 rounded-xl font-bold text-sm">✕</button>
+                    </div>
+                </div>
+                <!-- Zone étudiant (dépôt pièces) -->
+                <div id="gedEtuUploadZone" class="hidden mb-4 p-4 bg-green-50 rounded-2xl border border-green-100">
+                    <p class="text-[10px] font-black text-green-700 uppercase mb-2">📎 Déposer une pièce justificative</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="file" id="gedFileInputEtuStu" class="flex-1 text-sm">
+                        <button onclick="gedUploadFileStudent()" id="btnGedUploadStu" class="bg-green-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-green-700 whitespace-nowrap">Envoyer</button>
+                    </div>
+                </div>
+                <!-- Fichiers -->
+                <div id="gedEtuFiles"><p class="text-center text-gray-400 text-sm italic py-4">Chargement…</p></div>
+                <!-- Bouton Drive -->
+                <div id="gedEtuFolderLink" class="hidden mt-4 text-center">
+                    <a id="gedEtuFolderUrl" href="#" target="_blank" class="text-xs text-blue-500 hover:underline font-semibold">📂 Ouvrir le dossier dans Google Drive</a>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -150,6 +198,8 @@
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
     payload.idAuteur = userSession.nom || "Inconnu";
     payload.roleAuteur = userSession.role || "N/A";
+    payload.vieScRole = userSession.vieScRole || userSession.role || "";
+    payload.emailAuteur = userSession.email || "";
     
     try {
         const response = await fetch(API_URL, {
@@ -273,6 +323,9 @@
                     document.getElementById('countPartagees').innerText = `Partagées : ${offres.length}`;
                     document.getElementById('countPostulees').innerText = `Postulées : ${postulees.length}`;
 
+                    // Historique alternance
+                    renderAlternanceHistory(data.alternanceHistory || []);
+
                     document.getElementById('listOffresPartagees').innerHTML = offres.map(o => `
                         <div class="p-5 border border-slate-100 rounded-2xl bg-slate-50 flex justify-between items-center group">
                             <div>
@@ -285,6 +338,8 @@
                             }
                         </div>
                     `).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
+                    // GED - chargement documents
+                    loadGedEtu();
                 }
             } catch (err) { alert("Erreur réseau"); }
         }
@@ -380,6 +435,112 @@
             }
             btn.innerText = originalText;
             btn.disabled = false;
+        }
+        // ══ Historique alternance ══
+        function renderAlternanceHistory(history) {
+            if (!history || !history.length) return;
+            document.getElementById('alternanceHistoryBlock').classList.remove('hidden');
+            document.getElementById('alternanceHistoryList').innerHTML = history.map(h =>
+                `<div style="padding:0.4rem 0.6rem;border-radius:0.6rem;border:1px solid #e5e7eb;background:#f9fafb;font-size:0.75rem">
+                    <span class="font-bold text-gray-700">${h.entreprise||'—'}</span>
+                    ${h.dateDepart?`<span class="text-gray-400 ml-2">Départ : ${h.dateDepart}</span>`:''}
+                    ${h.status?`<span style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:9999px;background:${h.status==='Confirmé'?'#dcfce7':'#f3f4f6'};color:${h.status==='Confirmé'?'#15803d':'#6b7280'};margin-left:0.4rem">${h.status}</span>`:''}
+                </div>`
+            ).join('');
+        }
+
+        // ══ GED Étudiant ══
+        async function loadGedEtu() {
+            const isAdmin = currentUser.role !== 'Etudiant';
+            if (isAdmin) {
+                document.getElementById('btnGedScan').classList.remove('hidden');
+                document.getElementById('btnGedLink').classList.remove('hidden');
+                document.getElementById('btnGedUploadAdmin').classList.remove('hidden');
+            } else {
+                document.getElementById('gedEtuUploadZone').classList.remove('hidden');
+            }
+            const r = await apiPost({ action: 'gedGetStudentDocs', idEtu: studentId });
+            const container = document.getElementById('gedEtuFiles');
+            if (!r.success) { container.innerHTML = `<p class="text-red-400 text-sm text-center py-4">${r.message}</p>`; return; }
+            if (!r.linked) {
+                container.innerHTML = `<p class="text-gray-400 text-sm italic text-center py-4">Aucun dossier Drive lié à cet étudiant.${isAdmin?' Utilisez "Lier un dossier" ou "Scanner les dossiers".':''}</p>`;
+                return;
+            }
+            document.getElementById('gedEtuFolderLink').classList.remove('hidden');
+            document.getElementById('gedEtuFolderUrl').href = r.folderUrl || '#';
+            const files = r.files || [];
+            if (!files.length) { container.innerHTML = '<p class="text-gray-400 text-sm italic text-center py-4">Dossier vide.</p>'; return; }
+            container.innerHTML = `<div class="space-y-2">${files.map(f => {
+                const icon = f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : '📎';
+                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#f9fafb">
+                    <span style="font-size:1.3rem">${icon}</span>
+                    <div style="flex:1;min-width:0">
+                        <p style="font-weight:600;font-size:0.8rem;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</p>
+                        <p style="font-size:0.7rem;color:#9ca3af">${f.date} · ${(f.size/1024).toFixed(0)} KB</p>
+                    </div>
+                    <a href="${f.url}" target="_blank" style="font-size:0.75rem;font-weight:700;color:#1A4E8A;white-space:nowrap">Ouvrir</a>
+                </div>`;
+            }).join('')}</div>`;
+        }
+
+        async function gedLinkFolder() {
+            const val = document.getElementById('gedFolderInput').value.trim();
+            if (!val) return alert('Entrez une URL ou un ID de dossier Drive.');
+            const r = await apiPost({ action: 'gedLinkStudentFolder', idEtu: studentId, nomPrenom: document.getElementById('etuNom')?.innerText || '', folderUrl: val, folderId: val });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert('Dossier lié ✓');
+            document.getElementById('gedLinkPanel').classList.add('hidden');
+            loadGedEtu();
+        }
+
+        async function gedAutoScan() {
+            const btn = document.getElementById('btnGedScan');
+            btn.textContent = '⏳ Scan…'; btn.disabled = true;
+            const r = await apiPost({ action: 'gedAutoScanStudents' });
+            btn.textContent = '🔍 Scanner les dossiers'; btn.disabled = false;
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert(`Scan terminé : ${r.matched} dossier(s) lié(s) sur ${r.total} trouvé(s).`);
+            loadGedEtu();
+        }
+
+        async function gedUploadFile() {
+            const file = document.getElementById('gedFileInputEtu').files[0];
+            if (!file) return alert('Sélectionnez un fichier.');
+            const btn = document.getElementById('btnGedUploadConfirmEtu');
+            btn.textContent = '⏳…'; btn.disabled = true;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                const r = await apiPost({ action: 'gedUploadStudentDoc', idEtu: studentId,
+                    nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                    base64Data: b64, fileName: file.name, mimeType: file.type });
+                btn.textContent = 'Envoyer'; btn.disabled = false;
+                if (!r.success) return alert('Erreur : ' + r.message);
+                alert('Document déposé ✓');
+                document.getElementById('gedUploadPanel').classList.add('hidden');
+                document.getElementById('gedFileInputEtu').value = '';
+                loadGedEtu();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function gedUploadFileStudent() {
+            const file = document.getElementById('gedFileInputEtuStu').files[0];
+            if (!file) return alert('Sélectionnez un fichier.');
+            const btn = document.getElementById('btnGedUploadStu');
+            btn.textContent = '⏳…'; btn.disabled = true;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                const r = await apiPost({ action: 'gedUploadStudentDoc', idEtu: studentId,
+                    nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                    base64Data: b64, fileName: file.name, mimeType: file.type });
+                btn.textContent = 'Envoyer'; btn.disabled = false;
+                if (!r.success) return alert('Erreur : ' + r.message);
+                alert('Pièce envoyée ✓');
+                document.getElementById('gedFileInputEtuStu').value = '';
+            };
+            reader.readAsDataURL(file);
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
