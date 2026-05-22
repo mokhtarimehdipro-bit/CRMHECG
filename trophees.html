@@ -286,15 +286,28 @@ function renderBanner(d) {
     // Emblème
     const emblemeId = prefs.emblemeChoisi;
     const emblemeT = emblemeId && d.trophees ? d.trophees.find(t => t.id === emblemeId && t.unlocked) : null;
-    document.getElementById('emblemeDisplay').textContent = emblemeT ? (emblemeT.nom.match(/[\u{1F300}-\u{1FFFF}]/u) ? emblemeT.nom.match(/[\u{1F300}-\u{1FFFF}]/u)[0] : '🏆') : '🏆';
+    const emblemeEl = document.getElementById('emblemeDisplay');
+    if (emblemeT && emblemeT.url) {
+        emblemeEl.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center';
+        emblemeEl.innerHTML = `<img src="${escH(emblemeT.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+    } else {
+        emblemeEl.style.cssText = '';
+        emblemeEl.className = 'text-4xl';
+        emblemeEl.textContent = '🏆';
+    }
 
     // Personnage
     const persoRef = prefs.personnageChoisi;
     const perso = persoRef && d.personnages ? d.personnages.find(c => c.ref === persoRef && c.unlocked) : (d.personnages || []).find(c => c.unlocked);
-    if (perso && perso.url) {
-        document.getElementById('personnageImg').src = perso.url;
-        document.getElementById('personnageImg').classList.remove('hidden');
-        document.getElementById('personnagePlaceholder').classList.add('hidden');
+    if (perso) {
+        if (perso.url) {
+            document.getElementById('personnageImg').src = perso.url;
+            document.getElementById('personnageImg').classList.remove('hidden');
+            document.getElementById('personnagePlaceholder').classList.add('hidden');
+        } else {
+            document.getElementById('personnageImg').classList.add('hidden');
+            document.getElementById('personnagePlaceholder').classList.remove('hidden');
+        }
         document.getElementById('personnageNom').textContent = perso.nom;
     } else {
         document.getElementById('personnageImg').classList.add('hidden');
@@ -318,6 +331,16 @@ function renderKPIs(d) {
     }).join('');
 }
 
+function tropheeImg(t, big) {
+    if (t.url) return `<img src="${escH(t.url)}" class="${big?'w-16 h-16':'w-12 h-12'} object-contain rounded-xl">`;
+    return `<span class="${big?'text-5xl':'text-3xl'}">🏆</span>`;
+}
+
+function openTropheeById(id) {
+    const t = ((tropheeData && tropheeData.trophees) || []).find(x => x.id === id);
+    if (t) openTropheeDetail(t);
+}
+
 function renderTrophees(d) {
     const grid = document.getElementById('tropheesGrid');
     const unlocked = (d.trophees || []).filter(t => t.unlocked);
@@ -326,8 +349,8 @@ function renderTrophees(d) {
         return;
     }
     grid.innerHTML = unlocked.map(t => `
-        <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeDetail(${esc(JSON.stringify(t))})">
-            <div class="text-4xl mb-2">🏆</div>
+        <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
+            <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
             <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
             <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
             ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
@@ -379,17 +402,16 @@ function filterActions() {
 }
 
 function openTropheeDetail(t) {
-    document.getElementById('tropheeDetailNom').textContent = t.nom;
+    document.getElementById('tropheeDetailNom').textContent = t.unlocked ? t.nom : '???';
     const pct = t.quantite > 0 ? Math.min(100, Math.round(t.count / t.quantite * 100)) : 100;
     document.getElementById('tropheeDetailBody').innerHTML = `
-        <div class="text-center text-6xl mb-4">🏆</div>
-        <p class="text-gray-600 text-sm mb-3">${escH(t.desc)}</p>
+        <div class="mb-4 flex justify-center">${tropheeImg(t, true)}</div>
         <div class="bg-gray-50 rounded-xl p-3 mb-3">
             <p class="text-xs text-gray-500 mb-1">Catégorie : <strong>${escH(t.categorie)}</strong></p>
-            <p class="text-xs text-gray-500 mb-1">Condition : ${t.count} / ${t.quantite} ${escH(XP_LABELS[t.catKey]||t.categorie)}</p>
+            <p class="text-xs text-gray-500 mb-1">Progression : ${t.count} / ${t.quantite} ${escH(XP_LABELS[t.catKey]||t.categorie)}</p>
             <div class="bg-gray-200 rounded-full h-2 mt-2"><div class="bg-amber-500 h-2 rounded-full" style="width:${pct}%"></div></div>
         </div>
-        ${t.dateObtention ? `<p class="text-xs text-amber-600 font-bold text-center">✅ Débloqué le ${escH(t.dateObtention)}</p>` : `<p class="text-xs text-gray-400 text-center">🔒 Non débloqué</p>`}
+        ${t.unlocked ? `<p class="text-xs text-amber-600 font-bold text-center">✅ Débloqué${t.dateObtention ? ' le '+escH(t.dateObtention) : ''}</p>` : `<p class="text-xs text-gray-400 text-center">🔒 Encore ${t.quantite - t.count} ${escH(XP_LABELS[t.catKey]||t.categorie)} à faire</p>`}
     `;
     document.getElementById('modalTrophee').classList.remove('hidden');
 }
@@ -407,10 +429,10 @@ function openSalleRecompenses() {
             <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">${escH(cat)}</h3>
             <div class="grid grid-cols-3 md:grid-cols-5 gap-3">`;
         cats[cat].forEach(t => {
-            html += `<div class="trophy-card ${t.unlocked?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100'} border rounded-2xl p-3 text-center cursor-pointer ${t.unlocked?'':'trophy-locked'}" onclick="openTropheeDetail(${esc(JSON.stringify(t))})">
-                <div class="text-3xl mb-1">🏆</div>
+            html += `<div class="trophy-card ${t.unlocked?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100'} border rounded-2xl p-3 text-center cursor-pointer ${t.unlocked?'':'trophy-locked'}" onclick="openTropheeById('${escH(t.id)}')">
+                <div class="mb-1 flex justify-center">${t.unlocked ? tropheeImg(t, false) : '<span class="text-3xl opacity-30">🏆</span>'}</div>
                 <p class="font-bold text-gray-800 text-xs leading-tight">${t.unlocked ? escH(t.nom) : '?'}</p>
-                ${t.unlocked ? `<p class="text-[9px] text-amber-600 mt-0.5">${t.count}/${t.quantite}</p>` : `<p class="text-[9px] text-gray-400 mt-0.5">${t.count}/${t.quantite}</p>`}
+                <p class="text-[9px] ${t.unlocked?'text-amber-600':'text-gray-400'} mt-0.5">${t.count}/${t.quantite}</p>
             </div>`;
         });
         html += '</div></div>';
@@ -460,8 +482,8 @@ function openEmblemePicker() {
     }
     grid.innerHTML = unlockedTrophees.map(t => {
         const sel = t.id === current;
-        return `<div class="perso-card rounded-2xl p-4 bg-amber-50 border border-amber-100 text-center ${sel?'selected':''}" onclick="pickEmbleme('${t.id}')">
-            <div class="text-4xl mb-2">🏆</div>
+        return `<div class="perso-card rounded-2xl p-4 bg-amber-50 border border-amber-100 text-center ${sel?'selected':''}" onclick="pickEmbleme('${escH(t.id)}')">
+            <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
             <p class="font-bold text-xs text-gray-800">${escH(t.nom)}</p>
             <p class="text-[9px] text-amber-600">${escH(t.categorie)}</p>
         </div>`;
