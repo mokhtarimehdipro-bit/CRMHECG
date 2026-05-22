@@ -35,9 +35,10 @@
         .perso-card.locked { filter: grayscale(1) brightness(0.5); cursor: not-allowed; }
         .modal-backdrop { background: rgba(0,0,0,0.65); }
         @keyframes trophyRainbow {
-            0%   { filter: hue-rotate(0deg)   brightness(1); }
-            50%  { filter: hue-rotate(180deg) brightness(1.08); }
-            100% { filter: hue-rotate(360deg) brightness(1); }
+            0%   { filter: hue-rotate(0deg)   brightness(1)    drop-shadow(0 2px 8px rgba(160,80,255,0.5)); }
+            33%  { filter: hue-rotate(120deg) brightness(1.07) drop-shadow(0 2px 8px rgba(60,200,100,0.5)); }
+            66%  { filter: hue-rotate(240deg) brightness(1.04) drop-shadow(0 2px 8px rgba(80,100,255,0.5)); }
+            100% { filter: hue-rotate(360deg) brightness(1)    drop-shadow(0 2px 8px rgba(160,80,255,0.5)); }
         }
         .trophy-rw-anim { animation: trophyRainbow 10s ease-in-out infinite; display:inline-block; }
     </style>
@@ -227,7 +228,7 @@ const NOM_USER   = user.nom || user.name || '';
 if (!EMAIL_USER) { localStorage.clear(); window.location.href = 'index.html'; }
 
 const XP_MAP = {Actions:1,Offres:10,CarnetRoute:5,CarnetEntreprise:15,Missions:15,Objectifs:50,Alertes:10,Com:35,Entreprise:25,Etudiant:20,Special:100};
-const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions clôturées',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial'};
+const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial'};
 const KPI_COLORS = {Actions:'blue',Offres:'emerald',CarnetRoute:'violet',CarnetEntreprise:'pink',Missions:'amber',Objectifs:'green',Alertes:'orange',Com:'cyan',Entreprise:'indigo',Etudiant:'teal',Special:'red'};
 
 let tropheeData = null;
@@ -364,28 +365,57 @@ function renderKPIs(d) {
 function tropheeImg(t, big) {
     if (t.url) return `<img src="${escH(t.url)}" class="${big?'w-16 h-16':'w-12 h-12'} object-contain rounded-xl">`;
     const tier = (t.tier||'').toLowerCase();
-    const sz = big ? 52 : 34;
-    const gid = 'tg' + Math.random().toString(36).slice(2,8);
-    const PALS = {
-        bronze:        ['#f5d09a','#cd7f32','#7a4a1a'],
-        argent:        ['#f0f4f8','#b0bec8','#5a7080'],
-        or:            ['#fff3c0','#f59e0b','#92400e'],
-        'arc-en-ciel': ['#fff3c0','#f59e0b','#92400e']
+    const sz = big ? 64 : 42;
+    const g = 'tg' + Math.random().toString(36).slice(2,9);
+    const isRw = tier === 'arc-en-ciel';
+    const cls = isRw ? 'trophy-rw-anim' : '';
+    // [deep, shadow, mid, light, bright, specular, accent, highlight]
+    const PAL = {
+        bronze:        ['#1a0800','#6b3010','#a85520','#cc7830','#e8a040','#fff0c8','#d09030','#f8c860'],
+        argent:        ['#0d1520','#304858','#506878','#7898a8','#a8c4d4','#f0f8ff','#8aaac0','#d8eef8'],
+        or:            ['#1a0c00','#6a4010','#a87820','#d4a030','#f0c840','#fffae0','#c09020','#ffe868'],
+        'arc-en-ciel': ['#180028','#4a0078','#8040c0','#b080e8','#d8b0ff','#fff4ff','#c0a0f0','#f0d8ff']
     };
-    const pal = PALS[tier] || PALS.or;
-    const cls = tier === 'arc-en-ciel' ? 'trophy-rw-anim' : '';
-    return `<svg class="${cls}" width="${sz}" height="${sz}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle">
-        <defs><linearGradient id="${gid}" x1="0.3" y1="0" x2="0.7" y2="1">
-            <stop offset="0%"   stop-color="${pal[0]}"/>
-            <stop offset="55%"  stop-color="${pal[1]}"/>
-            <stop offset="100%" stop-color="${pal[2]}"/>
-        </linearGradient></defs>
-        <path fill="url(#${gid})" d="M5 3H19V9C19 12.3 15.9 15 12 15C8.1 15 5 12.3 5 9V3Z"/>
-        <path fill="url(#${gid})" d="M3 5H6V9H3Z"/>
-        <path fill="url(#${gid})" d="M18 5H21V9H18Z"/>
-        <path fill="url(#${gid})" d="M10 14H14V17H10Z"/>
-        <path fill="url(#${gid})" d="M7 16H17V20H7Z"/>
-    </svg>`;
+    const [D,S,M,L,B,SP,A,HI] = PAL[tier] || (isRw ? PAL['arc-en-ciel'] : PAL.or);
+    const drp = isRw ? '' : 'filter:drop-shadow(0 3px 8px rgba(0,0,0,0.5))';
+    return `<svg class="${cls}" width="${sz}" height="${sz}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;${drp}">
+  <defs>
+    <linearGradient id="${g}M" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="${D}"/><stop offset="10%" stop-color="${S}"/>
+      <stop offset="25%"  stop-color="${M}"/><stop offset="42%" stop-color="${L}"/>
+      <stop offset="50%"  stop-color="${SP}"/>
+      <stop offset="58%"  stop-color="${B}"/><stop offset="75%" stop-color="${L}"/>
+      <stop offset="90%"  stop-color="${S}"/><stop offset="100%" stop-color="${D}"/>
+    </linearGradient>
+    <linearGradient id="${g}B" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="${S}"/><stop offset="30%" stop-color="${A}"/>
+      <stop offset="50%" stop-color="${HI}"/><stop offset="70%" stop-color="${A}"/>
+      <stop offset="100%" stop-color="${S}"/>
+    </linearGradient>
+    <radialGradient id="${g}R" cx="0.38" cy="0.3" r="0.44">
+      <stop offset="0%"   stop-color="rgba(255,255,255,0.78)"/>
+      <stop offset="45%"  stop-color="rgba(255,255,255,0.12)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <linearGradient id="${g}V" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="rgba(255,255,255,0.1)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.22)"/>
+    </linearGradient>
+  </defs>
+  <path d="M18 30 C3 30 3 58 18 58"  fill="none" stroke="${S}"  stroke-width="9" stroke-linecap="round"/>
+  <path d="M17 32 C7 32 7 56 17 56"  fill="none" stroke="${HI}" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <path d="M82 30 C97 30 97 58 82 58" fill="none" stroke="${S}"  stroke-width="9" stroke-linecap="round"/>
+  <path d="M83 32 C93 32 93 56 83 56" fill="none" stroke="${HI}" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <path d="M18 10 H82 V46 C82 68 66 80 50 80 C34 80 18 68 18 46 Z" fill="url(#${g}M)"/>
+  <path d="M18 10 H82 V46 C82 68 66 80 50 80 C34 80 18 68 18 46 Z" fill="url(#${g}V)"/>
+  <path d="M18 10 H82 V46 C82 68 66 80 50 80 C34 80 18 68 18 46 Z" fill="url(#${g}R)"/>
+  <ellipse cx="50" cy="13" rx="28" ry="3.5" fill="rgba(0,0,0,0.22)"/>
+  <rect x="30" y="33" width="40" height="2.5" rx="1.2" fill="rgba(255,255,255,0.14)"/>
+  <rect x="14" y="8"  width="72" height="6"   rx="2.5" fill="url(#${g}B)"/>
+  <rect x="40" y="80" width="20" height="9"   fill="url(#${g}B)"/>
+  <rect x="24" y="87" width="52" height="3"   rx="1"   fill="url(#${g}M)" opacity="0.9"/>
+  <path d="M25 90 H75 V98 Q75 100 70 100 H30 Q25 100 25 98 Z" fill="url(#${g}B)"/>
+</svg>`;
 }
 
 function openTropheeById(id) {
