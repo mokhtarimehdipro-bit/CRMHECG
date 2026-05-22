@@ -8,14 +8,19 @@
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .card-mission { transition: transform .15s, box-shadow .15s; }
-        .card-mission:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,.10); }
-        .toggle-btn.active { background: #1A4E8A; color: #fff; }
-        .toggle-btn-green.active  { background: #16a34a; color: #fff; }
-        .toggle-btn-blue.active   { background: #2563eb; color: #fff; }
-        .toggle-btn-red.active    { background: #dc2626; color: #fff; }
-        @keyframes fadeInUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-        .card-anim { animation: fadeInUp .2s ease both; }
+        /* Board */
+        .board-wrap { display:flex; gap:1rem; overflow-x:auto; padding-bottom:1.5rem; align-items:flex-start; }
+        .board-col { min-width:270px; max-width:300px; flex-shrink:0; background:#f1f5f9; border-radius:1rem; padding:0.75rem; }
+        .board-col-body { min-height:60px; transition: background .15s; }
+        .board-col.drag-over .board-col-body { background:rgba(59,130,246,.08); border-radius:.5rem; outline:2px dashed #93c5fd; }
+        /* Cards */
+        .card-mission { transition: box-shadow .15s; cursor:pointer; }
+        .card-mission:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+        .card-mission.dragging { opacity:.3; }
+        .card-grid { transition: transform .15s, box-shadow .15s; }
+        .card-grid:hover { transform:translateY(-3px); box-shadow:0 8px 30px rgba(0,0,0,.10); }
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);} }
+        .card-anim { animation: fadeInUp .18s ease both; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -41,7 +46,7 @@
 </nav>
 <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
 
-<main class="max-w-7xl mx-auto p-8">
+<main class="max-w-screen-xl mx-auto p-8">
 
     <!-- TITRE + ACTIONS -->
     <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
@@ -52,42 +57,42 @@
         <div class="flex gap-3 flex-wrap">
             <button onclick="loadMissions()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition text-sm">🔄 Rafraîchir</button>
             <button id="btnAspirer" onclick="aspirerMaintenant()" class="hidden bg-amber-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-amber-600 transition text-sm">📬 Aspirer mes mails</button>
-            <button id="btnExportCurrent" onclick="exportCSV(false)" class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition text-sm">📥 Exporter la vue</button>
-            <button id="btnExportAll" onclick="exportCSV(true)" class="hidden bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition text-sm">📦 Export global (toutes)</button>
+            <button onclick="openNouveauMission()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition text-sm">+ Nouvelle mission</button>
+            <button id="btnExportCurrent" onclick="exportCSV(false)" class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition text-sm">📥 Export vue</button>
+            <button id="btnExportAll" onclick="exportCSV(true)" class="hidden bg-gray-700 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-gray-800 transition text-sm">📦 Export global</button>
         </div>
     </div>
 
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition" onclick="switchView('tous')">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('')">
             <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
             <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpiTotal">0</p>
         </div>
-        <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-200 cursor-pointer hover:shadow-md transition" onclick="switchView('Attribué')">
+        <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-200 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Attribué')">
             <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">En cours</p>
             <p class="text-3xl font-black text-amber-700 mt-1" id="kpiAttribue">0</p>
         </div>
-        <div class="bg-green-50 p-5 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Clôturé')">
+        <div class="bg-green-50 p-5 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Clôturé')">
             <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Clôturées</p>
             <p class="text-3xl font-black text-green-700 mt-1" id="kpiCloture">0</p>
         </div>
-        <div class="bg-blue-50 p-5 rounded-2xl shadow-sm border border-blue-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Annulé')">
+        <div class="bg-blue-50 p-5 rounded-2xl shadow-sm border border-blue-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Annulé')">
             <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Annulées</p>
             <p class="text-3xl font-black text-blue-700 mt-1" id="kpiAnnule">0</p>
         </div>
-        <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100 cursor-pointer hover:shadow-md transition" onclick="switchView('Problématique')">
+        <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Problématique')">
             <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Problématiques</p>
             <p class="text-3xl font-black text-red-700 mt-1" id="kpiProbleme">0</p>
         </div>
     </div>
 
-    <!-- BARRE FILTRES + TOGGLE VUES -->
+    <!-- FILTRES + TOGGLE -->
     <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-6">
-        <!-- Filtres -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
                 <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Recherche</label>
-                <input type="text" id="fSearch" placeholder="Objet, collaborateur, note..." oninput="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <input type="text" id="fSearch" placeholder="Objet, collaborateur, résumé…" oninput="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
             </div>
             <div id="wrapCollab">
                 <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Collaborateur</label>
@@ -104,32 +109,41 @@
                 <input type="date" id="fDateFin" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
             </div>
         </div>
-        <!-- Toggles vues -->
         <div class="flex flex-wrap gap-2 pt-3 border-t border-gray-50 items-center">
             <span class="text-[10px] font-black text-gray-400 uppercase mr-1">Vue :</span>
-            <button id="btn-Attribué" onclick="switchView('Attribué')" class="toggle-btn active px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-amber-400 text-amber-700 bg-amber-50 transition">🟡 En cours</button>
-            <button id="btn-Clôturé" onclick="switchView('Clôturé')" class="toggle-btn-green px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-green-300 text-green-700 bg-white transition">✅ Clôturées</button>
-            <button id="btn-Annulé" onclick="switchView('Annulé')" class="toggle-btn-blue px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-blue-300 text-blue-700 bg-white transition">🔵 Annulées</button>
-            <button id="btn-Problématique" onclick="switchView('Problématique')" class="toggle-btn-red px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-red-300 text-red-700 bg-white transition">🔴 Problématiques</button>
+            <button id="btnVueBoard" onclick="setView('board')" class="px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 transition">🗂 Tableau</button>
+            <button id="btnVueGrille" onclick="setView('grid')" class="px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 transition">⊞ Grille</button>
             <button onclick="resetFilters()" class="ml-auto px-4 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Réinitialiser</button>
         </div>
     </div>
 
-    <!-- ZONE CARTES -->
+    <!-- LOADER -->
     <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des missions...</div>
-    <div id="emptyState" class="hidden text-center py-20">
-        <p class="text-5xl mb-4">📭</p>
-        <p class="text-gray-400 font-bold text-lg">Aucune mission dans cette catégorie.</p>
-        <p class="text-gray-300 text-sm mt-1">Les missions aspirées depuis Gmail apparaîtront ici.</p>
+
+    <!-- BOARD TRELLO -->
+    <div id="boardView" class="hidden">
+        <div class="flex items-center gap-3 mb-4 flex-wrap">
+            <span class="text-xs font-black text-gray-400 uppercase">Sections :</span>
+            <button onclick="addSection()" class="px-3 py-1.5 text-[11px] font-black uppercase border-2 border-dashed border-gray-300 text-gray-400 rounded-xl hover:border-[#1A4E8A] hover:text-[#1A4E8A] transition">+ Nouvelle section</button>
+            <button onclick="resetBoard()" class="px-3 py-1.5 text-[11px] font-black uppercase border-2 border-dashed border-gray-300 text-gray-400 rounded-xl hover:border-red-400 hover:text-red-400 transition ml-auto">↺ Réinitialiser le tableau</button>
+        </div>
+        <div id="boardWrap" class="board-wrap"></div>
     </div>
-    <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+
+    <!-- GRILLE -->
+    <div id="gridView" class="hidden">
+        <div id="emptyState" class="hidden text-center py-20">
+            <p class="text-5xl mb-4">📭</p>
+            <p class="text-gray-400 font-bold text-lg">Aucune mission dans cette catégorie.</p>
+        </div>
+        <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+    </div>
 
 </main>
 
-<!-- ========== MODALE DETAIL ========== -->
-<div id="modalDetail" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-10 px-4">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-        <!-- Header modale -->
+<!-- ══ MODALE DÉTAIL ══════════════════════════════════════════════════════════ -->
+<div id="modalDetail" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-8 px-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div id="modalHeader" class="p-6 rounded-t-3xl flex justify-between items-start gap-4">
             <div class="flex-1 min-w-0">
                 <p class="text-[9px] font-black uppercase tracking-widest text-white/70 mb-1" id="modalCollab">—</p>
@@ -138,38 +152,48 @@
             </div>
             <button onclick="closeModal()" class="text-white/60 hover:text-white text-2xl font-black flex-shrink-0">✕</button>
         </div>
-        <!-- Body modale scrollable -->
         <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5">
-            <!-- CC -->
             <div id="sectionCC" class="hidden">
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Copies (CC)</p>
                 <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCC">—</p>
             </div>
+            <!-- Priorité -->
+            <div>
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Priorité</p>
+                <div id="modalPrioritySelector" class="flex gap-2 flex-wrap"></div>
+            </div>
             <!-- Corps -->
             <div>
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Corps du message</p>
-                <pre class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-2xl p-4 whitespace-pre-wrap font-sans border border-gray-100 max-h-52 overflow-y-auto custom-scrollbar" id="modalCorps">—</pre>
+                <pre class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-2xl p-4 whitespace-pre-wrap font-sans border border-gray-100 max-h-40 overflow-y-auto custom-scrollbar" id="modalCorps">—</pre>
             </div>
-            <!-- Statut (admin seulement) -->
+            <!-- Résumé -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-[9px] font-black text-gray-400 uppercase">Résumé / To-do</p>
+                    <button id="btnSaveResume" onclick="saveResume()" class="hidden text-[10px] font-black text-[#1A4E8A] border border-[#1A4E8A] px-3 py-1 rounded-lg hover:bg-blue-50 transition">Enregistrer</button>
+                </div>
+                <textarea id="modalResume" rows="3" placeholder="Notes personnelles, to-do, résumé de la mission…" class="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
+            </div>
+            <!-- Statut admin -->
             <div id="sectionStatut" class="hidden">
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Modifier le statut</p>
                 <div class="flex gap-2 flex-wrap">
-                    <button onclick="changeStatut('Attribué')"    class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">🟡 Attribué</button>
-                    <button onclick="changeStatut('Clôturé')"     class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition">✅ Clôturé</button>
-                    <button onclick="changeStatut('Annulé')"      class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition">🔵 Annulé</button>
-                    <button onclick="changeStatut('Problématique')" class="statut-btn px-4 py-2 rounded-xl text-[11px] font-black border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition">🔴 Problématique</button>
+                    <button onclick="changeStatut('Attribué')"      class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">🟡 Attribué</button>
+                    <button onclick="changeStatut('Clôturé')"       class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition">✅ Clôturé</button>
+                    <button onclick="changeStatut('Annulé')"        class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition">🔵 Annulé</button>
+                    <button onclick="changeStatut('Problématique')" class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition">🔴 Problématique</button>
                 </div>
             </div>
-            <!-- Notes historique -->
+            <!-- Notes -->
             <div>
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Notes & suivi</p>
-                <div id="modalNotes" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar"></div>
+                <div id="modalNotes" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar"></div>
             </div>
-            <!-- Ajouter une note -->
             <div class="pt-3 border-t border-gray-100">
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Ajouter une note</p>
                 <div class="flex gap-2">
-                    <textarea id="inputNote" rows="2" placeholder="Ex : Mission complétée, retour client positif..." class="flex-1 px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
+                    <textarea id="inputNote" rows="2" placeholder="Ex : Mission complétée, retour client positif…" class="flex-1 px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
                     <button onclick="saveNote()" id="btnSaveNote" class="bg-[#1A4E8A] text-white px-5 rounded-xl font-black text-sm hover:bg-blue-800 transition self-stretch">Envoyer</button>
                 </div>
             </div>
@@ -177,336 +201,585 @@
     </div>
 </div>
 
+<!-- ══ MODALE NOUVELLE MISSION ════════════════════════════════════════════════ -->
+<div id="modalNouveauMission" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-8 px-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="p-6 bg-[#1A4E8A] rounded-t-3xl flex justify-between items-center">
+            <h2 class="text-lg font-black text-white">Nouvelle mission</h2>
+            <button onclick="closeNouveauMission()" class="text-white/60 hover:text-white text-2xl font-black">✕</button>
+        </div>
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+            <div id="nwCollabWrap" class="hidden">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Pour le collaborateur</label>
+                <select id="nwCollab" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                    <option value="">— Moi-même —</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Objet *</label>
+                <input type="text" id="nwObjet" placeholder="Titre de la mission…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Description</label>
+                <textarea id="nwCorps" rows="3" placeholder="Détails de la mission…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-2">Priorité</label>
+                <div id="nwPrioritySelector" class="flex gap-2 flex-wrap"></div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Résumé / To-do initial</label>
+                <textarea id="nwResume" rows="2" placeholder="Notes initiales optionnelles…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">CC (emails séparés par virgule)</label>
+                <input type="text" id="nwCC" placeholder="email1@hecg.fr, email2@…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A]">
+            </div>
+        </div>
+        <div class="p-5 border-t border-gray-100 flex gap-3 justify-end">
+            <button onclick="closeNouveauMission()" class="px-5 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Annuler</button>
+            <button id="btnCreateMission" onclick="saveNouveauMission()" class="px-6 py-2 bg-[#1A4E8A] text-white rounded-xl font-black text-sm hover:bg-blue-800 shadow-md transition">Créer la mission</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODALE SECTION ════════════════════════════════════════════════════════ -->
+<div id="modalSection" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center px-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <h3 class="text-base font-black text-gray-800 mb-4" id="modalSectionTitle">Modifier la section</h3>
+        <input type="hidden" id="modalSectionId">
+        <div class="mb-3">
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Nom</label>
+            <input type="text" id="modalSectionName" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+        </div>
+        <div class="mb-4">
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-2">Couleur</label>
+            <div class="flex gap-2 flex-wrap" id="colorPicker"></div>
+        </div>
+        <div class="flex gap-2">
+            <button id="btnDeleteSection" onclick="deleteSection()" class="hidden px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl font-black text-sm hover:bg-red-100 transition">Supprimer</button>
+            <div class="flex-1"></div>
+            <button onclick="closeModalSection()" class="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Annuler</button>
+            <button onclick="saveSection()" class="px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-black text-sm hover:bg-blue-800 transition">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-const user = JSON.parse(localStorage.getItem('user') || '{}');
+const user    = JSON.parse(localStorage.getItem('user') || '{}');
 const isAdmin = user.role === "Administrateur" || (user.email || "").toLowerCase() === "m.mokhtari@hecg.fr";
+const BOARD_KEY = 'hecg_board_' + (user.email || 'default');
 
-let allMissions = [];     // données brutes
-let filteredMissions = []; // après filtres texte/date/collab
-let currentView = "Attribué"; // vue active
+let allMissions      = [];
+let filteredMissions = [];
+let currentView      = 'board';
+let currentStatutFilter = '';
 let currentMissionId = null;
+let dragSrcId        = null;
 
-// ── INIT ───────────────────────────────────────────────────────────────────
+// ── PRIORITÉ ──────────────────────────────────────────────────────────────────
+const PRIO_LABELS = {1:'Faible', 2:'Normal', 3:'Moyen', 4:'Important', 5:'Urgent'};
+const PRIO_COLORS = {1:'#9ca3af', 2:'#60a5fa', 3:'#fbbf24', 4:'#fb923c', 5:'#f87171'};
+const PRIO_BG     = {1:'#f9fafb', 2:'#eff6ff', 3:'#fefce8', 4:'#fff7ed', 5:'#fef2f2'};
+
+function buildPrioritySelector(containerId, current, onClickFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = [1,2,3,4,5].map(p => {
+        const active = p === current;
+        return `<button onclick="${onClickFn}(${p})" data-p="${p}"
+            style="display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.65rem;border-radius:0.6rem;border:2px solid ${active ? PRIO_COLORS[p] : '#e5e7eb'};background:${active ? PRIO_BG[p] : '#fff'};font-size:0.72rem;font-weight:700;cursor:pointer;transition:.12s"
+            title="${PRIO_LABELS[p]}">
+            <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};display:inline-block;flex-shrink:0"></span>
+            ${PRIO_LABELS[p]}
+        </button>`;
+    }).join('');
+}
+
+// ── BOARD DATA ────────────────────────────────────────────────────────────────
+const DEFAULT_SECTIONS = [
+    {id:'default-attribue',      name:'🟡 En cours',      color:'#f59e0b', isDefault:true, defaultStatut:'Attribué'},
+    {id:'default-cloture',       name:'✅ Clôturées',      color:'#16a34a', isDefault:true, defaultStatut:'Clôturé'},
+    {id:'default-annule',        name:'🔵 Annulées',       color:'#2563eb', isDefault:true, defaultStatut:'Annulé'},
+    {id:'default-problematique', name:'🔴 Problématiques', color:'#dc2626', isDefault:true, defaultStatut:'Problématique'},
+];
+function loadBoardData() {
+    try {
+        const raw = localStorage.getItem(BOARD_KEY);
+        if (!raw) return initBoardData();
+        const d = JSON.parse(raw);
+        DEFAULT_SECTIONS.forEach(def => { if (!d.sections.find(s => s.id === def.id)) d.sections.unshift({...def}); });
+        if (!d.placements) d.placements = {};
+        return d;
+    } catch(e) { return initBoardData(); }
+}
+function initBoardData() { return {sections: DEFAULT_SECTIONS.map(s => ({...s})), placements:{}}; }
+function saveBoardData(d) { localStorage.setItem(BOARD_KEY, JSON.stringify(d)); }
+function resetBoard() {
+    if (!confirm('Réinitialiser le tableau ? Les sections personnalisées et placements seront perdus.')) return;
+    saveBoardData(initBoardData());
+    renderBoard();
+    showToast('Tableau réinitialisé.', 'info');
+}
+function defaultSectionForStatut(statut) {
+    const def = DEFAULT_SECTIONS.find(s => s.defaultStatut === statut);
+    return def ? def.id : 'default-attribue';
+}
+function getSectionIdForMission(bd, m) { return bd.placements[m.id] || defaultSectionForStatut(m.statut); }
+
+// ── STATUT STYLE ──────────────────────────────────────────────────────────────
+const STATUT_STYLE = {
+    'Attribué':      {card:'border-amber-300', badge:'bg-amber-100 text-amber-800 border border-amber-300',   header:'bg-amber-500'},
+    'Clôturé':       {card:'border-green-300', badge:'bg-green-100 text-green-800 border border-green-300',   header:'bg-green-600'},
+    'Annulé':        {card:'border-blue-300',  badge:'bg-blue-100 text-blue-800 border border-blue-300',      header:'bg-blue-600'},
+    'Problématique': {card:'border-red-400',   badge:'bg-red-100 text-red-800 border border-red-400',          header:'bg-red-600'},
+};
+const STATUT_ICON = {'Attribué':'🟡','Clôturé':'✅','Annulé':'🔵','Problématique':'🔴'};
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
 window.onload = () => {
     if (!user || !user.role) { window.location.href = 'index.html'; return; }
     if (user.role === "Administrateur") {
         document.getElementById('navHistorique').classList.remove('hidden');
         document.getElementById('btnExportAll').classList.remove('hidden');
     }
-    if (isAdmin) {
-        document.getElementById('btnAspirer').classList.remove('hidden');
-    }
+    if (isAdmin) document.getElementById('btnAspirer').classList.remove('hidden');
     if (!isAdmin) {
-        // Collaborateur : masque le filtre collab (inutile, vue filtrée serveur)
         document.getElementById('wrapCollab').classList.add('hidden');
         document.getElementById('subtitleCollab').textContent = "Mes missions";
     }
+    setView('board', false);
     loadMissions();
 };
 
+function setView(v, rerender) {
+    currentView = v;
+    const onBoard = v === 'board';
+    document.getElementById('boardView').classList.toggle('hidden', !onBoard);
+    document.getElementById('gridView').classList.toggle('hidden',  onBoard);
+    const active  = 'px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-[#1A4E8A] text-white bg-[#1A4E8A] transition';
+    const passive = 'px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-gray-300 text-gray-500 bg-white transition';
+    document.getElementById('btnVueBoard').className  = onBoard  ? active : passive;
+    document.getElementById('btnVueGrille').className = !onBoard ? active : passive;
+    if (rerender !== false) { if (onBoard) renderBoard(); else renderGrid(filteredMissions); }
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
 async function apiPost(payload) {
-    payload.idAuteur    = user.nom || "Inconnu";
-    payload.roleAuteur  = user.role || "N/A";
-    payload.emailAuteur = user.email || "";
-    const r = await fetch(API_URL, { method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
+    payload.idAuteur    = user.nom    || "Inconnu";
+    payload.roleAuteur  = user.role   || "N/A";
+    payload.emailAuteur = user.email  || "";
+    const r = await fetch(API_URL, {method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
     return r.json();
 }
 
-// ── ASPIRATION À LA DEMANDE ────────────────────────────────────────────────
+// ── ASPIRATION ────────────────────────────────────────────────────────────────
 async function aspirerMaintenant() {
-    const btn = document.getElementById('btnAspirer');
-    const orig = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '⏳ Aspiration en cours…';
+    const btn = document.getElementById('btnAspirer'), orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '⏳ En cours…';
     try {
-        const res = await apiPost({ action: 'aspirerMissionsNow' });
+        const res = await apiPost({action:'aspirerMissionsNow'});
         if (res.success) {
-            if (res.nb === 0) {
-                showToast('Aucun nouveau mail #mission trouvé (déjà traités ou absents).', 'info');
-            } else {
-                showToast(`✅ ${res.nb} mission(s) importée(s) depuis Gmail !`, 'success');
-                await loadMissions();
-            }
-        } else {
-            showToast('Erreur : ' + res.message, 'error');
-        }
-    } catch(e) {
-        showToast('Erreur réseau : ' + e.message, 'error');
-    }
-    btn.disabled = false;
-    btn.textContent = orig;
+            showToast(res.nb === 0 ? 'Aucun nouveau mail #mission.' : `✅ ${res.nb} mission(s) importée(s) !`, res.nb===0?'info':'success');
+            if (res.nb > 0) await loadMissions();
+        } else showToast('Erreur : ' + res.message, 'error');
+    } catch(e) { showToast('Erreur réseau.', 'error'); }
+    btn.disabled = false; btn.textContent = orig;
 }
 
 function showToast(msg, type) {
-    const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-gray-600' };
+    const colors = {success:'bg-green-600', error:'bg-red-600', info:'bg-gray-600'};
     const t = document.createElement('div');
-    t.className = `fixed bottom-6 right-6 z-[100] ${colors[type]||'bg-gray-700'} text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold transition-all`;
-    t.textContent = msg;
-    document.body.appendChild(t);
+    t.className = `fixed bottom-6 right-6 z-[100] ${colors[type]||'bg-gray-700'} text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold`;
+    t.textContent = msg; document.body.appendChild(t);
     setTimeout(() => t.remove(), 4000);
 }
 
-// ── CHARGEMENT ─────────────────────────────────────────────────────────────
+// ── CHARGEMENT ────────────────────────────────────────────────────────────────
 async function loadMissions() {
     document.getElementById('loader').classList.remove('hidden');
-    document.getElementById('cardsGrid').innerHTML = '';
-    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('boardView').classList.add('hidden');
+    document.getElementById('gridView').classList.add('hidden');
     try {
-        const res = await apiPost({ action: 'getMissions' });
-        if (res.success) {
-            allMissions = res.data || [];
-            buildCollabFilter();
-            updateKPIs();
-            applyFilters();
-        }
+        const res = await apiPost({action:'getMissions'});
+        if (res.success) { allMissions = res.data || []; buildCollabFilter(); updateKPIs(); applyFilters(); }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
+    if (currentView === 'board') document.getElementById('boardView').classList.remove('hidden');
+    else document.getElementById('gridView').classList.remove('hidden');
 }
 
-// ── FILTRES ────────────────────────────────────────────────────────────────
+// ── FILTRES ───────────────────────────────────────────────────────────────────
 function buildCollabFilter() {
     const collabs = [...new Set(allMissions.map(m => m.collab).filter(Boolean))].sort();
-    const sel = document.getElementById('fCollab');
-    sel.innerHTML = '<option value="">Tous</option>' + collabs.map(c => `<option value="${c}">${c}</option>`).join('');
+    document.getElementById('fCollab').innerHTML = '<option value="">Tous</option>' + collabs.map(c => `<option value="${c}">${c}</option>`).join('');
 }
-
+function filterStatut(s) { currentStatutFilter = s; applyFilters(); }
 function applyFilters() {
-    const search    = document.getElementById('fSearch').value.toLowerCase();
-    const collab    = document.getElementById('fCollab').value;
-    const dateDebut = document.getElementById('fDateDebut').value;
-    const dateFin   = document.getElementById('fDateFin').value;
-
-    // D'abord : filtre statut (vue active)
-    let base = currentView === 'tous'
-        ? allMissions
-        : allMissions.filter(m => m.statut === currentView);
-
-    // Puis : filtres texte / collab / date
+    const search = document.getElementById('fSearch').value.toLowerCase();
+    const collab = document.getElementById('fCollab').value;
+    const dd     = document.getElementById('fDateDebut').value;
+    const df     = document.getElementById('fDateFin').value;
+    const base   = currentStatutFilter ? allMissions.filter(m => m.statut === currentStatutFilter) : allMissions;
     filteredMissions = base.filter(m => {
-        const txt = (m.objet + ' ' + m.collab + ' ' + m.corps + ' ' + m.notes).toLowerCase();
+        const txt = (m.objet+' '+m.collab+' '+m.corps+' '+m.notes+' '+(m.resume||'')).toLowerCase();
         if (search && !txt.includes(search)) return false;
         if (collab && m.collab !== collab) return false;
-        if (dateDebut || dateFin) {
-            // Date stockée en dd/MM/yyyy
-            const parts = (m.date || '').split('/');
-            if (parts.length === 3) {
-                const d = new Date(parts[2], parts[1]-1, parts[0]);
-                if (dateDebut && d < new Date(dateDebut)) return false;
-                if (dateFin   && d > new Date(dateFin + 'T23:59:59')) return false;
+        if (dd || df) {
+            const p = (m.date||'').split('/');
+            if (p.length === 3) {
+                const d = new Date(p[2], p[1]-1, p[0]);
+                if (dd && d < new Date(dd)) return false;
+                if (df && d > new Date(df+'T23:59:59')) return false;
             }
         }
         return true;
     });
-
-    renderCards(filteredMissions);
+    if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
     updateKPIs();
 }
-
 function resetFilters() {
     document.getElementById('fSearch').value = '';
     document.getElementById('fCollab').value = '';
     document.getElementById('fDateDebut').value = '';
     document.getElementById('fDateFin').value = '';
+    currentStatutFilter = '';
     applyFilters();
 }
 
-// ── VUE (TOGGLE) ───────────────────────────────────────────────────────────
-const VIEW_MAP = {
-    'Attribué':      { btn:'btn-Attribué',      cls:'toggle-btn',       activeCls:'active', label:'🟡 En cours' },
-    'Clôturé':       { btn:'btn-Clôturé',       cls:'toggle-btn-green', activeCls:'active', label:'✅ Clôturées' },
-    'Annulé':        { btn:'btn-Annulé',        cls:'toggle-btn-blue',  activeCls:'active', label:'🔵 Annulées' },
-    'Problématique': { btn:'btn-Problématique', cls:'toggle-btn-red',   activeCls:'active', label:'🔴 Problématiques' },
-};
-
-function switchView(view) {
-    currentView = view;
-    // Réinitialise tous les boutons
-    Object.values(VIEW_MAP).forEach(v => {
-        const el = document.getElementById(v.btn);
-        if (el) el.classList.remove('active');
-    });
-    if (VIEW_MAP[view]) {
-        const el = document.getElementById(VIEW_MAP[view].btn);
-        if (el) el.classList.add('active');
-    }
-    applyFilters();
-}
-
-// ── KPIs ───────────────────────────────────────────────────────────────────
+// ── KPIs ──────────────────────────────────────────────────────────────────────
 function updateKPIs() {
-    document.getElementById('kpiTotal').textContent    = allMissions.length;
-    document.getElementById('kpiAttribue').textContent = allMissions.filter(m => m.statut === 'Attribué').length;
-    document.getElementById('kpiCloture').textContent  = allMissions.filter(m => m.statut === 'Clôturé').length;
-    document.getElementById('kpiAnnule').textContent   = allMissions.filter(m => m.statut === 'Annulé').length;
-    document.getElementById('kpiProbleme').textContent = allMissions.filter(m => m.statut === 'Problématique').length;
+    const b = filteredMissions;
+    document.getElementById('kpiTotal').textContent    = b.length;
+    document.getElementById('kpiAttribue').textContent = b.filter(m => m.statut==='Attribué').length;
+    document.getElementById('kpiCloture').textContent  = b.filter(m => m.statut==='Clôturé').length;
+    document.getElementById('kpiAnnule').textContent   = b.filter(m => m.statut==='Annulé').length;
+    document.getElementById('kpiProbleme').textContent = b.filter(m => m.statut==='Problématique').length;
 }
 
-// ── RENDU CARTES ───────────────────────────────────────────────────────────
-const STATUT_STYLE = {
-    'Attribué':      { card:'border-amber-300 bg-white',       badge:'bg-amber-100 text-amber-800 border border-amber-300',    header:'bg-amber-500' },
-    'Clôturé':       { card:'border-green-300 bg-white',       badge:'bg-green-100 text-green-800 border border-green-300',    header:'bg-green-600' },
-    'Annulé':        { card:'border-blue-300 bg-white',        badge:'bg-blue-100 text-blue-800 border border-blue-300',       header:'bg-blue-600' },
-    'Problématique': { card:'border-red-400 bg-red-50',        badge:'bg-red-100 text-red-800 border border-red-400',          header:'bg-red-600' },
-};
-const STATUT_ICON = { 'Attribué':'🟡', 'Clôturé':'✅', 'Annulé':'🔵', 'Problématique':'🔴' };
-
-function renderCards(missions) {
-    const grid = document.getElementById('cardsGrid');
-    const empty = document.getElementById('emptyState');
-    if (!missions.length) {
-        grid.innerHTML = '';
-        empty.classList.remove('hidden');
-        return;
-    }
-    empty.classList.add('hidden');
-    grid.innerHTML = missions.map((m, idx) => {
-        const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
-        const icon = STATUT_ICON[m.statut] || '🟡';
-        const bodyPreview = m.corps.replace(/\n/g,' ').substring(0, 120) + (m.corps.length > 120 ? '…' : '');
-        const nbNotes = m.notes ? m.notes.split('\n').filter(l => l.trim().startsWith('[')).length : 0;
+// ══ BOARD TRELLO ══════════════════════════════════════════════════════════════
+function renderBoard() {
+    const bd   = loadBoardData();
+    const wrap = document.getElementById('boardWrap');
+    if (!wrap) return;
+    wrap.innerHTML = bd.sections.map(sect => {
+        const cards = filteredMissions.filter(m => getSectionIdForMission(bd, m) === sect.id);
+        const cardsHtml = cards.length
+            ? cards.map((m,i) => renderBoardCard(m, i)).join('')
+            : '<div style="font-size:0.72rem;color:#cbd5e1;text-align:center;padding:1rem 0">Aucune carte</div>';
         return `
-        <div class="card-mission card-anim border-2 ${st.card} rounded-3xl p-5 cursor-pointer"
-             style="animation-delay:${idx * 30}ms"
-             onclick="openModal('${m.id}')">
-            <div class="flex justify-between items-start mb-3 gap-2">
-                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">${m.date} ${m.heure ? '· ' + m.heure : ''}</span>
-                <span class="text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${st.badge} flex-shrink-0">${icon} ${m.statut}</span>
+        <div class="board-col" id="col_${sect.id}" data-section-id="${sect.id}"
+             ondragover="onDragOver(event)" ondrop="onDrop(event,'${sect.id}')" ondragleave="onDragLeave(event)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;padding:0 0.25rem">
+                <div style="display:flex;align-items:center;gap:0.4rem">
+                    <span style="width:11px;height:11px;border-radius:50%;background:${sect.color};display:inline-block;flex-shrink:0"></span>
+                    <span style="font-size:0.78rem;font-weight:900;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${escHtml(sect.name)}</span>
+                    <span style="font-size:0.7rem;font-weight:900;color:#9ca3af">${cards.length}</span>
+                </div>
+                <button onclick="openModalSection('${sect.id}')" style="color:#d1d5db;font-size:0.85rem;font-weight:900;background:none;border:none;cursor:pointer;padding:0.1rem 0.3rem;border-radius:0.3rem" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='#d1d5db'" title="Modifier">✏</button>
             </div>
-            <h3 class="font-black text-gray-800 text-sm leading-snug mb-2 line-clamp-2">${escHtml(m.objet)}</h3>
-            <div class="flex items-center gap-2 mb-3">
-                <span class="inline-block w-7 h-7 rounded-full bg-[#1A4E8A] text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">${initials(m.collab)}</span>
-                <span class="text-xs font-bold text-gray-600 truncate">${escHtml(m.collab)}</span>
-            </div>
-            <p class="text-xs text-gray-400 leading-relaxed line-clamp-2">${escHtml(bodyPreview)}</p>
-            ${nbNotes ? `<p class="mt-3 text-[9px] text-gray-400 font-black uppercase">💬 ${nbNotes} note${nbNotes > 1 ? 's' : ''}</p>` : ''}
+            <div class="board-col-body" id="colBody_${sect.id}" style="display:flex;flex-direction:column;gap:0.5rem">${cardsHtml}</div>
         </div>`;
     }).join('');
 }
 
-function initials(name) {
-    if (!name) return '?';
-    return name.trim().split(/\s+/).map(w => w[0]).join('').substring(0,2).toUpperCase();
-}
-function escHtml(s) {
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function renderBoardCard(m, idx) {
+    const p  = m.priorite || 3;
+    const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
+    const nb = m.notes ? m.notes.split('\n').filter(l => l.trim().startsWith('[')).length : 0;
+    const resumePreview = m.resume ? escHtml(m.resume.substring(0,65)) + (m.resume.length>65?'…':'') : '';
+    return `
+    <div class="card-mission card-anim bg-white border-l-4 rounded-xl p-3 select-none"
+         style="animation-delay:${idx*15}ms;border-left-color:${PRIO_COLORS[p]};border-top:1px solid #f1f5f9;border-right:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9"
+         draggable="true" ondragstart="onDragStart(event,'${m.id}')" ondragend="onDragEnd(event)"
+         onclick="openModal('${m.id}')">
+        <div style="display:flex;align-items:flex-start;gap:0.4rem;margin-bottom:0.35rem">
+            <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};margin-top:3px;flex-shrink:0" title="${PRIO_LABELS[p]}"></span>
+            <span style="font-size:0.78rem;font-weight:900;color:#1f2937;line-height:1.3;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(m.objet)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:${resumePreview?'0.35rem':'0'}">
+            <span style="width:22px;height:22px;border-radius:50%;background:#1A4E8A;color:#fff;font-size:0.65rem;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${initials(m.collab)}</span>
+            <span style="font-size:0.72rem;font-weight:700;color:#6b7280;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.collab)}</span>
+            <span style="font-size:0.65rem">${STATUT_ICON[m.statut]||''}</span>
+        </div>
+        ${resumePreview ? `<div style="font-size:0.68rem;color:#9ca3af;background:#f9fafb;border-radius:0.4rem;padding:0.2rem 0.4rem;line-height:1.4">${resumePreview}</div>` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.3rem">
+            <span style="font-size:0.65rem;color:#d1d5db">${m.date}</span>
+            ${nb ? `<span style="font-size:0.65rem;color:#9ca3af;font-weight:900">💬 ${nb}</span>` : ''}
+        </div>
+    </div>`;
 }
 
-// ── MODALE ─────────────────────────────────────────────────────────────────
+// ── DRAG & DROP ───────────────────────────────────────────────────────────────
+function onDragStart(e, id) {
+    dragSrcId = id; e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('dragging');
+}
+function onDragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.board-col').forEach(c => c.classList.remove('drag-over'));
+}
+function onDragOver(e) {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drag-over');
+}
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function onDrop(e, sectionId) {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    if (!dragSrcId) return;
+    const bd = loadBoardData();
+    bd.placements[dragSrcId] = sectionId;
+    saveBoardData(bd); dragSrcId = null; renderBoard();
+}
+
+// ── SECTION MODAL ─────────────────────────────────────────────────────────────
+const SECTION_COLORS = ['#f59e0b','#16a34a','#2563eb','#dc2626','#8b5cf6','#ec4899','#0891b2','#65a30d','#f97316','#0f172a','#6b7280','#1A4E8A'];
+let _sectionEditColor = '';
+
+function openModalSection(sectId) {
+    const bd = loadBoardData();
+    const sect = bd.sections.find(s => s.id === sectId);
+    if (!sect) return;
+    _sectionEditColor = sect.color;
+    document.getElementById('modalSectionId').value    = sectId;
+    document.getElementById('modalSectionName').value  = sect.name;
+    document.getElementById('modalSectionTitle').textContent = sect.isDefault ? 'Renommer la section' : 'Modifier la section';
+    document.getElementById('colorPicker').innerHTML = SECTION_COLORS.map(c => `
+        <button onclick="selectSectionColor('${c}')" data-col="${c}"
+            style="width:26px;height:26px;border-radius:50%;background:${c};border:3px solid ${c===sect.color?'#1f2937':'transparent'};cursor:pointer;transition:.1s"
+            id="cpBtn_${c.replace('#','')}"></button>`).join('');
+    document.getElementById('btnDeleteSection').classList.toggle('hidden', !!sect.isDefault);
+    document.getElementById('modalSection').classList.remove('hidden');
+}
+function selectSectionColor(c) {
+    _sectionEditColor = c;
+    document.querySelectorAll('#colorPicker button').forEach(b => {
+        b.style.border = `3px solid ${b.dataset.col === c ? '#1f2937' : 'transparent'}`;
+    });
+}
+function closeModalSection() { document.getElementById('modalSection').classList.add('hidden'); }
+function saveSection() {
+    const sectId = document.getElementById('modalSectionId').value;
+    const name   = document.getElementById('modalSectionName').value.trim();
+    if (!name) { showToast('Saisissez un nom.', 'error'); return; }
+    const bd   = loadBoardData();
+    const sect = bd.sections.find(s => s.id === sectId);
+    if (sect) { sect.name = name; sect.color = _sectionEditColor || sect.color; }
+    saveBoardData(bd); closeModalSection(); renderBoard();
+}
+function deleteSection() {
+    const sectId = document.getElementById('modalSectionId').value;
+    if (!confirm('Supprimer cette section ? Les cartes retourneront à leur section par défaut.')) return;
+    const bd = loadBoardData();
+    bd.sections = bd.sections.filter(s => s.id !== sectId);
+    Object.keys(bd.placements).forEach(k => { if (bd.placements[k] === sectId) delete bd.placements[k]; });
+    saveBoardData(bd); closeModalSection(); renderBoard();
+}
+function addSection() {
+    const name = prompt('Nom de la nouvelle section :');
+    if (!name || !name.trim()) return;
+    const bd = loadBoardData();
+    bd.sections.push({id:'sect_'+Date.now(), name:name.trim(), color:'#6b7280', isDefault:false});
+    saveBoardData(bd); renderBoard();
+}
+
+// ── GRILLE ────────────────────────────────────────────────────────────────────
+function renderGrid(missions) {
+    const grid = document.getElementById('cardsGrid'), empty = document.getElementById('emptyState');
+    if (!missions.length) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    grid.innerHTML = missions.map((m, idx) => {
+        const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
+        const p  = m.priorite || 3;
+        const preview = m.corps.replace(/\n/g,' ').substring(0,120) + (m.corps.length>120?'…':'');
+        const nb = m.notes ? m.notes.split('\n').filter(l=>l.trim().startsWith('[')).length : 0;
+        return `
+        <div class="card-grid border-2 ${st.card} bg-white rounded-3xl p-5 cursor-pointer card-anim"
+             style="animation-delay:${idx*30}ms;border-left:4px solid ${PRIO_COLORS[p]}"
+             onclick="openModal('${m.id}')">
+            <div class="flex justify-between items-start mb-3 gap-2">
+                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">${m.date} ${m.heure?'· '+m.heure:''}</span>
+                <span class="text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${st.badge} flex-shrink-0">${STATUT_ICON[m.statut]||''} ${m.statut}</span>
+            </div>
+            <h3 class="font-black text-gray-800 text-sm leading-snug mb-2 line-clamp-2">${escHtml(m.objet)}</h3>
+            <div class="flex items-center gap-2 mb-3">
+                <span class="inline-flex w-7 h-7 rounded-full bg-[#1A4E8A] text-white text-[10px] font-black items-center justify-center flex-shrink-0">${initials(m.collab)}</span>
+                <span class="text-xs font-bold text-gray-600 truncate flex-1">${escHtml(m.collab)}</span>
+                <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};display:inline-block" title="${PRIO_LABELS[p]}"></span>
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed line-clamp-2">${escHtml(preview)}</p>
+            ${nb ? `<p class="mt-3 text-[9px] text-gray-400 font-black">💬 ${nb}</p>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ── MODALE DÉTAIL ─────────────────────────────────────────────────────────────
+let _modalPrio = 3;
+
 function openModal(id) {
     const m = allMissions.find(x => x.id === id);
     if (!m) return;
     currentMissionId = id;
+    _modalPrio = m.priorite || 3;
     const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
-
-    // Header couleur
     document.getElementById('modalHeader').className = `p-6 rounded-t-3xl flex justify-between items-start gap-4 ${st.header}`;
     document.getElementById('modalCollab').textContent = m.collab || '—';
     document.getElementById('modalObjet').textContent  = m.objet  || '(Sans objet)';
-    document.getElementById('modalMeta').textContent   = `📅 ${m.date} ${m.heure ? '· ' + m.heure : ''} ${m.dateMaj ? '· Mis à jour ' + m.dateMaj : ''}`;
-
-    // CC
-    if (m.cc && m.cc.trim()) {
-        document.getElementById('modalCC').textContent = m.cc;
-        document.getElementById('sectionCC').classList.remove('hidden');
-    } else {
-        document.getElementById('sectionCC').classList.add('hidden');
-    }
-
-    // Corps
+    document.getElementById('modalMeta').textContent   = `📅 ${m.date} ${m.heure?'· '+m.heure:''} ${m.dateMaj?'· Maj '+m.dateMaj:''}`;
+    if (m.cc&&m.cc.trim()) { document.getElementById('modalCC').textContent=m.cc; document.getElementById('sectionCC').classList.remove('hidden'); }
+    else document.getElementById('sectionCC').classList.add('hidden');
     document.getElementById('modalCorps').textContent = m.corps || '(Aucun contenu)';
-
-    // Statut (admin seulement)
+    buildPrioritySelector('modalPrioritySelector', _modalPrio, 'selectModalPrio');
+    const canEdit = isAdmin || String(m.email||'').toLowerCase() === String(user.email||'').toLowerCase();
+    const ta = document.getElementById('modalResume');
+    ta.value    = m.resume || '';
+    ta.readOnly = !canEdit;
+    ta.className = `w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none resize-none ${canEdit?'focus:border-[#1A4E8A]':'text-gray-400'}`;
+    document.getElementById('btnSaveResume').classList.toggle('hidden', !canEdit);
     document.getElementById('sectionStatut').classList.toggle('hidden', !isAdmin);
-
-    // Notes
     renderNotes(m.notes);
     document.getElementById('inputNote').value = '';
     document.getElementById('modalDetail').classList.remove('hidden');
 }
 
-function renderNotes(notesRaw) {
-    const container = document.getElementById('modalNotes');
-    if (!notesRaw || !notesRaw.trim()) {
-        container.innerHTML = '<p class="text-xs text-gray-300 italic">Aucune note pour l\'instant.</p>';
-        return;
-    }
-    const lines = notesRaw.split('\n').filter(l => l.trim());
-    container.innerHTML = lines.map(l => {
-        const isNote = l.trim().startsWith('[');
-        return `<div class="text-xs ${isNote ? 'bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-gray-700' : 'text-gray-500 italic px-1'}">${escHtml(l)}</div>`;
-    }).join('');
-    container.scrollTop = container.scrollHeight;
-}
-
-function closeModal() {
-    document.getElementById('modalDetail').classList.add('hidden');
-    currentMissionId = null;
-}
-document.getElementById('modalDetail').addEventListener('click', e => {
-    if (e.target === document.getElementById('modalDetail')) closeModal();
-});
-
-// ── CHANGEMENT STATUT ──────────────────────────────────────────────────────
-async function changeStatut(newStatut) {
+function selectModalPrio(p) {
+    _modalPrio = p;
+    buildPrioritySelector('modalPrioritySelector', p, 'selectModalPrio');
     if (!currentMissionId) return;
-    const btn = event.target;
-    const orig = btn.textContent;
+    apiPost({action:'updateMissionField', id:currentMissionId, field:'priorite', val:p}).then(r => {
+        if (r.success) {
+            const m = allMissions.find(x => x.id === currentMissionId);
+            if (m) m.priorite = p;
+            if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
+        }
+    });
+}
+
+async function saveResume() {
+    const val = document.getElementById('modalResume').value;
+    if (!currentMissionId) return;
+    const r = await apiPost({action:'updateMissionField', id:currentMissionId, field:'resume', val});
+    if (r.success) {
+        const m = allMissions.find(x => x.id === currentMissionId);
+        if (m) m.resume = val;
+        showToast('Résumé enregistré ✓', 'success');
+        if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
+    } else showToast('Erreur : ' + r.message, 'error');
+}
+
+function renderNotes(raw) {
+    const c = document.getElementById('modalNotes');
+    if (!raw||!raw.trim()) { c.innerHTML='<p class="text-xs text-gray-300 italic">Aucune note pour l\'instant.</p>'; return; }
+    const lines = raw.split('\n').filter(l=>l.trim());
+    c.innerHTML = lines.map(l => {
+        const stamped = l.trim().startsWith('[');
+        return `<div class="text-xs ${stamped?'bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-gray-700':'text-gray-500 italic px-1'}">${escHtml(l)}</div>`;
+    }).join('');
+    c.scrollTop = c.scrollHeight;
+}
+
+function closeModal() { document.getElementById('modalDetail').classList.add('hidden'); currentMissionId = null; }
+document.getElementById('modalDetail').addEventListener('click', e => { if (e.target===document.getElementById('modalDetail')) closeModal(); });
+
+// ── STATUT ────────────────────────────────────────────────────────────────────
+async function changeStatut(s) {
+    if (!currentMissionId) return;
+    const btn = event.target, orig = btn.textContent;
     btn.disabled = true; btn.textContent = '…';
-    const res = await apiPost({ action: 'updateMissionStatus', id: currentMissionId, statut: newStatut });
+    const res = await apiPost({action:'updateMissionStatus', id:currentMissionId, statut:s});
     btn.disabled = false; btn.textContent = orig;
     if (res.success) {
-        // Met à jour localement et ferme
         const m = allMissions.find(x => x.id === currentMissionId);
-        if (m) { m.statut = newStatut; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
-        closeModal();
-        updateKPIs();
-        applyFilters(); // La carte disparaît de la vue actuelle si statut différent
-    } else {
-        alert('Erreur : ' + res.message);
-    }
+        if (m) { m.statut = s; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
+        closeModal(); updateKPIs(); applyFilters();
+    } else showToast('Erreur : ' + res.message, 'error');
 }
 
-// ── AJOUT NOTE ─────────────────────────────────────────────────────────────
+// ── NOTE ──────────────────────────────────────────────────────────────────────
 async function saveNote() {
     const note = document.getElementById('inputNote').value.trim();
-    if (!note || !currentMissionId) return;
+    if (!note||!currentMissionId) return;
     const btn = document.getElementById('btnSaveNote');
     btn.disabled = true; btn.textContent = '…';
-    const res = await apiPost({ action: 'addMissionNote', id: currentMissionId, note: note });
+    const res = await apiPost({action:'addMissionNote', id:currentMissionId, note});
     btn.disabled = false; btn.textContent = 'Envoyer';
     if (res.success) {
-        // Mise à jour locale des notes
         const m = allMissions.find(x => x.id === currentMissionId);
         if (m) {
-            const now = new Date().toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-            const ligne = `[${now} — ${user.nom || '?'}] ${note}`;
-            m.notes = m.notes ? m.notes + '\n' + ligne : ligne;
+            const now = new Date().toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            const ligne = `[${now} — ${user.nom||'?'}] ${note}`;
+            m.notes = m.notes ? m.notes+'\n'+ligne : ligne;
             m.dateMaj = new Date().toLocaleDateString('fr-FR');
             renderNotes(m.notes);
         }
         document.getElementById('inputNote').value = '';
-    } else {
-        alert('Erreur : ' + res.message);
-    }
+    } else showToast('Erreur : ' + res.message, 'error');
 }
 
-// ── EXPORT CSV ─────────────────────────────────────────────────────────────
+// ── NOUVELLE MISSION ──────────────────────────────────────────────────────────
+let _nwPrio = 3;
+
+function openNouveauMission() {
+    _nwPrio = 3;
+    ['nwObjet','nwCorps','nwResume','nwCC'].forEach(id => document.getElementById(id).value='');
+    buildPrioritySelector('nwPrioritySelector', _nwPrio, 'selectNwPrio');
+    if (isAdmin) {
+        document.getElementById('nwCollabWrap').classList.remove('hidden');
+        const collabs = [...new Set(allMissions.map(m=>m.collab).filter(Boolean))].sort();
+        document.getElementById('nwCollab').innerHTML = '<option value="">— Moi-même —</option>' + collabs.map(c=>`<option value="${c}">${c}</option>`).join('');
+    } else { document.getElementById('nwCollabWrap').classList.add('hidden'); }
+    document.getElementById('modalNouveauMission').classList.remove('hidden');
+    document.getElementById('nwObjet').focus();
+}
+function selectNwPrio(p) { _nwPrio = p; buildPrioritySelector('nwPrioritySelector', p, 'selectNwPrio'); }
+function closeNouveauMission() { document.getElementById('modalNouveauMission').classList.add('hidden'); }
+document.getElementById('modalNouveauMission').addEventListener('click', e => { if(e.target===document.getElementById('modalNouveauMission')) closeNouveauMission(); });
+
+async function saveNouveauMission() {
+    const objet = document.getElementById('nwObjet').value.trim();
+    if (!objet) { showToast('Saisissez un objet.', 'error'); return; }
+    const payload = {
+        action: 'addMission',
+        objet,
+        corps:    document.getElementById('nwCorps').value.trim(),
+        resume:   document.getElementById('nwResume').value.trim(),
+        cc:       document.getElementById('nwCC').value.trim(),
+        priorite: _nwPrio,
+    };
+    if (isAdmin) {
+        const sel = document.getElementById('nwCollab');
+        if (sel.value) {
+            const ref = allMissions.find(m => m.collab === sel.value);
+            payload.emailDest = ref ? ref.email : '';
+            payload.nomCollab = sel.value;
+        }
+    }
+    const btn = document.getElementById('btnCreateMission');
+    btn.disabled = true; btn.textContent = '…';
+    const res = await apiPost(payload);
+    btn.disabled = false; btn.textContent = 'Créer la mission';
+    if (res.success) { showToast('Mission créée ✓', 'success'); closeNouveauMission(); await loadMissions(); }
+    else showToast('Erreur : ' + res.message, 'error');
+}
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────────────
 function exportCSV(global) {
     const liste = global ? allMissions : filteredMissions;
-    if (!liste.length) { alert('Aucune mission à exporter.'); return; }
-    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Mise à jour'];
-    const escape = v => '"' + String(v||'').replace(/"/g,'""') + '"';
-    let csv = headers.map(escape).join(';') + '\n';
-    liste.forEach(m => {
-        csv += [m.id, m.date, m.heure, m.email, m.collab, m.cc, m.objet, m.corps, m.statut, m.notes, m.dateMaj].map(escape).join(';') + '\n';
-    });
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global ? '_GLOBAL' : '_vue'}.csv`;
+    if (!liste.length) { showToast('Aucune mission à exporter.', 'error'); return; }
+    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Maj','Priorité','Résumé'];
+    const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
+    let csv = headers.map(esc).join(';') + '\n';
+    liste.forEach(m => { csv += [m.id,m.date,m.heure,m.email,m.collab,m.cc,m.objet,m.corps,m.statut,m.notes,m.dateMaj,m.priorite,m.resume].map(esc).join(';') + '\n'; });
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global?'_GLOBAL':'_vue'}.csv`;
     a.click();
 }
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function initials(name) { if(!name) return '?'; return name.trim().split(/\s+/).map(w=>w[0]).join('').substring(0,2).toUpperCase(); }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
