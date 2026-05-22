@@ -273,6 +273,7 @@ const BOARD_KEY = 'hecg_board_' + (user.email || 'default');
 
 let allMissions      = [];
 let filteredMissions = [];
+let personnelList    = []; // [{ref, nom, email, role}] — chargé au démarrage pour admin
 let currentView      = 'board';
 let currentStatutFilter = '';
 let currentMissionId = null;
@@ -350,8 +351,16 @@ window.onload = () => {
         document.getElementById('subtitleCollab').textContent = "Mes missions";
     }
     setView('board', false);
+    if (isAdmin) loadPersonnelList();
     loadMissions();
 };
+
+async function loadPersonnelList() {
+    try {
+        const res = await apiPost({action:'getPersonnelList'});
+        if (res.success) personnelList = res.data || [];
+    } catch(e) { console.error('Personnel:', e); }
+}
 
 function setView(v, rerender) {
     currentView = v;
@@ -726,8 +735,10 @@ function openNouveauMission() {
     buildPrioritySelector('nwPrioritySelector', _nwPrio, 'selectNwPrio');
     if (isAdmin) {
         document.getElementById('nwCollabWrap').classList.remove('hidden');
-        const collabs = [...new Set(allMissions.map(m=>m.collab).filter(Boolean))].sort();
-        document.getElementById('nwCollab').innerHTML = '<option value="">— Moi-même —</option>' + collabs.map(c=>`<option value="${c}">${c}</option>`).join('');
+        const list = personnelList.length ? personnelList : [];
+        document.getElementById('nwCollab').innerHTML =
+            '<option value="">— Moi-même —</option>' +
+            list.map(p => `<option value="${p.ref}" data-email="${p.email}" data-nom="${p.nom}">${p.nom}${p.email?' ('+p.email+')':''}</option>`).join('');
     } else { document.getElementById('nwCollabWrap').classList.add('hidden'); }
     document.getElementById('modalNouveauMission').classList.remove('hidden');
     document.getElementById('nwObjet').focus();
@@ -750,9 +761,9 @@ async function saveNouveauMission() {
     if (isAdmin) {
         const sel = document.getElementById('nwCollab');
         if (sel.value) {
-            const ref = allMissions.find(m => m.collab === sel.value);
-            payload.emailDest = ref ? ref.email : '';
-            payload.nomCollab = sel.value;
+            const opt = sel.options[sel.selectedIndex];
+            payload.emailDest = opt.dataset.email || '';
+            payload.nomCollab = opt.dataset.nom   || sel.options[sel.selectedIndex].text.split(' (')[0];
         }
     }
     const btn = document.getElementById('btnCreateMission');
