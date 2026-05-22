@@ -368,35 +368,95 @@ function renderKPIs(d) {
 function tropheeImg(t, big) {
     if (t.url) return `<img src="${escH(t.url)}" class="${big?'w-16 h-16':'w-12 h-12'} object-contain rounded-xl">`;
     const tier = (t.tier||'').toLowerCase();
-    const sz = big ? 64 : 42;
+    const sz = big ? 70 : 48;
     const isRw = tier === 'arc-en-ciel';
     const cls = isRw ? 'trophy-rw-anim' : '';
-    // { f=fill(dark), s=stroke(tier color), glow }
-    const C = {
-        bronze:        { f:'#0e0906', s:'#c87832', glow:'rgba(200,120,50,0.7)'   },
-        argent:        { f:'#06090d', s:'#8ab0cc', glow:'rgba(138,176,204,0.7)'  },
-        or:            { f:'#0c0a02', s:'#d4b018', glow:'rgba(212,176,24,0.75)'  },
-        'arc-en-ciel': { f:'#060310', s:'#8830e8', glow:'rgba(136,48,232,0.9)'   }
+    const uid = Math.random().toString(36).slice(2,9);
+    const PAL = {
+        bronze: {
+            chrome: ['#1a0d05','#3a1a06','#78390e','#b5621c','#d4883c','#f0ae6a','#d4883c','#b5621c','#78390e','#3a1a06','#1a0d05'],
+            depth:  ['rgba(180,100,30,0.10)','rgba(10,4,0,0.55)'],
+            spec:   'rgba(255,215,160,0.52)',
+            rim:    ['#3a1806','#c87832','#f5c880','#c87832','#3a1806'],
+            base:   ['#0e0906','#2e1808','#5a3010','#2e1808','#0e0906'],
+            stroke: '#c87832', glow: 'rgba(200,120,50,0.75)'
+        },
+        argent: {
+            chrome: ['#0a1016','#1c2e3c','#385468','#6488a0','#90b4c8','#c8e0f0','#90b4c8','#6488a0','#385468','#1c2e3c','#0a1016'],
+            depth:  ['rgba(150,185,210,0.10)','rgba(4,10,16,0.55)'],
+            spec:   'rgba(215,240,255,0.52)',
+            rim:    ['#1a2e3c','#8ab0cc','#d8eef8','#8ab0cc','#1a2e3c'],
+            base:   ['#06090d','#18283a','#304858','#18283a','#06090d'],
+            stroke: '#8ab0cc', glow: 'rgba(138,176,204,0.75)'
+        },
+        or: {
+            chrome: ['#181200','#302200','#685000','#a87e0e','#c8a01e','#ecd050','#c8a01e','#a87e0e','#685000','#302200','#181200'],
+            depth:  ['rgba(220,175,25,0.10)','rgba(12,8,0,0.55)'],
+            spec:   'rgba(255,242,168,0.52)',
+            rim:    ['#302000','#d4b018','#f8e878','#d4b018','#302000'],
+            base:   ['#0c0a00','#281e06','#4e3a08','#281e06','#0c0a00'],
+            stroke: '#d4b018', glow: 'rgba(212,176,24,0.80)'
+        }
     };
-    const c = C[tier] || (isRw ? C['arc-en-ciel'] : C.or);
-    const drp = isRw ? '' : `filter:drop-shadow(0 0 5px ${c.glow}) drop-shadow(0 2px 7px rgba(0,0,0,0.75))`;
-    // Trophy: cup+fins as single polygon, stem, dark base with rounded corners
-    // Cup: trapezoid 20,5→80,5→72,52→28,52 | Fins: angular wings on both sides
+    PAL['arc-en-ciel'] = Object.assign({}, PAL.argent);
+    const p = PAL[tier] || PAL.or;
+    const drp = isRw ? '' : `filter:drop-shadow(0 0 7px ${p.glow}) drop-shadow(0 3px 10px rgba(0,0,0,0.9))`;
+    const mk = arr => arr.map((c,i) => `<stop offset="${Math.round(i*100/(arr.length-1))}%" stop-color="${c}"/>`).join('');
     return `<svg class="${cls}" width="${sz}" height="${sz}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;${drp}">
-  <!-- Cup body + angular fins — single polygon, clean modern outline -->
-  <polygon points="20,5 80,5 78,18 95,30 74,42 72,52 28,52 26,42 5,30 22,18"
-           fill="${c.f}" stroke="${c.s}" stroke-width="2" stroke-linejoin="round"/>
-  <!-- Inner rim edge (top) -->
-  <line x1="23" y1="10" x2="77" y2="10" stroke="${c.s}" stroke-width="0.8" opacity="0.45"/>
-  <!-- Inner side edge reflections (suggest interior edges) -->
-  <line x1="23" y1="10" x2="29.5" y2="49" stroke="${c.s}" stroke-width="0.6" opacity="0.25"/>
-  <line x1="77" y1="10" x2="70.5" y2="49" stroke="${c.s}" stroke-width="0.6" opacity="0.25"/>
+  <defs>
+    <linearGradient id="cG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.chrome)}</linearGradient>
+    <linearGradient id="rG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.rim)}</linearGradient>
+    <linearGradient id="bG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.base)}</linearGradient>
+    <linearGradient id="dG${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="${p.depth[0]}"/>
+      <stop offset="100%" stop-color="${p.depth[1]}"/>
+    </linearGradient>
+    <radialGradient id="sG${uid}" cx="34%" cy="26%" r="44%">
+      <stop offset="0%" stop-color="${p.spec}"/>
+      <stop offset="70%" stop-color="rgba(255,255,255,0.05)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <radialGradient id="iG${uid}" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.28)"/>
+    </radialGradient>
+  </defs>
+  <!-- Handles drawn first so cup body overlaps attachment points -->
+  <!-- Left handle: dark shadow → tier color → bright specular -->
+  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="2" stroke-linecap="round"/>
+  <!-- Right handle: dark shadow → tier color → bright specular -->
+  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(255,255,255,0.20)" stroke-width="2" stroke-linecap="round"/>
+  <!-- Cup body: chalice shape — wide rim, curves inward then tapers to stem junction -->
+  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
+        fill="url(#cG${uid})" stroke="${p.stroke}" stroke-width="2.8" stroke-linejoin="round"/>
+  <!-- Vertical depth shading (lit at top, shadowed at bottom) -->
+  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
+        fill="url(#dG${uid})" pointer-events="none"/>
+  <!-- Radial inner shadow (gives bowl depth) -->
+  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
+        fill="url(#iG${uid})" pointer-events="none"/>
+  <!-- Specular highlight (bright spot upper-left, simulates light source) -->
+  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
+        fill="url(#sG${uid})" pointer-events="none"/>
+  <!-- Inner cup edge shadow (gives thickness/depth to the cup walls) -->
+  <path d="M23,13 C21,27 18,43 26,55 C31,63 40,66 50,67 C60,66 69,63 74,55 C82,43 79,27 77,13"
+        fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="1.5"/>
+  <!-- Rim band (flat top of cup, most reflective part) -->
+  <path d="M12,5 H88 V12 Q88,14 82,14 H18 Q12,14 12,12 Z" fill="url(#rG${uid})" stroke="${p.stroke}" stroke-width="1.2"/>
+  <line x1="16" y1="8.5" x2="84" y2="8.5" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>
+  <!-- Junction band (cup-to-stem) -->
+  <rect x="37" y="68" width="26" height="5.5" rx="1.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2"/>
   <!-- Stem -->
-  <rect x="43" y="52" width="14" height="13" fill="${c.f}" stroke="${c.s}" stroke-width="2"/>
-  <!-- Base pedestal (dark anodized) -->
-  <rect x="17" y="65" width="66" height="17" fill="${c.f}" stroke="${c.s}" stroke-width="2" rx="2.5"/>
-  <!-- Base inner top edge highlight -->
-  <line x1="20" y1="69" x2="80" y2="69" stroke="${c.s}" stroke-width="0.7" opacity="0.4"/>
+  <rect x="43" y="73.5" width="14" height="7" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.2"/>
+  <!-- Upper base tier -->
+  <rect x="26" y="80" width="48" height="7" rx="2" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.4"/>
+  <!-- Lower base tier (widest, most prominent) -->
+  <rect x="15" y="86" width="70" height="9" rx="2.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.7"/>
+  <line x1="18" y1="89.5" x2="82" y2="89.5" stroke="rgba(255,255,255,0.14)" stroke-width="0.9"/>
 </svg>`;
 }
 
