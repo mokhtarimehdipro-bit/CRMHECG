@@ -1028,24 +1028,69 @@ function computeAndShowStats(groups){
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qClasse  = document.getElementById('filterClasse').value||'';
+  const qMatRaw  = document.getElementById('filterMatiere').value||'';
+  const qMat     = matKey(qMatRaw);
   const isDCGstats = qDiplome==='DCG'||qDiplome==='DSCG';
+  const isUEfilter = !!(qMat && isDCGstats);
+  const matLabel = qMatRaw
+    ? (document.getElementById('filterMatiere').options[document.getElementById('filterMatiere').selectedIndex]?.text || qMatRaw)
+    : '';
+
   const students = groups.map(g=>{
     const {totalPts,moy,diff,ueOk,ueElim,ueRecu,ueTotal}=calcGroupStats(g);
+    let resultat = g.resultat||'En cours';
+    let noteUE = null;
+    if (isUEfilter){
+      const noteObj = g.notes.find(n=>matKey(n.matiere)===qMat);
+      if (noteObj){
+        const rawNote = String(noteObj.note||'').trim().toUpperCase();
+        if (rawNote==='NE'){
+          resultat='Admis'; noteUE='NE';
+        } else {
+          const num = parseFloat(rawNote);
+          noteUE = isNaN(num) ? null : num;
+          if (!isNaN(num)){
+            if (num>=10) resultat='Admis';
+            else if (num>=6) resultat='Rattrapage';
+            else resultat='Recalé';
+          } else {
+            resultat='En cours';
+          }
+        }
+      } else {
+        resultat='En cours'; noteUE=null;
+      }
+    }
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
-            totalPts,moy,diff,ueOk,ueElim,ueRecu,ueTotal,resultat:g.resultat||'En cours'};
-  }).sort((a,b)=>(b.moy??-1)-(a.moy??-1));
+            totalPts,moy,diff,ueOk,ueElim,ueRecu,ueTotal,resultat,noteUE};
+  }).sort((a,b)=>{
+    if (isUEfilter){
+      const va = a.noteUE==='NE'?10:(a.noteUE??-1);
+      const vb = b.noteUE==='NE'?10:(b.noteUE??-1);
+      return vb-va;
+    }
+    return (b.moy??-1)-(a.moy??-1);
+  });
+
   const total  = students.length;
   const admis  = students.filter(s=>s.resultat==='Admis').length;
   const ratt   = students.filter(s=>s.resultat==='Rattrapage').length;
   const recale = students.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
   const enCours= total-admis-ratt-recale;
-  const moyVals= students.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
-  const moyGlobal= moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
-  const noteMax= moyVals.length?Math.max(...moyVals).toFixed(2):'—';
-  const noteMin= moyVals.length?Math.min(...moyVals).toFixed(2):'—';
+
+  const noteVals = isUEfilter
+    ? students.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
+    : students.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+  const moyGlobal= noteVals.length?(noteVals.reduce((a,b)=>a+b,0)/noteVals.length).toFixed(2):'—';
+  const noteMax= noteVals.length?Math.max(...noteVals).toFixed(2):'—';
+  const noteMin= noteVals.length?Math.min(...noteVals).toFixed(2):'—';
   const taux   = total?Math.round(admis/total*100):0;
+
   const titleParts=[qDiplome,qAnnee,qClasse].filter(Boolean);
-  document.getElementById('statsPanelTitle').textContent='Statistiques — '+(titleParts.join(' · ')||'tous filtres');
+  const titleBase = titleParts.join(' · ')||'tous filtres';
+  document.getElementById('statsPanelTitle').textContent =
+    'Statistiques — ' + titleBase + (isUEfilter ? ' · '+matLabel : '');
+
   document.getElementById('statsKpis').innerHTML=[
     ['Inscrits',total,'#1A4E8A'],['Admis',admis,'#15803d'],
     ['Rattrapage',ratt,'#a16207'],['Non admis / Éliminés',recale,'#dc2626'],
@@ -1053,17 +1098,32 @@ function computeAndShowStats(groups){
   document.getElementById('statsKpis2').innerHTML=[
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
-  if (isDCGstats){
+
+  if (isUEfilter){
+    document.querySelector('#statsPanel table thead tr').innerHTML=
+      `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th><th></th>`;
+  } else if (isDCGstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
       '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th>Résultat</th><th></th>';
   } else {
     document.querySelector('#statsPanel table thead tr').innerHTML=
       '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th><th></th>';
   }
+
   const latestAnnee=qAnnee||'';
   document.getElementById('statsTbody').innerHTML=students.map((x,i)=>{
     const diffHtml=x.diff===null?'—':x.diff>=0?`<span style="color:#15803d;font-weight:700">+${x.diff}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diff}</span>`;
     const editBtn=canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${(x.nomPrenom||'').replace(/'/g,"\\'")}','${latestAnnee}','${x.diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:'';
+    if (isUEfilter){
+      const rawUE = x.noteUE;
+      const dispUE = rawUE==='NE'?'NE':rawUE===null?'—':rawUE.toFixed(2)+'/20';
+      const colUE = rawUE==='NE'?'#4338ca':rawUE===null?'#6b7280':(rawUE>=10?'#15803d':rawUE>=6?'#d97706':'#dc2626');
+      return `<tr>
+        <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+        <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+        <td style="font-weight:700;color:${colUE}">${dispUE}</td>
+        <td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
+    }
     if (isDCGstats) return `<tr>
       <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
