@@ -290,9 +290,45 @@
             <button id="btnAddObjectif" onclick="openObjectifModal(null)" class="btn-orange hidden">+ Objectif</button>
           </div>
         </div>
+        <div id="kpiObjSemaine" class="hidden grid grid-cols-4 gap-3 mb-3"></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
           <div id="objectifsContent"><p class="text-center text-gray-400 py-8 text-sm">Chargement…</p></div>
         </div>
+      </div>
+
+      <!-- ── Synthèse hebdomadaire ── -->
+      <div class="mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-black text-[#1A4E8A]" id="syntheseTitle">📝 Synthèse de la semaine —</h2>
+          <span id="syntheseSaveStatus" class="text-xs text-gray-400 italic"></span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-xl p-4" style="background:#f0fdf4;border:1px solid #bbf7d0">
+            <label style="color:#15803d;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">💪 Points forts</label>
+            <textarea id="synthPointsForts" onblur="saveSyntheseField('pointsForts',this.value)" rows="5" placeholder="Ce qui a bien fonctionné cette semaine…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
+          </div>
+          <div class="rounded-xl p-4" style="background:#fffbeb;border:1px solid #fde68a">
+            <label style="color:#b45309;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📈 Axes d'amélioration</label>
+            <textarea id="synthAxes" onblur="saveSyntheseField('axesAmelioration',this.value)" rows="5" placeholder="Points à améliorer, freins identifiés…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
+          </div>
+          <div class="rounded-xl p-4 md:col-span-2" style="background:#eff6ff;border:1px solid #bfdbfe">
+            <label style="color:#1d4ed8;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📋 Rapport semaine &amp; projection semaine prochaine</label>
+            <textarea id="synthRapport" onblur="saveSyntheseField('rapportSemaine',this.value)" rows="5" placeholder="Bilan global, actions prévues semaine suivante…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
+          </div>
+          <div class="rounded-xl p-4 md:col-span-2" style="background:#faf5ff;border:1px solid #e9d5ff">
+            <label style="color:#7c3aed;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📰 BULLETIN HEBDO SFLIFLA</label>
+            <textarea id="synthBulletin" onblur="saveSyntheseField('bulletinSFLIFLA',this.value)" rows="7" placeholder="Collez ici le contenu du bulletin hebdomadaire…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:monospace,inherit"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Suivi objectifs par semaine ── -->
+      <div class="mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-black text-[#1A4E8A]">Suivi objectifs — par semaine</h2>
+          <button onclick="loadObjectifsStatsSemaines()" class="btn-ghost text-sm">↻ Actualiser</button>
+        </div>
+        <div id="objectifsStatsSemainesContent"><p class="text-center text-gray-400 py-6 text-sm">Cliquez "Actualiser" pour charger le suivi.</p></div>
       </div>
     </div>
 
@@ -2313,19 +2349,135 @@ async function loadObjectifsStats(){
   el.innerHTML=html;
 }
 
+let currentSyntheseData = {};
+
 async function loadObjectifs(){
   if (vieScRole==='Super-admin') show('btnAddObjectif');
   const dates=getWeekDates(weekOffset);
   const semDebut=fmtDate(dates[0]);
   const semNum=getWeekNumber(dates[0]);
-  document.getElementById('objSemTitle').textContent=`Objectifs S ${semNum} — du ${fmtDay(dates[0])} au ${fmtDay(dates[5])} ${dates[0].getFullYear()}`;
-  const r=await api('getObjectifsSemaine',{semaineDebut:semDebut});
-  if (!r.success){ document.getElementById('objectifsContent').innerHTML='<p class="text-center text-red-400 py-8 text-sm">Erreur chargement objectifs</p>'; return; }
-  allObjectifs=r.data||[];
+  const semLabel=`S ${semNum} — du ${fmtDay(dates[0])} au ${fmtDay(dates[5])} ${dates[0].getFullYear()}`;
+  document.getElementById('objSemTitle').textContent=`Objectifs ${semLabel}`;
+  document.getElementById('syntheseTitle').textContent=`📝 Synthèse de la semaine — ${semLabel}`;
+  const [rObj, rSynth] = await Promise.all([
+    api('getObjectifsSemaine',{semaineDebut:semDebut}),
+    api('getSyntheseSemaine',{semaineDebut:semDebut}),
+  ]);
+  if (!rObj.success){ document.getElementById('objectifsContent').innerHTML='<p class="text-center text-red-400 py-8 text-sm">Erreur chargement objectifs</p>'; return; }
+  allObjectifs=rObj.data||[];
+  currentSyntheseData=(rSynth.success&&rSynth.data&&rSynth.data[0])||{};
+  document.getElementById('synthPointsForts').value=currentSyntheseData.pointsForts||'';
+  document.getElementById('synthAxes').value=currentSyntheseData.axesAmelioration||'';
+  document.getElementById('synthRapport').value=currentSyntheseData.rapportSemaine||'';
+  document.getElementById('synthBulletin').value=currentSyntheseData.bulletinSFLIFLA||'';
+  document.getElementById('syntheseSaveStatus').textContent='';
   renderObjectifs();
 }
 
+async function saveSyntheseField(field, val){
+  const dates=getWeekDates(weekOffset);
+  const semaineDebut=fmtDate(dates[0]);
+  currentSyntheseData[field]=val;
+  const statusEl=document.getElementById('syntheseSaveStatus');
+  statusEl.textContent='Enregistrement…';
+  const r=await api('saveSyntheseSemaine',{semaineDebut,field,val});
+  statusEl.textContent=r.success?'Enregistré ✓':'Erreur sauvegarde';
+  setTimeout(()=>{ statusEl.textContent=''; },2000);
+}
+
+async function loadObjectifsStatsSemaines(){
+  const el=document.getElementById('objectifsStatsSemainesContent');
+  el.innerHTML='<p class="text-center text-gray-400 py-6 text-sm">Chargement…</p>';
+  const [rStats, rSynths] = await Promise.all([
+    api('getObjectifsStatsSemaines'),
+    api('getSyntheseSemaine',{dateDebut:'2020-01-01',dateFin:'2099-12-31'}),
+  ]);
+  if (!rStats.success){ el.innerHTML='<p class="text-center text-red-400 py-6 text-sm">Erreur : '+rStats.message+'</p>'; return; }
+  const {bySem,semaines}=rStats;
+  const synthMap={};
+  if (rSynths.success) (rSynths.data||[]).forEach(s=>{ synthMap[s.semaineDebut]=s; });
+  if (!semaines.length){ el.innerHTML='<p class="text-center text-gray-400 py-6 text-sm">Aucun objectif enregistré.</p>'; return; }
+  const moisNoms=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  let html='<div class="space-y-3">';
+  semaines.slice().reverse().forEach(s=>{
+    const sem=bySem[s];
+    const semDt=new Date(s+' 12:00');
+    const semNum=isNaN(semDt)?'?':getWeekNumber(semDt);
+    const semLabel=isNaN(semDt)?s:`S${semNum} — ${fmtDay(semDt)} (${semDt.getFullYear()})`;
+    const taux=sem.total?Math.round(sem.ok/sem.total*100):0;
+    const synth=synthMap[s]||{};
+    const hasSynth=synth.pointsForts||synth.axesAmelioration||synth.rapportSemaine||synth.bulletinSFLIFLA;
+    html+=`<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="flex flex-wrap justify-between items-center px-5 py-3 bg-gray-50 border-b border-gray-100 cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+        <div class="flex items-center gap-4">
+          <span class="font-black text-[#1A4E8A]">${semLabel}</span>
+          <span class="text-xs font-bold text-gray-400">${sem.total} objectif${sem.total>1?'s':''}</span>
+          ${hasSynth?'<span style="font-size:0.7rem;background:#eff6ff;color:#1d4ed8;padding:0.1rem 0.5rem;border-radius:9999px;font-weight:700">📝 Synthèse</span>':''}
+        </div>
+        <div class="flex gap-3 text-xs font-bold">
+          <span style="color:#15803d">✔ ${sem.ok}</span>
+          <span style="color:#dc2626">✘ ${sem.nok}</span>
+          <span style="color:#d97706">⏳ ${sem.enCours}</span>
+          <span style="background:#dbeafe;color:#1d4ed8;padding:0.1rem 0.5rem;border-radius:9999px">${taux}%</span>
+        </div>
+      </div>
+      <div class="hidden p-4">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:${hasSynth?'1rem':'0'}">
+          <thead><tr style="background:#f9fafb">
+            <th style="padding:0.4rem 0.75rem;text-align:left;color:#9ca3af;font-size:0.7rem;font-weight:900;text-transform:uppercase">Objectif</th>
+            <th style="padding:0.4rem 0.75rem;text-align:left;color:#9ca3af;font-size:0.7rem;font-weight:900;text-transform:uppercase">État fin</th>
+            <th style="padding:0.4rem 0.75rem;text-align:left;color:#9ca3af;font-size:0.7rem;font-weight:900;text-transform:uppercase">Retour équipes</th>
+            <th style="padding:0.4rem 0.75rem;text-align:center;color:#9ca3af;font-size:0.7rem;font-weight:900;text-transform:uppercase">Statut</th>
+          </tr></thead>
+          <tbody>${sem.detail.map(d=>{
+            const v=d.valide==='TRUE';
+            const st=v?'<span style="color:#15803d;font-weight:700">✔ Atteint</span>':d.etatFinSemaine?'<span style="color:#dc2626;font-weight:700">✘ Non atteint</span>':'<span style="color:#d97706;font-weight:700">⏳ En cours</span>';
+            return `<tr style="border-bottom:1px solid #f3f4f6;${v?'opacity:0.65;text-decoration:line-through':''}">
+              <td style="padding:0.4rem 0.75rem;font-weight:600">${d.priorite>=4?'🚨 ':''}${d.nom}${d.quantite?' (×'+d.quantite+')':''}</td>
+              <td style="padding:0.4rem 0.75rem;color:#4b5563;font-style:italic">${d.etatFinSemaine||'—'}</td>
+              <td style="padding:0.4rem 0.75rem;color:#6b7280;font-style:italic">${d.retourEquipes||'—'}</td>
+              <td style="padding:0.4rem 0.75rem;text-align:center">${st}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+        ${hasSynth?`<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+          ${synth.pointsForts?`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:0.6rem;padding:0.6rem 0.75rem"><p style="font-size:0.68rem;font-weight:900;color:#15803d;text-transform:uppercase;margin-bottom:0.25rem">💪 Points forts</p><p style="font-size:0.8rem;white-space:pre-wrap;color:#374151">${synth.pointsForts}</p></div>`:''}
+          ${synth.axesAmelioration?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:0.6rem;padding:0.6rem 0.75rem"><p style="font-size:0.68rem;font-weight:900;color:#b45309;text-transform:uppercase;margin-bottom:0.25rem">📈 Axes d'amélioration</p><p style="font-size:0.8rem;white-space:pre-wrap;color:#374151">${synth.axesAmelioration}</p></div>`:''}
+          ${synth.rapportSemaine?`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:0.6rem;padding:0.6rem 0.75rem;grid-column:1/-1"><p style="font-size:0.68rem;font-weight:900;color:#1d4ed8;text-transform:uppercase;margin-bottom:0.25rem">📋 Rapport & projection</p><p style="font-size:0.8rem;white-space:pre-wrap;color:#374151">${synth.rapportSemaine}</p></div>`:''}
+          ${synth.bulletinSFLIFLA?`<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:0.6rem;padding:0.6rem 0.75rem;grid-column:1/-1"><p style="font-size:0.68rem;font-weight:900;color:#7c3aed;text-transform:uppercase;margin-bottom:0.25rem">📰 Bulletin SFLIFLA</p><p style="font-size:0.8rem;white-space:pre-wrap;font-family:monospace;color:#374151">${synth.bulletinSFLIFLA}</p></div>`:''}
+        </div>`:''}
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
 function renderObjectifs(){
+  // KPI bar
+  const kpiEl=document.getElementById('kpiObjSemaine');
+  if (allObjectifs.length){
+    const total=allObjectifs.length;
+    const ok=allObjectifs.filter(o=>o.valide==='TRUE').length;
+    const enCours=allObjectifs.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
+    const nok=total-ok-enCours;
+    const taux=total?Math.round(ok/total*100):0;
+    kpiEl.innerHTML=[
+      [total,'Fixés','#1A4E8A'],
+      [ok,'Validés ✔','#15803d'],
+      [nok,'Non atteints','#dc2626'],
+      [enCours,'En cours','#d97706'],
+    ].map(([v,l,c])=>`<div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-center">
+      <p class="text-xl font-black" style="color:${c}">${v}</p>
+      <p class="text-xs text-gray-400 font-bold uppercase mt-0.5">${l}</p>
+    </div>`).join('')+`<div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-center">
+      <p class="text-xl font-black" style="color:#1d4ed8">${taux}%</p>
+      <p class="text-xs text-gray-400 font-bold uppercase mt-0.5">Taux réussite</p>
+    </div>`;
+    kpiEl.classList.remove('hidden');
+  } else {
+    kpiEl.classList.add('hidden');
+  }
   const el=document.getElementById('objectifsContent');
   if (!allObjectifs.length){
     el.innerHTML=`<p class="text-center text-gray-400 py-10 text-sm">${vieScRole==='Super-admin'?'Aucun objectif cette semaine. Cliquez "+ Objectif" pour en ajouter.':'Aucun objectif défini pour cette semaine.'}</p>`;
@@ -2432,15 +2584,28 @@ function exportObjectifs(){
   const dates=getWeekDates(weekOffset);
   const semNum=getWeekNumber(dates[0]);
   if (!allObjectifs.length){ toast('Aucun objectif à exporter.',false); return; }
-  const rows=[['Semaine','Objectif','Quantité','Priorité','Descriptif','État mi-semaine','État fin de semaine','Retour équipes','Validé']];
   const sem=`S${semNum} (${fmtDay(dates[0])} - ${fmtDay(dates[5])} ${dates[0].getFullYear()})`;
+  const rows=[['Semaine','Objectif','Quantité','Priorité','Descriptif','État mi-semaine','État fin de semaine','Retour équipes','Validé']];
   allObjectifs.forEach(o=>{
     rows.push([sem,o.nom,o.quantite||'',o.priorite,o.descriptif||'',o.etatMiSemaine||'',o.etatFinSemaine||'',o.retourEquipes||'',(o.valide==='TRUE'||o.valide===true)?'Oui':'Non']);
   });
-  let csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  // Stats semaine
+  const total=allObjectifs.length, ok=allObjectifs.filter(o=>o.valide==='TRUE').length;
+  const enCours=allObjectifs.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
+  rows.push([]); rows.push(['=== STATISTIQUES SEMAINE ===']);
+  rows.push(['Total','Validés','En cours','Non atteints','Taux réussite']);
+  rows.push([total,ok,enCours,total-ok-enCours,total?Math.round(ok/total*100)+'%':'—']);
+  // Synthèse
+  if (currentSyntheseData && (currentSyntheseData.pointsForts||currentSyntheseData.axesAmelioration||currentSyntheseData.rapportSemaine||currentSyntheseData.bulletinSFLIFLA)){
+    rows.push([]); rows.push(['=== SYNTHÈSE HEBDOMADAIRE ===']);
+    if (currentSyntheseData.pointsForts)       rows.push(['Points forts', currentSyntheseData.pointsForts]);
+    if (currentSyntheseData.axesAmelioration)  rows.push(["Axes d'amélioration", currentSyntheseData.axesAmelioration]);
+    if (currentSyntheseData.rapportSemaine)    rows.push(['Rapport & projection', currentSyntheseData.rapportSemaine]);
+    if (currentSyntheseData.bulletinSFLIFLA)   rows.push(['Bulletin SFLIFLA', currentSyntheseData.bulletinSFLIFLA]);
+  }
+  const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download=`Objectifs_S${semNum}_${dates[0].getFullYear()}.csv`; a.click();
   URL.revokeObjectURL(url);
 }
@@ -2479,45 +2644,60 @@ async function exportObjectifsPeriode(){
   if (dateDebut>dateFin){ toast('La date de début doit être avant la date de fin.',false); return; }
   const btn=document.querySelector('#exportPeriodeModal .btn-primary');
   const origTxt=btn.textContent; btn.textContent='⏳ Chargement…'; btn.disabled=true;
-  const r=await api('getObjectifsSemaine',{semaineDebut:dateDebut,dateFin});
+  const [rObj, rSynth] = await Promise.all([
+    api('getObjectifsSemaine',{semaineDebut:dateDebut,dateFin}),
+    api('getSyntheseSemaine',{dateDebut,dateFin}),
+  ]);
   btn.textContent=origTxt; btn.disabled=false;
-  if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  const data=r.data||[];
+  if (!rObj.success){ toast('Erreur : '+rObj.message,false); return; }
+  const data=rObj.data||[];
   if (!data.length){ toast('Aucun objectif sur cette période.',false); return; }
+  const synthMap={};
+  if (rSynth.success) (rSynth.data||[]).forEach(s=>{ synthMap[s.semaineDebut]=s; });
   const rows=[['Semaine','Objectif','Quantité','Priorité','Descriptif','État mi-semaine','État fin de semaine','Retour équipes','Validé']];
   data.forEach(o=>{
-    const semDt=new Date(o.semaineDebut);
+    const semDt=new Date(o.semaineDebut+' 12:00');
     const semLabel=isNaN(semDt)?o.semaineDebut:`S${getWeekNumber(semDt)} (${fmtDay(semDt)})`;
     rows.push([semLabel,o.nom,o.quantite||'',o.priorite,o.descriptif||'',o.etatMiSemaine||'',o.etatFinSemaine||'',o.retourEquipes||'',(o.valide==='TRUE')?'Oui':'Non']);
   });
   if (inclureStats){
-    rows.push([]);
-    rows.push(['=== STATISTIQUES ===']);
-    rows.push(['Total','Validés','En cours','Non atteints','Taux réussite']);
-    const total=data.length;
-    const valides=data.filter(o=>o.valide==='TRUE').length;
+    // Stats globales période
+    const total=data.length, valides=data.filter(o=>o.valide==='TRUE').length;
     const enCours=data.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
-    const nonAtt=total-valides-enCours;
-    rows.push([total,valides,enCours,nonAtt,total?Math.round(valides/total*100)+'%':'—']);
+    rows.push([]); rows.push(['=== STATISTIQUES PÉRIODE ===']);
+    rows.push(['Total','Validés','En cours','Non atteints','Taux réussite']);
+    rows.push([total,valides,enCours,total-valides-enCours,total?Math.round(valides/total*100)+'%':'—']);
     // Détail par semaine
     const bySem={};
     data.forEach(o=>{ if(!bySem[o.semaineDebut]) bySem[o.semaineDebut]={total:0,ok:0}; bySem[o.semaineDebut].total++; if(o.valide==='TRUE') bySem[o.semaineDebut].ok++; });
-    rows.push([]);
-    rows.push(['Semaine','Total','Validés','Taux']);
+    rows.push([]); rows.push(['Semaine','Total','Validés','Non atteints','En cours','Taux']);
     Object.keys(bySem).sort().forEach(s=>{
-      const semDt=new Date(s);
+      const semDt=new Date(s+' 12:00');
       const semLabel=isNaN(semDt)?s:`S${getWeekNumber(semDt)} — ${fmtDay(semDt)}`;
       const b=bySem[s];
-      rows.push([semLabel,b.total,b.ok,b.total?Math.round(b.ok/b.total*100)+'%':'—']);
+      const allForSem=data.filter(o=>o.semaineDebut===s);
+      const nok=allForSem.filter(o=>o.valide!=='TRUE'&&o.etatFinSemaine).length;
+      const ec=allForSem.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
+      rows.push([semLabel,b.total,b.ok,nok,ec,b.total?Math.round(b.ok/b.total*100)+'%':'—']);
     });
+    // Synthèses par semaine
+    const synthSems=Object.keys(synthMap).sort().filter(s=>s>=dateDebut&&s<=dateFin);
+    if (synthSems.length){
+      rows.push([]); rows.push(['=== SYNTHÈSES HEBDOMADAIRES ===']);
+      rows.push(['Semaine','Points forts',"Axes d'amélioration",'Rapport & projection','Bulletin SFLIFLA']);
+      synthSems.forEach(s=>{
+        const sy=synthMap[s];
+        const semDt=new Date(s+' 12:00');
+        const semLabel=isNaN(semDt)?s:`S${getWeekNumber(semDt)} — ${fmtDay(semDt)}`;
+        rows.push([semLabel,sy.pointsForts||'',sy.axesAmelioration||'',sy.rapportSemaine||'',sy.bulletinSFLIFLA||'']);
+      });
+    }
   }
   const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download=`Objectifs_${dateDebut}_${dateFin}.csv`; a.click();
-  URL.revokeObjectURL(url);
-  closeExportPeriodeModal();
+  URL.revokeObjectURL(url); closeExportPeriodeModal();
 }
 
 // ── Démarrage ────────────────────────────────────────────────────
