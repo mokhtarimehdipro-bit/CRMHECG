@@ -817,6 +817,9 @@ async function loadNotes(){
     selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
     hide('statsPanel');
     renderNotesGrouped();
+    const diplomeVal = document.getElementById('filterDiplome').value;
+    const anneeVal   = document.getElementById('filterAnnee').value;
+    if (diplomeVal && anneeVal) await showStats();
   } finally {
     _loadNotesRunning = false;
   }
@@ -951,11 +954,10 @@ function renderMatiereStats(){
   if (!qMat || !allNotes.length){ panel.classList.add('hidden'); return; }
   const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes.filter(n=>matKey(n.matiere)===qMat);
-  if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
-  else if (qAnnee && !isDCGview) notes = notes.filter(n=>n.annee===qAnnee);
+  if (qAnnee) notes = notes.filter(n=>n.annee===qAnnee);
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (!notes.length){ panel.classList.add('hidden'); return; }
-  // Une note par étudiant : la plus récente pour DCG (cumulatif), exacte pour BTS
+  // Une note par étudiant (filtre exact sur l'année — pas de cumul)
   const byEtu = {};
   notes.forEach(n=>{
     const k = n.idEtu||n.nomPrenom;
