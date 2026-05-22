@@ -940,7 +940,7 @@ function calcGroupStats(g){
   if (isDCG) {
     const bestByUE = {};
     notesWithVal.forEach(n=>{
-      const k=(n.matiere||'').toLowerCase();
+      const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
       const isNE = String(n.note).toUpperCase()==='NE';
       const existing = bestByUE[k];
       if (!existing) { bestByUE[k]=n; }
@@ -1074,6 +1074,8 @@ function computeAndShowStats(groups){
     ? (document.getElementById('filterMatiere').options[document.getElementById('filterMatiere').selectedIndex]?.text || qMatRaw)
     : '';
 
+  const nbUEObl = qDiplome==='DCG'?13:6;
+
   const students = groups.map(g=>{
     const {totalPts,moy,moyPro,diff,ueOk,ueElim,ueRecu,ueTotal}=calcGroupStats(g);
     let resultatAuto = g.resultat||'En cours';
@@ -1095,15 +1097,18 @@ function computeAndShowStats(groups){
         resultatAuto='En cours'; noteUE=null;
       }
     } else if (isBTSstats){
-      resultatAuto  = calcBTSResultatAuto(moy, moyPro);
+      resultatAuto   = calcBTSResultatAuto(moy, moyPro);
       resultatManuel = g.resultat||'';
     }
 
+    // Pour BTS : définitif = auto pour Admis/Recalé ; pour Rattrapage = valeur saisie manuellement
+    // Le taux de réussite se base sur le statut définitif
     const resultat = isBTSstats
-      ? (resultatManuel || resultatAuto)
+      ? (resultatAuto === 'Rattrapage' ? (resultatManuel || resultatAuto) : resultatAuto)
       : resultatAuto;
 
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
+            lastAnnee:g.lastAnnee||'',
             totalPts,moy,moyPro,diff,ueOk,ueElim,ueRecu,ueTotal,
             resultat,resultatAuto,resultatManuel,noteUE};
   }).sort((a,b)=>{
@@ -1115,15 +1120,21 @@ function computeAndShowStats(groups){
     return (b.moy??-1)-(a.moy??-1);
   });
 
-  const total  = students.length;
-  const admis  = students.filter(s=>s.resultat==='Admis').length;
-  const ratt   = students.filter(s=>s.resultat==='Rattrapage').length;
-  const recale = students.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
+  // Pour DCG sans filtre UE + avec année : ne garder que les étudiants ayant toutes leurs UE
+  // ET dont la dernière saisie correspond à l'année sélectionnée (= promo)
+  const statsStudents = (isDCGstats && qAnnee && !isUEfilter)
+    ? students.filter(s => s.ueTotal >= nbUEObl && s.lastAnnee === qAnnee)
+    : students;
+
+  const total  = statsStudents.length;
+  const admis  = statsStudents.filter(s=>s.resultat==='Admis').length;
+  const ratt   = statsStudents.filter(s=>s.resultat==='Rattrapage').length;
+  const recale = statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
   const enCours= total-admis-ratt-recale;
 
   const noteVals = isUEfilter
-    ? students.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
-    : students.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+    ? statsStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
+    : statsStudents.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
   const moyGlobal= noteVals.length?(noteVals.reduce((a,b)=>a+b,0)/noteVals.length).toFixed(2):'—';
   const noteMax= noteVals.length?Math.max(...noteVals).toFixed(2):'—';
   const noteMin= noteVals.length?Math.min(...noteVals).toFixed(2):'—';
@@ -1142,11 +1153,11 @@ function computeAndShowStats(groups){
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
 
+  const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
   if (isUEfilter){
     document.querySelector('#statsPanel table thead tr').innerHTML=
       `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th><th></th>`;
   } else if (isBTSstats){
-    const hasProCol = students.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
     document.querySelector('#statsPanel table thead tr').innerHTML=
       '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th><th></th>';
   } else if (isDCGstats){
@@ -1158,11 +1169,12 @@ function computeAndShowStats(groups){
   }
 
   const latestAnnee=qAnnee||'';
-  const hasProCol = isBTSstats && students.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
-  document.getElementById('statsTbody').innerHTML=students.map((x,i)=>{
+  document.getElementById('statsTbody').innerHTML=statsStudents.map((x,i)=>{
     const diffHtml=x.diff===null?'—':x.diff>=0?`<span style="color:#15803d;font-weight:700">+${x.diff}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diff}</span>`;
     const safeNom=(x.nomPrenom||'').replace(/'/g,"\\'");
-    const editBtn=canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${safeNom}','${latestAnnee}','${x.diplome}','${x.resultatAuto||''}','${(x.classe||'').replace(/'/g,"\\'")}')" class="btn-ghost py-1 text-xs">✏</button>`:'';
+    // Bouton édition : BTS uniquement pour Rattrapage (Admis/Recalé sont déterminés automatiquement)
+    const canEdit = canWrite('notes') && (!isBTSstats || x.resultatAuto==='Rattrapage');
+    const editBtn = canEdit ? `<button onclick="openResultatModal('${x.idEtu}','${safeNom}','${latestAnnee}','${x.diplome}','${x.resultatAuto||''}','${(x.classe||'').replace(/'/g,"\\'")}')" class="btn-ghost py-1 text-xs">✏</button>` : '';
     if (isUEfilter){
       const rawUE = x.noteUE;
       const dispUE = rawUE==='NE'?'NE':rawUE===null?'—':rawUE.toFixed(2)+'/20';
@@ -1173,18 +1185,24 @@ function computeAndShowStats(groups){
         <td style="font-weight:700;color:${colUE}">${dispUE}</td>
         <td>${badgeRes(x.resultatAuto)}</td><td>${editBtn}</td></tr>`;
     }
-    if (isBTSstats) return `<tr>
-      <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
-      <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
-      <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
-      ${hasProCol?`<td style="color:#7c3aed;font-weight:700">${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`:''}
-      <td>${badgeRes(x.resultatAuto)}</td>
-      <td>${x.resultatManuel?badgeRes(x.resultatManuel):'<span style="color:#9ca3af;font-size:0.75rem">—</span>'}</td>
-      <td>${editBtn}</td></tr>`;
+    if (isBTSstats){
+      // Colonne Définitif : auto pour Admis/Recalé ; valeur saisie pour Rattrapage
+      const defCell = x.resultatAuto==='Rattrapage'
+        ? (x.resultatManuel ? badgeRes(x.resultatManuel) : '<span style="color:#9ca3af;font-size:0.75rem">—</span>')
+        : badgeRes(x.resultatAuto);
+      return `<tr>
+        <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+        <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+        <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
+        ${hasProCol?`<td style="color:#7c3aed;font-weight:700">${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`:''}
+        <td>${badgeRes(x.resultatAuto)}</td>
+        <td>${defCell}</td>
+        <td>${editBtn}</td></tr>`;
+    }
     if (isDCGstats) return `<tr>
       <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
-      <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${qDiplome==='DCG'?13:6}</td>
+      <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${nbUEObl}</td>
       <td style="color:#d97706;font-weight:700">${x.ueRecu||0}≈</td>
       <td style="color:#dc2626;font-weight:700">${x.ueElim||0}✘</td>
       <td>${diffHtml}</td><td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
@@ -1277,21 +1295,50 @@ function exportNotesCSV(){
   const dataUEs = refMats.length ? refMats :
     [...new Set(notes.map(n=>n.matiere))].sort((a,b)=>matKey(a).localeCompare(matKey(b)));
 
+  const isBTSexport = diplome==='BTS CG';
+  const isDCGexport = diplome==='DCG'||diplome==='DSCG';
+  const nbUEOblExp  = diplome==='DCG'?13:6;
+
+  // Pré-calcul des statuts pour chaque étudiant
+  const groupStats = groups.map(g=>{
+    const {totalPts, moy, moyPro, diff} = calcGroupStats(g);
+    let autoRes = '', defRes = '';
+    if (isBTSexport){
+      autoRes = calcBTSResultatAuto(moy, moyPro);
+      defRes  = autoRes === 'Rattrapage' ? (g.resultat || '—') : autoRes;
+    } else {
+      defRes  = g.resultat || '—';
+    }
+    return {g, totalPts, moy, moyPro, diff, autoRes, defRes, lastAnnee: g.lastAnnee||''};
+  });
+
+  // Pour DCG sans filtre UE + avec année : restreindre aux étudiants avec toutes les UE + promo correspondante
+  const statsRows = (isDCGexport && qAnnee && !qMat)
+    ? groupStats.filter(s=>{
+        const {ueTotal} = calcGroupStats(s.g);
+        return ueTotal >= nbUEOblExp && s.lastAnnee === qAnnee;
+      })
+    : groupStats;
+
   // En-têtes
-  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE','STATUT','DIFFÉRENTIEL'];
+  const btsExtraCols = isBTSexport ? ['MOY. PRO','STATUT AUTO','STATUT DÉFINITIF'] : ['STATUT'];
+  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL'];
   const rows = [header];
 
-  groups.sort((a,b)=>(a.nomPrenom||'').localeCompare(b.nomPrenom||'')).forEach(g=>{
-    const {totalPts, moy, diff} = calcGroupStats(g);
+  groupStats.sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||'')).forEach(({g, totalPts, moy, moyPro, diff, autoRes, defRes})=>{
     // Meilleure/dernière note par UE (DCG = cumulatif, BTS = année filtrée)
     const noteByUE = {};
     g.notes.forEach(n=>{
       const k = matKey(n.matiere);
+      if (isBTSexport && n.matiere==='Rattrapage') return; // exclure les notes de rattrapage de l'export
       if (qAnnee && !isDCGview){ if (n.annee!==qAnnee) return; }
       if (!noteByUE[k]||(n.annee||'')>=(noteByUE[k].annee||'')) noteByUE[k]=n;
     });
     const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
     const diffLabel  = diff===null?'—':(diff>=0?'+'+diff:String(diff));
+    const extraVals = isBTSexport
+      ? [moyPro!==null?moyPro.toFixed(2):'—', autoRes||'—', defRes||'—']
+      : [defRes];
     rows.push([
       g.nomPrenom, g.diplome, anneeLabel,
       ...dataUEs.map(ue=>{
@@ -1301,18 +1348,19 @@ function exportNotesCSV(){
       }),
       totalPts!==null ? totalPts.toFixed(2) : '—',
       moy!==null ? moy.toFixed(2) : '—',
-      g.resultat||'—',
+      ...extraVals,
       diffLabel,
     ]);
   });
 
-  // Stats en bas
+  // Stats en bas — basées sur statut définitif
   rows.push([]); rows.push(['=== STATISTIQUES ===']);
-  const total=groups.length, admis=groups.filter(g=>g.resultat==='Admis').length;
-  const ratt=groups.filter(g=>g.resultat==='Rattrapage').length;
-  const recale=groups.filter(g=>['Recalé','Non admis','Éliminé'].includes(g.resultat)).length;
-  const enCours=total-admis-ratt-recale;
-  const moyVals=groups.map(g=>calcGroupStats(g).moy).filter(v=>v!==null&&!isNaN(v));
+  const total  = statsRows.length;
+  const admis  = statsRows.filter(s=>s.defRes==='Admis').length;
+  const ratt   = statsRows.filter(s=>s.defRes==='Rattrapage'||s.defRes==='—'&&s.autoRes==='Rattrapage').length;
+  const recale = statsRows.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.defRes)).length;
+  const enCours= total-admis-ratt-recale;
+  const moyVals= statsRows.map(s=>s.moy).filter(v=>v!==null&&!isNaN(v));
   const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
   rows.push(['Total','Admis','Rattrapage','Non admis / Éliminés','En cours','Moyenne','Taux réussite']);
   rows.push([total,admis,ratt,recale,enCours,moyGlobal,total?Math.round(admis/total*100)+'%':'—']);
