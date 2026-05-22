@@ -117,7 +117,6 @@
         </div>
         <div class="flex gap-3">
           <button onclick="exportNotesCSV()" class="btn-ghost">📥 Export CSV</button>
-          <button onclick="showStats()" class="btn-ghost">📈 Statistiques</button>
           <button id="btnAddNote" onclick="openBulkNoteModal()" class="btn-orange hidden">+ Saisir les notes</button>
         </div>
       </div>
@@ -182,8 +181,7 @@
       <!-- Stats Panel -->
       <div id="statsPanel" class="hidden mt-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-black text-[#1A4E8A]">Statistiques promotion</h2>
-          <button onclick="document.getElementById('statsPanel').classList.add('hidden')" class="btn-ghost text-xs">✕ Fermer</button>
+          <h2 class="text-xl font-black text-[#1A4E8A]" id="statsPanelTitle">Statistiques promotion</h2>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis"></div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis2"></div>
@@ -877,11 +875,7 @@ async function loadNotes(){
     const selC = document.getElementById('filterClasse');
     const prevC = selC.value;
     selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
-    hide('statsPanel');
     renderNotesGrouped();
-    const diplomeVal = document.getElementById('filterDiplome').value;
-    const anneeVal   = document.getElementById('filterAnnee').value;
-    if (diplomeVal && anneeVal) await showStats();
   } finally {
     _loadNotesRunning = false;
   }
@@ -890,17 +884,38 @@ async function loadNotes(){
 function getStudentGroups(notes){
   const groups = {};
   notes.forEach(n => {
-    const diplome = (n.classe||'').split(' ')[0] || '';
-    const key = n.idEtu + '|' + diplome;
-    if (!groups[key]) groups[key] = { idEtu:n.idEtu, nomPrenom:n.nomPrenom, classe:n.classe, diplome, notes:[], resultat:n.resultat, annees:[], lastAnnee:'' };
+    const diplome = diplomeFromClasse(n.classe);
+    const key = (n.idEtu || n.nomPrenom || '?') + '|' + diplome;
+    if (!groups[key]) groups[key] = { _key:key, idEtu:n.idEtu||'', nomPrenom:n.nomPrenom, classe:n.classe, diplome, notes:[], resultat:n.resultat, annees:[], lastAnnee:'' };
     groups[key].notes.push(n);
     if (n.annee && !groups[key].annees.includes(n.annee)) groups[key].annees.push(n.annee);
-    // Track latest year for classe/résultat
     if ((n.annee||'') >= groups[key].lastAnnee) { groups[key].lastAnnee=n.annee||''; groups[key].classe=n.classe; }
     if (n.resultat) groups[key].resultat = n.resultat;
   });
+  // Fusionne les groupes de même étudiant ayant des idEtu différents (mismatch d'import)
+  const byName = {};
+  const toDelete = [];
+  Object.keys(groups).forEach(k => {
+    const g = groups[k];
+    const nameKey = (g.nomPrenom||'').trim().toLowerCase() + '|' + g.diplome;
+    if (!byName[nameKey]) { byName[nameKey] = k; return; }
+    const existKey = byName[nameKey];
+    const win = groups[existKey], lose = g;
+    // Préférer le groupe avec idEtu non vide
+    const [wk, lk] = (lose.idEtu && !win.idEtu) ? [k, existKey] : [existKey, k];
+    const W = groups[wk], L = groups[lk];
+    const seenIds = new Set(W.notes.map(n=>n.id));
+    L.notes.forEach(n=>{ if (!seenIds.has(n.id)){ W.notes.push(n); seenIds.add(n.id); } });
+    L.annees.forEach(a=>{ if (!W.annees.includes(a)) W.annees.push(a); });
+    if ((L.lastAnnee||'')>(W.lastAnnee||'')){ W.lastAnnee=L.lastAnnee; W.classe=L.classe; }
+    if (L.resultat) W.resultat=L.resultat;
+    if (L.idEtu && !W.idEtu) W.idEtu=L.idEtu;
+    byName[nameKey] = wk;
+    toDelete.push(lk);
+  });
+  toDelete.forEach(k => delete groups[k]);
   const result = Object.values(groups);
-  result.forEach(g => g.annees.sort());
+  result.forEach(g => { delete g._key; g.annees.sort(); });
   return result;
 }
 
@@ -1004,6 +1019,65 @@ function renderNotesGrouped(){
   });
   tbody.innerHTML = html;
   renderMatiereStats();
+  computeAndShowStats(groups);
+}
+
+function computeAndShowStats(groups){
+  const panel = document.getElementById('statsPanel');
+  if (!groups || !groups.length){ panel.classList.add('hidden'); return; }
+  const qDiplome = document.getElementById('filterDiplome').value||'';
+  const qAnnee   = document.getElementById('filterAnnee').value||'';
+  const qClasse  = document.getElementById('filterClasse').value||'';
+  const isDCGstats = qDiplome==='DCG'||qDiplome==='DSCG';
+  const students = groups.map(g=>{
+    const {totalPts,moy,diff,ueOk,ueElim,ueRecu,ueTotal}=calcGroupStats(g);
+    return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
+            totalPts,moy,diff,ueOk,ueElim,ueRecu,ueTotal,resultat:g.resultat||'En cours'};
+  }).sort((a,b)=>(b.moy??-1)-(a.moy??-1));
+  const total  = students.length;
+  const admis  = students.filter(s=>s.resultat==='Admis').length;
+  const ratt   = students.filter(s=>s.resultat==='Rattrapage').length;
+  const recale = students.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
+  const enCours= total-admis-ratt-recale;
+  const moyVals= students.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+  const moyGlobal= moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
+  const noteMax= moyVals.length?Math.max(...moyVals).toFixed(2):'—';
+  const noteMin= moyVals.length?Math.min(...moyVals).toFixed(2):'—';
+  const taux   = total?Math.round(admis/total*100):0;
+  const titleParts=[qDiplome,qAnnee,qClasse].filter(Boolean);
+  document.getElementById('statsPanelTitle').textContent='Statistiques — '+(titleParts.join(' · ')||'tous filtres');
+  document.getElementById('statsKpis').innerHTML=[
+    ['Inscrits',total,'#1A4E8A'],['Admis',admis,'#15803d'],
+    ['Rattrapage',ratt,'#a16207'],['Non admis / Éliminés',recale,'#dc2626'],
+  ].map(([l,v,c])=>`<div class="kpi-card"><p class="text-3xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
+  document.getElementById('statsKpis2').innerHTML=[
+    ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
+  ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
+  if (isDCGstats){
+    document.querySelector('#statsPanel table thead tr').innerHTML=
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th>Résultat</th><th></th>';
+  } else {
+    document.querySelector('#statsPanel table thead tr').innerHTML=
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th><th></th>';
+  }
+  const latestAnnee=qAnnee||'';
+  document.getElementById('statsTbody').innerHTML=students.map((x,i)=>{
+    const diffHtml=x.diff===null?'—':x.diff>=0?`<span style="color:#15803d;font-weight:700">+${x.diff}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diff}</span>`;
+    const editBtn=canWrite('notes')?`<button onclick="openResultatModal('${x.idEtu}','${(x.nomPrenom||'').replace(/'/g,"\\'")}','${latestAnnee}','${x.diplome}')" class="btn-ghost py-1 text-xs">✏</button>`:'';
+    if (isDCGstats) return `<tr>
+      <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+      <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${qDiplome==='DCG'?13:6}</td>
+      <td style="color:#d97706;font-weight:700">${x.ueRecu||0}≈</td>
+      <td style="color:#dc2626;font-weight:700">${x.ueElim||0}✘</td>
+      <td>${diffHtml}</td><td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
+    return `<tr>
+      <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+      <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
+      <td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
+  }).join('');
+  panel.classList.remove('hidden');
 }
 
 function renderMatiereStats(){
@@ -1070,28 +1144,65 @@ function exportNotesCSV(){
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qClasse  = document.getElementById('filterClasse').value||'';
-  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
+  const isDCGview= qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
-  if (qMat)    notes = notes.filter(n=>matKey(n.matiere)===qMat);
-  if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
+  if (qMat)  notes = notes.filter(n=>matKey(n.matiere)===qMat);
+  if (qEtu)  notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
   let groups = getStudentGroups(notes);
   if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
   if (qClasse) groups = groups.filter(g=>(g.classe||'')===qClasse);
-  // En-tête : indiquer les filtres actifs dans le nom du fichier
-  const parts = [qDiplome,qAnnee,qClasse,qMat?document.getElementById('filterMatiere').value:''].filter(Boolean);
-  const filename = 'notes'+(parts.length?'_'+parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_'):'')+'.csv';
-  const rows = [['Étudiant','Diplôme','Classe','Année','Matière','Note','Coeff','Points','Résultat']];
-  groups.forEach(g=>{
-    // Pour DCG : n'exporter que les notes dans l'intervalle du filtre
-    const notesFiltered = (qAnnee && isDCGview)
-      ? g.notes.filter(n=>(n.annee||'')<=qAnnee)
-      : (qAnnee && !isDCGview ? g.notes.filter(n=>n.annee===qAnnee) : g.notes);
-    notesFiltered.forEach(n=>{
-      rows.push([g.nomPrenom, g.diplome, g.classe, n.annee||'', n.matiere, n.note??'', n.coeff??'', n.points??'', n.resultat||'']);
+  if (!groups.length){ toast('Aucune donnée à exporter.',false); return; }
+
+  // Liste ordonnée des UEs : référentiel si disponible, sinon données filtrées
+  const diplome = groups[0]?.diplome || qDiplome;
+  const refMats = (refMatieres[diplome]||[]).map(m=>m.matiere);
+  const dataUEs = refMats.length ? refMats :
+    [...new Set(notes.map(n=>n.matiere))].sort((a,b)=>matKey(a).localeCompare(matKey(b)));
+
+  // En-têtes
+  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE','STATUT','DIFFÉRENTIEL'];
+  const rows = [header];
+
+  groups.sort((a,b)=>(a.nomPrenom||'').localeCompare(b.nomPrenom||'')).forEach(g=>{
+    const {totalPts, moy, diff} = calcGroupStats(g);
+    // Meilleure/dernière note par UE (DCG = cumulatif, BTS = année filtrée)
+    const noteByUE = {};
+    g.notes.forEach(n=>{
+      const k = matKey(n.matiere);
+      if (qAnnee && !isDCGview){ if (n.annee!==qAnnee) return; }
+      if (!noteByUE[k]||(n.annee||'')>=(noteByUE[k].annee||'')) noteByUE[k]=n;
     });
+    const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
+    const diffLabel  = diff===null?'—':(diff>=0?'+'+diff:String(diff));
+    rows.push([
+      g.nomPrenom, g.diplome, anneeLabel,
+      ...dataUEs.map(ue=>{
+        const n = noteByUE[matKey(ue)];
+        if (!n || n.note===null || n.note===undefined || n.note==='') return '—';
+        return String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+      }),
+      totalPts!==null ? totalPts.toFixed(2) : '—',
+      moy!==null ? moy.toFixed(2) : '—',
+      g.resultat||'—',
+      diffLabel,
+    ]);
   });
-  const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+
+  // Stats en bas
+  rows.push([]); rows.push(['=== STATISTIQUES ===']);
+  const total=groups.length, admis=groups.filter(g=>g.resultat==='Admis').length;
+  const ratt=groups.filter(g=>g.resultat==='Rattrapage').length;
+  const recale=groups.filter(g=>['Recalé','Non admis','Éliminé'].includes(g.resultat)).length;
+  const enCours=total-admis-ratt-recale;
+  const moyVals=groups.map(g=>calcGroupStats(g).moy).filter(v=>v!==null&&!isNaN(v));
+  const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
+  rows.push(['Total','Admis','Rattrapage','Non admis / Éliminés','En cours','Moyenne','Taux réussite']);
+  rows.push([total,admis,ratt,recale,enCours,moyGlobal,total?Math.round(admis/total*100)+'%':'—']);
+
+  const parts=[qDiplome,qAnnee,qClasse].filter(Boolean);
+  const filename='notes_'+(parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_')||'export')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   a.download=filename; a.click();
 }
