@@ -1099,10 +1099,15 @@ function computeAndShowStats(groups){
     } else if (isBTSstats){
       resultatAuto   = calcBTSResultatAuto(moy, moyPro);
       resultatManuel = g.resultat||'';
+    } else if (isDCGstats){
+      // DCG auto : Admis si moy ≥ 10 ET aucune UE éliminatoire (note < 6), sinon Recalé
+      if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
+      else              resultatAuto = 'En cours';
     }
 
     // Pour BTS : définitif = auto pour Admis/Recalé ; pour Rattrapage = valeur saisie manuellement
     // Le taux de réussite se base sur le statut définitif
+    // Pour DCG : résultat = auto (100 % calculé depuis les notes)
     const resultat = isBTSstats
       ? (resultatAuto === 'Rattrapage' ? (resultatManuel || resultatAuto) : resultatAuto)
       : resultatAuto;
