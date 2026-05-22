@@ -300,24 +300,8 @@
           <h2 class="text-lg font-black text-[#1A4E8A]" id="syntheseTitle">📝 Synthèse de la semaine —</h2>
           <span id="syntheseSaveStatus" class="text-xs text-gray-400 italic"></span>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="rounded-xl p-4" style="background:#f0fdf4;border:1px solid #bbf7d0">
-            <label style="color:#15803d;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">💪 Points forts</label>
-            <textarea id="synthPointsForts" onblur="saveSyntheseField('pointsForts',this.value)" rows="5" placeholder="Ce qui a bien fonctionné cette semaine…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
-          </div>
-          <div class="rounded-xl p-4" style="background:#fffbeb;border:1px solid #fde68a">
-            <label style="color:#b45309;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📈 Axes d'amélioration</label>
-            <textarea id="synthAxes" onblur="saveSyntheseField('axesAmelioration',this.value)" rows="5" placeholder="Points à améliorer, freins identifiés…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
-          </div>
-          <div class="rounded-xl p-4 md:col-span-2" style="background:#eff6ff;border:1px solid #bfdbfe">
-            <label style="color:#1d4ed8;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📋 Rapport semaine &amp; projection semaine prochaine</label>
-            <textarea id="synthRapport" onblur="saveSyntheseField('rapportSemaine',this.value)" rows="5" placeholder="Bilan global, actions prévues semaine suivante…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:inherit"></textarea>
-          </div>
-          <div class="rounded-xl p-4 md:col-span-2" style="background:#faf5ff;border:1px solid #e9d5ff">
-            <label style="color:#7c3aed;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">📰 BULLETIN HEBDO SFLIFLA</label>
-            <textarea id="synthBulletin" onblur="saveSyntheseField('bulletinSFLIFLA',this.value)" rows="7" placeholder="Collez ici le contenu du bulletin hebdomadaire…" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:monospace,inherit"></textarea>
-          </div>
-        </div>
+        <div id="syntheseGrid"></div>
+        <div id="syntheseCommentsSection"></div>
       </div>
 
       <!-- ── Suivi objectifs par semaine ── -->
@@ -2687,11 +2671,8 @@ async function loadObjectifs(){
   if (!rObj.success){ document.getElementById('objectifsContent').innerHTML='<p class="text-center text-red-400 py-8 text-sm">Erreur chargement objectifs</p>'; return; }
   allObjectifs=rObj.data||[];
   currentSyntheseData=(rSynth.success&&rSynth.data&&rSynth.data[0])||{};
-  document.getElementById('synthPointsForts').value=currentSyntheseData.pointsForts||'';
-  document.getElementById('synthAxes').value=currentSyntheseData.axesAmelioration||'';
-  document.getElementById('synthRapport').value=currentSyntheseData.rapportSemaine||'';
-  document.getElementById('synthBulletin').value=currentSyntheseData.bulletinSFLIFLA||'';
   document.getElementById('syntheseSaveStatus').textContent='';
+  renderSyntheseSection(currentSyntheseData);
   renderObjectifs();
 }
 
@@ -2704,6 +2685,86 @@ async function saveSyntheseField(field, val){
   const r=await api('saveSyntheseSemaine',{semaineDebut,field,val});
   statusEl.textContent=r.success?'Enregistré ✓':'Erreur sauvegarde';
   setTimeout(()=>{ statusEl.textContent=''; },2000);
+}
+
+function renderSyntheseSection(data){
+  const isSA = vieScRole==='Super-admin';
+  const grid = document.getElementById('syntheseGrid');
+  const commentsEl = document.getElementById('syntheseCommentsSection');
+  if (!grid) return;
+
+  const fields = [
+    {id:'synthPointsForts', field:'pointsForts',       label:'💪 Points forts',                                    val:data.pointsForts||'',       bg:'#f0fdf4', bc:'#bbf7d0', fc:'#15803d', ph:"Ce qui a bien fonctionné cette semaine…",         rows:5, mono:false, full:false},
+    {id:'synthAxes',        field:'axesAmelioration',  label:"📈 Axes d'amélioration",                             val:data.axesAmelioration||'',  bg:'#fffbeb', bc:'#fde68a', fc:'#b45309', ph:'Points à améliorer, freins identifiés…',           rows:5, mono:false, full:false},
+    {id:'synthRapport',     field:'rapportSemaine',    label:'📋 Rapport semaine &amp; projection semaine prochaine',val:data.rapportSemaine||'',    bg:'#eff6ff', bc:'#bfdbfe', fc:'#1d4ed8', ph:'Bilan global, actions prévues semaine suivante…', rows:5, mono:false, full:true},
+    {id:'synthBulletin',    field:'bulletinSFLIFLA',   label:'📰 BULLETIN HEBDO SFLIFLA',                          val:data.bulletinSFLIFLA||'',   bg:'#faf5ff', bc:'#e9d5ff', fc:'#7c3aed', ph:'Collez ici le contenu du bulletin hebdomadaire…', rows:7, mono:true,  full:true},
+  ];
+
+  if (isSA) {
+    grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
+      <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
+        <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
+        <textarea id="${f.id}" onblur="saveSyntheseField('${f.field}',this.value)" rows="${f.rows}" placeholder="${f.ph}" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:${f.mono?'monospace,inherit':'inherit'}">${escHtmlObj(f.val)}</textarea>
+      </div>`).join('')}</div>`;
+  } else {
+    grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
+      <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
+        <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
+        <div style="font-size:0.85rem;color:#374151;line-height:1.65;min-height:36px;white-space:pre-wrap;font-family:${f.mono?'monospace,inherit':'inherit'}">${f.val?escHtmlObj(f.val):'<span style="color:#d1d5db;font-style:italic">—</span>'}</div>
+      </div>`).join('')}</div>`;
+  }
+
+  // Section commentaires (visible pour tous)
+  if (commentsEl) {
+    const entries = data.commentaires ? data.commentaires.split('\n').filter(l=>l.trim()) : [];
+    const entriesHtml = entries.length
+      ? entries.map(e=>{
+          const s=e.trim().startsWith('[');
+          return `<div style="font-size:0.75rem;margin-bottom:0.3rem;padding:0.3rem 0.6rem;border-radius:0.4rem;${s?'background:#f0f9ff;border:1px solid #bae6fd;color:#0c4a6e':'color:#6b7280;font-style:italic'}">${escHtmlObj(e)}</div>`;
+        }).join('')
+      : '<div style="font-size:0.75rem;color:#d1d5db;font-style:italic;padding:0.2rem 0">Aucun commentaire pour l\'instant.</div>';
+    commentsEl.innerHTML = `
+      <div class="rounded-xl p-4 mt-4" style="background:#f8fafc;border:1px solid #e2e8f0">
+        <label style="color:#475569;font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;display:block">💬 Commentaires équipe</label>
+        <div style="margin-bottom:0.5rem">${entriesHtml}</div>
+        <div id="synthCommentInput" class="hidden">
+          <textarea id="synthCommentTa" rows="2" placeholder="Votre commentaire…" style="width:100%;font-size:0.8rem;resize:vertical;border:1px solid #bfdbfe;border-radius:0.4rem;padding:0.35rem 0.5rem;outline:none;background:#eff6ff"></textarea>
+          <div style="display:flex;gap:0.4rem;margin-top:0.3rem">
+            <button onclick="saveSyntheseComment()" style="flex:1;padding:0.3rem;background:#1A4E8A;color:#fff;border:none;border-radius:0.4rem;font-size:0.72rem;font-weight:700;cursor:pointer">Envoyer</button>
+            <button onclick="toggleSynthComment()" style="padding:0.3rem 0.6rem;background:#f3f4f6;border:none;border-radius:0.4rem;font-size:0.72rem;cursor:pointer">✕</button>
+          </div>
+        </div>
+        <button onclick="toggleSynthComment()" id="btnAddSynthComment" style="font-size:0.72rem;color:#1A4E8A;font-weight:700;background:none;border:none;cursor:pointer;padding:0">+ Ajouter un commentaire</button>
+      </div>`;
+  }
+}
+
+function toggleSynthComment(){
+  const zone = document.getElementById('synthCommentInput');
+  const btn  = document.getElementById('btnAddSynthComment');
+  if (!zone) return;
+  const hidden = zone.classList.contains('hidden');
+  zone.classList.toggle('hidden', !hidden);
+  if (btn) btn.style.display = hidden ? 'none' : '';
+  if (hidden) { const ta=document.getElementById('synthCommentTa'); if(ta) ta.focus(); }
+}
+
+async function saveSyntheseComment(){
+  const ta = document.getElementById('synthCommentTa');
+  if (!ta) return;
+  const txt = ta.value.trim();
+  if (!txt){ toast('Saisissez un commentaire.',false); return; }
+  const now = new Date();
+  const stamp = now.toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const entry = `[${stamp} — ${user.nom||'?'}] ${txt}`;
+  const dates = getWeekDates(weekOffset);
+  const semaineDebut = fmtDate(dates[0]);
+  const r = await api('saveSyntheseSemaine',{semaineDebut, field:'appendComment', val:entry});
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  currentSyntheseData.commentaires = currentSyntheseData.commentaires
+    ? currentSyntheseData.commentaires+'\n'+entry : entry;
+  toast('Commentaire ajouté ✓');
+  renderSyntheseSection(currentSyntheseData);
 }
 
 async function loadObjectifsStatsSemaines(){
