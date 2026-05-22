@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salle des Trophées - HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        .banner-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #1a3a5c 70%, #0f172a 100%);
+        }
+        .emblem-ring {
+            border: 3px solid #f59e0b;
+            box-shadow: 0 0 16px rgba(245,158,11,0.5);
+        }
+        .xp-bar-fill {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+            transition: width 0.8s ease;
+        }
+        .trophy-card { transition: transform 0.15s, box-shadow 0.15s; }
+        .trophy-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+        .trophy-locked { filter: grayscale(1); opacity: 0.5; }
+        .level-bronze { color: #cd7f32; }
+        .level-gold { color: #f59e0b; }
+        .level-rainbow {
+            background: linear-gradient(90deg, #f43f5e, #f59e0b, #22c55e, #3b82f6, #a855f7);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .perso-card { cursor: pointer; border: 3px solid transparent; transition: border-color 0.2s, transform 0.15s; }
+        .perso-card:hover { transform: scale(1.04); }
+        .perso-card.selected { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245,158,11,0.4); }
+        .perso-card.locked { filter: grayscale(1) brightness(0.5); cursor: not-allowed; }
+        .modal-backdrop { background: rgba(0,0,0,0.65); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- NAV -->
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="historique.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
+                <a href="trophees.html" class="font-bold text-amber-500 border-b-2 border-amber-500 pb-1">🏆 Trophées</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+    </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
+
+    <main class="max-w-6xl mx-auto p-6">
+
+        <!-- BANNER -->
+        <div id="banner" class="banner-bg rounded-3xl p-6 mb-6 relative overflow-hidden">
+            <div class="flex items-center gap-6">
+                <!-- Emblem -->
+                <div class="relative flex-shrink-0">
+                    <div id="emblemeCircle" class="emblem-ring w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center cursor-pointer overflow-hidden"
+                         onclick="openEmblemePicker()" title="Changer d'emblème">
+                        <span id="emblemeDisplay" class="text-4xl">🏆</span>
+                    </div>
+                    <div class="absolute -bottom-1 -right-1 bg-amber-500 rounded-full w-6 h-6 flex items-center justify-center text-xs font-black text-white cursor-pointer" onclick="openEmblemePicker()">✏️</div>
+                </div>
+
+                <!-- Center info -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-3 mb-1">
+                        <h1 id="pseudoDisplay" class="text-white font-black text-2xl truncate cursor-pointer hover:text-amber-400" onclick="editPseudo()" title="Modifier pseudo">Chargement…</h1>
+                        <span class="text-xs text-gray-400 cursor-pointer hover:text-amber-400" onclick="editPseudo()">✏️</span>
+                    </div>
+                    <div id="niveauDisplay" class="text-sm font-bold mb-3">Niveau 0</div>
+                    <!-- XP bar -->
+                    <div class="bg-gray-700 rounded-full h-3 w-full max-w-sm">
+                        <div id="xpBarFill" class="xp-bar-fill h-3 rounded-full" style="width:0%"></div>
+                    </div>
+                    <div class="text-xs text-gray-400 mt-1"><span id="xpDisplay">0 XP</span></div>
+                </div>
+
+                <!-- Character portrait -->
+                <div class="flex-shrink-0 text-center">
+                    <div id="personnagePortrait" class="w-24 h-24 rounded-2xl bg-gray-700 overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors"
+                         onclick="openPersonnagePicker()" title="Changer de personnage">
+                        <img id="personnageImg" src="" alt="" class="w-full h-full object-cover hidden">
+                        <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-3xl">👤</div>
+                    </div>
+                    <p id="personnageNom" class="text-xs text-amber-400 font-bold mt-1"></p>
+                    <p class="text-xs text-gray-500 cursor-pointer hover:text-amber-400 mt-0.5" onclick="openPersonnagePicker()">Changer ✏️</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS ROW -->
+        <div class="flex gap-3 mb-6">
+            <button onclick="openSalleRecompenses()" class="bg-white border-2 border-amber-500 text-amber-600 px-5 py-2.5 rounded-xl font-bold hover:bg-amber-50 transition text-sm shadow-sm">
+                🏅 Salle des Récompenses
+            </button>
+            <button onclick="loadData(true)" class="bg-white border-2 border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm">
+                🔄 Rafraîchir
+            </button>
+        </div>
+
+        <!-- KPI STRIP -->
+        <div id="kpiStrip" class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6"></div>
+
+        <!-- MES TROPHEES -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+            <h2 class="text-lg font-black text-gray-800 mb-4">🏆 Mes Trophées débloqués</h2>
+            <div id="tropheesGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <p class="text-gray-400 text-sm col-span-full text-center py-8">Chargement…</p>
+            </div>
+        </div>
+
+        <!-- HISTORIQUE ACTIONS -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+            <div class="flex flex-wrap gap-3 items-center mb-4">
+                <h2 class="text-lg font-black text-gray-800">📋 Mes Actions</h2>
+                <input type="text" id="actSearch" placeholder="Rechercher…" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-gray-50 outline-none focus:border-amber-400 w-48" oninput="filterActions()">
+                <select id="actCatFilter" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-white outline-none focus:border-amber-400" onchange="filterActions()">
+                    <option value="">Toutes catégories</option>
+                </select>
+                <select id="actPeriodFilter" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-white outline-none focus:border-amber-400" onchange="filterActions()">
+                    <option value="">Toute période</option>
+                    <option value="7">7 derniers jours</option>
+                    <option value="30">30 derniers jours</option>
+                    <option value="90">3 derniers mois</option>
+                </select>
+                <span id="actCount" class="text-xs text-gray-400 font-bold ml-auto"></span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
+                            <th class="pb-2 pr-3 text-left">Date</th>
+                            <th class="pb-2 pr-3 text-left">Type</th>
+                            <th class="pb-2 pr-3 text-left">Catégorie</th>
+                            <th class="pb-2 text-left">Détails</th>
+                        </tr>
+                    </thead>
+                    <tbody id="actionsBody">
+                        <tr><td colspan="4" class="py-8 text-center text-gray-400">Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL: SALLE DES RECOMPENSES -->
+    <div id="modalSalle" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
+                <h2 class="text-xl font-black text-gray-800">🏅 Salle des Récompenses</h2>
+                <button onclick="closeModal('modalSalle')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div id="salleContent" class="p-6"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: DETAIL TROPHEE -->
+    <div id="modalTrophee" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-lg font-black text-gray-800" id="tropheeDetailNom">Trophée</h2>
+                <button onclick="closeModal('modalTrophee')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div id="tropheeDetailBody"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: PERSONNAGE PICKER -->
+    <div id="modalPersonnage" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
+            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
+                <h2 class="text-xl font-black text-gray-800">👤 Choisir un personnage</h2>
+                <button onclick="closeModal('modalPersonnage')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div id="personnageGrid" class="p-6 grid grid-cols-3 md:grid-cols-4 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: EMBLEME PICKER -->
+    <div id="modalEmbleme" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
+            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
+                <h2 class="text-xl font-black text-gray-800">🏅 Choisir un emblème</h2>
+                <button onclick="closeModal('modalEmbleme')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div id="emblemeGrid" class="p-6 grid grid-cols-3 md:grid-cols-4 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: EDIT PSEUDO -->
+    <div id="modalPseudo" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
+            <h2 class="text-lg font-black text-gray-800 mb-4">Modifier le pseudo</h2>
+            <input type="text" id="pseudoInput" maxlength="30" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl font-bold text-lg outline-none focus:border-amber-400 mb-4" placeholder="Votre pseudo…">
+            <div class="flex gap-3">
+                <button onclick="savePseudo()" class="flex-1 bg-amber-500 text-white font-bold py-2.5 rounded-xl hover:bg-amber-600 transition">Enregistrer</button>
+                <button onclick="closeModal('modalPseudo')" class="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-200 transition">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+const EMAIL_USER = (user.email || '').toLowerCase();
+const NOM_USER   = user.nom || user.name || '';
+
+if (!EMAIL_USER) { localStorage.clear(); window.location.href = 'index.html'; }
+
+const XP_MAP = {Actions:1,Offres:10,CarnetRoute:5,CarnetEntreprise:15,Missions:15,Objectifs:50,Alertes:10,Com:35,Entreprise:25,Etudiant:20,Special:100};
+const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions clôturées',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial'};
+const KPI_COLORS = {Actions:'blue',Offres:'emerald',CarnetRoute:'violet',CarnetEntreprise:'pink',Missions:'amber',Objectifs:'green',Alertes:'orange',Com:'cyan',Entreprise:'indigo',Etudiant:'teal',Special:'red'};
+
+let tropheeData = null;
+let allActionRows = [];
+let filteredActionRows = [];
+
+async function apiPost(payload) {
+    const r = await fetch(API_URL, {method:'POST', body: JSON.stringify(payload)});
+    return r.json();
+}
+
+async function loadData(force) {
+    try {
+        const res = await apiPost({action:'getTropheeData', emailUser: EMAIL_USER, nomUser: NOM_USER});
+        if (!res.success) { console.error(res.message); return; }
+        tropheeData = res;
+        allActionRows = res.actionRows || [];
+
+        renderBanner(res);
+        renderKPIs(res);
+        renderTrophees(res);
+        renderActionTable(res);
+        buildCatFilter(res);
+
+        // Efface le badge
+        localStorage.removeItem('hecg_trophees_new');
+        const badgeEl = document.getElementById('navTropheesBadge');
+        if (badgeEl) badgeEl.style.display = 'none';
+
+        // Marquer vus
+        if (res.newUnlocks && res.newUnlocks.length > 0) {
+            apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
+        }
+    } catch(e) { console.error(e); }
+}
+
+function getNiveauLabel(n) {
+    if (n <= 3) return {label: 'Niveau ' + n + ' — Bronzé', cls: 'level-bronze'};
+    if (n <= 8) return {label: 'Niveau ' + n + ' — Doré', cls: 'level-gold'};
+    return {label: 'Niveau ' + n + ' — Légendaire', cls: 'level-rainbow'};
+}
+
+function renderBanner(d) {
+    const prefs = d.prefs || {};
+    const xp = d.xpTotal || 0;
+    const niveau = d.niveau || 0;
+    const nl = getNiveauLabel(niveau);
+
+    document.getElementById('pseudoDisplay').textContent = prefs.pseudo || NOM_USER || 'Joueur';
+    const niveauEl = document.getElementById('niveauDisplay');
+    niveauEl.className = 'text-sm font-bold mb-3 ' + nl.cls;
+    niveauEl.textContent = nl.label;
+    document.getElementById('xpDisplay').textContent = xp.toLocaleString('fr') + ' XP';
+
+    // Calcul XP vers prochain niveau
+    const persos = (d.personnages || []).sort((a,b) => a.xpRequired - b.xpRequired);
+    const nextPerso = persos.find(p => !p.unlocked);
+    const maxXP = nextPerso ? nextPerso.xpRequired : (xp || 1);
+    const pct = nextPerso ? Math.min(100, Math.round(xp / maxXP * 100)) : 100;
+    document.getElementById('xpBarFill').style.width = pct + '%';
+
+    // Emblème
+    const emblemeId = prefs.emblemeChoisi;
+    const emblemeT = emblemeId && d.trophees ? d.trophees.find(t => t.id === emblemeId && t.unlocked) : null;
+    document.getElementById('emblemeDisplay').textContent = emblemeT ? (emblemeT.nom.match(/[\u{1F300}-\u{1FFFF}]/u) ? emblemeT.nom.match(/[\u{1F300}-\u{1FFFF}]/u)[0] : '🏆') : '🏆';
+
+    // Personnage
+    const persoRef = prefs.personnageChoisi;
+    const perso = persoRef && d.personnages ? d.personnages.find(c => c.ref === persoRef && c.unlocked) : (d.personnages || []).find(c => c.unlocked);
+    if (perso && perso.url) {
+        document.getElementById('personnageImg').src = perso.url;
+        document.getElementById('personnageImg').classList.remove('hidden');
+        document.getElementById('personnagePlaceholder').classList.add('hidden');
+        document.getElementById('personnageNom').textContent = perso.nom;
+    } else {
+        document.getElementById('personnageImg').classList.add('hidden');
+        document.getElementById('personnagePlaceholder').classList.remove('hidden');
+        document.getElementById('personnageNom').textContent = '';
+    }
+}
+
+function renderKPIs(d) {
+    const strip = document.getElementById('kpiStrip');
+    const cnt = d.count || {};
+    const items = Object.keys(XP_MAP);
+    strip.innerHTML = items.map(k => {
+        const v = cnt[k] || 0;
+        const xp = v * XP_MAP[k];
+        return `<div class="bg-white rounded-2xl p-3 border border-gray-100 shadow-sm text-center">
+            <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest truncate">${XP_LABELS[k]}</p>
+            <p class="text-2xl font-black text-gray-800 mt-0.5">${v}</p>
+            <p class="text-xs text-amber-500 font-bold">+${xp} XP</p>
+        </div>`;
+    }).join('');
+}
+
+function renderTrophees(d) {
+    const grid = document.getElementById('tropheesGrid');
+    const unlocked = (d.trophees || []).filter(t => t.unlocked);
+    if (!unlocked.length) {
+        grid.innerHTML = '<p class="text-gray-400 text-sm col-span-full text-center py-8">Aucun trophée débloqué pour l\'instant. Continue tes efforts ! 💪</p>';
+        return;
+    }
+    grid.innerHTML = unlocked.map(t => `
+        <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeDetail(${esc(JSON.stringify(t))})">
+            <div class="text-4xl mb-2">🏆</div>
+            <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
+            <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
+            ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
+        </div>`).join('');
+}
+
+function buildCatFilter(d) {
+    const cats = [...new Set((d.actionRows||[]).map(r => r.categorie).filter(Boolean))].sort();
+    const sel = document.getElementById('actCatFilter');
+    sel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${escH(c)}">${escH(c)}</option>`).join('');
+}
+
+function renderActionTable(d) {
+    filteredActionRows = d.actionRows || [];
+    filterActions();
+}
+
+function filterActions() {
+    const search = document.getElementById('actSearch').value.toLowerCase();
+    const cat = document.getElementById('actCatFilter').value;
+    const period = parseInt(document.getElementById('actPeriodFilter').value) || 0;
+    const now = Date.now();
+
+    let rows = allActionRows;
+    if (search) rows = rows.filter(r => (r.cible+r.details+r.type+r.categorie).toLowerCase().includes(search));
+    if (cat) rows = rows.filter(r => r.categorie === cat);
+    if (period) rows = rows.filter(r => {
+        if (!r.date) return false;
+        const parts = r.date.split(' ')[0].split('/');
+        const d = new Date(parts[2], parts[1]-1, parts[0]);
+        return (now - d.getTime()) <= period * 86400000;
+    });
+
+    filteredActionRows = rows;
+    document.getElementById('actCount').textContent = rows.length + ' action' + (rows.length>1?'s':'');
+
+    const tbody = document.getElementById('actionsBody');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-gray-400 text-sm">Aucune action trouvée</td></tr>';
+        return;
+    }
+    const typeColor = {Création:'bg-green-100 text-green-700', Modification:'bg-blue-100 text-blue-700', Suppression:'bg-red-100 text-red-700'};
+    tbody.innerHTML = rows.slice(0,200).map(r => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+        <td class="py-2 pr-3 text-gray-500 text-xs whitespace-nowrap">${escH(r.date)}</td>
+        <td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-full text-xs font-bold ${typeColor[r.type]||'bg-gray-100 text-gray-600'}">${escH(r.type)}</span></td>
+        <td class="py-2 pr-3 text-gray-600 text-xs">${escH(r.categorie)}</td>
+        <td class="py-2 text-gray-700 text-xs truncate max-w-xs">${escH(r.cible||r.details||'')}</td>
+    </tr>`).join('');
+}
+
+function openTropheeDetail(t) {
+    document.getElementById('tropheeDetailNom').textContent = t.nom;
+    const pct = t.quantite > 0 ? Math.min(100, Math.round(t.count / t.quantite * 100)) : 100;
+    document.getElementById('tropheeDetailBody').innerHTML = `
+        <div class="text-center text-6xl mb-4">🏆</div>
+        <p class="text-gray-600 text-sm mb-3">${escH(t.desc)}</p>
+        <div class="bg-gray-50 rounded-xl p-3 mb-3">
+            <p class="text-xs text-gray-500 mb-1">Catégorie : <strong>${escH(t.categorie)}</strong></p>
+            <p class="text-xs text-gray-500 mb-1">Condition : ${t.count} / ${t.quantite} ${escH(XP_LABELS[t.catKey]||t.categorie)}</p>
+            <div class="bg-gray-200 rounded-full h-2 mt-2"><div class="bg-amber-500 h-2 rounded-full" style="width:${pct}%"></div></div>
+        </div>
+        ${t.dateObtention ? `<p class="text-xs text-amber-600 font-bold text-center">✅ Débloqué le ${escH(t.dateObtention)}</p>` : `<p class="text-xs text-gray-400 text-center">🔒 Non débloqué</p>`}
+    `;
+    document.getElementById('modalTrophee').classList.remove('hidden');
+}
+
+function openSalleRecompenses() {
+    if (!tropheeData) return;
+    const cats = {};
+    (tropheeData.trophees || []).forEach(t => {
+        if (!cats[t.categorie]) cats[t.categorie] = [];
+        cats[t.categorie].push(t);
+    });
+    let html = '';
+    for (const cat in cats) {
+        html += `<div class="mb-6">
+            <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">${escH(cat)}</h3>
+            <div class="grid grid-cols-3 md:grid-cols-5 gap-3">`;
+        cats[cat].forEach(t => {
+            html += `<div class="trophy-card ${t.unlocked?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100'} border rounded-2xl p-3 text-center cursor-pointer ${t.unlocked?'':'trophy-locked'}" onclick="openTropheeDetail(${esc(JSON.stringify(t))})">
+                <div class="text-3xl mb-1">🏆</div>
+                <p class="font-bold text-gray-800 text-xs leading-tight">${t.unlocked ? escH(t.nom) : '?'}</p>
+                ${t.unlocked ? `<p class="text-[9px] text-amber-600 mt-0.5">${t.count}/${t.quantite}</p>` : `<p class="text-[9px] text-gray-400 mt-0.5">${t.count}/${t.quantite}</p>`}
+            </div>`;
+        });
+        html += '</div></div>';
+    }
+    document.getElementById('salleContent').innerHTML = html || '<p class="text-center text-gray-400 py-8">Aucune récompense trouvée.</p>';
+    document.getElementById('modalSalle').classList.remove('hidden');
+}
+
+function openPersonnagePicker() {
+    if (!tropheeData) return;
+    const current = (tropheeData.prefs || {}).personnageChoisi || '';
+    const grid = document.getElementById('personnageGrid');
+    grid.innerHTML = (tropheeData.personnages || []).map(c => {
+        const locked = !c.unlocked;
+        const sel = c.ref === current;
+        return `<div class="perso-card rounded-2xl overflow-hidden bg-gray-50 ${sel?'selected':''} ${locked?'locked':''}" onclick="${locked?'':  `pickPersonnage('${c.ref}')`}">
+            <div class="aspect-square overflow-hidden bg-gray-200">
+                ${c.url ? `<img src="${escH(c.url)}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-4xl">👤</div>`}
+            </div>
+            <div class="p-2 text-center">
+                <p class="font-bold text-xs text-gray-800">${locked ? '???' : escH(c.nom)}</p>
+                <p class="text-[9px] text-gray-400">${locked ? 'Requis: '+c.xpRequired.toLocaleString('fr')+' XP' : '✅ Débloqué'}</p>
+            </div>
+        </div>`;
+    }).join('');
+    document.getElementById('modalPersonnage').classList.remove('hidden');
+}
+
+async function pickPersonnage(ref) {
+    if (!tropheeData) return;
+    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'personnageChoisi', val: ref});
+    tropheeData.prefs = tropheeData.prefs || {};
+    tropheeData.prefs.personnageChoisi = ref;
+    renderBanner(tropheeData);
+    closeModal('modalPersonnage');
+}
+
+function openEmblemePicker() {
+    if (!tropheeData) return;
+    const current = (tropheeData.prefs || {}).emblemeChoisi || '';
+    const unlockedTrophees = (tropheeData.trophees || []).filter(t => t.unlocked);
+    const grid = document.getElementById('emblemeGrid');
+    if (!unlockedTrophees.length) {
+        grid.innerHTML = '<p class="col-span-full text-center text-gray-400 py-8">Débloquez des trophées pour en choisir un comme emblème.</p>';
+        document.getElementById('modalEmbleme').classList.remove('hidden');
+        return;
+    }
+    grid.innerHTML = unlockedTrophees.map(t => {
+        const sel = t.id === current;
+        return `<div class="perso-card rounded-2xl p-4 bg-amber-50 border border-amber-100 text-center ${sel?'selected':''}" onclick="pickEmbleme('${t.id}')">
+            <div class="text-4xl mb-2">🏆</div>
+            <p class="font-bold text-xs text-gray-800">${escH(t.nom)}</p>
+            <p class="text-[9px] text-amber-600">${escH(t.categorie)}</p>
+        </div>`;
+    }).join('');
+    document.getElementById('modalEmbleme').classList.remove('hidden');
+}
+
+async function pickEmbleme(id) {
+    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'emblemeChoisi', val: id});
+    tropheeData.prefs = tropheeData.prefs || {};
+    tropheeData.prefs.emblemeChoisi = id;
+    renderBanner(tropheeData);
+    closeModal('modalEmbleme');
+}
+
+function editPseudo() {
+    const cur = (tropheeData && tropheeData.prefs) ? tropheeData.prefs.pseudo || '' : '';
+    document.getElementById('pseudoInput').value = cur || NOM_USER || '';
+    document.getElementById('modalPseudo').classList.remove('hidden');
+    setTimeout(() => document.getElementById('pseudoInput').focus(), 50);
+}
+
+async function savePseudo() {
+    const val = document.getElementById('pseudoInput').value.trim();
+    if (!val) return;
+    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'pseudo', val: val});
+    if (tropheeData) {
+        tropheeData.prefs = tropheeData.prefs || {};
+        tropheeData.prefs.pseudo = val;
+        document.getElementById('pseudoDisplay').textContent = val;
+    }
+    closeModal('modalPseudo');
+}
+
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(closeModal);
+    }
+    if (e.key === 'Enter' && !document.getElementById('modalPseudo').classList.contains('hidden')) savePseudo();
+});
+
+['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(id => {
+    document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) closeModal(id); });
+});
+
+function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+// Init
+loadData();
+</script>
+</body>
+</html>
