@@ -71,6 +71,7 @@
       <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
       <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
       <a href="vie_scolaire.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">🏫 Vie Scolaire</a>
+      <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
     </div>
   </div>
   <div class="flex items-center gap-3">
@@ -805,6 +806,7 @@ async function init(){
   document.getElementById('userBadge').textContent = (user.nom||'?') + ' · ' + (vieScRole||'Sans rôle');
   if (!vieScRole){ show('accessDenied'); return; }
   show('mainLayout');
+  if((user.email||'').toLowerCase()==='m.mokhtari@hecg.fr'){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
   ['notes','delegues','formateurs','planning','inscription','ged','qualiopi'].forEach(m => {
     if (canAccess(m)) show('nav-'+m);
@@ -2687,6 +2689,17 @@ async function saveSyntheseField(field, val){
   setTimeout(()=>{ statusEl.textContent=''; },2000);
 }
 
+function brToNl(s){ return (s||'').replace(/<br\s*\/?>/gi,'\n'); }
+function escTa(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderSyntheseText(s){
+  if(!s) return '<span style="color:#d1d5db;font-style:italic">—</span>';
+  var norm = s.replace(/<br\s*\/?>/gi,'\n');
+  var out  = norm.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  out = out.replace(/\*([^*\n]+)\*/g,'<strong>$1</strong>');
+  out = out.replace(/\n/g,'<br>');
+  return out;
+}
+
 function renderSyntheseSection(data){
   const isSA = vieScRole==='Super-admin';
   const grid = document.getElementById('syntheseGrid');
@@ -2704,13 +2717,13 @@ function renderSyntheseSection(data){
     grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
       <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
         <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
-        <textarea id="${f.id}" onblur="saveSyntheseField('${f.field}',this.value)" rows="${f.rows}" placeholder="${f.ph}" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:${f.mono?'monospace,inherit':'inherit'}">${escHtmlObj(f.val)}</textarea>
+        <textarea id="${f.id}" onblur="saveSyntheseField('${f.field}',this.value)" rows="${f.rows}" placeholder="${f.ph}" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:${f.mono?'monospace,inherit':'inherit'}">${escTa(brToNl(f.val))}</textarea>
       </div>`).join('')}</div>`;
   } else {
     grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
       <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
         <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
-        <div style="font-size:0.85rem;color:#374151;line-height:1.65;min-height:36px;white-space:pre-wrap;font-family:${f.mono?'monospace,inherit':'inherit'}">${f.val?escHtmlObj(f.val):'<span style="color:#d1d5db;font-style:italic">—</span>'}</div>
+        <div style="font-size:0.85rem;color:#374151;line-height:1.65;min-height:36px;font-family:${f.mono?'monospace,inherit':'inherit'}">${renderSyntheseText(f.val)}</div>
       </div>`).join('')}</div>`;
   }
 
