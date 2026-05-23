@@ -84,7 +84,7 @@
                 <div class="relative flex-shrink-0 text-center">
                     <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Emblème</p>
                     <div id="emblemeCircle" class="emblem-ring rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden mx-auto"
-                         style="width:110px;height:165px"
+                         style="width:165px;height:248px"
                          onclick="openEmblemePicker()" title="Changer d'emblème">
                         <span id="emblemeDisplay" class="text-5xl">🏆</span>
                     </div>
@@ -92,24 +92,24 @@
                 </div>
 
                 <!-- Center info -->
-                <div class="flex-1 min-w-0">
+                <div class="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
                     <div class="flex items-center gap-3 mb-1.5">
                         <h1 id="pseudoDisplay" class="text-white font-black text-3xl truncate cursor-pointer hover:text-amber-400" onclick="editPseudo()" title="Modifier pseudo">Chargement…</h1>
                         <span class="text-sm text-gray-400 cursor-pointer hover:text-amber-400" onclick="editPseudo()">✏️</span>
                     </div>
-                    <div id="niveauDisplay" class="text-base font-bold mb-4">Niveau 0</div>
+                    <div id="niveauDisplay" class="text-base font-bold mb-5">Niveau 0</div>
                     <!-- XP bar -->
-                    <div class="bg-gray-700 rounded-full h-4 w-full max-w-md">
+                    <div class="bg-gray-700 rounded-full h-4 w-full max-w-xs">
                         <div id="xpBarFill" class="xp-bar-fill h-4 rounded-full" style="width:0%"></div>
                     </div>
-                    <div class="text-sm text-gray-400 mt-1.5"><span id="xpDisplay">0 XP</span></div>
+                    <div class="text-sm text-gray-400 mt-2"><span id="xpDisplay">0 XP</span></div>
                 </div>
 
                 <!-- Character portrait -->
                 <div class="flex-shrink-0 text-center">
                     <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Personnage</p>
                     <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors mx-auto"
-                         style="width:100px;height:150px"
+                         style="width:150px;height:225px"
                          onclick="openPersonnagePicker()" title="Changer de personnage">
                         <img id="personnageImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;background:#000;display:none">
                         <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-4xl">👤</div>
