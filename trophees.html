@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -84,7 +84,7 @@
                 <div class="relative flex-shrink-0 text-center">
                     <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Emblème</p>
                     <div id="emblemeCircle" class="emblem-ring rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden mx-auto"
-                         style="width:80px;height:120px"
+                         style="width:110px;height:165px"
                          onclick="openEmblemePicker()" title="Changer d'emblème">
                         <span id="emblemeDisplay" class="text-5xl">🏆</span>
                     </div>
@@ -109,7 +109,7 @@
                 <div class="flex-shrink-0 text-center">
                     <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Personnage</p>
                     <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors mx-auto"
-                         style="width:72px;height:108px"
+                         style="width:100px;height:150px"
                          onclick="openPersonnagePicker()" title="Changer de personnage">
                         <img id="personnageImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;background:#000;display:none">
                         <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-4xl">👤</div>
@@ -186,18 +186,18 @@
         </div>
     </div>
 
-    <!-- MODAL: DETAIL TROPHEE -->
-    <div id="modalTrophee" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
-            <!-- Dark header zone with big trophy -->
-            <div id="tropheeDetailHeader" class="bg-gray-900 px-6 pt-6 pb-8 relative flex flex-col items-center" style="min-height:220px">
-                <button onclick="closeModal('modalTrophee')" class="absolute top-4 right-4 text-gray-500 hover:text-white font-bold text-xl leading-none">✕</button>
-                <div id="tropheeDetailImgWrap" class="flex items-center justify-center" style="height:160px"></div>
-                <h2 class="text-xl font-black text-white mt-4 text-center" id="tropheeDetailNom">Trophée</h2>
-                <p id="tropheeDetailTier" class="text-xs font-bold uppercase tracking-widest mt-1 text-amber-400"></p>
+    <!-- MODAL: DETAIL TROPHEE (quasi plein écran) -->
+    <div id="modalTrophee" class="fixed inset-0 z-50 hidden modal-backdrop flex items-end md:items-center justify-center">
+        <div class="bg-white w-full md:rounded-3xl shadow-2xl overflow-hidden flex flex-col" style="max-width:560px;max-height:96vh">
+            <!-- Zone sombre : trophée en grand -->
+            <div id="tropheeDetailHeader" class="bg-gray-950 relative flex flex-col items-center justify-center px-8 pt-10 pb-6 flex-shrink-0" style="background:#0a0a0f">
+                <button onclick="closeModal('modalTrophee')" class="absolute top-4 right-4 text-gray-500 hover:text-white font-bold text-2xl leading-none z-10">✕</button>
+                <div id="tropheeDetailImgWrap" class="flex items-center justify-center" style="min-height:300px"></div>
+                <h2 class="text-2xl font-black text-white mt-5 text-center leading-tight" id="tropheeDetailNom">Trophée</h2>
+                <p id="tropheeDetailTier" class="text-sm font-black uppercase tracking-widest mt-1.5 text-amber-400"></p>
             </div>
-            <!-- Info zone -->
-            <div id="tropheeDetailBody" class="p-6"></div>
+            <!-- Zone info scrollable -->
+            <div id="tropheeDetailBody" class="p-6 overflow-y-auto flex-shrink-0"></div>
         </div>
     </div>
 
@@ -567,7 +567,7 @@ function openTropheeDetail(t) {
     tierEl.className = 'text-xs font-bold uppercase tracking-widest mt-1 ' + tierColor;
 
     // Large trophy image
-    document.getElementById('tropheeDetailImgWrap').innerHTML = tropheeImg(t, true, 150);
+    document.getElementById('tropheeDetailImgWrap').innerHTML = tropheeImg(t, true, 300);
 
     // Info body
     const isEmbleme = tropheeData && tropheeData.prefs && tropheeData.prefs.emblemeChoisi === t.id;
