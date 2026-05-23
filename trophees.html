@@ -78,41 +78,44 @@
     <main class="max-w-6xl mx-auto p-6">
 
         <!-- BANNER -->
-        <div id="banner" class="banner-bg rounded-3xl p-6 mb-6 relative overflow-hidden">
-            <div class="flex items-center gap-6">
+        <div id="banner" class="banner-bg rounded-3xl p-8 mb-6 relative overflow-hidden">
+            <div class="flex items-center gap-8">
                 <!-- Emblem -->
-                <div class="relative flex-shrink-0">
-                    <div id="emblemeCircle" class="emblem-ring w-14 h-20 rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden"
+                <div class="relative flex-shrink-0 text-center">
+                    <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Emblème</p>
+                    <div id="emblemeCircle" class="emblem-ring rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden mx-auto"
+                         style="width:80px;height:120px"
                          onclick="openEmblemePicker()" title="Changer d'emblème">
-                        <span id="emblemeDisplay" class="text-4xl">🏆</span>
+                        <span id="emblemeDisplay" class="text-5xl">🏆</span>
                     </div>
-                    <div class="absolute -bottom-1 -right-1 bg-amber-500 rounded-full w-6 h-6 flex items-center justify-center text-xs font-black text-white cursor-pointer" onclick="openEmblemePicker()">✏️</div>
+                    <p class="text-[10px] text-gray-500 cursor-pointer hover:text-amber-400 mt-1.5" onclick="openEmblemePicker()">Changer ✏️</p>
                 </div>
 
                 <!-- Center info -->
                 <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-3 mb-1">
-                        <h1 id="pseudoDisplay" class="text-white font-black text-2xl truncate cursor-pointer hover:text-amber-400" onclick="editPseudo()" title="Modifier pseudo">Chargement…</h1>
-                        <span class="text-xs text-gray-400 cursor-pointer hover:text-amber-400" onclick="editPseudo()">✏️</span>
+                    <div class="flex items-center gap-3 mb-1.5">
+                        <h1 id="pseudoDisplay" class="text-white font-black text-3xl truncate cursor-pointer hover:text-amber-400" onclick="editPseudo()" title="Modifier pseudo">Chargement…</h1>
+                        <span class="text-sm text-gray-400 cursor-pointer hover:text-amber-400" onclick="editPseudo()">✏️</span>
                     </div>
-                    <div id="niveauDisplay" class="text-sm font-bold mb-3">Niveau 0</div>
+                    <div id="niveauDisplay" class="text-base font-bold mb-4">Niveau 0</div>
                     <!-- XP bar -->
-                    <div class="bg-gray-700 rounded-full h-3 w-full max-w-sm">
-                        <div id="xpBarFill" class="xp-bar-fill h-3 rounded-full" style="width:0%"></div>
+                    <div class="bg-gray-700 rounded-full h-4 w-full max-w-md">
+                        <div id="xpBarFill" class="xp-bar-fill h-4 rounded-full" style="width:0%"></div>
                     </div>
-                    <div class="text-xs text-gray-400 mt-1"><span id="xpDisplay">0 XP</span></div>
+                    <div class="text-sm text-gray-400 mt-1.5"><span id="xpDisplay">0 XP</span></div>
                 </div>
 
                 <!-- Character portrait -->
                 <div class="flex-shrink-0 text-center">
-                    <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors"
-                         style="width:56px;height:84px"
+                    <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Personnage</p>
+                    <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors mx-auto"
+                         style="width:72px;height:108px"
                          onclick="openPersonnagePicker()" title="Changer de personnage">
                         <img id="personnageImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;background:#000;display:none">
-                        <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-3xl">👤</div>
+                        <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-4xl">👤</div>
                     </div>
-                    <p id="personnageNom" class="text-xs text-amber-400 font-bold mt-1"></p>
-                    <p class="text-xs text-gray-500 cursor-pointer hover:text-amber-400 mt-0.5" onclick="openPersonnagePicker()">Changer ✏️</p>
+                    <p id="personnageNom" class="text-xs text-amber-400 font-bold mt-1.5 truncate max-w-[80px]"></p>
+                    <p class="text-[10px] text-gray-500 cursor-pointer hover:text-amber-400 mt-0.5" onclick="openPersonnagePicker()">Changer ✏️</p>
                 </div>
             </div>
         </div>
@@ -185,12 +188,16 @@
 
     <!-- MODAL: DETAIL TROPHEE -->
     <div id="modalTrophee" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
-            <div class="flex justify-between items-start mb-4">
-                <h2 class="text-lg font-black text-gray-800" id="tropheeDetailNom">Trophée</h2>
-                <button onclick="closeModal('modalTrophee')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <!-- Dark header zone with big trophy -->
+            <div id="tropheeDetailHeader" class="bg-gray-900 px-6 pt-6 pb-8 relative flex flex-col items-center" style="min-height:220px">
+                <button onclick="closeModal('modalTrophee')" class="absolute top-4 right-4 text-gray-500 hover:text-white font-bold text-xl leading-none">✕</button>
+                <div id="tropheeDetailImgWrap" class="flex items-center justify-center" style="height:160px"></div>
+                <h2 class="text-xl font-black text-white mt-4 text-center" id="tropheeDetailNom">Trophée</h2>
+                <p id="tropheeDetailTier" class="text-xs font-bold uppercase tracking-widest mt-1 text-amber-400"></p>
             </div>
-            <div id="tropheeDetailBody"></div>
+            <!-- Info zone -->
+            <div id="tropheeDetailBody" class="p-6"></div>
         </div>
     </div>
 
@@ -387,10 +394,11 @@ function renderKPIs(d) {
     }).join('');
 }
 
-function tropheeImg(t, big) {
-    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${big?'68px':'48px'};height:${big?'68px':'48px'};object-fit:contain;background:#000;border-radius:10px;display:block">`;
+function tropheeImg(t, big, overrideSz) {
+    const sz = overrideSz != null ? overrideSz : (big ? 70 : 48);
+    const rad = sz > 90 ? 18 : 10;
+    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${sz}px;height:${sz}px;object-fit:contain;background:#000;border-radius:${rad}px;display:block">`;
     const tier = (t.tier||'').toLowerCase();
-    const sz = big ? 70 : 48;
     const isRw = tier === 'arc-en-ciel';
     const cls = isRw ? 'trophy-rw-anim' : '';
     const uid = Math.random().toString(36).slice(2,9);
@@ -548,18 +556,48 @@ function filterActions() {
 }
 
 function openTropheeDetail(t) {
-    document.getElementById('tropheeDetailNom').textContent = t.unlocked ? t.nom : '???';
     const pct = t.quantite > 0 ? Math.min(100, Math.round(t.count / t.quantite * 100)) : 100;
+    const tierLabel = {bronze:'Bronze',argent:'Argent',or:'Or','arc-en-ciel':'Arc-en-ciel'}[(t.tier||'').toLowerCase()] || '';
+    const tierColor = {bronze:'text-amber-700',argent:'text-slate-400',or:'text-amber-400','arc-en-ciel':'level-rainbow'}[(t.tier||'').toLowerCase()] || 'text-amber-400';
+
+    // Header zone
+    document.getElementById('tropheeDetailNom').textContent = t.unlocked ? t.nom : '???';
+    const tierEl = document.getElementById('tropheeDetailTier');
+    tierEl.textContent = tierLabel;
+    tierEl.className = 'text-xs font-bold uppercase tracking-widest mt-1 ' + tierColor;
+
+    // Large trophy image
+    document.getElementById('tropheeDetailImgWrap').innerHTML = tropheeImg(t, true, 150);
+
+    // Info body
+    const isEmbleme = tropheeData && tropheeData.prefs && tropheeData.prefs.emblemeChoisi === t.id;
     document.getElementById('tropheeDetailBody').innerHTML = `
-        <div class="mb-4 flex justify-center">${tropheeImg(t, true)}</div>
-        <div class="bg-gray-50 rounded-xl p-3 mb-3">
-            <p class="text-xs text-gray-500 mb-1">Catégorie : <strong>${escH(t.categorie)}</strong></p>
-            <p class="text-xs text-gray-500 mb-1">Progression : ${t.count} / ${t.quantite} ${escH(XP_LABELS[t.catKey]||t.categorie)}</p>
-            <div class="bg-gray-200 rounded-full h-2 mt-2"><div class="bg-amber-500 h-2 rounded-full" style="width:${pct}%"></div></div>
+        <div class="flex gap-3 mb-4">
+            <div class="flex-1 bg-gray-50 rounded-2xl p-3 text-center">
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest font-black mb-1">Catégorie</p>
+                <p class="text-sm font-black text-gray-800">${escH(t.categorie)}</p>
+            </div>
+            <div class="flex-1 bg-gray-50 rounded-2xl p-3 text-center">
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest font-black mb-1">Progression</p>
+                <p class="text-sm font-black text-gray-800">${t.count} <span class="text-gray-400 font-normal">/ ${t.quantite}</span></p>
+            </div>
         </div>
-        ${t.unlocked ? `<p class="text-xs text-amber-600 font-bold text-center">✅ Débloqué${t.dateObtention ? ' le '+escH(t.dateObtention) : ''}</p>` : `<p class="text-xs text-gray-400 text-center">🔒 Encore ${t.quantite - t.count} ${escH(XP_LABELS[t.catKey]||t.categorie)} à faire</p>`}
+        <div class="bg-gray-100 rounded-full h-2 mb-4"><div class="bg-amber-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>
+        ${t.unlocked ? `
+            <p class="text-xs text-green-600 font-bold text-center mb-4">✅ Débloqué${t.dateObtention ? ' le '+escH(t.dateObtention) : ''}</p>
+            <button onclick="pickEmblemeFromDetail('${esc(t.id)}')" class="w-full py-2.5 rounded-xl font-black text-sm transition ${isEmbleme ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200'}">
+                ${isEmbleme ? '🏅 Emblème actuel' : '🏅 Définir comme emblème'}
+            </button>` : `<p class="text-xs text-gray-400 text-center">🔒 Encore ${t.quantite - t.count} ${escH(XP_LABELS[t.catKey]||t.categorie)} à faire</p>`}
     `;
     document.getElementById('modalTrophee').classList.remove('hidden');
+}
+
+async function pickEmblemeFromDetail(id) {
+    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'emblemeChoisi', val: id});
+    tropheeData.prefs = tropheeData.prefs || {};
+    tropheeData.prefs.emblemeChoisi = id;
+    renderBanner(tropheeData);
+    closeModal('modalTrophee');
 }
 
 function openSalleRecompenses() {
