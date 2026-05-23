@@ -44,6 +44,11 @@
             100% { filter: hue-rotate(360deg) brightness(1.06) drop-shadow(0 0 7px rgba(136,48,232,0.9)); }
         }
         .trophy-rw-anim { animation: trophyRainbow 8s ease-in-out infinite; display:inline-block; }
+        @keyframes notifPop {
+            from { transform: scale(0.72) translateY(20px); opacity: 0; }
+            to   { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .notif-pop { animation: notifPop 0.42s cubic-bezier(0.34,1.56,0.64,1); }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -77,7 +82,7 @@
             <div class="flex items-center gap-6">
                 <!-- Emblem -->
                 <div class="relative flex-shrink-0">
-                    <div id="emblemeCircle" class="emblem-ring w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center cursor-pointer overflow-hidden"
+                    <div id="emblemeCircle" class="emblem-ring w-14 h-20 rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden"
                          onclick="openEmblemePicker()" title="Changer d'emblème">
                         <span id="emblemeDisplay" class="text-4xl">🏆</span>
                     </div>
@@ -100,9 +105,10 @@
 
                 <!-- Character portrait -->
                 <div class="flex-shrink-0 text-center">
-                    <div id="personnagePortrait" class="w-24 h-24 rounded-2xl bg-gray-700 overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors"
+                    <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors"
+                         style="width:56px;height:84px"
                          onclick="openPersonnagePicker()" title="Changer de personnage">
-                        <img id="personnageImg" src="" alt="" class="w-full h-full object-cover hidden">
+                        <img id="personnageImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;background:#000;display:none">
                         <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-3xl">👤</div>
                     </div>
                     <p id="personnageNom" class="text-xs text-amber-400 font-bold mt-1"></p>
@@ -210,6 +216,20 @@
         </div>
     </div>
 
+    <!-- NOTIFICATION: NOUVEAU TROPHEE DEBLOQUE -->
+    <div id="notifTrophee" class="fixed inset-0 z-[200] hidden items-center justify-center" style="background:rgba(0,0,0,0.85)">
+        <div id="notifTropheeBox" class="notif-pop bg-white rounded-3xl shadow-2xl p-8 max-w-xs w-full text-center mx-4">
+            <div class="text-5xl mb-3">🎉</div>
+            <p class="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Nouveau trophée débloqué !</p>
+            <h2 class="text-2xl font-black text-amber-500 mb-5">Félicitations !</h2>
+            <div id="notifTropheeImg" class="flex justify-center items-center mb-4" style="min-height:72px"></div>
+            <p id="notifTropheeName" class="font-black text-gray-800 text-base mb-2"></p>
+            <p id="notifTropheeCategorie" class="text-xs text-amber-600 mb-6"></p>
+            <button onclick="nextNotif()" class="bg-amber-500 text-white font-black px-8 py-3 rounded-xl hover:bg-amber-600 active:scale-95 transition w-full text-sm">Continuer →</button>
+            <p id="notifCounter" class="text-xs text-gray-400 mt-3"></p>
+        </div>
+    </div>
+
     <!-- MODAL: EDIT PSEUDO -->
     <div id="modalPseudo" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
@@ -261,9 +281,10 @@ async function loadData(force) {
         const badgeEl = document.getElementById('navTropheesBadge');
         if (badgeEl) badgeEl.style.display = 'none';
 
-        // Marquer vus
+        // Marquer vus + notifier
         if (res.newUnlocks && res.newUnlocks.length > 0) {
             apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
+            showTropheeNotifs(res.newUnlocks);
         }
     } catch(e) { console.error(e); }
 }
@@ -306,7 +327,7 @@ function renderBanner(d) {
     if (emblemeT) {
         emblemeEl.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center';
         if (emblemeT.url) {
-            emblemeEl.innerHTML = `<img src="${escH(emblemeT.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+            emblemeEl.innerHTML = `<img src="${escH(driveImg(emblemeT.url))}" style="width:100%;height:100%;object-fit:contain;background:#000">`;
         } else {
             emblemeEl.innerHTML = tropheeImg(emblemeT, true);
         }
@@ -320,7 +341,7 @@ function renderBanner(d) {
     const specialUnlocked = (d.trophees || []).filter(t => t.unlocked && (t.catKey === 'Special' || t.categorie === 'Spécial') && t.url);
     const banner = document.getElementById('banner');
     if (specialUnlocked.length > 0) {
-        const bgUrl = specialUnlocked[specialUnlocked.length - 1].url;
+        const bgUrl = driveImg(specialUnlocked[specialUnlocked.length - 1].url);
         banner.style.backgroundImage = `url('${bgUrl}')`;
         banner.style.backgroundSize = 'cover';
         banner.style.backgroundPosition = 'center';
@@ -333,19 +354,20 @@ function renderBanner(d) {
     // Personnage
     const persoRef = prefs.personnageChoisi;
     const perso = persoRef && d.personnages ? d.personnages.find(c => c.ref === persoRef && c.unlocked) : (d.personnages || []).find(c => c.unlocked);
-    if (perso) {
-        if (perso.url) {
-            document.getElementById('personnageImg').src = perso.url;
-            document.getElementById('personnageImg').classList.remove('hidden');
-            document.getElementById('personnagePlaceholder').classList.add('hidden');
-        } else {
-            document.getElementById('personnageImg').classList.add('hidden');
-            document.getElementById('personnagePlaceholder').classList.remove('hidden');
-        }
+    const pImg = document.getElementById('personnageImg');
+    const pPh  = document.getElementById('personnagePlaceholder');
+    if (perso && perso.url) {
+        pImg.src = driveImg(perso.url);
+        pImg.style.display = 'block';
+        pPh.style.display  = 'none';
+        document.getElementById('personnageNom').textContent = perso.nom;
+    } else if (perso) {
+        pImg.style.display = 'none';
+        pPh.style.display  = 'flex';
         document.getElementById('personnageNom').textContent = perso.nom;
     } else {
-        document.getElementById('personnageImg').classList.add('hidden');
-        document.getElementById('personnagePlaceholder').classList.remove('hidden');
+        pImg.style.display = 'none';
+        pPh.style.display  = 'flex';
         document.getElementById('personnageNom').textContent = '';
     }
 }
@@ -366,7 +388,7 @@ function renderKPIs(d) {
 }
 
 function tropheeImg(t, big) {
-    if (t.url) return `<img src="${escH(t.url)}" class="${big?'w-16 h-16':'w-12 h-12'} object-contain rounded-xl">`;
+    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${big?'68px':'48px'};height:${big?'68px':'48px'};object-fit:contain;background:#000;border-radius:10px;display:block">`;
     const tier = (t.tier||'').toLowerCase();
     const sz = big ? 70 : 48;
     const isRw = tier === 'arc-en-ciel';
@@ -574,7 +596,7 @@ function openPersonnagePicker() {
         const sel = c.ref === current;
         return `<div class="perso-card rounded-2xl overflow-hidden bg-gray-50 ${sel?'selected':''} ${locked?'locked':''}" onclick="${locked?'':  `pickPersonnage('${c.ref}')`}">
             <div class="aspect-square overflow-hidden bg-gray-200">
-                ${c.url ? `<img src="${escH(c.url)}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-4xl">👤</div>`}
+                ${c.url ? `<img src="${escH(driveImg(c.url))}" class="w-full h-full" style="object-fit:contain;background:#000">` : `<div class="w-full h-full flex items-center justify-center text-4xl">👤</div>`}
             </div>
             <div class="p-2 text-center">
                 <p class="font-bold text-xs text-gray-800">${locked ? '???' : escH(c.nom)}</p>
@@ -646,6 +668,9 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+        // Dismiss notification first if open
+        const notif = document.getElementById('notifTrophee');
+        if (!notif.classList.contains('hidden')) { nextNotif(); return; }
         ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(closeModal);
     }
     if (e.key === 'Enter' && !document.getElementById('modalPseudo').classList.contains('hidden')) savePseudo();
@@ -654,9 +679,53 @@ document.addEventListener('keydown', e => {
 ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(id => {
     document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) closeModal(id); });
 });
+// Click outside notif box → next
+document.getElementById('notifTrophee').addEventListener('click', function(e){ if(e.target===this) nextNotif(); });
 
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function esc(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+// Converts any Google Drive share link to a direct-embed URL
+function driveImg(url) {
+    if (!url) return '';
+    // Extract file ID from share URL  → use thumbnail endpoint (most reliable for <img src>)
+    const m = url.match(/\/file\/d\/([^\/\?#]+)/) || url.match(/[?&]id=([^&]+)/);
+    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
+    // Already a direct embed or other URL — return as-is
+    return url;
+}
+
+// Trophy unlock notification queue
+let notifQueue = [];
+let notifIdx = 0;
+
+function showTropheeNotifs(newUnlockIds) {
+    if (!newUnlockIds || !newUnlockIds.length) return;
+    const all = (tropheeData && tropheeData.trophees) || [];
+    notifQueue = newUnlockIds.map(id => all.find(t => t.id === id)).filter(Boolean);
+    notifIdx = 0;
+    if (notifQueue.length) _showNotifAt(0);
+}
+
+function _showNotifAt(idx) {
+    const overlay = document.getElementById('notifTrophee');
+    if (idx >= notifQueue.length) { overlay.style.display = ''; overlay.classList.add('hidden'); return; }
+    const t = notifQueue[idx];
+    document.getElementById('notifTropheeImg').innerHTML = tropheeImg(t, true);
+    document.getElementById('notifTropheeName').textContent = t.nom;
+    document.getElementById('notifTropheeCategorie').textContent = t.categorie || '';
+    const ctr = document.getElementById('notifCounter');
+    ctr.textContent = notifQueue.length > 1 ? (idx+1) + ' / ' + notifQueue.length : '';
+    // Re-trigger animation
+    const box = document.getElementById('notifTropheeBox');
+    box.classList.remove('notif-pop');
+    void box.offsetWidth;
+    box.classList.add('notif-pop');
+    overlay.style.display = 'flex';
+    overlay.classList.remove('hidden');
+}
+
+function nextNotif() { notifIdx++; _showNotifAt(notifIdx); }
 
 // Init
 loadData();
