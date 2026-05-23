@@ -44,6 +44,14 @@
             100% { filter: hue-rotate(360deg) brightness(1.06) drop-shadow(0 0 7px rgba(136,48,232,0.9)); }
         }
         .trophy-rw-anim { animation: trophyRainbow 8s ease-in-out infinite; display:inline-block; }
+        @keyframes borderNeonRainbow {
+            0%   { border-color:#e879f9; box-shadow:0 0 12px rgba(232,121,249,0.85),0 0 28px rgba(232,121,249,0.3); }
+            25%  { border-color:#3b82f6; box-shadow:0 0 12px rgba(59,130,246,0.85),0 0 28px rgba(59,130,246,0.3); }
+            50%  { border-color:#22c55e; box-shadow:0 0 12px rgba(34,197,94,0.85),0 0 28px rgba(34,197,94,0.3); }
+            75%  { border-color:#f59e0b; box-shadow:0 0 12px rgba(245,158,11,0.85),0 0 28px rgba(245,158,11,0.3); }
+            100% { border-color:#e879f9; box-shadow:0 0 12px rgba(232,121,249,0.85),0 0 28px rgba(232,121,249,0.3); }
+        }
+        .portrait-rainbow-border { animation: borderNeonRainbow 3s ease-in-out infinite; }
         @keyframes notifPop {
             from { transform: scale(0.72) translateY(20px); opacity: 0; }
             to   { transform: scale(1) translateY(0); opacity: 1; }
@@ -297,9 +305,9 @@ async function loadData(force) {
 }
 
 function getNiveauLabel(n) {
-    if (n <= 3) return {label: 'Niveau ' + n + ' — Bronzé', cls: 'level-bronze'};
-    if (n <= 8) return {label: 'Niveau ' + n + ' — Doré', cls: 'level-gold'};
-    return {label: 'Niveau ' + n + ' — Légendaire', cls: 'level-rainbow'};
+    if (n <= 3) return {label: 'Niveau ' + n, cls: 'level-bronze', tier: 'bronze'};
+    if (n <= 8) return {label: 'Niveau ' + n, cls: 'level-gold',   tier: 'or'};
+    return      {label: 'Niveau ' + n, cls: 'level-rainbow',        tier: 'rainbow'};
 }
 
 function renderBanner(d) {
@@ -316,9 +324,26 @@ function renderBanner(d) {
 
     // Niveau + nom de l'emblème sélectionné
     const niveauEl = document.getElementById('niveauDisplay');
-    niveauEl.className = 'text-sm font-bold mb-3 ' + nl.cls;
+    niveauEl.className = 'text-base font-bold mb-5 ' + nl.cls;
     const embLabel = emblemeT ? `<span style="-webkit-text-fill-color:rgba(255,255,255,0.5);color:rgba(255,255,255,0.5);font-weight:400;font-size:0.7rem;margin-left:8px">· ${escH(emblemeT.nom)}</span>` : '';
     niveauEl.innerHTML = nl.label + embLabel;
+
+    // Liseré neon sur le portrait selon le tier du niveau
+    const portrait = document.getElementById('personnagePortrait');
+    portrait.classList.remove('portrait-rainbow-border');
+    if (nl.tier === 'bronze') {
+        portrait.style.borderColor = '#c87832';
+        portrait.style.boxShadow   = '0 0 10px rgba(200,120,50,0.8), 0 0 22px rgba(200,120,50,0.35)';
+        portrait.style.animation   = '';
+    } else if (nl.tier === 'or') {
+        portrait.style.borderColor = '#f59e0b';
+        portrait.style.boxShadow   = '0 0 13px rgba(245,158,11,0.9), 0 0 28px rgba(245,158,11,0.4)';
+        portrait.style.animation   = '';
+    } else {
+        portrait.style.borderColor = '';
+        portrait.style.boxShadow   = '';
+        portrait.classList.add('portrait-rainbow-border');
+    }
 
     document.getElementById('xpDisplay').textContent = xp.toLocaleString('fr') + ' XP';
 
@@ -497,12 +522,35 @@ function openTropheeById(id) {
 
 function renderTrophees(d) {
     const grid = document.getElementById('tropheesGrid');
-    const unlocked = (d.trophees || []).filter(t => t.unlocked);
+    const all      = d.trophees || [];
+    const unlocked = all.filter(t => t.unlocked);
+
+    // Comptage par tier
+    const tc = {bronze:0, argent:0, or:0, 'arc-en-ciel':0};
+    unlocked.forEach(t => { const k = (t.tier||'').toLowerCase(); if (k in tc) tc[k]++; });
+
+    const tierBadges = [
+        {k:'bronze',       label:'Bronze',      col:'#c87832', bg:'rgba(200,120,50,0.12)'},
+        {k:'argent',       label:'Argent',      col:'#8ab0cc', bg:'rgba(138,176,204,0.12)'},
+        {k:'or',           label:'Or',          col:'#d4b018', bg:'rgba(212,176,24,0.12)'},
+        {k:'arc-en-ciel',  label:'Incandescent',col:'#a855f7', bg:'rgba(168,85,247,0.10)'},
+    ];
+    const statsBar = `<div class="col-span-full flex flex-wrap gap-3 mb-2">
+        <div class="flex-1 min-w-[120px] bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center">
+            <p class="text-[10px] font-black text-amber-500 uppercase tracking-widest">Total</p>
+            <p class="text-2xl font-black text-gray-800 mt-0.5">${unlocked.length}<span class="text-sm text-gray-400 font-normal"> / ${all.length}</span></p>
+        </div>
+        ${tierBadges.map(b => `<div class="flex-1 min-w-[90px] rounded-2xl px-3 py-3 text-center border" style="background:${b.bg};border-color:${b.col}40">
+            <p class="text-[10px] font-black uppercase tracking-widest" style="color:${b.col}">${b.label}</p>
+            <p class="text-xl font-black text-gray-800 mt-0.5">${tc[b.k]}</p>
+        </div>`).join('')}
+    </div>`;
+
     if (!unlocked.length) {
-        grid.innerHTML = '<p class="text-gray-400 text-sm col-span-full text-center py-8">Aucun trophée débloqué pour l\'instant. Continue tes efforts ! 💪</p>';
+        grid.innerHTML = statsBar + '<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée débloqué pour l\'instant. Continue tes efforts ! 💪</p>';
         return;
     }
-    grid.innerHTML = unlocked.map(t => `
+    grid.innerHTML = statsBar + unlocked.map(t => `
         <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
             <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
             <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
