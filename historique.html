@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historique & Audit - HECG</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -39,11 +40,12 @@
             </div>
             <div class="flex space-x-3">
                 <button onclick="loadHistory()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
+                <button id="btnRapport" onclick="toggleRapport()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition">📊 Rapport</button>
                 <button onclick="exportCSV()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions filtrées</p>
                 <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpi-total">0</p>
@@ -63,6 +65,16 @@
             <div class="bg-orange-50 p-5 rounded-2xl shadow-sm border border-orange-100">
                 <p class="text-[10px] font-black text-orange-600 uppercase tracking-widest">Autres Actions</p>
                 <p class="text-3xl font-black text-orange-700 mt-1" id="kpi-action">0</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-4">🏆 Encadrants les plus actifs</p>
+                <div id="rankingEncadrant"><p class="text-xs text-gray-400 italic">Chargement…</p></div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4">🎓 Étudiants les plus suivis</p>
+                <div id="rankingEtudiant"><p class="text-xs text-gray-400 italic">Chargement…</p></div>
             </div>
         </div>
 <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 space-y-4">
@@ -123,6 +135,28 @@
             </div>
         </div>
         
+        <!-- RAPPORT -->
+        <div id="rapportPanel" class="hidden bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-base font-black text-gray-800">📊 Rapport d'activité — <span id="rapportPeriodLabel" class="text-[#1A4E8A] font-black">période filtrée</span></h2>
+                <button onclick="toggleRapport()" class="text-gray-400 hover:text-gray-700 font-bold text-xl leading-none">✕</button>
+            </div>
+            <div class="mb-8">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">📈 Évolution des actions</p>
+                <div style="height:200px"><canvas id="chartTimeline"></canvas></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">👤 Répartition par encadrant</p>
+                    <div style="height:260px"><canvas id="chartPersonnel"></canvas></div>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">🎓 Activité par étudiant</p>
+                    <div style="height:260px"><canvas id="chartEtudiant"></canvas></div>
+                </div>
+            </div>
+        </div>
+
         <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
@@ -258,7 +292,48 @@
             });
 
             updateKPIs(filteredLogs);
+            updateLeaders(filteredLogs);
             renderLogs(filteredLogs);
+            updateRapportCharts();
+        }
+
+        function updateLeaders(logs) {
+            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant'];
+            const byPerson = {}, byStudent = {};
+            logs.forEach(log => {
+                const a = getSafeValue(log, ['auteur']) || 'Inconnu';
+                byPerson[a] = (byPerson[a] || 0) + 1;
+                const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
+                if (STU_CATS.some(c => cat.includes(c))) {
+                    const cible = getSafeValue(log, ['cible']) || '';
+                    if (cible) byStudent[cible] = (byStudent[cible] || 0) + 1;
+                }
+            });
+            renderRanking('rankingEncadrant', byPerson, '#1A4E8A');
+            renderRanking('rankingEtudiant', byStudent, '#f59e0b');
+        }
+
+        function renderRanking(containerId, countMap, color) {
+            const container = document.getElementById(containerId);
+            const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+            const entries = Object.entries(countMap).sort((a,b) => b[1]-a[1]).slice(0,5);
+            if (!entries.length) { container.innerHTML = '<p class="text-xs text-gray-400 italic text-center py-4">Aucune donnée sur cette période</p>'; return; }
+            const max = entries[0][1];
+            container.innerHTML = entries.map(([name, count], i) => {
+                const pct = Math.round(count / max * 100);
+                return `<div class="flex items-center gap-3 mb-3">
+                    <span class="text-lg shrink-0 w-7 text-center">${MEDALS[i]}</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-black text-gray-800 truncate">${name}</span>
+                            <span class="text-[10px] font-black ml-2 shrink-0" style="color:${color}">${count} action${count>1?'s':''}</span>
+                        </div>
+                        <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
         }
 
         function updateKPIs(logs) {
@@ -349,6 +424,121 @@
             document.getElementById('fDateFin').value = "";
             applyFilters();
         }
+
+        // ===================== RAPPORT =====================
+        let rapportOpen = false;
+        let chartTimeline = null, chartPersonnel = null, chartEtudiant = null;
+        const PIE_COLORS = ['#1A4E8A','#F26522','#22c55e','#f59e0b','#a855f7','#ef4444','#3b82f6','#14b8a6','#ec4899','#84cc16'];
+
+        function toggleRapport() {
+            rapportOpen = !rapportOpen;
+            document.getElementById('rapportPanel').classList.toggle('hidden', !rapportOpen);
+            document.getElementById('btnRapport').classList.toggle('bg-[#1A4E8A]', !rapportOpen);
+            document.getElementById('btnRapport').classList.toggle('bg-blue-800', rapportOpen);
+            if (rapportOpen) updateRapportCharts();
+        }
+
+        function updateRapportCharts() {
+            if (!rapportOpen) return;
+            // Label période
+            const deb = document.getElementById('fDateDebut').value;
+            const fin = document.getElementById('fDateFin').value;
+            const lbl = (deb || fin) ? ((deb || '…') + ' → ' + (fin || '…')) : 'toute la période';
+            document.getElementById('rapportPeriodLabel').textContent = lbl + ' (' + filteredLogs.length + ' actions)';
+            buildTimelineChart();
+            buildPersonnelChart();
+            buildStudentChart();
+        }
+
+        function buildTimelineChart() {
+            const byDay = {};
+            filteredLogs.forEach(log => {
+                const dv = getSafeValue(log, ['date']);
+                if (!dv) return;
+                const d = new Date(dv);
+                if (isNaN(d)) return;
+                const key = d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+                byDay[key] = (byDay[key] || 0) + 1;
+            });
+            const parseKey = k => { const [d,m,y] = k.split('/'); return new Date(y, m-1, d); };
+            const labels = Object.keys(byDay).sort((a,b) => parseKey(a) - parseKey(b));
+            const ctx = document.getElementById('chartTimeline').getContext('2d');
+            if (chartTimeline) chartTimeline.destroy();
+            chartTimeline = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ label: 'Actions', data: labels.map(k => byDay[k]), backgroundColor: 'rgba(26,78,138,0.75)', borderColor: '#1A4E8A', borderWidth: 1, borderRadius: 4 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { font: { weight: 'bold', size: 9 }, maxRotation: 45 } },
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold', size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        function buildPersonnelChart() {
+            const byPerson = {};
+            filteredLogs.forEach(log => {
+                const a = getSafeValue(log, ['auteur']) || 'Inconnu';
+                byPerson[a] = (byPerson[a] || 0) + 1;
+            });
+            const entries = Object.entries(byPerson).sort((a,b) => b[1]-a[1]).slice(0,10);
+            if (!entries.length) return;
+            const ctx = document.getElementById('chartPersonnel').getContext('2d');
+            if (chartPersonnel) chartPersonnel.destroy();
+            chartPersonnel = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: entries.map(e => e[0]),
+                    datasets: [{ data: entries.map(e => e[1]), backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#fff' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 10 } },
+                        tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ' : ' + ctx.raw + ' actions (' + Math.round(ctx.parsed / filteredLogs.length * 100) + '%)' } }
+                    }
+                }
+            });
+        }
+
+        function buildStudentChart() {
+            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant'];
+            const byStudent = {};
+            filteredLogs.forEach(log => {
+                const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
+                if (!STU_CATS.some(c => cat.includes(c))) return;
+                const cible = getSafeValue(log, ['cible']) || '-';
+                if (cible === '-' || !cible) return;
+                byStudent[cible] = (byStudent[cible] || 0) + 1;
+            });
+            const entries = Object.entries(byStudent).sort((a,b) => b[1]-a[1]).slice(0,10);
+            const ctx = document.getElementById('chartEtudiant').getContext('2d');
+            if (chartEtudiant) chartEtudiant.destroy();
+            if (!entries.length) {
+                chartEtudiant = null;
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'center';
+                ctx.fillText('Aucune action étudiant sur cette période', ctx.canvas.width/2, 100);
+                return;
+            }
+            chartEtudiant = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: entries.map(e => e[0]),
+                    datasets: [{ data: entries.map(e => e[1]), backgroundColor: [...PIE_COLORS].reverse(), borderWidth: 2, borderColor: '#fff' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 10 } } }
+                }
+            });
+        }
+        // ====================================================
 
         function exportCSV() {
             if (filteredLogs.length === 0) return alert("Rien à exporter !");
