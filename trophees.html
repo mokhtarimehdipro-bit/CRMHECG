@@ -880,10 +880,7 @@ function computeCompetences(actionRows, count) {
     // Missions: missions clôturées (1 point par mission — déjà calculé en backend)
     const missionsScore  = count.Missions || 0;
     // Vie scolaire: toutes actions vie scolaire ÷ 5
-    const vieScolaireAll = actionRows.filter(r => {
-        const cat = (r.categorie || '').toLowerCase();
-        return cat.includes('scolaire') || cat === 'notes' || cat.includes('délégué') || cat === 'matière' || cat.includes('note vie');
-    }).length;
+    const vieScolaireAll = actionRows.filter(r => r.categorie === 'Vie scolaire').length;
 
     const s = {
         offres:      Math.min(100, Math.round(offresAll / 5)),
