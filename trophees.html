@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -605,12 +605,13 @@
         }
 
         function downloadCSV(data, filename) {
-            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Dernier Échange\n";
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Date dernier échange;Contenu dernier échange\n";
             data.forEach(p => {
                 const c = p.contacts[0] || {};
                 const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
-                const dernierEchange = (p.dernierEchange || '').replace(/"/g, '""');
-                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dernierEchange}"\n`;
+                const dateEchange = (p.dateEchange || '').replace(/"/g, '""');
+                const contenuEchange = (p.contenuEchange || '').replace(/"/g, '""');
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dateEchange}";"${contenuEchange}"\n`;
             });
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
