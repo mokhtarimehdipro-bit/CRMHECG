@@ -206,7 +206,7 @@
         
         let currentOffres = [];
         let showObsolete = false;
-        let showPartagee = false;
+        let showPartagee = true;
         let _statsClickData = [];
 
         // --- POSTIER CENTRAL ---
@@ -309,16 +309,16 @@
                 return matchSearch && matchQualite && matchPartage && matchVille && matchEntreprise && matchDate;
             });
 
-            // Masquer les obsolètes par défaut
-            if (!showObsolete) {
+            // Masquer les obsolètes par défaut (sauf si filtre qualité actif sur "obsolète")
+            if (!showObsolete && !qualite.includes("obsolete")) {
                 filteredData = filteredData.filter(o => {
                     const q = (o.qualite || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
                     return !q.includes("obsolete");
                 });
             }
 
-            // Masquer les partagées par défaut
-            if (!showPartagee) {
+            // Masquer les partagées par défaut (sauf si filtre partage actif)
+            if (!showPartagee && partage === "") {
                 filteredData = filteredData.filter(o => {
                     const e = (o.etat || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
                     const estPartage = (e.includes("partag")) && !e.includes("non");
@@ -410,9 +410,25 @@
             }).join('');
         }
 
+        // Helper : set select by value insensible à la casse
+        function setSelectCI(selId, val) {
+            const sel = document.getElementById(selId);
+            if (!sel || val === undefined || val === null) return;
+            const norm = String(val).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+            for (const opt of sel.options) {
+                const optNorm = opt.value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                if (optNorm === norm || norm.includes(optNorm) || optNorm.includes(norm)) {
+                    sel.value = opt.value;
+                    return;
+                }
+            }
+            // fallback : valeur brute
+            sel.value = val;
+        }
+
         // 4. MODAL AJOUT / MODIF
-        function openModal(id = null) { 
-            document.getElementById('offreModal').classList.replace('hidden', 'flex'); 
+        function openModal(id = null) {
+            document.getElementById('offreModal').classList.replace('hidden', 'flex');
             if(id) {
                 const o = currentOffres.find(x => x.id === id);
                 document.getElementById('modalTitle').innerText = "Modifier l'Offre";
@@ -420,11 +436,11 @@
                 document.getElementById('offrePoste').value = o.poste || "";
                 document.getElementById('offreEnt').value = o.entreprise;
                 document.getElementById('offreUrl').value = o.url;
-                document.getElementById('offrePlateforme').value = o.plateforme;
+                document.getElementById('offrePlateforme').value = o.plateforme || '';
                 document.getElementById('offreVille').value = o.ville || '';
-                document.getElementById('offreMissions').value = o.missions;
-                document.getElementById('offreQualite').value = o.qualite;
-                document.getElementById('offreEtat').value = o.etat || 'Non partagée';
+                document.getElementById('offreMissions').value = o.missions || '';
+                setSelectCI('offreQualite', o.qualite);
+                setSelectCI('offreEtat', o.etat || 'Non partagée');
             } else {
                 document.getElementById('modalTitle').innerText = "Ajouter une Offre";
                 document.getElementById('formOffreId').value = "";
