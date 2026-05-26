@@ -2850,6 +2850,39 @@ async function saveSyntheseField(field, val){
   setTimeout(()=>{ statusEl.textContent=''; },2000);
 }
 
+function startEditSyntheseField(field, elId, rows, mono){
+  hide('synthView_'+elId);
+  hide('synthEditBtn_'+elId);
+  show('synthEdit_'+elId);
+  const ta=document.getElementById('synthTa_'+elId);
+  if (ta){ ta.value=brToNl(currentSyntheseData[field]||''); ta.focus(); ta.rows=rows||5; }
+}
+
+function cancelEditSyntheseField(elId){
+  show('synthView_'+elId);
+  show('synthEditBtn_'+elId);
+  hide('synthEdit_'+elId);
+}
+
+async function saveSyntheseFieldExplicit(field, elId){
+  const ta=document.getElementById('synthTa_'+elId);
+  if (!ta) return;
+  const val=ta.value;
+  const statusEl=document.getElementById('syntheseSaveStatus');
+  if (statusEl) statusEl.textContent='Enregistrement…';
+  const dates=getWeekDates(weekOffset);
+  const semaineDebut=fmtDate(dates[0]);
+  currentSyntheseData[field]=val;
+  const r=await api('saveSyntheseSemaine',{semaineDebut,field,val});
+  if (!r.success){ toast('Erreur sauvegarde : '+r.message,false); if(statusEl) statusEl.textContent=''; return; }
+  toast('Enregistré ✓');
+  if (statusEl){ statusEl.textContent='Enregistré ✓'; setTimeout(()=>{ statusEl.textContent=''; },2000); }
+  // Mise à jour de la vue lecture sans re-render complet
+  const viewEl=document.getElementById('synthView_'+elId);
+  if (viewEl) viewEl.innerHTML=renderSyntheseText(val)||'<span style="color:#d1d5db;font-style:italic">— Rien de saisi —</span>';
+  cancelEditSyntheseField(elId);
+}
+
 function brToNl(s){ return (s||'').replace(/<br\s*\/?>/gi,'\n'); }
 function escTa(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function renderSyntheseText(s){
@@ -2874,19 +2907,34 @@ function renderSyntheseSection(data){
     {id:'synthBulletin',    field:'bulletinSFLIFLA',   label:'📰 BULLETIN HEBDO SFLIFLA',                          val:data.bulletinSFLIFLA||'',   bg:'#faf5ff', bc:'#e9d5ff', fc:'#7c3aed', ph:'Collez ici le contenu du bulletin hebdomadaire…', rows:7, mono:true,  full:true},
   ];
 
-  if (isSA) {
-    grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
-      <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
-        <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
-        <textarea id="${f.id}" onblur="saveSyntheseField('${f.field}',this.value)" rows="${f.rows}" placeholder="${f.ph}" style="width:100%;background:transparent;border:none;resize:vertical;padding:0;font-size:0.85rem;outline:none;font-family:${f.mono?'monospace,inherit':'inherit'}">${escTa(brToNl(f.val))}</textarea>
-      </div>`).join('')}</div>`;
-  } else {
-    grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>`
+  const renderFieldCard = (f, editable) => {
+    if (!editable) return `
       <div class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
         <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;display:block">${f.label}</label>
         <div style="font-size:0.85rem;color:#374151;line-height:1.65;min-height:36px;font-family:${f.mono?'monospace,inherit':'inherit'}">${renderSyntheseText(f.val)}</div>
-      </div>`).join('')}</div>`;
-  }
+      </div>`;
+    return `
+      <div id="synthCard_${f.id}" class="rounded-xl p-4${f.full?' md:col-span-2':''}" style="background:${f.bg};border:1px solid ${f.bc}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+          <label style="color:${f.fc};font-size:0.7rem;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;margin:0">${f.label}</label>
+          <button id="synthEditBtn_${f.id}" onclick="startEditSyntheseField('${f.field}','${f.id}',${f.rows},${f.mono})"
+            style="font-size:0.72rem;color:${f.fc};font-weight:700;background:rgba(0,0,0,0.07);border:none;cursor:pointer;padding:0.2rem 0.7rem;border-radius:0.4rem;flex-shrink:0">✏ Modifier</button>
+        </div>
+        <div id="synthView_${f.id}" style="font-size:0.85rem;color:#374151;line-height:1.65;min-height:40px;font-family:${f.mono?'monospace,inherit':'inherit'};white-space:pre-wrap">${renderSyntheseText(f.val)||'<span style="color:#d1d5db;font-style:italic">— Rien de saisi —</span>'}</div>
+        <div id="synthEdit_${f.id}" class="hidden" style="margin-top:0.25rem">
+          <textarea id="synthTa_${f.id}" rows="${f.rows}" placeholder="${f.ph}"
+            style="width:100%;background:rgba(255,255,255,0.8);border:1px solid ${f.bc};resize:vertical;padding:0.5rem 0.6rem;font-size:0.85rem;outline:none;border-radius:0.5rem;font-family:${f.mono?'monospace,inherit':'inherit'}"></textarea>
+          <div style="display:flex;gap:0.5rem;margin-top:0.4rem">
+            <button onclick="saveSyntheseFieldExplicit('${f.field}','${f.id}')"
+              style="padding:0.3rem 0.9rem;background:${f.fc};color:#fff;border:none;border-radius:0.5rem;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Enregistrer</button>
+            <button onclick="cancelEditSyntheseField('${f.id}')"
+              style="padding:0.3rem 0.8rem;background:rgba(0,0,0,0.07);border:none;border-radius:0.5rem;font-size:0.8rem;cursor:pointer">✕ Annuler</button>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${fields.map(f=>renderFieldCard(f, isSA)).join('')}</div>`;
 
   // Section commentaires (visible pour tous)
   if (commentsEl) {
@@ -3068,20 +3116,29 @@ function renderObjectifs(){
         </div>
       </td>
       <td style="padding:0.5rem 0.75rem;border-bottom:1px solid #e5e7eb;border-left:1px solid #e5e7eb;vertical-align:top">
-        ${isSA
-          ? `<textarea onblur='updateObjectifEtat("${obj.id}","etatMiSemaine",this.value)' style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none" placeholder="Saisir état…"${valide?' disabled':''}>${obj.etatMiSemaine||''}</textarea>`
+        ${isSA && !valide
+          ? `<div style="display:flex;flex-direction:column;gap:0.3rem">
+              <textarea id="ta_mi_${obj.id}" style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none" placeholder="Saisir état…">${obj.etatMiSemaine||''}</textarea>
+              <button onclick="saveObjectifEtat('${obj.id}','etatMiSemaine','ta_mi_${obj.id}')" style="align-self:flex-end;padding:0.2rem 0.7rem;background:#1A4E8A;color:#fff;border:none;border-radius:0.4rem;font-size:0.72rem;font-weight:700;cursor:pointer">💾 Enregistrer</button>
+            </div>`
           : `<div style="font-size:0.8rem;color:#374151;padding:0.3rem 0.1rem;min-height:40px;line-height:1.5">${obj.etatMiSemaine ? escHtmlObj(obj.etatMiSemaine) : '<span style="color:#d1d5db;font-style:italic">—</span>'}</div>`
         }
       </td>
       <td style="padding:0.5rem 0.75rem;border-bottom:1px solid #e5e7eb;border-left:1px solid #e5e7eb;vertical-align:top">
-        ${isSA
-          ? `<textarea onblur='updateObjectifEtat("${obj.id}","etatFinSemaine",this.value)' style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none" placeholder="Saisir état…"${valide?' disabled':''}>${obj.etatFinSemaine||''}</textarea>`
+        ${isSA && !valide
+          ? `<div style="display:flex;flex-direction:column;gap:0.3rem">
+              <textarea id="ta_fin_${obj.id}" style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none" placeholder="Saisir état…">${obj.etatFinSemaine||''}</textarea>
+              <button onclick="saveObjectifEtat('${obj.id}','etatFinSemaine','ta_fin_${obj.id}')" style="align-self:flex-end;padding:0.2rem 0.7rem;background:#1A4E8A;color:#fff;border:none;border-radius:0.4rem;font-size:0.72rem;font-weight:700;cursor:pointer">💾 Enregistrer</button>
+            </div>`
           : `<div style="font-size:0.8rem;color:#374151;padding:0.3rem 0.1rem;min-height:40px;line-height:1.5">${obj.etatFinSemaine ? escHtmlObj(obj.etatFinSemaine) : '<span style="color:#d1d5db;font-style:italic">—</span>'}</div>`
         }
       </td>
       <td style="padding:0.5rem 0.75rem;border-bottom:1px solid #e5e7eb;border-left:1px solid #e5e7eb;vertical-align:top">
-        ${isSA
-          ? `<textarea onblur='updateObjectifEtat("${obj.id}","retourEquipes",this.value)' style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;background:#fefce8" placeholder="Retours terrain…">${obj.retourEquipes||''}</textarea>`
+        ${isSA && !valide
+          ? `<div style="display:flex;flex-direction:column;gap:0.3rem">
+              <textarea id="ta_ret_${obj.id}" style="width:100%;min-height:60px;font-size:0.8rem;resize:vertical;border:1px solid #e5e7eb;border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;background:#fefce8" placeholder="Retours terrain…">${obj.retourEquipes||''}</textarea>
+              <button onclick="saveObjectifEtat('${obj.id}','retourEquipes','ta_ret_${obj.id}')" style="align-self:flex-end;padding:0.2rem 0.7rem;background:#b45309;color:#fff;border:none;border-radius:0.4rem;font-size:0.72rem;font-weight:700;cursor:pointer">💾 Enregistrer</button>
+            </div>`
           : renderCarnetDeBord(obj.id, obj.retourEquipes||'', valide)
         }
       </td>
@@ -3135,6 +3192,18 @@ async function deleteObjectif(id){
 
 async function updateObjectifEtat(id, field, val){
   await api('updateObjectifEtat',{id,field,val});
+}
+
+async function saveObjectifEtat(id, field, taId){
+  const ta=document.getElementById(taId);
+  if (!ta) return;
+  const val=ta.value;
+  const r=await api('updateObjectifEtat',{id,field,val});
+  if (r && r.success===false){ toast('Erreur : '+r.message,false); return; }
+  toast('Enregistré ✓');
+  // Mettre à jour allObjectifs en local pour cohérence
+  const obj=allObjectifs.find(o=>o.id===id);
+  if (obj) obj[field]=val;
 }
 
 function escHtmlObj(s){
