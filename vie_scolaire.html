@@ -806,7 +806,7 @@ async function init(){
   document.getElementById('userBadge').textContent = (user.nom||'?') + ' · ' + (vieScRole||'Sans rôle');
   if (!vieScRole){ show('accessDenied'); return; }
   show('mainLayout');
-  if((user.email||'').toLowerCase()==='m.mokhtari@hecg.fr'){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
+  if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
   ['notes','delegues','formateurs','planning','inscription','ged','qualiopi'].forEach(m => {
     if (canAccess(m)) show('nav-'+m);
@@ -2221,7 +2221,14 @@ async function saveTache(){
     priorite:      prio,
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  toast('Tâche enregistrée ✓'); closeTacheModal(); loadPlanning();
+  const isNew = !document.getElementById('tacheId').value;
+  const hasPerson = !!referentEmail;
+  if (isNew && hasPerson && r.missionId) {
+    toast('Tâche enregistrée ✓  —  Mission créée automatiquement 🎯');
+  } else {
+    toast('Tâche enregistrée ✓');
+  }
+  closeTacheModal(); loadPlanning();
 }
 async function deleteTache(id){
   if (!confirm('Supprimer cette tâche ?')) return;
