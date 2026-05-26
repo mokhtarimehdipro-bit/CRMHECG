@@ -2061,7 +2061,7 @@ function getWeekDates(offset){
   return dates;
 }
 
-function fmtDate(d){ return d.toISOString().slice(0,10); }
+function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtDay(d){ return d.getDate()+'/'+(d.getMonth()+1); }
 
 function buildPersonColors(){
