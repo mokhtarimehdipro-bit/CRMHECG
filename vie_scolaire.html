@@ -2062,7 +2062,8 @@ function getWeekDates(offset){
   return dates;
 }
 
-function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtDate(d){ return d.toISOString().slice(0,10); }
+function fmtDateLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtDay(d){ return d.getDate()+'/'+(d.getMonth()+1); }
 
 function buildPersonColors(){
@@ -2226,8 +2227,9 @@ function renderWeek(){
   let html=`<table style="width:100%;border-collapse:collapse;min-width:700px">
     <thead><tr>
       <th style="width:100px;background:#f9fafb;border-bottom:2px solid #e5e7eb;padding:0.75rem 1rem;font-size:0.75rem;font-weight:900;color:#6b7280;text-align:left">Créneau</th>`;
+  const todayLocal=fmtDateLocal(new Date());
   dates.forEach((d,i)=>{
-    const today=fmtDate(new Date())===fmtDate(d);
+    const today=todayLocal===fmtDateLocal(d);
     html+=`<th style="background:${today?'#eff6ff':'#f9fafb'};border-bottom:2px solid ${today?'#bfdbfe':'#e5e7eb'};border-left:1px solid #e5e7eb;padding:0.75rem 0.5rem;font-size:0.8rem;font-weight:900;color:${today?'#1A4E8A':'#374151'};text-align:center">
       ${JOURS[i]}<br><span style="font-weight:400;font-size:0.7rem;color:#9ca3af">${fmtDay(d)}</span>
     </th>`;
@@ -2237,9 +2239,9 @@ function renderWeek(){
     html+=`<tr>
       <td style="background:#f9fafb;padding:0.75rem 1rem;font-size:0.8rem;font-weight:700;color:#6b7280;vertical-align:top;border-bottom:1px solid #e5e7eb;border-right:2px solid #e5e7eb">${dj}</td>`;
     dates.forEach(d=>{
-      const dateStr=fmtDate(d);
+      const dateStr=fmtDateLocal(d);
       const cell=visibleTaches.filter(t=>t.dateDebut===dateStr&&(t.demiJournee||'Matin')===dj);
-      const today=fmtDate(new Date())===dateStr;
+      const today=todayLocal===dateStr;
       const cellBg=today?'#fafcff':'white';
       const canDrop=canWrite('planning');
       html+=`<td
