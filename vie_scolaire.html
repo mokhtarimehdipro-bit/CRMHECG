@@ -278,7 +278,7 @@
       </div>
 
       <!-- ── Stats globales objectifs ── -->
-      <div class="mt-6">
+      <div id="planBilanSection" class="mt-6">
         <div class="flex justify-between items-center mb-3">
           <h2 class="text-lg font-black text-[#1A4E8A]">Bilan objectifs — tous les mois</h2>
           <button onclick="loadObjectifsStats()" class="btn-ghost text-sm">↻ Actualiser</button>
@@ -287,7 +287,7 @@
       </div>
 
       <!-- ── Objectifs de la semaine ── -->
-      <div class="mt-6">
+      <div id="planObjSection" class="mt-6">
         <div class="flex justify-between items-center mb-3">
           <h2 class="text-lg font-black text-[#1A4E8A]" id="objSemTitle">Objectifs de la semaine —</h2>
           <div class="flex gap-2">
@@ -303,7 +303,7 @@
       </div>
 
       <!-- ── Synthèse hebdomadaire ── -->
-      <div class="mt-6">
+      <div id="planSyntheseSection" class="mt-6">
         <div class="flex justify-between items-center mb-3">
           <h2 class="text-lg font-black text-[#1A4E8A]" id="syntheseTitle">📝 Synthèse de la semaine —</h2>
           <span id="syntheseSaveStatus" class="text-xs text-gray-400 italic"></span>
@@ -313,7 +313,7 @@
       </div>
 
       <!-- ── Suivi objectifs par semaine ── -->
-      <div class="mt-6">
+      <div id="planSuiviSection" class="mt-6">
         <div class="flex justify-between items-center mb-3">
           <h2 class="text-lg font-black text-[#1A4E8A]">Suivi objectifs — par semaine</h2>
           <button onclick="loadObjectifsStatsSemaines()" class="btn-ghost text-sm">↻ Actualiser</button>
@@ -750,16 +750,16 @@ const ACCESS = {
   planning:    ['Super-admin','Pédagogie','Administratif'],
   inscription: ['Super-admin'],
   ged:         ['Super-admin','Pédagogie','Administratif'],
-  qualiopi:    ['Super-admin'],
+  qualiopi:    ['Super-admin','Pédagogie'],
 };
 const WRITE = {
-  notes:       ['Super-admin','Pédagogie'],
+  notes:       ['Super-admin','Pédagogie','Administratif'],
   delegues:    ['Super-admin','Pédagogie','Administratif'],
   formateurs:  ['Super-admin','Pédagogie','Administratif'],
-  planning:    ['Super-admin'],
+  planning:    ['Super-admin','Pédagogie'],
   inscription: ['Super-admin'],
-  ged:         ['Super-admin'],
-  qualiopi:    ['Super-admin'],
+  ged:         ['Super-admin','Pédagogie'],
+  qualiopi:    ['Super-admin','Pédagogie'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -2082,6 +2082,14 @@ function hexToRgba(hex,a){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.sl
 async function loadPlanning(){
   if (canWrite('planning')) show('btnAddTache');
   if (vieScRole==='Super-admin'){ show('btnPlanPriorities'); show('btnMigrateWeek'); }
+
+  // Administratif : masquer les sections de gestion (synthèse, objectifs, bilan, suivi)
+  if (vieScRole==='Administratif'){
+    ['planBilanSection','planObjSection','planSyntheseSection','planSuiviSection'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display='none';
+    });
+  }
+
   // Load personnel if not yet done
   if (!allPersonnel.length){
     const rp = await api('getPersonnelList');
@@ -2096,15 +2104,32 @@ async function loadPlanning(){
   allTaches = r.data;
   buildPersonColors();
   populateTacheReferentSelect();
+
+  // Administratif : verrouiller le filtre sur leurs propres tâches uniquement
+  if (vieScRole==='Administratif'){
+    planningPersonFilter.clear();
+    const myRef = user.ref || user.email || '';
+    // Chercher leur ref dans allPersonnel (match par email)
+    const myPerson = allPersonnel.find(p=> p.email===user.email || p.ref===user.ref || p.ref===user.email);
+    const lockRef = (myPerson && myPerson.ref) ? myPerson.ref : myRef;
+    if (lockRef) planningPersonFilter.add(lockRef);
+  }
+
   renderPlanFilterBar();
   renderWeek();
-  loadObjectifs();
+  if (vieScRole !== 'Administratif') loadObjectifs();
 }
 
 function goToCurrentWeek(){ weekOffset=0; renderWeek(); loadObjectifs(); }
 function changeWeek(d){ weekOffset+=d; renderWeek(); loadObjectifs(); }
 
 function renderPlanFilterBar(){
+  // Administratif : filtre verrouillé sur leur propre planning, pas de chips
+  if (vieScRole==='Administratif'){
+    const bar=document.getElementById('planFilterBar');
+    if (bar) bar.style.display='none';
+    return;
+  }
   const chips=document.getElementById('planFilterChips');
   const btnClear=document.getElementById('btnClearFilter');
   const usedRefs=new Set(allTaches.map(t=>t.referentRef||t.referent).filter(Boolean));
@@ -2307,6 +2332,17 @@ function openTacheModal(t, preDate=null, preDJ=null){
     show('tacheReferentNewDiv'); hide('tacheReferentEditDiv');
     document.querySelectorAll('#tacheReferentCheckboxes input[type=checkbox]').forEach(cb=>cb.checked=false);
   }
+
+  // Mode lecture seule pour Administratif (pas de droits planning)
+  const isReadOnly = !canWrite('planning');
+  const saveBtn = document.querySelector('#tacheModal button[onclick="saveTache()"]');
+  const cancelBtn = document.querySelector('#tacheModal button[onclick="closeTacheModal()"]');
+  if (saveBtn) saveBtn.style.display = isReadOnly ? 'none' : '';
+  if (cancelBtn) cancelBtn.textContent = isReadOnly ? 'Fermer' : 'Annuler';
+  ['tacheTacheRefSel','tacheTitre','tacheDesc','tacheReferent','tacheStatut','tacheDebut','tacheDemiJournee'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled=isReadOnly;
+  });
+  document.querySelectorAll('#tacheReferentCheckboxes input').forEach(cb=>cb.disabled=isReadOnly);
 }
 function closeTacheModal(){ document.getElementById('tacheModal').classList.add('hidden'); }
 
