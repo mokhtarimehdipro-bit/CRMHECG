@@ -382,7 +382,6 @@
                 if (estPartage) bgCarte = "bg-green-50 border-green-500";
                 let badgePartage = estPartage ? "bg-green-100 text-green-800 border-green-300" : "bg-slate-100 text-slate-500 border-slate-200";
 
-                const safePoste = (o.poste || "").replace(/'/g, "\\'");
                 const namesHTML = estPartage && o.destinataires && o.destinataires.length > 0 
                     ? `<details class="mt-3 group">
                          <summary class="text-[9px] font-black text-blue-500 cursor-pointer uppercase list-none focus:outline-none hover:underline">
@@ -419,7 +418,7 @@
                         <a href="${o.url}" target="_blank" class="text-blue-500 font-black text-[10px] hover:underline uppercase tracking-widest">Voir l'annonce ↗</a>
                         <div class="flex space-x-1">
                             <button onclick="openModal('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-500 hover:bg-white hover:shadow-sm transition" title="Modifier">✏️</button>
-                            <button onclick="openShareModal('${o.id}', '${safePoste}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white hover:shadow-sm transition" title="Partager">📡</button>
+                            <button onclick="openShareModal('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white hover:shadow-sm transition" title="Partager">📡</button>
                             <button onclick="deleteOffre('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition" title="Supprimer">🗑️</button>
                         </div>
                     </div>
@@ -515,9 +514,10 @@
             return enRecherche && legitime && !exclu;
         }
 
-        async function openShareModal(id, titre) {
+        async function openShareModal(id) {
+            const offre = currentOffres.find(x => x.id === id);
             document.getElementById('shareOffreId').value = id;
-            document.getElementById('shareOffreTitle').innerText = titre;
+            document.getElementById('shareOffreTitle').innerText = offre ? (offre.poste || '') : '';
             document.getElementById('shareModal').classList.replace('hidden', 'flex');
 
             selectedClassesSet = new Set();
