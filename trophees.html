@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -875,8 +875,8 @@ function computeCompetences(actionRows, count) {
     const entreprisesAll = actionRows.filter(r => r.categorie === 'Entreprise' || r.categorie === 'Note Partenaire' || r.categorie === 'Carnet entreprise' || (r.categorie||'').toLowerCase().includes('partenaire')).length;
     // Communication: événements créés (1 point par événement, pas ÷ 5)
     const comAll         = actionRows.filter(r => r.categorie === 'Com & Événements' && r.type === 'Création').length;
-    // Alertes: alertes créées ÷ 5
-    const alertesAll     = actionRows.filter(r => (r.categorie === 'Alertes Partenaires' || r.categorie === 'Alertes Étudiants') && r.type === 'Création').length;
+    // Alertes: alertes créées ÷ 5 (toutes catégories d'alertes)
+    const alertesAll     = actionRows.filter(r => (r.categorie === 'Alertes' || r.categorie === 'Alertes Partenaires' || r.categorie === 'Alertes Étudiants') && r.type === 'Création').length;
     // Missions: missions clôturées (1 point par mission — déjà calculé en backend)
     const missionsScore  = count.Missions || 0;
     // Vie scolaire: toutes actions vie scolaire ÷ 5
