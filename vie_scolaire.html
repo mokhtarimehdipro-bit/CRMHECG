@@ -2083,13 +2083,6 @@ async function loadPlanning(){
   if (canWrite('planning')) show('btnAddTache');
   if (vieScRole==='Super-admin'){ show('btnPlanPriorities'); show('btnMigrateWeek'); }
 
-  // Administratif : masquer les sections de gestion (synthèse, objectifs, bilan, suivi)
-  if (vieScRole==='Administratif'){
-    ['planBilanSection','planObjSection','planSyntheseSection','planSuiviSection'].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.style.display='none';
-    });
-  }
-
   // Load personnel if not yet done
   if (!allPersonnel.length){
     const rp = await api('getPersonnelList');
@@ -2117,7 +2110,7 @@ async function loadPlanning(){
 
   renderPlanFilterBar();
   renderWeek();
-  if (vieScRole !== 'Administratif') loadObjectifs();
+  loadObjectifs();
 }
 
 function goToCurrentWeek(){ weekOffset=0; renderWeek(); loadObjectifs(); }
