@@ -769,6 +769,7 @@ let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
 let planningPersonFilter = new Set();
+let draggedTaskId = null;
 let inscriptionPreviews = [];
 let gedCurrentFolderId = null; let gedCurrentFolderName = "GED"; let gedDroitsCurrentMembers = [];
 let qualiopiPreuves = [];
@@ -2135,6 +2136,54 @@ function clearPlanFilter(){
   renderWeek();
 }
 
+// ── Drag & drop cartes planning ──────────────────────────────────
+function startDragTache(id, event){
+  draggedTaskId = id;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text', id);
+  // légère transparence après le démarrage (setTimeout évite que le ghost soit transparent)
+  setTimeout(()=>{ const el=document.querySelector(`[ondragstart*="'${id}'"]`); if(el) el.style.opacity='0.35'; }, 0);
+}
+
+function endDragTache(event){
+  event.target.style.opacity='1';
+  draggedTaskId = null;
+}
+
+async function dropTache(event, dateStr, dj, cell, origBg){
+  event.preventDefault();
+  cell.style.outline='';
+  cell.style.background=origBg;
+  const id = draggedTaskId || event.dataTransfer.getData('text');
+  if (!id) return;
+  draggedTaskId = null;
+  const t = allTaches.find(x=>x.id===id);
+  if (!t) return;
+  if (t.dateDebut===dateStr && (t.demiJournee||'Matin')===dj) return;
+  // Mise à jour optimiste locale → rendu immédiat
+  t.dateDebut  = dateStr;
+  t.demiJournee = dj;
+  renderWeek();
+  // Appel API
+  const r = await api('savePlanningTache',{
+    id:           t.id,
+    titre:        t.titre,
+    description:  t.description||'',
+    dateDebut:    dateStr,
+    dateFin:      dateStr,
+    demiJournee:  dj,
+    referentRef:  t.referentRef||t.referent||'',
+    referentNom:  t.referentNom||'',
+    referentEmail:t.referentEmail||t.referent||'',
+    referent:     t.referentEmail||t.referentRef||t.referent||'',
+    statut:       t.statut||'À faire',
+    tacheRef:     t.tacheRef||'',
+    priorite:     t.priorite||1,
+  });
+  if (!r.success){ toast('Erreur déplacement : '+r.message, false); loadPlanning(); return; }
+  toast('Tâche déplacée ✓');
+}
+
 async function migratePlanningWeek(){
   const btn=document.getElementById('btnMigrateWeek');
   btn.textContent='⏳ Migration…'; btn.disabled=true;
@@ -2172,7 +2221,6 @@ function renderWeek(){
   const visibleTaches = planningPersonFilter.size===0
     ? allTaches
     : allTaches.filter(t=>planningPersonFilter.has(t.referentRef||t.referent));
-  // Grille
   const wrap=document.getElementById('planningContent');
   const demiJournees=['Matin','Après-midi'];
   let html=`<table style="width:100%;border-collapse:collapse;min-width:700px">
@@ -2192,7 +2240,11 @@ function renderWeek(){
       const dateStr=fmtDate(d);
       const cell=visibleTaches.filter(t=>t.dateDebut===dateStr&&(t.demiJournee||'Matin')===dj);
       const today=fmtDate(new Date())===dateStr;
-      html+=`<td style="vertical-align:top;padding:0.4rem;border-left:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:${today?'#fafcff':'white'};min-width:110px;min-height:80px">`;
+      const cellBg=today?'#fafcff':'white';
+      const canDrop=canWrite('planning');
+      html+=`<td
+        ${canDrop?`ondragover="event.preventDefault()" ondragenter="this.style.outline='2px dashed #1A4E8A';this.style.background='#eff6ff'" ondragleave="if(!this.contains(event.relatedTarget)){this.style.outline='';this.style.background='${cellBg}'}" ondrop="dropTache(event,'${dateStr}','${dj}',this,'${cellBg}')"`:``}
+        style="vertical-align:top;padding:0.4rem;border-left:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:${cellBg};min-width:110px;min-height:80px;transition:background 0.1s">`;
       cell.slice(0,3).forEach(t=>{
         const pc=getPersonColor(t.referentRef||t.referent);
         const bg=hexToRgba(pc,0.15);
@@ -2201,13 +2253,19 @@ function renderWeek(){
         const missionBadge=t.missionId
           ? (t.statut==='Terminé'?'<span title="Mission clôturée" style="font-size:0.6rem;color:#15803d">✓</span> ':'<span title="Mission liée" style="font-size:0.6rem">🎯</span> ')
           : '';
-        html+=`<div onclick='openTacheModal(${JSON.stringify(t).replace(/'/g,"&#39;")},null,null)' style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:pointer;font-size:0.75rem">
+        const tJson=JSON.stringify(t).replace(/'/g,"&#39;");
+        html+=`<div
+          draggable="${canDrop?'true':'false'}"
+          ondragstart="startDragTache('${t.id}',event)"
+          ondragend="endDragTache(event)"
+          onclick="openTacheModal(${tJson},null,null)"
+          style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:${canDrop?'grab':'pointer'};font-size:0.75rem;transition:opacity 0.15s;user-select:none">
           <div style="font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="${t.titre}">${sirenIcon}${missionBadge}${t.titre}</div>
           <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">${t.referentNom||t.referent||''}</div>
         </div>`;
       });
       if(cell.length>3) html+=`<div style="font-size:0.65rem;color:#9ca3af;padding:0 0.3rem">+${cell.length-3} de plus</div>`;
-      if(canWrite('planning')){
+      if(canDrop){
         html+=`<div onclick='openTacheModal(null,"${dateStr}","${dj}")' style="opacity:0.4;font-size:0.7rem;color:#9ca3af;text-align:center;padding:0.25rem;cursor:pointer;border-radius:0.4rem;border:1px dashed #d1d5db;margin-top:0.2rem" title="Ajouter">+</div>`;
       }
       html+='</td>';
