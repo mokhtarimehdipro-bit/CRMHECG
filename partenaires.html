@@ -26,6 +26,9 @@
                 <a href="dashboard.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition">Étudiants</a>
                 <a href="partenaires.html" class="px-4 py-2 text-sm font-bold bg-white text-[#1A4E8A] rounded-lg shadow-sm">Entreprises</a>
                 <a href="campagnes.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Campagnes</a>
+                <a href="missions.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden px-4 py-2 text-sm font-bold text-amber-500 hover:text-amber-700">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -33,6 +36,7 @@
             <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-slate-400 font-bold text-xs hover:text-red-500">Déconnexion</button>
         </div>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
@@ -601,11 +605,13 @@
         }
 
         function downloadCSV(data, filename) {
-            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants\n";
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Date dernier échange;Contenu dernier échange\n";
             data.forEach(p => {
                 const c = p.contacts[0] || {};
                 const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
-                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}"\n`;
+                const dateEchange = (p.dateEchange || '').replace(/"/g, '""');
+                const contenuEchange = (p.contenuEchange || '').replace(/"/g, '""');
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dateEchange}";"${contenuEchange}"\n`;
             });
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
@@ -898,5 +904,6 @@
         }
 
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
