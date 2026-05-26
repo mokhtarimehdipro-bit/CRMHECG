@@ -2,971 +2,907 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salle des Trophées - HECG</title>
+    <title>HECG - CRM Partenaires</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
     <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-
-        .banner-bg {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #1a3a5c 70%, #0f172a 100%);
-        }
-        .emblem-ring {
-            border: 3px solid #f59e0b;
-            box-shadow: 0 0 16px rgba(245,158,11,0.5);
-        }
-        .xp-bar-fill {
-            background: linear-gradient(90deg, #f59e0b, #fbbf24);
-            transition: width 0.8s ease;
-        }
-        .trophy-card { transition: transform 0.15s, box-shadow 0.15s; }
-        .trophy-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
-        .trophy-locked { filter: grayscale(1); opacity: 0.5; }
-        .level-bronze { color: #cd7f32; }
-        .level-gold { color: #f59e0b; }
-        .level-rainbow {
-            background: linear-gradient(90deg, #f43f5e, #f59e0b, #22c55e, #3b82f6, #a855f7);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .perso-card { cursor: pointer; border: 3px solid transparent; transition: border-color 0.2s, transform 0.15s; }
-        .perso-card:hover { transform: scale(1.04); }
-        .perso-card.selected { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245,158,11,0.4); }
-        .perso-card.locked { filter: grayscale(1) brightness(0.5); cursor: not-allowed; }
-        .modal-backdrop { background: rgba(0,0,0,0.65); }
-        @keyframes trophyRainbow {
-            0%   { filter: hue-rotate(0deg)   brightness(1.06) drop-shadow(0 0 7px rgba(136,48,232,0.9)); }
-            12%  { filter: hue-rotate(40deg)  brightness(0.95) drop-shadow(0 0 4px rgba(136,48,232,0.4)); }
-            33%  { filter: hue-rotate(120deg) brightness(1.06) drop-shadow(0 0 7px rgba(48,136,232,0.9)); }
-            45%  { filter: hue-rotate(160deg) brightness(0.95) drop-shadow(0 0 4px rgba(48,136,232,0.4)); }
-            66%  { filter: hue-rotate(240deg) brightness(1.06) drop-shadow(0 0 7px rgba(48,220,136,0.9)); }
-            78%  { filter: hue-rotate(280deg) brightness(0.95) drop-shadow(0 0 4px rgba(48,220,136,0.4)); }
-            100% { filter: hue-rotate(360deg) brightness(1.06) drop-shadow(0 0 7px rgba(136,48,232,0.9)); }
-        }
-        .trophy-rw-anim { animation: trophyRainbow 8s ease-in-out infinite; display:inline-block; }
-        @keyframes borderNeonRainbow {
-            0%   { border-color:#e879f9; box-shadow:0 0 12px rgba(232,121,249,0.85),0 0 28px rgba(232,121,249,0.3); }
-            25%  { border-color:#3b82f6; box-shadow:0 0 12px rgba(59,130,246,0.85),0 0 28px rgba(59,130,246,0.3); }
-            50%  { border-color:#22c55e; box-shadow:0 0 12px rgba(34,197,94,0.85),0 0 28px rgba(34,197,94,0.3); }
-            75%  { border-color:#f59e0b; box-shadow:0 0 12px rgba(245,158,11,0.85),0 0 28px rgba(245,158,11,0.3); }
-            100% { border-color:#e879f9; box-shadow:0 0 12px rgba(232,121,249,0.85),0 0 28px rgba(232,121,249,0.3); }
-        }
-        .portrait-rainbow-border { animation: borderNeonRainbow 3s ease-in-out infinite; }
-        @keyframes notifPop {
-            from { transform: scale(0.72) translateY(20px); opacity: 0; }
-            to   { transform: scale(1) translateY(0); opacity: 1; }
-        }
-        .notif-pop { animation: notifPop 0.42s cubic-bezier(0.34,1.56,0.64,1); }
-        .tier-badge-btn { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; user-select: none; }
-        .tier-badge-btn:hover { transform: scale(1.04); }
+        @keyframes pulse-red { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
+        .pulse-red { animation: pulse-red 2s infinite; }
+        .modal-active { display: flex !important; }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-[#F8FAFC] min-h-screen text-slate-900 font-sans">
 
-    <!-- NAV -->
-    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+    <nav class="bg-white shadow-sm px-8 py-4 flex justify-between items-center sticky top-0 z-50 border-b border-slate-100">
+        <div class="flex items-center space-x-6">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" class="h-9 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-1 bg-slate-100 p-1 rounded-xl">
+                <a href="dashboard.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition">Étudiants</a>
+                <a href="partenaires.html" class="px-4 py-2 text-sm font-bold bg-white text-[#1A4E8A] rounded-lg shadow-sm">Entreprises</a>
+                <a href="campagnes.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Campagnes</a>
+                <a href="missions.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden px-4 py-2 text-sm font-bold text-amber-500 hover:text-amber-700">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
+            </div>
+        </div>
         <div class="flex items-center space-x-4">
-            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
-            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
-                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
-                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
-                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
-                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
-                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
-                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
-                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
-                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
-                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
-                <a href="historique.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
-                <a href="trophees.html" class="font-bold text-amber-500 border-b-2 border-amber-500 pb-1">🏆 Trophées</a>
-            </div>
+            <span id="userNameDisplay" class="text-xs font-bold text-slate-400"></span>
+            <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-slate-400 font-bold text-xs hover:text-red-500">Déconnexion</button>
         </div>
-        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
     </nav>
-    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
-    <main class="max-w-6xl mx-auto p-6">
-
-        <!-- BANNER -->
-        <div id="banner" class="banner-bg rounded-3xl p-8 mb-6 relative overflow-hidden">
-            <div class="flex items-center gap-8">
-                <!-- Emblem -->
-                <div class="relative flex-shrink-0 text-center">
-                    <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Emblème</p>
-                    <div id="emblemeCircle" class="emblem-ring rounded-xl bg-black flex items-center justify-center cursor-pointer overflow-hidden mx-auto"
-                         style="width:165px;height:248px"
-                         onclick="openEmblemePicker()" title="Changer d'emblème">
-                        <span id="emblemeDisplay" class="text-5xl">🏆</span>
-                    </div>
-                    <p class="text-[10px] text-gray-500 cursor-pointer hover:text-amber-400 mt-1.5" onclick="openEmblemePicker()">Changer ✏️</p>
-                </div>
-
-                <!-- Center info -->
-                <div class="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
-                    <div class="flex items-center gap-3 mb-1.5">
-                        <h1 id="pseudoDisplay" class="text-white font-black text-3xl truncate cursor-pointer hover:text-amber-400" onclick="editPseudo()" title="Modifier pseudo">Chargement…</h1>
-                        <span class="text-sm text-gray-400 cursor-pointer hover:text-amber-400" onclick="editPseudo()">✏️</span>
-                    </div>
-                    <div id="niveauDisplay" class="text-base font-bold mb-5">Niveau 0</div>
-                    <!-- XP bar -->
-                    <div class="bg-gray-700 rounded-full h-4 w-full max-w-xs">
-                        <div id="xpBarFill" class="xp-bar-fill h-4 rounded-full" style="width:0%"></div>
-                    </div>
-                    <div class="text-sm text-gray-400 mt-2"><span id="xpDisplay">0 XP</span></div>
-                </div>
-
-                <!-- Character portrait -->
-                <div class="flex-shrink-0 text-center">
-                    <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1.5">Personnage</p>
-                    <div id="personnagePortrait" class="rounded-xl bg-black overflow-hidden cursor-pointer border-2 border-amber-500/30 hover:border-amber-500 transition-colors mx-auto"
-                         style="width:150px;height:225px"
-                         onclick="openPersonnagePicker()" title="Changer de personnage">
-                        <img id="personnageImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;background:#000;display:none">
-                        <div id="personnagePlaceholder" class="w-full h-full flex items-center justify-center text-gray-500 text-4xl">👤</div>
-                    </div>
-                    <p id="personnageNom" class="text-xs text-amber-400 font-bold mt-1.5 truncate max-w-[80px]"></p>
-                    <p class="text-[10px] text-gray-500 cursor-pointer hover:text-amber-400 mt-0.5" onclick="openPersonnagePicker()">Changer ✏️</p>
-                </div>
+    <main class="max-w-7xl mx-auto p-8">
+        <div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
+            <div class="space-y-1">
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight italic">Partenaires B2B</h1>
+                <p class="text-slate-400 text-sm font-medium">Gestion du portefeuille, relances et carnet de bord.</p>
             </div>
-        </div>
-
-        <!-- ACTIONS ROW -->
-        <div class="flex gap-3 mb-6">
-            <button onclick="openSalleRecompenses()" class="bg-white border-2 border-amber-500 text-amber-600 px-5 py-2.5 rounded-xl font-bold hover:bg-amber-50 transition text-sm shadow-sm">
-                🏅 Salle des Récompenses
-            </button>
-            <button onclick="loadData(true)" class="bg-white border-2 border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm">
-                🔄 Rafraîchir
-            </button>
-        </div>
-
-        <!-- KPI STRIP -->
-        <div id="kpiStrip" class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6"></div>
-
-        <!-- ARBRE DES COMPETENCES -->
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
-            <div class="flex flex-wrap items-center gap-4 mb-4">
-                <h2 class="text-lg font-black text-gray-800">🕸️ Arbre des Compétences</h2>
-                <div class="ml-auto flex items-baseline gap-2">
-                    <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Note générale</span>
-                    <span id="noteGenerale" class="text-3xl font-black text-gray-800">—</span>
-                    <span class="text-sm text-gray-400 font-bold">/100</span>
+            
+            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <div class="relative flex-grow md:w-64">
+                    <input type="text" id="searchInput" onkeyup="filterPartners()" placeholder="Rechercher une entité..." class="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-[#1A4E8A] outline-none text-sm font-bold shadow-sm transition-all">
+                    <span class="absolute left-4 top-3.5 text-slate-400">🔍</span>
                 </div>
-            </div>
-            <div id="heptagonContainer" class="flex justify-center items-center rounded-2xl overflow-hidden" style="min-height:340px;background:#0f172a">
-                <p class="text-gray-400 text-sm">Chargement…</p>
-            </div>
-        </div>
-
-        <!-- MES TROPHEES -->
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h2 class="text-lg font-black text-gray-800 mb-4">🏆 Mes Trophées débloqués</h2>
-            <div id="tropheesGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                <p class="text-gray-400 text-sm col-span-full text-center py-8">Chargement…</p>
-            </div>
-        </div>
-
-        <!-- HISTORIQUE ACTIONS -->
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
-            <div class="flex flex-wrap gap-3 items-center mb-4">
-                <h2 class="text-lg font-black text-gray-800">📋 Mes Actions</h2>
-                <input type="text" id="actSearch" placeholder="Rechercher…" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-gray-50 outline-none focus:border-amber-400 w-48" oninput="filterActions()">
-                <select id="actCatFilter" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-white outline-none focus:border-amber-400" onchange="filterActions()">
-                    <option value="">Toutes catégories</option>
+                
+                <select id="filterNbAlt" onchange="filterPartners()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm cursor-pointer">
+                    <option value="all">🌍 Tous les partenaires</option>
+                    <option value="0">❌ 0 alternant (À relancer)</option>
+                    <option value="1">🟢 1 alternant actif</option>
+                    <option value="2+">🔥 2+ alternants (Grands Comptes)</option>
                 </select>
-                <select id="actPeriodFilter" class="px-3 py-1.5 border-2 border-gray-100 rounded-xl text-sm font-semibold bg-white outline-none focus:border-amber-400" onchange="filterActions()">
-                    <option value="">Toute période</option>
-                    <option value="7">7 derniers jours</option>
-                    <option value="30">30 derniers jours</option>
-                    <option value="90">3 derniers mois</option>
-                </select>
-                <span id="actCount" class="text-xs text-gray-400 font-bold ml-auto"></span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
-                            <th class="pb-2 pr-3 text-left">Date</th>
-                            <th class="pb-2 pr-3 text-left">Type</th>
-                            <th class="pb-2 pr-3 text-left">Catégorie</th>
-                            <th class="pb-2 text-left">Détails</th>
-                        </tr>
-                    </thead>
-                    <tbody id="actionsBody">
-                        <tr><td colspan="4" class="py-8 text-center text-gray-400">Chargement…</td></tr>
-                    </tbody>
-                </table>
+
+                <input type="text" id="filterCP" onkeyup="filterPartners()" placeholder="📮 Code postal..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
+                <input type="text" id="filterVille" onkeyup="filterPartners()" placeholder="🏙️ Ville..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
+
+                <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
+                <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
+                <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
             </div>
         </div>
+
+        <div id="loader" class="text-center py-24">
+            <div class="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#1A4E8A] rounded-full animate-spin mb-4"></div>
+            <p class="font-black text-slate-400 text-sm animate-pulse">SYNCHRONISATION GOOGLE SHEETS...</p>
+        </div>
+
+        <div id="mapContainer" class="hidden mb-8">
+            <div id="mapView" style="height:480px;border-radius:1.5rem;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(0,0,0,.08)"></div>
+            <div id="mapStatus" class="text-[10px] font-bold text-slate-400 mt-2 text-right h-4"></div>
+        </div>
+
+        <div id="partnersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
     </main>
 
-    <!-- MODAL: SALLE DES RECOMPENSES -->
-    <div id="modalSalle" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
-                <h2 class="text-xl font-black text-gray-800">🏅 Salle des Récompenses</h2>
-                <button onclick="closeModal('modalSalle')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+    <div id="dossierModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100">
+            
+            <div class="p-8 border-b flex justify-between items-center bg-slate-50/50">
+                <div class="flex items-center space-x-6 flex-grow">
+                    <div class="w-16 h-16 bg-[#1A4E8A] rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-inner">🏢</div>
+                    <div class="flex-grow pr-10">
+                        <input type="text" id="editEntNom" class="text-3xl font-black text-slate-800 bg-transparent border-b-2 border-transparent focus:border-[#F26522] outline-none w-full transition-colors" title="Cliquer pour modifier le nom de l'entreprise">
+                        <p class="text-slate-400 font-bold text-xs mt-1" id="editEntRef"></p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="exportIndividualDossier()" class="text-slate-500 font-black text-[10px] border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-100 transition">📥 EXPORT DOSSIER</button>
+                    <button onclick="closeDossier()" class="w-12 h-12 flex items-center justify-center rounded-full bg-white text-slate-300 hover:text-red-500 shadow-sm transition-all text-2xl">✕</button>
+                </div>
             </div>
-            <div id="salleContent" class="p-6"></div>
-        </div>
-    </div>
 
-    <!-- MODAL: DETAIL TROPHEE (quasi plein écran) -->
-    <div id="modalTrophee" class="fixed inset-0 z-50 hidden modal-backdrop flex items-end md:items-center justify-center">
-        <div class="bg-white w-full md:rounded-3xl shadow-2xl overflow-hidden flex flex-col" style="max-width:560px;max-height:96vh">
-            <!-- Zone sombre : trophée en grand -->
-            <div id="tropheeDetailHeader" class="bg-gray-950 relative flex flex-col items-center justify-center px-8 pt-10 pb-6 flex-shrink-0" style="background:#0a0a0f">
-                <button onclick="closeModal('modalTrophee')" class="absolute top-4 right-4 text-gray-500 hover:text-white font-bold text-2xl leading-none z-10">✕</button>
-                <div id="tropheeDetailImgWrap" class="flex items-center justify-center" style="min-height:300px"></div>
-                <h2 class="text-2xl font-black text-white mt-5 text-center leading-tight" id="tropheeDetailNom">Trophée</h2>
-                <p id="tropheeDetailTier" class="text-sm font-black uppercase tracking-widest mt-1.5 text-amber-400"></p>
+            <div class="flex-grow overflow-y-auto p-8 custom-scrollbar">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                    
+                    <div class="lg:col-span-4 space-y-8">
+                        <div>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-black text-slate-800 uppercase text-[10px] tracking-widest">📇 Interlocuteurs</h3>
+                                <button onclick="openAddContact(currentId)" class="text-[#F26522] text-[10px] font-black hover:underline">+ Ajouter un contact</button>
+                            </div>
+                            <div id="dossierContacts" class="space-y-3"></div>
+                        </div>
+
+                        <div class="bg-green-50/50 p-6 rounded-3xl border border-green-100">
+                            <h3 class="font-black text-green-700 uppercase text-[10px] tracking-widest mb-4">🎓 Alternants HECG en poste</h3>
+                            <div id="dossierAlternants" class="flex flex-wrap gap-2"></div>
+                        </div>
+
+                        <div id="dossierAnciensBlock" class="hidden bg-amber-50/60 p-6 rounded-3xl border border-amber-200">
+                            <h3 class="font-black text-amber-700 uppercase text-[10px] tracking-widest mb-1">⚠️ Anciens alternants détectés</h3>
+                            <p class="text-[9px] text-amber-600 italic mb-4">Ces étudiants ont quitté cette entreprise (changement d'entreprise détecté). Confirmez ou signalez une erreur de saisie.</p>
+                            <div id="dossierAnciensAlternants" class="space-y-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-8 space-y-8">
+                        
+                        <div class="bg-orange-50/50 p-6 rounded-3xl border border-orange-100 shadow-sm">
+                            <h3 class="font-black text-orange-700 uppercase text-[10px] tracking-widest mb-4">🔔 Programmer une relance</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="setQuickAlert(1)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">Demain</button>
+                                <button onclick="setQuickAlert(7)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">J+7</button>
+                                <button onclick="setQuickAlert(30)" class="px-4 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-100 transition shadow-sm">1 Mois</button>
+                                <div class="flex items-center bg-white border border-orange-200 rounded-xl px-2">
+                                    <input type="date" id="alertCustomDate" class="p-2 bg-transparent text-xs font-bold outline-none">
+                                    <button onclick="setCustomAlert()" class="p-2 text-[#F26522] font-black text-xs hover:scale-110 transition">OK</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="font-black text-slate-800 uppercase text-[10px] tracking-widest">📝 Historique Échanges (B2B)</h3>
+                            <div class="flex gap-4">
+                                <textarea id="newNote" class="flex-grow bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A] h-20 shadow-inner" placeholder="Saisir un nouvel échange..."></textarea>
+                                <button onclick="addNote()" class="px-6 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg">ENREGISTRER</button>
+                            </div>
+                            <div id="dossierHistory" class="space-y-4 mt-6 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <!-- Zone info scrollable -->
-            <div id="tropheeDetailBody" class="p-6 overflow-y-auto flex-shrink-0"></div>
-        </div>
-    </div>
 
-    <!-- MODAL: PERSONNAGE PICKER -->
-    <div id="modalPersonnage" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
-            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
-                <h2 class="text-xl font-black text-gray-800">👤 Choisir un personnage</h2>
-                <button onclick="closeModal('modalPersonnage')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
-            </div>
-            <div id="personnageGrid" class="p-6 grid grid-cols-3 md:grid-cols-4 gap-4"></div>
-        </div>
-    </div>
-
-    <!-- MODAL: EMBLEME PICKER -->
-    <div id="modalEmbleme" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
-            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-3xl">
-                <h2 class="text-xl font-black text-gray-800">🏅 Choisir un emblème</h2>
-                <button onclick="closeModal('modalEmbleme')" class="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
-            </div>
-            <div id="emblemeGrid" class="p-6 grid grid-cols-3 md:grid-cols-4 gap-4"></div>
-        </div>
-    </div>
-
-    <!-- NOTIFICATION: NOUVEAU TROPHEE DEBLOQUE -->
-    <div id="notifTrophee" class="fixed inset-0 z-[200] hidden items-center justify-center" style="background:rgba(0,0,0,0.85)">
-        <div id="notifTropheeBox" class="notif-pop bg-white rounded-3xl shadow-2xl p-8 max-w-xs w-full text-center mx-4">
-            <div class="text-5xl mb-3">🎉</div>
-            <p class="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Nouveau trophée débloqué !</p>
-            <h2 class="text-2xl font-black text-amber-500 mb-5">Félicitations !</h2>
-            <div id="notifTropheeImg" class="flex justify-center items-center mb-4" style="min-height:72px"></div>
-            <p id="notifTropheeName" class="font-black text-gray-800 text-base mb-2"></p>
-            <p id="notifTropheeCategorie" class="text-xs text-amber-600 mb-6"></p>
-            <button onclick="nextNotif()" class="bg-amber-500 text-white font-black px-8 py-3 rounded-xl hover:bg-amber-600 active:scale-95 transition w-full text-sm">Continuer →</button>
-            <p id="notifCounter" class="text-xs text-gray-400 mt-3"></p>
-        </div>
-    </div>
-
-    <!-- MODAL: EDIT PSEUDO -->
-    <div id="modalPseudo" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
-            <h2 class="text-lg font-black text-gray-800 mb-4">Modifier le pseudo</h2>
-            <input type="text" id="pseudoInput" maxlength="30" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl font-bold text-lg outline-none focus:border-amber-400 mb-4" placeholder="Votre pseudo…">
-            <div class="flex gap-3">
-                <button onclick="savePseudo()" class="flex-1 bg-amber-500 text-white font-bold py-2.5 rounded-xl hover:bg-amber-600 transition">Enregistrer</button>
-                <button onclick="closeModal('modalPseudo')" class="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-200 transition">Annuler</button>
+            <div class="p-8 border-t flex justify-between items-center bg-slate-50/50">
+                <button onclick="deleteEnterprise()" class="text-slate-300 hover:text-red-600 font-bold text-xs transition">⚠️ SUPPRIMER L'ENTREPRISE</button>
+                <div class="flex space-x-4">
+                    <button onclick="closeDossier()" class="px-8 py-3 text-slate-400 font-bold hover:bg-slate-100 rounded-2xl transition">Annuler</button>
+                    <button onclick="saveEnterpriseChanges()" class="px-10 py-3 bg-[#1A4E8A] text-white rounded-2xl font-black shadow-xl hover:bg-blue-800 transition">SAUVEGARDER LE NOM</button>
+                </div>
             </div>
         </div>
     </div>
 
-<script>
-const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-const user = JSON.parse(localStorage.getItem('user') || '{}');
-const EMAIL_USER = (user.email || '').toLowerCase();
-const NOM_USER   = user.nom || user.name || '';
+    <div id="addContactModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 border border-slate-100">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-xl font-black text-slate-800 tracking-tight">Ajouter un interlocuteur</h2>
+                <button onclick="closeAddContact()" class="text-slate-300 hover:text-red-500 text-2xl">✕</button>
+            </div>
+            
+            <form id="addContactForm" class="space-y-4">
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Entreprise de rattachement</label>
+                    <input type="text" id="addContEntNom" placeholder="Nom de l'entreprise" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <input type="hidden" id="addContEntId">
+                </div>
 
-if (!EMAIL_USER) { localStorage.clear(); window.location.href = 'index.html'; }
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="addContPrenom" placeholder="Prénom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                    <input type="text" id="addContNom" placeholder="Nom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                </div>
 
-const XP_MAP = {Actions:1,Offres:10,CarnetRoute:5,CarnetEntreprise:15,Missions:15,Objectifs:50,Alertes:10,Com:35,Entreprise:25,Etudiant:20,Special:100};
-const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial'};
-const KPI_COLORS = {Actions:'blue',Offres:'emerald',CarnetRoute:'violet',CarnetEntreprise:'pink',Missions:'amber',Objectifs:'green',Alertes:'orange',Com:'cyan',Entreprise:'indigo',Etudiant:'teal',Special:'red'};
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-[#1A4E8A] ml-2 italic">Coordonnées Pro (1)</label>
+                        <input type="email" id="addContMail1" placeholder="Mail 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="addContTel1" placeholder="Tel 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Coordonnées Perso (2)</label>
+                        <input type="email" id="addContMail2" placeholder="Mail 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                        <input type="text" id="addContTel2" placeholder="Tel 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                </div>
 
-let tropheeData = null;
-let allActionRows = [];
-let filteredActionRows = [];
+                <div class="space-y-2">
+                    <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Adresse de l'entreprise</label>
+                    <input type="text" id="addContAdresse" placeholder="Adresse (rue, n°...)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" id="addContCP" placeholder="Code postal" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="addContVille" placeholder="Ville" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                    </div>
+                </div>
 
-async function apiPost(payload) {
-    const r = await fetch(API_URL, {method:'POST', body: JSON.stringify(payload)});
-    return r.json();
-}
+                <button type="button" onclick="submitNewContact()" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg hover:scale-[1.02] transition duration-300 mt-6">
+                    CRÉER ET VÉRIFIER DOUBLONS
+                </button>
+            </form>
+        </div>
+    </div>
 
-async function loadData(force) {
+    <div id="contactEditModal" class="fixed inset-0 bg-slate-900/40 hidden items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-slate-100">
+            <h3 class="font-black text-slate-800 mb-6 text-lg">Modifier le contact</h3>
+            <div class="space-y-4">
+                <input type="text" id="editContactPrenom" placeholder="Prénom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="text" id="editContactNom" placeholder="Nom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="text" id="editContactTel" placeholder="Téléphone" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <input type="email" id="editContactMail" placeholder="Email" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+            </div>
+            <div class="flex gap-4 mt-8">
+                <button onclick="closeContactEdit()" class="flex-1 py-2 text-slate-400 font-bold text-sm hover:underline transition">Annuler</button>
+                <button onclick="saveContactChanges()" class="flex-1 py-3 bg-[#1A4E8A] text-white rounded-xl font-black text-xs shadow-md hover:bg-blue-800 transition">ENREGISTRER</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        async function apiPost(payload) {
+    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+    payload.idAuteur = userSession.nom || "Inconnu";
+    payload.roleAuteur = userSession.role || "N/A";
+    
     try {
-        const res = await apiPost({action:'getTropheeData', emailUser: EMAIL_USER, nomUser: NOM_USER});
-        if (!res.success) { console.error(res.message); return; }
-        tropheeData = res;
-        allActionRows = res.actionRows || [];
-
-        renderBanner(res);
-        renderKPIs(res);
-        renderHeptagon(res);
-        renderTrophees(res);
-        renderActionTable(res);
-        buildCatFilter(res);
-
-        // Efface le badge
-        localStorage.removeItem('hecg_trophees_new');
-        const badgeEl = document.getElementById('navTropheesBadge');
-        if (badgeEl) badgeEl.style.display = 'none';
-
-        // Marquer vus + notifier
-        if (res.newUnlocks && res.newUnlocks.length > 0) {
-            apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
-            showTropheeNotifs(res.newUnlocks);
-        }
-    } catch(e) { console.error(e); }
-}
-
-function getNiveauLabel(n) {
-    if (n <= 3) return {label: 'Niveau ' + n, cls: 'level-bronze', tier: 'bronze'};
-    if (n <= 8) return {label: 'Niveau ' + n, cls: 'level-gold',   tier: 'or'};
-    return      {label: 'Niveau ' + n, cls: 'level-rainbow',        tier: 'rainbow'};
-}
-
-function renderBanner(d) {
-    const prefs = d.prefs || {};
-    const xp = d.xpTotal || 0;
-    const niveau = d.niveau || 0;
-    const nl = getNiveauLabel(niveau);
-
-    document.getElementById('pseudoDisplay').textContent = prefs.pseudo || NOM_USER || 'Joueur';
-
-    // Calcul emblème en premier pour afficher son nom à côté du niveau
-    const emblemeId = prefs.emblemeChoisi;
-    const emblemeT = emblemeId && d.trophees ? d.trophees.find(t => t.id === emblemeId && t.unlocked) : null;
-
-    // Niveau + nom de l'emblème sélectionné
-    const niveauEl = document.getElementById('niveauDisplay');
-    niveauEl.className = 'text-base font-bold mb-5 ' + nl.cls;
-    const embLabel = emblemeT ? `<span style="-webkit-text-fill-color:rgba(255,255,255,0.5);color:rgba(255,255,255,0.5);font-weight:400;font-size:0.7rem;margin-left:8px">· ${escH(emblemeT.nom)}</span>` : '';
-    niveauEl.innerHTML = nl.label + embLabel;
-
-    // Liseré neon sur le portrait selon le tier du niveau
-    const portrait = document.getElementById('personnagePortrait');
-    portrait.classList.remove('portrait-rainbow-border');
-    if (nl.tier === 'bronze') {
-        portrait.style.borderColor = '#c87832';
-        portrait.style.boxShadow   = '0 0 10px rgba(200,120,50,0.8), 0 0 22px rgba(200,120,50,0.35)';
-        portrait.style.animation   = '';
-    } else if (nl.tier === 'or') {
-        portrait.style.borderColor = '#f59e0b';
-        portrait.style.boxShadow   = '0 0 13px rgba(245,158,11,0.9), 0 0 28px rgba(245,158,11,0.4)';
-        portrait.style.animation   = '';
-    } else {
-        portrait.style.borderColor = '';
-        portrait.style.boxShadow   = '';
-        portrait.classList.add('portrait-rainbow-border');
-    }
-
-    document.getElementById('xpDisplay').textContent = xp.toLocaleString('fr') + ' XP';
-
-    // Calcul XP vers prochain niveau
-    const persos = (d.personnages || []).sort((a,b) => a.xpRequired - b.xpRequired);
-    const nextPerso = persos.find(p => !p.unlocked);
-    const maxXP = nextPerso ? nextPerso.xpRequired : (xp || 1);
-    const pct = nextPerso ? Math.min(100, Math.round(xp / maxXP * 100)) : 100;
-    document.getElementById('xpBarFill').style.width = pct + '%';
-
-    // Afficher l'emblème dans le cercle
-    const emblemeEl = document.getElementById('emblemeDisplay');
-    if (emblemeT) {
-        emblemeEl.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center';
-        if (emblemeT.url) {
-            emblemeEl.innerHTML = `<img src="${escH(driveImg(emblemeT.url))}" style="width:100%;height:100%;object-fit:contain;background:#000">`;
-        } else {
-            emblemeEl.innerHTML = tropheeImg(emblemeT, true);
-        }
-    } else {
-        emblemeEl.style.cssText = '';
-        emblemeEl.className = 'text-4xl';
-        emblemeEl.textContent = '🏆';
-    }
-
-    // Fond banner selon trophées spéciaux obtenus
-    const specialUnlocked = (d.trophees || []).filter(t => t.unlocked && (t.catKey === 'Special' || t.categorie === 'Spécial') && t.url);
-    const banner = document.getElementById('banner');
-    if (specialUnlocked.length > 0) {
-        const bgUrl = driveImg(specialUnlocked[specialUnlocked.length - 1].url);
-        banner.style.backgroundImage = `url('${bgUrl}')`;
-        banner.style.backgroundSize = 'cover';
-        banner.style.backgroundPosition = 'center';
-    } else {
-        banner.style.backgroundImage = '';
-        banner.style.backgroundSize = '';
-        banner.style.backgroundPosition = '';
-    }
-
-    // Personnage
-    const persoRef = prefs.personnageChoisi;
-    const perso = persoRef && d.personnages ? d.personnages.find(c => c.ref === persoRef && c.unlocked) : (d.personnages || []).find(c => c.unlocked);
-    const pImg = document.getElementById('personnageImg');
-    const pPh  = document.getElementById('personnagePlaceholder');
-    if (perso && perso.url) {
-        pImg.src = driveImg(perso.url);
-        pImg.style.display = 'block';
-        pPh.style.display  = 'none';
-        document.getElementById('personnageNom').textContent = perso.nom;
-    } else if (perso) {
-        pImg.style.display = 'none';
-        pPh.style.display  = 'flex';
-        document.getElementById('personnageNom').textContent = perso.nom;
-    } else {
-        pImg.style.display = 'none';
-        pPh.style.display  = 'flex';
-        document.getElementById('personnageNom').textContent = '';
-    }
-}
-
-function renderKPIs(d) {
-    const strip = document.getElementById('kpiStrip');
-    const cnt = d.count || {};
-    const items = Object.keys(XP_MAP);
-    strip.innerHTML = items.map(k => {
-        const v = cnt[k] || 0;
-        const xp = v * XP_MAP[k];
-        return `<div class="bg-white rounded-2xl p-3 border border-gray-100 shadow-sm text-center">
-            <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest truncate">${XP_LABELS[k]}</p>
-            <p class="text-2xl font-black text-gray-800 mt-0.5">${v}</p>
-            <p class="text-xs text-amber-500 font-bold">+${xp} XP</p>
-        </div>`;
-    }).join('');
-}
-
-function tropheeImg(t, big, overrideSz) {
-    const sz = overrideSz != null ? overrideSz : (big ? 70 : 48);
-    const rad = sz > 90 ? 18 : 10;
-    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${sz}px;height:${sz}px;object-fit:contain;background:#000;border-radius:${rad}px;display:block">`;
-    const tier = (t.tier||'').toLowerCase();
-    const isRw = tier === 'arc-en-ciel';
-    const cls = isRw ? 'trophy-rw-anim' : '';
-    const uid = Math.random().toString(36).slice(2,9);
-    const PAL = {
-        bronze: {
-            chrome: ['#1a0d05','#3a1a06','#78390e','#b5621c','#d4883c','#f0ae6a','#d4883c','#b5621c','#78390e','#3a1a06','#1a0d05'],
-            depth:  ['rgba(180,100,30,0.10)','rgba(10,4,0,0.55)'],
-            spec:   'rgba(255,215,160,0.52)',
-            rim:    ['#3a1806','#c87832','#f5c880','#c87832','#3a1806'],
-            base:   ['#0e0906','#2e1808','#5a3010','#2e1808','#0e0906'],
-            stroke: '#c87832', glow: 'rgba(200,120,50,0.75)'
-        },
-        argent: {
-            chrome: ['#0a1016','#1c2e3c','#385468','#6488a0','#90b4c8','#c8e0f0','#90b4c8','#6488a0','#385468','#1c2e3c','#0a1016'],
-            depth:  ['rgba(150,185,210,0.10)','rgba(4,10,16,0.55)'],
-            spec:   'rgba(215,240,255,0.52)',
-            rim:    ['#1a2e3c','#8ab0cc','#d8eef8','#8ab0cc','#1a2e3c'],
-            base:   ['#06090d','#18283a','#304858','#18283a','#06090d'],
-            stroke: '#8ab0cc', glow: 'rgba(138,176,204,0.75)'
-        },
-        or: {
-            chrome: ['#181200','#302200','#685000','#a87e0e','#c8a01e','#ecd050','#c8a01e','#a87e0e','#685000','#302200','#181200'],
-            depth:  ['rgba(220,175,25,0.10)','rgba(12,8,0,0.55)'],
-            spec:   'rgba(255,242,168,0.52)',
-            rim:    ['#302000','#d4b018','#f8e878','#d4b018','#302000'],
-            base:   ['#0c0a00','#281e06','#4e3a08','#281e06','#0c0a00'],
-            stroke: '#d4b018', glow: 'rgba(212,176,24,0.80)'
-        }
-    };
-    PAL['arc-en-ciel'] = Object.assign({}, PAL.argent);
-    const p = PAL[tier] || PAL.or;
-    const drp = isRw ? '' : `filter:drop-shadow(0 0 7px ${p.glow}) drop-shadow(0 3px 10px rgba(0,0,0,0.9))`;
-    const mk = arr => arr.map((c,i) => `<stop offset="${Math.round(i*100/(arr.length-1))}%" stop-color="${c}"/>`).join('');
-    return `<svg class="${cls}" width="${sz}" height="${sz}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;${drp}">
-  <defs>
-    <linearGradient id="cG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.chrome)}</linearGradient>
-    <linearGradient id="rG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.rim)}</linearGradient>
-    <linearGradient id="bG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.base)}</linearGradient>
-    <linearGradient id="dG${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="${p.depth[0]}"/>
-      <stop offset="100%" stop-color="${p.depth[1]}"/>
-    </linearGradient>
-    <radialGradient id="sG${uid}" cx="34%" cy="26%" r="44%">
-      <stop offset="0%" stop-color="${p.spec}"/>
-      <stop offset="70%" stop-color="rgba(255,255,255,0.05)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-    </radialGradient>
-    <radialGradient id="iG${uid}" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0.28)"/>
-    </radialGradient>
-  </defs>
-  <!-- Handles drawn first so cup body overlaps attachment points -->
-  <!-- Left handle: dark shadow → tier color → bright specular -->
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="2" stroke-linecap="round"/>
-  <!-- Right handle: dark shadow → tier color → bright specular -->
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(255,255,255,0.20)" stroke-width="2" stroke-linecap="round"/>
-  <!-- Cup body: chalice shape — wide rim, curves inward then tapers to stem junction -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#cG${uid})" stroke="${p.stroke}" stroke-width="2.8" stroke-linejoin="round"/>
-  <!-- Vertical depth shading (lit at top, shadowed at bottom) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#dG${uid})" pointer-events="none"/>
-  <!-- Radial inner shadow (gives bowl depth) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#iG${uid})" pointer-events="none"/>
-  <!-- Specular highlight (bright spot upper-left, simulates light source) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#sG${uid})" pointer-events="none"/>
-  <!-- Inner cup edge shadow (gives thickness/depth to the cup walls) -->
-  <path d="M23,13 C21,27 18,43 26,55 C31,63 40,66 50,67 C60,66 69,63 74,55 C82,43 79,27 77,13"
-        fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="1.5"/>
-  <!-- Rim band (flat top of cup, most reflective part) -->
-  <path d="M12,5 H88 V12 Q88,14 82,14 H18 Q12,14 12,12 Z" fill="url(#rG${uid})" stroke="${p.stroke}" stroke-width="1.2"/>
-  <line x1="16" y1="8.5" x2="84" y2="8.5" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>
-  <!-- Junction band (cup-to-stem) -->
-  <rect x="37" y="68" width="26" height="5.5" rx="1.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2"/>
-  <!-- Stem -->
-  <rect x="43" y="73.5" width="14" height="7" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.2"/>
-  <!-- Upper base tier -->
-  <rect x="26" y="80" width="48" height="7" rx="2" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.4"/>
-  <!-- Lower base tier (widest, most prominent) -->
-  <rect x="15" y="86" width="70" height="9" rx="2.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.7"/>
-  <line x1="18" y1="89.5" x2="82" y2="89.5" stroke="rgba(255,255,255,0.14)" stroke-width="0.9"/>
-</svg>`;
-}
-
-function openTropheeById(id) {
-    const t = ((tropheeData && tropheeData.trophees) || []).find(x => x.id === id);
-    if (t) openTropheeDetail(t);
-}
-
-let currentTierFilter = null;
-
-function filterTier(tier) {
-    currentTierFilter = currentTierFilter === tier ? null : tier;
-    renderTrophees(tropheeData);
-}
-
-function renderTrophees(d) {
-    if (!d) return;
-    const grid = document.getElementById('tropheesGrid');
-    const all      = d.trophees || [];
-    const unlocked = all.filter(t => t.unlocked);
-
-    const tc = {bronze:0, argent:0, or:0, 'arc-en-ciel':0};
-    unlocked.forEach(t => { const k = (t.tier||'').toLowerCase(); if (k in tc) tc[k]++; });
-
-    const tierBadges = [
-        {k:'bronze',      label:'Bronze',       col:'#c87832', bg:'rgba(200,120,50,0.12)'},
-        {k:'argent',      label:'Argent',       col:'#8ab0cc', bg:'rgba(138,176,204,0.12)'},
-        {k:'or',          label:'Or',           col:'#d4b018', bg:'rgba(212,176,24,0.12)'},
-        {k:'arc-en-ciel', label:'Incandescent', col:'#a855f7', bg:'rgba(168,85,247,0.10)'},
-    ];
-
-    const statsBar = `<div class="col-span-full flex flex-wrap gap-3 mb-2">
-        <div class="flex-1 min-w-[120px] bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center">
-            <p class="text-[10px] font-black text-amber-500 uppercase tracking-widest">Total</p>
-            <p class="text-2xl font-black text-gray-800 mt-0.5">${unlocked.length}<span class="text-sm text-gray-400 font-normal"> / ${all.length}</span></p>
-        </div>
-        ${tierBadges.map(b => {
-            const isActive = currentTierFilter === b.k;
-            return `<div class="tier-badge-btn flex-1 min-w-[90px] rounded-2xl px-3 py-3 text-center border"
-                style="background:${b.bg};border-color:${isActive ? b.col : b.col+'40'};${isActive ? 'box-shadow:0 0 0 2px '+b.col+',0 0 10px '+b.col+'44' : ''}"
-                onclick="filterTier('${b.k}')">
-                <p class="text-[10px] font-black uppercase tracking-widest" style="color:${b.col}">${b.label}</p>
-                <p class="text-xl font-black text-gray-800 mt-0.5">${tc[b.k]}</p>
-                ${isActive ? `<p class="text-[8px] font-bold mt-0.5" style="color:${b.col}">✓ Filtré</p>` : ''}
-            </div>`;
-        }).join('')}
-    </div>`;
-
-    const filtered = currentTierFilter ? unlocked.filter(t => (t.tier||'').toLowerCase() === currentTierFilter) : unlocked;
-
-    if (!unlocked.length) {
-        grid.innerHTML = statsBar + '<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée débloqué pour l\'instant. Continue tes efforts ! 💪</p>';
-        return;
-    }
-
-    let heading = '';
-    if (currentTierFilter) {
-        const b = tierBadges.find(x => x.k === currentTierFilter);
-        heading = `<div class="col-span-full flex items-center gap-2 mb-1">
-            <span class="text-sm font-black" style="color:${b.col}">${b.label}</span>
-            <span class="text-xs text-gray-400">${filtered.length} trophée${filtered.length !== 1 ? 's' : ''}</span>
-            <button onclick="filterTier('${b.k}')" class="ml-auto text-xs text-gray-400 hover:text-gray-700 font-bold border border-gray-200 rounded-lg px-2 py-0.5 transition">✕ Tout voir</button>
-        </div>`;
-    }
-
-    const cards = !filtered.length
-        ? `<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée ${tierBadges.find(x=>x.k===currentTierFilter)?.label||''} pour l'instant.</p>`
-        : filtered.map(t => `
-            <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
-                <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
-                <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
-                <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
-                ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
-            </div>`).join('');
-
-    grid.innerHTML = statsBar + heading + cards;
-}
-
-function buildCatFilter(d) {
-    const cats = [...new Set((d.actionRows||[]).map(r => r.categorie).filter(Boolean))].sort();
-    const sel = document.getElementById('actCatFilter');
-    sel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${escH(c)}">${escH(c)}</option>`).join('');
-}
-
-function renderActionTable(d) {
-    filteredActionRows = d.actionRows || [];
-    filterActions();
-}
-
-function filterActions() {
-    const search = document.getElementById('actSearch').value.toLowerCase();
-    const cat = document.getElementById('actCatFilter').value;
-    const period = parseInt(document.getElementById('actPeriodFilter').value) || 0;
-    const now = Date.now();
-
-    let rows = allActionRows;
-    if (search) rows = rows.filter(r => (r.cible+r.details+r.type+r.categorie).toLowerCase().includes(search));
-    if (cat) rows = rows.filter(r => r.categorie === cat);
-    if (period) rows = rows.filter(r => {
-        if (!r.date) return false;
-        const parts = r.date.split(' ')[0].split('/');
-        const d = new Date(parts[2], parts[1]-1, parts[0]);
-        return (now - d.getTime()) <= period * 86400000;
-    });
-
-    rows.sort((a, b) => {
-        const parseD = s => {
-            if (!s) return 0;
-            const [dp='', tp=''] = s.split(' ');
-            const [d=0, m=0, y=0] = dp.split('/');
-            const [h=0, mn=0, sc=0] = tp.split(':');
-            return new Date(y, m-1, d, h, mn, sc).getTime();
-        };
-        return parseD(b.date) - parseD(a.date);
-    });
-
-    filteredActionRows = rows;
-    document.getElementById('actCount').textContent = rows.length + ' action' + (rows.length>1?'s':'');
-
-    const tbody = document.getElementById('actionsBody');
-    if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-gray-400 text-sm">Aucune action trouvée</td></tr>';
-        return;
-    }
-    const typeColor = {Création:'bg-green-100 text-green-700', Modification:'bg-blue-100 text-blue-700', Suppression:'bg-red-100 text-red-700'};
-    tbody.innerHTML = rows.slice(0,200).map(r => `<tr class="border-b border-gray-50 hover:bg-gray-50">
-        <td class="py-2 pr-3 text-gray-500 text-xs whitespace-nowrap">${escH(r.date)}</td>
-        <td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-full text-xs font-bold ${typeColor[r.type]||'bg-gray-100 text-gray-600'}">${escH(r.type)}</span></td>
-        <td class="py-2 pr-3 text-gray-600 text-xs">${escH(r.categorie)}</td>
-        <td class="py-2 text-gray-700 text-xs truncate max-w-xs">${escH(r.cible||r.details||'')}</td>
-    </tr>`).join('');
-}
-
-function openTropheeDetail(t) {
-    const pct = t.quantite > 0 ? Math.min(100, Math.round(t.count / t.quantite * 100)) : 100;
-    const tierLabel = {bronze:'Bronze',argent:'Argent',or:'Or','arc-en-ciel':'Arc-en-ciel'}[(t.tier||'').toLowerCase()] || '';
-    const tierColor = {bronze:'text-amber-700',argent:'text-slate-400',or:'text-amber-400','arc-en-ciel':'level-rainbow'}[(t.tier||'').toLowerCase()] || 'text-amber-400';
-
-    // Header zone
-    document.getElementById('tropheeDetailNom').textContent = t.unlocked ? t.nom : '???';
-    const tierEl = document.getElementById('tropheeDetailTier');
-    tierEl.textContent = tierLabel;
-    tierEl.className = 'text-xs font-bold uppercase tracking-widest mt-1 ' + tierColor;
-
-    // Large trophy image
-    document.getElementById('tropheeDetailImgWrap').innerHTML = tropheeImg(t, true, 300);
-
-    // Info body
-    const isEmbleme = tropheeData && tropheeData.prefs && tropheeData.prefs.emblemeChoisi === t.id;
-    document.getElementById('tropheeDetailBody').innerHTML = `
-        <div class="flex gap-3 mb-4">
-            <div class="flex-1 bg-gray-50 rounded-2xl p-3 text-center">
-                <p class="text-[10px] text-gray-400 uppercase tracking-widest font-black mb-1">Catégorie</p>
-                <p class="text-sm font-black text-gray-800">${escH(t.categorie)}</p>
-            </div>
-            <div class="flex-1 bg-gray-50 rounded-2xl p-3 text-center">
-                <p class="text-[10px] text-gray-400 uppercase tracking-widest font-black mb-1">Progression</p>
-                <p class="text-sm font-black text-gray-800">${t.count} <span class="text-gray-400 font-normal">/ ${t.quantite}</span></p>
-            </div>
-        </div>
-        <div class="bg-gray-100 rounded-full h-2 mb-4"><div class="bg-amber-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>
-        ${t.unlocked ? `
-            <p class="text-xs text-green-600 font-bold text-center mb-4">✅ Débloqué${t.dateObtention ? ' le '+escH(t.dateObtention) : ''}</p>
-            <button onclick="pickEmblemeFromDetail('${esc(t.id)}')" class="w-full py-2.5 rounded-xl font-black text-sm transition ${isEmbleme ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200'}">
-                ${isEmbleme ? '🏅 Emblème actuel' : '🏅 Définir comme emblème'}
-            </button>` : `<p class="text-xs text-gray-400 text-center">🔒 Encore ${t.quantite - t.count} ${escH(XP_LABELS[t.catKey]||t.categorie)} à faire</p>`}
-    `;
-    document.getElementById('modalTrophee').classList.remove('hidden');
-}
-
-async function pickEmblemeFromDetail(id) {
-    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'emblemeChoisi', val: id});
-    tropheeData.prefs = tropheeData.prefs || {};
-    tropheeData.prefs.emblemeChoisi = id;
-    renderBanner(tropheeData);
-    closeModal('modalTrophee');
-}
-
-function openSalleRecompenses() {
-    if (!tropheeData) return;
-    const cats = {};
-    (tropheeData.trophees || []).forEach(t => {
-        if (!cats[t.categorie]) cats[t.categorie] = [];
-        cats[t.categorie].push(t);
-    });
-    let html = '';
-    for (const cat in cats) {
-        html += `<div class="mb-6">
-            <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">${escH(cat)}</h3>
-            <div class="grid grid-cols-3 md:grid-cols-5 gap-3">`;
-        cats[cat].forEach(t => {
-            html += `<div class="trophy-card ${t.unlocked?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100'} border rounded-2xl p-3 text-center cursor-pointer ${t.unlocked?'':'trophy-locked'}" onclick="openTropheeById('${escH(t.id)}')">
-                <div class="mb-1 flex justify-center">${t.unlocked ? tropheeImg(t, false) : '<span class="text-3xl opacity-30">🏆</span>'}</div>
-                <p class="font-bold text-gray-800 text-xs leading-tight">${t.unlocked ? escH(t.nom) : '?'}</p>
-                <p class="text-[9px] ${t.unlocked?'text-amber-600':'text-gray-400'} mt-0.5">${t.count}/${t.quantite}</p>
-            </div>`;
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
         });
-        html += '</div></div>';
+        return await response.json();
+    } catch (e) {
+        console.error("Erreur API :", e);
+        return { success: false, message: "Erreur de connexion" };
     }
-    document.getElementById('salleContent').innerHTML = html || '<p class="text-center text-gray-400 py-8">Aucune récompense trouvée.</p>';
-    document.getElementById('modalSalle').classList.remove('hidden');
 }
+        let allPartners = [];
+        let lastFilteredPartners = [];
+        let filterOnlyAlt = false;
+        let currentId = null;
+        let currentContactId = null;
 
-function openPersonnagePicker() {
-    if (!tropheeData) return;
-    const current = (tropheeData.prefs || {}).personnageChoisi || '';
-    const grid = document.getElementById('personnageGrid');
-    grid.innerHTML = (tropheeData.personnages || []).map(c => {
-        const locked = !c.unlocked;
-        const sel = c.ref === current;
-        return `<div class="perso-card rounded-2xl overflow-hidden bg-gray-50 ${sel?'selected':''} ${locked?'locked':''}" onclick="${locked?'':  `pickPersonnage('${c.ref}')`}">
-            <div class="aspect-square overflow-hidden bg-gray-200">
-                ${c.url ? `<img src="${escH(driveImg(c.url))}" class="w-full h-full" style="object-fit:contain;background:#000">` : `<div class="w-full h-full flex items-center justify-center text-4xl">👤</div>`}
-            </div>
-            <div class="p-2 text-center">
-                <p class="font-bold text-xs text-gray-800">${locked ? '???' : escH(c.nom)}</p>
-                <p class="text-[9px] text-gray-400">${locked ? 'Requis: '+c.xpRequired.toLocaleString('fr')+' XP' : '✅ Débloqué'}</p>
-            </div>
-        </div>`;
-    }).join('');
-    document.getElementById('modalPersonnage').classList.remove('hidden');
-}
+        // Initialisation
+        window.onload = () => {
+            const userName = localStorage.getItem('user_nom');
+            if(userName) document.getElementById('userNameDisplay').innerText = userName;
+            loadPartners();
+        };
 
-async function pickPersonnage(ref) {
-    if (!tropheeData) return;
-    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'personnageChoisi', val: ref});
-    tropheeData.prefs = tropheeData.prefs || {};
-    tropheeData.prefs.personnageChoisi = ref;
-    renderBanner(tropheeData);
-    closeModal('modalPersonnage');
-}
+        // --- 1. CHARGEMENT & AFFICHAGE ---
+        async function loadPartners() {
+            try {
+                document.getElementById('loader').classList.remove('hidden');
+                document.getElementById('partnersGrid').classList.add('hidden');
 
-function openEmblemePicker() {
-    if (!tropheeData) return;
-    const current = (tropheeData.prefs || {}).emblemeChoisi || '';
-    const unlockedTrophees = (tropheeData.trophees || []).filter(t => t.unlocked);
-    const grid = document.getElementById('emblemeGrid');
-    if (!unlockedTrophees.length) {
-        grid.innerHTML = '<p class="col-span-full text-center text-gray-400 py-8">Débloquez des trophées pour en choisir un comme emblème.</p>';
-        document.getElementById('modalEmbleme').classList.remove('hidden');
-        return;
-    }
-    grid.innerHTML = unlockedTrophees.map(t => {
-        const sel = t.id === current;
-        return `<div class="perso-card rounded-2xl p-4 bg-amber-50 border border-amber-100 text-center ${sel?'selected':''}" onclick="pickEmbleme('${escH(t.id)}')">
-            <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
-            <p class="font-bold text-xs text-gray-800">${escH(t.nom)}</p>
-            <p class="text-[9px] text-amber-600">${escH(t.categorie)}</p>
-        </div>`;
-    }).join('');
-    document.getElementById('modalEmbleme').classList.remove('hidden');
-}
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartners' }) });
+                const data = await res.json();
+                
+                if(data.success) {
+                    allPartners = data.data;
+                    filterPartners(); // applique les filtres actifs et initialise lastFilteredPartners
+                } else {
+                    alert("Erreur Serveur : " + data.message);
+                }
+            } catch(e) { 
+                console.error("Erreur réseau : ", e);
+                alert("Impossible de joindre le serveur. Vérifiez votre connexion.");
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('partnersGrid').classList.remove('hidden');
+            }
+        }
 
-async function pickEmbleme(id) {
-    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'emblemeChoisi', val: id});
-    tropheeData.prefs = tropheeData.prefs || {};
-    tropheeData.prefs.emblemeChoisi = id;
-    renderBanner(tropheeData);
-    closeModal('modalEmbleme');
-}
+        function renderPartners(data) {
+            const grid = document.getElementById('partnersGrid');
+            
+            grid.innerHTML = data.map(ent => {
+                const nbAlt = (ent.alternants || []).length;
+                const nbContacts = (ent.contacts || []).length;
 
-function editPseudo() {
-    const cur = (tropheeData && tropheeData.prefs) ? tropheeData.prefs.pseudo || '' : '';
-    document.getElementById('pseudoInput').value = cur || NOM_USER || '';
-    document.getElementById('modalPseudo').classList.remove('hidden');
-    setTimeout(() => document.getElementById('pseudoInput').focus(), 50);
-}
+                // Logique pastille alerte
+                let alertClass = "";
+                if(ent.alerte === "RETARD") alertClass = "bg-red-500 pulse-red";
+                else if(ent.alerte === "PROGRAMMÉE") alertClass = "bg-blue-500";
 
-async function savePseudo() {
-    const val = document.getElementById('pseudoInput').value.trim();
-    if (!val) return;
-    await apiPost({action:'saveTropheePrefs', emailUser: EMAIL_USER, field:'pseudo', val: val});
-    if (tropheeData) {
-        tropheeData.prefs = tropheeData.prefs || {};
-        tropheeData.prefs.pseudo = val;
-        document.getElementById('pseudoDisplay').textContent = val;
-    }
-    closeModal('modalPseudo');
-}
+                return `
+                <div class="bg-white rounded-[2.2rem] p-8 border border-slate-100 flex flex-col justify-between hover:shadow-2xl transition-all duration-500 relative group">
+                    ${alertClass ? `<div class="absolute -top-1 -right-1 w-6 h-6 ${alertClass} rounded-full border-4 border-white shadow-lg"></div>` : ''}
+                    <div>
+                        <div class="flex justify-between items-start mb-6">
+                            <h3 class="text-xl font-black text-slate-800 leading-tight group-hover:text-[#1A4E8A] transition-colors">${ent.nom || "Sans nom"}</h3>
+                            <span class="text-[9px] font-black text-slate-300 uppercase">REF: ${ent.id}</span>
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1.5 rounded-xl font-black">${nbContacts} Contact${nbContacts > 1 ? 's' : ''}</span>
+                            ${nbAlt > 0 ? `<span class="text-[10px] bg-green-50 text-green-700 px-3 py-1.5 rounded-xl font-black">${nbAlt} Alternant${nbAlt > 1 ? 's' : ''}</span>` : ''}
+                        </div>
+                        ${(ent.ville || ent.cp) ? `<p class="text-[10px] text-slate-400 mt-2 font-medium">📍 ${[ent.adresse, ent.cp, ent.ville].filter(Boolean).join(' · ')}</p>` : ''}
+                    </div>
+                  <button onclick="window.location.href='dossier_partenaire.html?id=${ent.id}'" class="mt-6 w-full py-3 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg text-center">📂 DOSSIER COMPLET</button>
+                </div>
+                `;
+            }).join('') || '<div class="col-span-full text-center py-20 text-slate-300 font-bold italic">Aucune entreprise trouvée.</div>';
+        }
 
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        // --- 2. GESTION DU DOSSIER ---
+        async function openDossier(id) {
+            const ent = allPartners.find(p => String(ent.id) === String(id));
+            if(!ent) return;
+            currentId = id;
+            
+            document.getElementById('editEntNom').value = ent.nom || "";
+            document.getElementById('editEntRef').innerText = "ID SYSTÈME : " + ent.id;
+            
+            document.getElementById('dossierContacts').innerHTML = (ent.contacts || []).map(c => `
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group/item transition-all hover:bg-white hover:shadow-md">
+                    <div>
+                        <p class="font-black text-slate-800 text-sm">${c.prenom || ""} ${c.nom || ""}</p>
+                        <p class="text-[10px] font-bold text-slate-400 mt-1">📞 ${c.tel || "N/C"} ${c.tel2 ? '| ' + c.tel2 : ''}</p>
+                        <p class="text-[10px] text-blue-500 font-bold truncate">✉️ ${c.email || "N/C"}</p>
+                    </div>
+                    <div class="flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                        <button onclick="editContact('${ent.id}','${c.id_contact}')" class="p-2 text-slate-300 hover:text-blue-500 transition-colors">✏️</button>
+                        <button onclick="deleteContact('${c.id_contact}')" class="p-2 text-slate-300 hover:text-red-500 transition-colors">🗑️</button>
+                    </div>
+                </div>
+            `).join('') || "<p class='text-[10px] text-slate-300 italic font-bold'>Aucun contact enregistré.</p>";
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        // Dismiss notification first if open
-        const notif = document.getElementById('notifTrophee');
-        if (!notif.classList.contains('hidden')) { nextNotif(); return; }
-        ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(closeModal);
-    }
-    if (e.key === 'Enter' && !document.getElementById('modalPseudo').classList.contains('hidden')) savePseudo();
-});
+            document.getElementById('dossierAlternants').innerHTML = (ent.alternants || []).map(a => `
+                <span class="px-4 py-2 bg-white border border-green-200 rounded-xl font-black text-green-700 text-xs shadow-sm">🎓 ${a.prenom} ${a.nom}</span>
+            `).join('') || "<p class='text-xs text-slate-300 italic'>Aucun alternant HECG en poste.</p>";
 
-['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(id => {
-    document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) closeModal(id); });
-});
-// Click outside notif box → next
-document.getElementById('notifTrophee').addEventListener('click', function(e){ if(e.target===this) nextNotif(); });
+            // Anciens alternants
+            const anciens = (ent.anciensAlternants || []);
+            const anciensBlock = document.getElementById('dossierAnciensBlock');
+            if (anciens.length > 0) {
+                anciensBlock.classList.remove('hidden');
+                document.getElementById('dossierAnciensAlternants').innerHTML = anciens.map(a => {
+                    const dateStr = a.date ? new Date(a.date).toLocaleDateString('fr-FR') : '—';
+                    const isConfirmed = a.status === 'Confirmé';
+                    return `
+                    <div class="flex items-center justify-between gap-3 p-3 rounded-2xl border ${isConfirmed ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-amber-200 shadow-sm'}">
+                        <div>
+                            <p class="font-black text-slate-800 text-sm">${a.prenom} ${a.nom}</p>
+                            <p class="text-[9px] text-slate-400 font-bold">Détecté le ${dateStr} · <span class="${isConfirmed ? 'text-slate-400' : 'text-amber-600 font-black'}">${a.status}</span></p>
+                        </div>
+                        ${isConfirmed ? `<span class="text-[9px] text-slate-400 font-bold italic">✓ Confirmé</span>` : `
+                        <div class="flex gap-2 shrink-0">
+                            <button onclick="confirmFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-green-100 text-green-700 rounded-xl text-[10px] font-black hover:bg-green-200 transition">✓ Confirmer départ</button>
+                            <button onclick="removeFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-red-50 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-100 transition">✗ Erreur de saisie</button>
+                        </div>`}
+                    </div>`;
+                }).join('');
+            } else {
+                anciensBlock.classList.add('hidden');
+            }
 
-function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function esc(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+            loadHistory(id);
+            document.getElementById('dossierModal').classList.add('modal-active');
+        }
 
-// Converts any Google Drive share link to a direct-embed URL
-function driveImg(url) {
-    if (!url) return '';
-    // Extract file ID from share URL  → use thumbnail endpoint (most reliable for <img src>)
-    const m = url.match(/\/file\/d\/([^\/\?#]+)/) || url.match(/[?&]id=([^&]+)/);
-    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
-    // Already a direct embed or other URL — return as-is
-    return url;
-}
+        function closeDossier() {
+            document.getElementById('dossierModal').classList.remove('modal-active');
+            currentId = null;
+        }
 
-// Trophy unlock notification queue
-let notifQueue = [];
-let notifIdx = 0;
+        async function confirmFormerAlternant(id) {
+            await apiPost({ action: 'confirmFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) {
+                const a = (ent.anciensAlternants || []).find(x => x.id === id);
+                if (a) a.status = 'Confirmé';
+            }
+            openDossier(currentId);
+        }
 
-function showTropheeNotifs(newUnlockIds) {
-    if (!newUnlockIds || !newUnlockIds.length) return;
-    const all = (tropheeData && tropheeData.trophees) || [];
-    notifQueue = newUnlockIds.map(id => all.find(t => t.id === id)).filter(Boolean);
-    notifIdx = 0;
-    if (notifQueue.length) _showNotifAt(0);
-}
+        async function removeFormerAlternant(id) {
+            if (!confirm("Marquer comme erreur de saisie ? L'entrée sera masquée définitivement.")) return;
+            await apiPost({ action: 'removeFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) ent.anciensAlternants = (ent.anciensAlternants || []).filter(x => x.id !== id);
+            openDossier(currentId);
+        }
 
-function _showNotifAt(idx) {
-    const overlay = document.getElementById('notifTrophee');
-    if (idx >= notifQueue.length) { overlay.style.display = ''; overlay.classList.add('hidden'); return; }
-    const t = notifQueue[idx];
-    document.getElementById('notifTropheeImg').innerHTML = tropheeImg(t, true);
-    document.getElementById('notifTropheeName').textContent = t.nom;
-    document.getElementById('notifTropheeCategorie').textContent = t.categorie || '';
-    const ctr = document.getElementById('notifCounter');
-    ctr.textContent = notifQueue.length > 1 ? (idx+1) + ' / ' + notifQueue.length : '';
-    // Re-trigger animation
-    const box = document.getElementById('notifTropheeBox');
-    box.classList.remove('notif-pop');
-    void box.offsetWidth;
-    box.classList.add('notif-pop');
-    overlay.style.display = 'flex';
-    overlay.classList.remove('hidden');
-}
+        // --- 3. HISTORIQUE & NOTES ---
+        async function loadHistory(id) {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartnerHistory', id_entreprise: id }) });
+            const data = await res.json();
+            
+            const historyDiv = document.getElementById('dossierHistory');
+            if(data.success && data.data.length > 0) {
+                historyDiv.innerHTML = data.data.map(h => `
+                    <div class="bg-slate-50/50 p-4 rounded-2xl border-l-4 border-[#1A4E8A] shadow-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] font-black text-[#1A4E8A] uppercase">${h.auteur || "Système"}</span>
+                            <span class="text-[10px] font-bold text-slate-400">${new Date(h.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <p class="text-sm text-slate-700 leading-relaxed font-medium">${h.texte}</p>
+                    </div>
+                `).join('');
+            } else {
+                historyDiv.innerHTML = "<p class='text-xs text-slate-300 italic text-center py-4'>Aucun échange consigné pour cette entité.</p>";
+            }
+        }
 
-function nextNotif() { notifIdx++; _showNotifAt(notifIdx); }
+        async function addNote() {
+            const txt = document.getElementById('newNote').value.trim();
+            if(!txt) return;
+            const author = localStorage.getItem('user_nom') || "Utilisateur";
+            
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "...";
 
-// ======================================
-// ARBRE DES COMPETENCES — HEPTAGONE
-// ======================================
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ action: 'addPartnerNote', id_entreprise: currentId, texte: txt, auteur: author }) 
+            });
+            
+            document.getElementById('newNote').value = "";
+            btn.disabled = false; btn.innerText = "ENREGISTRER";
+            loadHistory(currentId);
+        }
 
-function computeCompetences(actionRows, count) {
-    // Offres: toutes les actions sur des offres ÷ 5
-    const offresAll      = actionRows.filter(r => r.categorie === 'Offres').length;
-    // Étudiants: créations, notes, modifs dossier étudiant + carnet de route ÷ 5
-    const etudiantsAll   = actionRows.filter(r => r.categorie === 'Dossier étudiant' || r.categorie === 'Note étudiant' || r.categorie === 'Carnet de route').length;
-    // Entreprises: créations, notes partenaire, modifs entreprise ÷ 5
-    const entreprisesAll = actionRows.filter(r => r.categorie === 'Entreprise' || r.categorie === 'Note Partenaire' || r.categorie === 'Carnet entreprise' || (r.categorie||'').toLowerCase().includes('partenaire')).length;
-    // Communication: événements créés (1 point par événement, pas ÷ 5)
-    const comAll         = actionRows.filter(r => r.categorie === 'Com & Événements' && r.type === 'Création').length;
-    // Alertes: alertes créées ÷ 5 (toutes catégories d'alertes)
-    const alertesAll     = actionRows.filter(r => (r.categorie === 'Alertes' || r.categorie === 'Alertes Partenaires' || r.categorie === 'Alertes Étudiants') && r.type === 'Création').length;
-    // Missions: missions clôturées (1 point par mission — déjà calculé en backend)
-    const missionsScore  = count.Missions || 0;
-    // Vie scolaire: toutes actions vie scolaire ÷ 5
-    const vieScolaireAll = actionRows.filter(r => r.categorie === 'Vie scolaire').length;
+        // --- 4. ÉDITION CONTACTS ---
+        function editContact(entId, contId) {
+            const ent = allPartners.find(p => String(ent.id) === String(entId));
+            const c = ent.contacts.find(con => String(con.id_contact) === String(contId));
+            if(!c) return;
+            
+            currentContactId = contId;
+            document.getElementById('editContactPrenom').value = c.prenom || "";
+            document.getElementById('editContactNom').value = c.nom || "";
+            document.getElementById('editContactTel').value = c.tel || "";
+            document.getElementById('editContactMail').value = c.email || "";
+            
+            document.getElementById('contactEditModal').classList.add('modal-active');
+        }
 
-    const s = {
-        offres:      Math.min(100, Math.round(offresAll / 5)),
-        etudiants:   Math.min(100, Math.round(etudiantsAll / 5)),
-        entreprises: Math.min(100, Math.round(entreprisesAll / 5)),
-        com:         Math.min(100, comAll),
-        alertes:     Math.min(100, Math.round(alertesAll / 5)),
-        missions:    Math.min(100, missionsScore),
-        vieScolaire: Math.min(100, Math.round(vieScolaireAll / 5)),
-    };
-    // Note générale pondérée / 100 : offres×3 + étudiants×2 + entreprises×3 + com×1 + alertes×1 + missions×2 + vieScolaire×2 = /14
-    s.noteGenerale = Math.round((s.offres*3 + s.etudiants*2 + s.entreprises*3 + s.com*1 + s.alertes*1 + s.missions*2 + s.vieScolaire*2) / 14);
-    return s;
-}
+        async function saveContactChanges() {
+            const payload = {
+                action: 'updateContact',
+                id_contact: currentContactId,
+                prenom: document.getElementById('editContactPrenom').value,
+                nom: document.getElementById('editContactNom').value,
+                tel: document.getElementById('editContactTel').value,
+                email: document.getElementById('editContactMail').value
+            };
+            
+            await apiPost(payload);
+            closeContactEdit();
+            openDossier(currentId);
+            loadPartners(); 
+        }
 
-function renderHeptagon(d) {
-    const c = computeCompetences(d.actionRows || [], d.count || {});
-    document.getElementById('noteGenerale').textContent = c.noteGenerale;
+        function closeContactEdit() { document.getElementById('contactEditModal').classList.remove('modal-active'); }
 
-    const skills = [
-        { label: 'Offres',       icon: '📋', score: c.offres,      poids: 3 },
-        { label: 'Étudiants',    icon: '🎓', score: c.etudiants,   poids: 2 },
-        { label: 'Entreprises',  icon: '🏢', score: c.entreprises, poids: 3 },
-        { label: 'Com.',         icon: '📢', score: c.com,         poids: 1 },
-        { label: 'Alertes',      icon: '🔔', score: c.alertes,     poids: 1 },
-        { label: 'Missions',     icon: '🎯', score: c.missions,    poids: 2 },
-        { label: 'Vie scolaire', icon: '🏫', score: c.vieScolaire, poids: 2 },
-    ];
+        // --- 5. AJOUT DE CONTACT & DOUBLONS ---
+        function openAddContact(idEnt = null) {
+            document.getElementById('addContactForm').reset();
+            if (idEnt) {
+                const ent = allPartners.find(p => String(ent.id) === String(idEnt));
+                document.getElementById('addContEntNom').value = ent.nom;
+                document.getElementById('addContEntNom').readOnly = true;
+                document.getElementById('addContEntId').value = ent.id;
+            } else {
+                document.getElementById('addContEntNom').readOnly = false;
+                document.getElementById('addContEntId').value = "";
+            }
+            document.getElementById('addContactModal').classList.add('modal-active');
+        }
 
-    const n = 7, cx = 260, cy = 218, maxR = 138, labelR = 190;
+        function closeAddContact() { document.getElementById('addContactModal').classList.remove('modal-active'); }
 
-    function ptArr(r, i) {
-        const a = -Math.PI / 2 + i * 2 * Math.PI / n;
-        return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-    }
-    function pStr(r, i) { return ptArr(r, i).map(v => v.toFixed(1)).join(','); }
-    function polyPts(r) { return skills.map((_, i) => pStr(r, i)).join(' '); }
+        async function submitNewContact() {
+            const payload = {
+                action: 'addPartner',
+                id_entreprise: document.getElementById('addContEntId').value,
+                nom_entreprise: document.getElementById('addContEntNom').value,
+                prenom: document.getElementById('addContPrenom').value,
+                nom: document.getElementById('addContNom').value,
+                mail1: document.getElementById('addContMail1').value,
+                mail2: document.getElementById('addContMail2').value,
+                tel1: document.getElementById('addContTel1').value,
+                tel2: document.getElementById('addContTel2').value,
+                adresse: document.getElementById('addContAdresse').value,
+                cp: document.getElementById('addContCP').value,
+                ville: document.getElementById('addContVille').value
+            };
 
-    // Anneaux de fond
-    const rings = [0.2, 0.4, 0.6, 0.8, 1.0].map((f, fi) =>
-        `<polygon points="${polyPts(maxR*f)}" fill="none" stroke="${fi===4?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.07)'}" stroke-width="${fi===4?1.4:0.8}" ${fi<4?'stroke-dasharray="3,4"':''}/>`)
-        .join('');
+            if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
+                return alert("Champs obligatoires : Nom Entreprise, Nom Contact, Mail Principal.");
+            }
 
-    // Axes du centre vers chaque sommet
-    const axes = skills.map((_, i) => {
-        const [x,y] = ptArr(maxR, i);
-        return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.09)" stroke-width="1"/>`;
-    }).join('');
+            const result = await apiPost(payload);
+            
+            if (result.success) {
+                alert("✅ " + result.message);
+                closeAddContact();
+                if(currentId) openDossier(currentId);
+                loadPartners();
+            } else {
+                alert("❌ ERREUR : " + result.message);
+            }
+        }
 
-    // Polygone de compétences
-    const skillPoly = `<polygon points="${skills.map((s,i) => pStr(maxR*s.score/100, i)).join(' ')}" fill="rgba(245,158,11,0.18)" stroke="#f59e0b" stroke-width="2.2" stroke-linejoin="round"/>`;
+        // --- 6. ALERTES ---
+        async function setQuickAlert(days) {
+            const d = new Date(); d.setDate(d.getDate() + days);
+            setAlert(d, (days === 1 ? "Demain" : "Dans " + days + " jours"));
+        }
 
-    // Points et étiquettes
-    const labels = skills.map((s, i) => {
-        const [dx,dy] = ptArr(maxR * s.score / 100, i);
-        const [lx,ly] = ptArr(labelR, i);
-        const ang = -Math.PI/2 + i * 2*Math.PI/n;
-        const cosA = Math.cos(ang), sinA = Math.sin(ang);
-        const anchor = cosA > 0.22 ? 'start' : (cosA < -0.22 ? 'end' : 'middle');
-        const yBase = sinA > 0.4 ? ly + 12 : (sinA < -0.4 ? ly - 4 : ly + 4);
-        return `
-            <circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="5.5" fill="#f59e0b" stroke="#0f172a" stroke-width="2.5"/>
-            <text x="${lx.toFixed(1)}" y="${(yBase - 11).toFixed(1)}" text-anchor="${anchor}" font-size="13" dominant-baseline="middle">${s.icon}</text>
-            <text x="${lx.toFixed(1)}" y="${(yBase + 4).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="700" fill="rgba(255,255,255,0.78)" font-family="system-ui,sans-serif">${s.label}</text>
-            <text x="${lx.toFixed(1)}" y="${(yBase + 18).toFixed(1)}" text-anchor="${anchor}" font-size="13" font-weight="900" fill="#f59e0b" font-family="system-ui,sans-serif">${s.score}</text>`;
-    }).join('');
+        async function setCustomAlert() {
+            const d = document.getElementById('alertCustomDate').value;
+            if(!d) return alert("Veuillez sélectionner une date.");
+            setAlert(new Date(d), "Date personnalisée");
+        }
 
-    document.getElementById('heptagonContainer').innerHTML =
-        `<svg viewBox="0 0 520 435" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:520px">
-            ${rings}${axes}${skillPoly}${labels}
-        </svg>`;
-}
+        async function setAlert(dateObj, freqLabel) {
+            const msg = prompt("Objet du rappel (ex: Relancer pour l'offre de com) :");
+            if(!msg) return;
+            
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ 
+                    action: 'setPartnerAlert', 
+                    id_entreprise: currentId, 
+                    date: dateObj.toISOString(), 
+                    msg: msg, 
+                    freq: freqLabel 
+                }) 
+            });
+            
+            alert("⏰ Relance programmée avec succès !");
+            closeDossier();
+            loadPartners();
+        }
 
-// Init
-loadData();
-</script>
+        // --- 7. FILTRES & EXPORT (NOUVELLE LOGIQUE) ---
+        function toggleFilter(type) {
+            if(type === 'alt') {
+                filterOnlyAlt = !filterOnlyAlt;
+                const btn = document.getElementById('btnFilterAlt');
+                btn.classList.toggle('bg-[#1A4E8A]', filterOnlyAlt);
+                btn.classList.toggle('text-white', filterOnlyAlt);
+            }
+            filterPartners();
+        }
+
+        function filterPartners() {
+            const s = document.getElementById('searchInput').value.toLowerCase().trim();
+            const nbAltFilter = document.getElementById('filterNbAlt').value;
+            const cpFilter = document.getElementById('filterCP').value.toLowerCase().trim();
+            const villeFilter = document.getElementById('filterVille').value.toLowerCase().trim();
+
+            let data = allPartners.filter(p => {
+                const nomEntreprise = (p.nom || "").toLowerCase();
+                const idEntreprise = (p.id || "").toLowerCase();
+                const infosContacts = (p.contacts || []).map(c =>
+                    `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`
+                ).join(" ").toLowerCase();
+                const cp = (p.cp || "").toLowerCase();
+                const ville = (p.ville || "").toLowerCase();
+
+                const zoneDeRecherche = `${nomEntreprise} ${idEntreprise} ${infosContacts} ${cp} ${ville}`;
+                const matchSearch = !s || zoneDeRecherche.includes(s);
+                const matchCp = !cpFilter || cp.startsWith(cpFilter);
+                const matchVille = !villeFilter || ville.includes(villeFilter);
+                return matchSearch && matchCp && matchVille;
+            });
+            
+            // Filtre via le bouton "Alternants" (si on veut juste > 0)
+            if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
+
+            // Nouveau filtre déroulant (Nb Alternants)
+            if (nbAltFilter !== "all") {
+                data = data.filter(p => {
+                    const count = (p.alternants || []).length;
+                    if (nbAltFilter === "0") return count === 0;
+                    if (nbAltFilter === "1") return count === 1;
+                    if (nbAltFilter === "2+") return count >= 2;
+                    return true;
+                });
+            }
+
+            lastFilteredPartners = data;
+            renderPartners(data);
+            refreshMapMarkers(true);
+        }
+
+        function exportFilteredView() {
+            downloadCSV(lastFilteredPartners, "HECG_Export_Filtre_Partenaires.csv");
+        }
+
+        function exportIndividualDossier() {
+            const ent = allPartners.find(p => ent.id === currentId);
+            downloadCSV([ent], "Dossier_" + (ent.nom || "Entreprise") + ".csv");
+        }
+
+        function downloadCSV(data, filename) {
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Dernier Échange\n";
+            data.forEach(p => {
+                const c = p.contacts[0] || {};
+                const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
+                const dernierEchange = (p.dernierEchange || '').replace(/"/g, '""');
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dernierEchange}"\n`;
+            });
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        // --- 8. ACTIONS GLOBALES ---
+        async function saveEnterpriseChanges() {
+            const newName = document.getElementById('editEntNom').value.trim();
+            if(!newName) return alert("Le nom ne peut pas être vide.");
+            
+            await apiPost({ action: 'updateEnterprise', id_entreprise: currentId, nouveauNom: newName });
+            
+            loadPartners(); 
+            alert("✅ Nom de l'entreprise mis à jour.");
+        }
+
+        async function deleteEnterprise() {
+            if(!confirm("⚠️ ATTENTION : La suppression de l'entreprise supprimera également TOUS ses contacts. Confirmer ?")) return;
+            await apiPost({ action: 'deleteEnterprise', id_entreprise: currentId });
+            closeDossier();
+            loadPartners();
+        }
+
+        async function deleteContact(id_contact) {
+            if(!confirm("Supprimer ce contact ?")) return;
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteContact', id_contact: id_contact }) });
+            openDossier(currentId);
+            loadPartners();
+        }
+
+        // --- CARTE INTERACTIVE ---
+        let _map = null, _markerGroup = null, _mapVisible = false;
+        let _geocodingToken = 0;
+
+        // Cache persistant adresse → coords dans localStorage
+        let _geocache = {};
+        try {
+            const raw = JSON.parse(localStorage.getItem('_hecg_geo') || '{}');
+            // Purge les anciennes clés basées sur l'ID (format "geo_p_*") invalides
+            for (const k of Object.keys(raw)) {
+                if (!k.startsWith('geo_p_')) _geocache[k] = raw[k];
+            }
+        } catch(e) {}
+        function _saveGeoCache() { try { localStorage.setItem('_hecg_geo', JSON.stringify(_geocache)); } catch(e) {} }
+
+        const GEO = {
+            "marseille": [43.2965, 5.3698],
+            "marseille 1": [43.2965, 5.3698], "marseille 2": [43.3047, 5.3660],
+            "marseille 3": [43.3107, 5.3714], "marseille 4": [43.3003, 5.3910],
+            "marseille 5": [43.2944, 5.3997], "marseille 6": [43.2904, 5.3772],
+            "marseille 7": [43.2762, 5.3570], "marseille 8": [43.2616, 5.3762],
+            "marseille 9": [43.2470, 5.3922], "marseille 10": [43.2757, 5.4135],
+            "marseille 11": [43.2949, 5.4318], "marseille 12": [43.3086, 5.4157],
+            "marseille 13": [43.3372, 5.4132], "marseille 14": [43.3396, 5.3701],
+            "marseille 15": [43.3487, 5.3587], "marseille 16": [43.3622, 5.3313],
+            "paris": [48.8566, 2.3522],
+            "paris 1": [48.8600, 2.3477], "paris 2": [48.8639, 2.3497],
+            "paris 3": [48.8627, 2.3577], "paris 4": [48.8534, 2.3543],
+            "paris 5": [48.8462, 2.3448], "paris 6": [48.8496, 2.3345],
+            "paris 7": [48.8558, 2.3134], "paris 8": [48.8742, 2.3070],
+            "paris 9": [48.8765, 2.3450], "paris 10": [48.8765, 2.3643],
+            "paris 11": [48.8590, 2.3776], "paris 12": [48.8448, 2.3878],
+            "paris 13": [48.8310, 2.3637], "paris 14": [48.8297, 2.3275],
+            "paris 15": [48.8418, 2.3001], "paris 16": [48.8638, 2.2756],
+            "paris 17": [48.8848, 2.3111], "paris 18": [48.8901, 2.3479],
+            "paris 19": [48.8817, 2.3787], "paris 20": [48.8642, 2.3968],
+            "lyon": [45.7640, 4.8357], "bordeaux": [44.8378, -0.5792],
+            "toulouse": [43.6047, 1.4442], "nice": [43.7102, 7.2620],
+            "nantes": [47.2184, -1.5536], "strasbourg": [48.5734, 7.7521],
+            "montpellier": [43.6108, 3.8767], "rennes": [48.1173, -1.6778],
+            "grenoble": [45.1885, 5.7245], "lille": [50.6292, 3.0573],
+            "toulon": [43.1242, 5.9280], "aix-en-provence": [43.5297, 5.4474],
+            "aix en provence": [43.5297, 5.4474], "avignon": [43.9493, 4.8055],
+            "nimes": [43.8367, 4.3601], "nimes": [43.8367, 4.3601],
+            "cannes": [43.5528, 7.0174], "antibes": [43.5804, 7.1283],
+            "vitrolles": [43.4615, 5.2456], "aubagne": [43.2930, 5.5710],
+            "istres": [43.5158, 4.9878], "martigues": [43.4061, 5.0486],
+            "la ciotat": [43.1727, 5.6082], "cassis": [43.2140, 5.5390],
+            "pertuis": [43.6918, 5.5031], "salon-de-provence": [43.6396, 5.0974],
+            "salon de provence": [43.6396, 5.0974], "arles": [43.6767, 4.6277],
+            "marignane": [43.4179, 5.2153], "gardanne": [43.4565, 5.4762],
+            "hyeres": [43.1204, 6.1283], "frejus": [43.4329, 6.7360],
+            "saint-raphael": [43.4252, 6.7688], "draguignan": [43.5378, 6.4660],
+            "brignoles": [43.4057, 6.0600], "gap": [44.5594, 6.0773],
+            "digne-les-bains": [44.0922, 6.2358], "metz": [49.1193, 6.1757],
+            "nancy": [48.6921, 6.1844], "reims": [49.2583, 4.0317],
+            "rouen": [49.4432, 1.0993], "amiens": [49.8941, 2.2958],
+            "caen": [49.1829, -0.3707], "dijon": [47.3220, 5.0415],
+            "clermont-ferrand": [45.7772, 3.0870], "clermont ferrand": [45.7772, 3.0870],
+            "limoges": [45.8336, 1.2611], "besancon": [47.2378, 6.0241],
+            "poitiers": [46.5802, 0.3404], "orleans": [47.9029, 1.9090],
+            "tours": [47.3941, 0.6848], "angers": [47.4784, -0.5632],
+            "le mans": [48.0027, 0.1984], "brest": [48.3904, -4.4861],
+            "le havre": [49.4944, 0.1079], "mulhouse": [47.7508, 7.3359],
+            "perpignan": [42.6976, 2.8954], "beziers": [43.3441, 3.2154],
+            "sete": [43.4025, 3.6975], "montauban": [44.0180, 1.3530],
+            "pau": [43.2951, -0.3708], "bayonne": [43.4929, -1.4748],
+            "la rochelle": [46.1603, -1.1511], "saint-etienne": [45.4347, 4.3922],
+            "saint etienne": [45.4347, 4.3922], "valence": [44.9334, 4.8924],
+            "annecy": [45.8992, 6.1294], "chambery": [45.5646, 5.9178],
+            "france": [46.2276, 2.2137]
+        };
+
+        function _normCity(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        }
+
+        function getCoordsForLocation(ville, cp) {
+            const cpStr = String(cp || "").trim();
+            // Arrondissements Marseille via CP (130XX)
+            if (cpStr.match(/^130\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                return GEO["marseille " + arr] || GEO["marseille"];
+            }
+            // Arrondissements Paris via CP (750XX)
+            if (cpStr.match(/^750\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                return GEO["paris " + arr] || GEO["paris"];
+            }
+            const v = _normCity(ville);
+            if (!v) return null;
+
+            // 1. Correspondance exacte
+            if (GEO[v]) return GEO[v];
+
+            // 2. Nettoyer suffixe département : "Marignane - 13", "Nice (06)"
+            const stripped = v.replace(/\s*[-–,]\s*\d+.*$/, '').replace(/\s*\(\d+\).*$/, '').trim();
+            if (stripped !== v && GEO[stripped]) return GEO[stripped];
+
+            // 3. Supprimer ordinaux d'arrondissement : "8ème" → "8", "3e" → "3"
+            const stripOrdinal = s => s.replace(/(\d+)\s*(i?eme|ieme|ière|iere|ère|ere|er|e)\b/g, '$1').trim();
+            const vNoOrd = stripOrdinal(v);
+            if (vNoOrd !== v && GEO[vNoOrd]) return GEO[vNoOrd];
+            const strippedNoOrd = stripOrdinal(stripped);
+            if (GEO[strippedNoOrd]) return GEO[strippedNoOrd];
+
+            // 4. Préfixe avec frontière de mot (clés longues en premier)
+            const candidates = [v, stripped, vNoOrd, strippedNoOrd].filter((s, i, a) => s && a.indexOf(s) === i);
+            const sortedKeys = Object.keys(GEO).sort((a, b) => b.length - a.length);
+            for (const c of candidates) {
+                for (const key of sortedKeys) {
+                    if (c === key) continue;
+                    if (c.length > key.length) {
+                        const ch = c[key.length];
+                        if (c.startsWith(key) && (ch === ' ' || ch === '-' || ch === ',' || ch === '(')) return GEO[key];
+                    } else if (key.length > c.length) {
+                        const ch = key[c.length];
+                        if (key.startsWith(c) && (ch === ' ' || ch === '-')) return GEO[key];
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Clé de cache basée sur l'adresse (invalidation automatique si l'adresse change)
+        function _geocacheKey(p) {
+            const addr = [p.adresse, p.cp, p.ville].filter(Boolean).join('|').toLowerCase().replace(/\s+/g, ' ').trim();
+            return 'geo_addr_' + addr.replace(/[^a-z0-9|]/g, '_').slice(0, 120);
+        }
+
+        function toggleMap() {
+            _mapVisible = !_mapVisible;
+            const container = document.getElementById('mapContainer');
+            const btn = document.getElementById('btnToggleMap');
+            if (_mapVisible) {
+                container.classList.remove('hidden');
+                btn.classList.add('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-200');
+                if (!_map) {
+                    _map = L.map('mapView').setView([43.3965, 5.2698], 9);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 18
+                    }).addTo(_map);
+                    _markerGroup = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false });
+                    _map.addLayer(_markerGroup);
+                }
+                refreshMapMarkers(true);
+                setTimeout(() => _map.invalidateSize(), 200);
+            } else {
+                container.classList.add('hidden');
+                btn.classList.remove('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.add('bg-white', 'text-slate-500', 'border-slate-200');
+            }
+        }
+
+        async function _nominatim(query) {
+            try {
+                const r = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=fr`,
+                    { headers: { 'Accept-Language': 'fr,fr-FR' } }
+                );
+                const d = await r.json();
+                if (d && d[0]) return [parseFloat(d[0].lat), parseFloat(d[0].lon)];
+            } catch(e) {}
+            return null;
+        }
+
+        function _buildMarker(p, coords, precise) {
+            const jitter = () => precise ? 0 : (Math.random() - 0.5) * 0.0015;
+            const ll = [coords[0] + jitter(), coords[1] + jitter()];
+            const nbAlt = (p.alternants || []).length;
+            const altEmoji = nbAlt >= 2 ? '🔥' : nbAlt === 1 ? '🟢' : '⚪';
+            const c = p.contacts[0] || {};
+            const cName = [c.prenom, c.nom].filter(Boolean).join(' ') || '—';
+            const label = p.nom.length > 22 ? p.nom.slice(0, 20) + '…' : p.nom;
+            const borderCol = precise ? '#F26522' : '#fff';
+            const marker = L.marker(ll, {
+                icon: L.divIcon({
+                    html: `<div style="background:#1A4E8A;color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid ${borderCol};box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
+                    className: '', iconAnchor: [0, 10]
+                })
+            });
+            marker.bindPopup(`
+                <div style="font-family:sans-serif;min-width:200px;padding:4px">
+                    <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
+                    <div style="font-size:11px;color:#666;margin-bottom:4px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
+                    ${precise ? '<div style="font-size:9px;color:#F26522;font-weight:700;margin-bottom:4px">📡 Position précise (géocodée)</div>' : ''}
+                    <div style="font-size:11px;color:#333">👤 ${cName}</div>
+                    ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
+                    ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
+                    <div style="font-size:12px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px solid #eee">${altEmoji} ${nbAlt} alternant${nbAlt !== 1 ? 's' : ''}</div>
+                </div>`);
+            return { marker, ll };
+        }
+
+        function _setMapStatus(msg) {
+            const el = document.getElementById('mapStatus');
+            if (el) el.textContent = msg;
+        }
+
+        function refreshMapMarkers(fitView = false) {
+            if (!_map || !_mapVisible) return;
+            _geocodingToken++;
+            const token = _geocodingToken;
+            _markerGroup.clearLayers();
+            _setMapStatus('');
+
+            const bounds = [];
+            const toGeocode = [];
+
+            lastFilteredPartners.forEach(p => {
+                const cacheKey = _geocacheKey(p);
+                const cachedCoords = _geocache[cacheKey];
+                const fallback = getCoordsForLocation(p.ville, p.cp);
+                const coords = cachedCoords || fallback;
+                if (!coords) return;
+
+                const { marker, ll } = _buildMarker(p, coords, !!cachedCoords);
+                bounds.push(ll);
+                _markerGroup.addLayer(marker);
+
+                if (!cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
+            });
+
+            if (bounds.length > 0 && fitView) {
+                try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
+            }
+            setTimeout(() => _map.invalidateSize(), 100);
+
+            if (toGeocode.length > 0) _geocodeBatch(toGeocode, token);
+        }
+
+        async function _geocodeBatch(partners, token) {
+            let done = 0;
+            for (const p of partners) {
+                if (_geocodingToken !== token) return;
+                const cacheKey = _geocacheKey(p);
+                if (_geocache[cacheKey]) { done++; continue; }
+
+                const q = p.adresse && p.cp && p.ville
+                    ? `${p.adresse}, ${p.cp} ${p.ville}, France`
+                    : p.cp && p.ville ? `${p.cp} ${p.ville}, France`
+                    : p.ville ? `${p.ville}, France` : null;
+
+                if (q) {
+                    _setMapStatus(`⟳ Géocodage ${done + 1}/${partners.length}…`);
+                    const coords = await _nominatim(q);
+                    if (coords) { _geocache[cacheKey] = coords; _saveGeoCache(); }
+                    await new Promise(r => setTimeout(r, 1100));
+                }
+                done++;
+            }
+            if (_geocodingToken !== token) return;
+            _setMapStatus('');
+            refreshMapMarkers();
+        }
+
+    </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
