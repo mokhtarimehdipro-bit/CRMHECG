@@ -635,6 +635,17 @@ function filterActions() {
         return (now - d.getTime()) <= period * 86400000;
     });
 
+    rows.sort((a, b) => {
+        const parseD = s => {
+            if (!s) return 0;
+            const [dp='', tp=''] = s.split(' ');
+            const [d=0, m=0, y=0] = dp.split('/');
+            const [h=0, mn=0, sc=0] = tp.split(':');
+            return new Date(y, m-1, d, h, mn, sc).getTime();
+        };
+        return parseD(b.date) - parseD(a.date);
+    });
+
     filteredActionRows = rows;
     document.getElementById('actCount').textContent = rows.length + ' action' + (rows.length>1?'s':'');
 
