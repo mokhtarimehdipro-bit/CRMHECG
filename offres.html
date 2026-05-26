@@ -202,8 +202,13 @@
     </div>
 
     <script>
+        window.onerror = function(msg, src, line, col, err) {
+            const loader = document.getElementById('loader');
+            if (loader) { loader.classList.remove('hidden'); loader.innerHTML = `<p class="text-red-600 font-black">🚨 Erreur JS (ligne ${line}): ${msg}</p><p class="text-xs text-gray-400 mt-1 font-mono">${src}</p>`; }
+        };
+
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-        
+
         let currentOffres = [];
         let showObsolete = false;
         let showPartagee = true;
@@ -239,18 +244,27 @@
                 loader.classList.add('hidden');
                 document.getElementById('offresGrid').classList.remove('hidden');
 
-                if (data.success && data.data && data.data.length > 0) {
-                    currentOffres = data.data;
-                    populateVilleFilter();
-                    populateEntrepriseFilter();
-                    renderStats(computeStats());
-                    updateToggleBtns();
-                    filterOffres();
-                } else {
-                    document.getElementById('offresGrid').innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
+                currentOffres = (data.success && Array.isArray(data.data)) ? data.data : [];
+                populateVilleFilter();
+                populateEntrepriseFilter();
+                renderStats(computeStats());
+                updateToggleBtns();
+                filterOffres();
+                if (!data.success) {
+                    console.warn('getOffres API error:', data.message);
                 }
             } catch (err) {
-                loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>';
+                loader.classList.add('hidden');
+                const grid = document.getElementById('offresGrid');
+                grid.classList.remove('hidden');
+                grid.innerHTML = `<div class="col-span-full text-center py-16">
+                    <p class="text-red-500 font-black text-lg mb-2">⚠️ Erreur de chargement</p>
+                    <p class="text-gray-500 text-sm mb-1">Impossible de contacter le serveur. Vérifiez votre connexion internet.</p>
+                    <p class="text-gray-300 text-xs mt-2 font-mono">${err && err.message ? err.message : String(err)}</p>
+                    <button onclick="loadOffres()" class="mt-4 px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-bold text-sm hover:bg-blue-800 transition">🔄 Réessayer</button>
+                </div>`;
+                renderStats(computeStats());
+                updateToggleBtns();
             }
         }
 
@@ -310,7 +324,7 @@
             });
 
             // Masquer les obsolètes par défaut (sauf si filtre qualité actif sur "obsolète")
-            if (!showObsolete && !qualite.includes("obsolete")) {
+            if (!showObsolete && !qualite.includes("obsolete") && !qualite.includes("obsolète")) {
                 filteredData = filteredData.filter(o => {
                     const q = (o.qualite || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
                     return !q.includes("obsolete");
@@ -334,8 +348,11 @@
         function renderOffres(data) {
             _lastRendered = data;
             const grid = document.getElementById('offresGrid');
-            if(data.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-center py-10"><p class="text-gray-400 font-bold italic">Aucune offre ne correspond à ces filtres.</p></div>';
+            if (!data || data.length === 0) {
+                const msg = currentOffres.length === 0
+                    ? 'Aucune offre disponible. Ajoutez votre première offre avec le bouton ci-dessus.'
+                    : 'Aucune offre ne correspond à ces filtres.';
+                grid.innerHTML = `<div class="col-span-full text-center py-10"><p class="text-gray-400 font-bold italic">${msg}</p></div>`;
                 return;
             }
             
