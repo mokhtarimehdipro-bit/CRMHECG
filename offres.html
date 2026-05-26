@@ -270,13 +270,13 @@
 
         function populateVilleFilter() {
             const sel = document.getElementById('fOffreVille');
-            const villes = [...new Set(currentOffres.map(o => (o.ville || "").trim()).filter(Boolean))].sort();
+            const villes = [...new Set(currentOffres.map(o => String(o.ville || "").trim()).filter(Boolean))].sort();
             sel.innerHTML = '<option value="">📍 Toutes les villes</option>' + villes.map(v => `<option value="${v}">${v}</option>`).join('');
         }
 
         function populateEntrepriseFilter() {
             const sel = document.getElementById('fOffreEntreprise');
-            const entreprises = [...new Set(currentOffres.map(o => (o.entreprise || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+            const entreprises = [...new Set(currentOffres.map(o => String(o.entreprise || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
             sel.innerHTML = '<option value="">🏢 Toutes les entreprises</option>' + entreprises.map(e => `<option value="${e}">${e}</option>`).join('');
         }
 
@@ -306,8 +306,8 @@
                 if (partage === "partagée") matchPartage = estPartage === true;
                 if (partage === "non partagée") matchPartage = estPartage === false;
 
-                const matchVille = !villeFilter || (o.ville || "") === villeFilter;
-                const matchEntreprise = !entrepriseFilter || (o.entreprise || "").trim() === entrepriseFilter;
+                const matchVille = !villeFilter || String(o.ville || "").trim() === villeFilter;
+                const matchEntreprise = !entrepriseFilter || String(o.entreprise || "").trim() === entrepriseFilter;
 
                 let matchDate = true;
                 if (dateFilter) {
