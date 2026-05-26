@@ -57,6 +57,8 @@
             to   { transform: scale(1) translateY(0); opacity: 1; }
         }
         .notif-pop { animation: notifPop 0.42s cubic-bezier(0.34,1.56,0.64,1); }
+        .tier-badge-btn { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; user-select: none; }
+        .tier-badge-btn:hover { transform: scale(1.04); }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -140,6 +142,21 @@
 
         <!-- KPI STRIP -->
         <div id="kpiStrip" class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6"></div>
+
+        <!-- ARBRE DES COMPETENCES -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div class="flex flex-wrap items-center gap-4 mb-4">
+                <h2 class="text-lg font-black text-gray-800">🕸️ Arbre des Compétences</h2>
+                <div class="ml-auto flex items-baseline gap-2">
+                    <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Note générale</span>
+                    <span id="noteGenerale" class="text-3xl font-black text-gray-800">—</span>
+                    <span class="text-sm text-gray-400 font-bold">/100</span>
+                </div>
+            </div>
+            <div id="heptagonContainer" class="flex justify-center items-center rounded-2xl overflow-hidden" style="min-height:340px;background:#0f172a">
+                <p class="text-gray-400 text-sm">Chargement…</p>
+            </div>
+        </div>
 
         <!-- MES TROPHEES -->
         <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
@@ -287,6 +304,7 @@ async function loadData(force) {
 
         renderBanner(res);
         renderKPIs(res);
+        renderHeptagon(res);
         renderTrophees(res);
         renderActionTable(res);
         buildCatFilter(res);
@@ -520,43 +538,74 @@ function openTropheeById(id) {
     if (t) openTropheeDetail(t);
 }
 
+let currentTierFilter = null;
+
+function filterTier(tier) {
+    currentTierFilter = currentTierFilter === tier ? null : tier;
+    renderTrophees(tropheeData);
+}
+
 function renderTrophees(d) {
+    if (!d) return;
     const grid = document.getElementById('tropheesGrid');
     const all      = d.trophees || [];
     const unlocked = all.filter(t => t.unlocked);
 
-    // Comptage par tier
     const tc = {bronze:0, argent:0, or:0, 'arc-en-ciel':0};
     unlocked.forEach(t => { const k = (t.tier||'').toLowerCase(); if (k in tc) tc[k]++; });
 
     const tierBadges = [
-        {k:'bronze',       label:'Bronze',      col:'#c87832', bg:'rgba(200,120,50,0.12)'},
-        {k:'argent',       label:'Argent',      col:'#8ab0cc', bg:'rgba(138,176,204,0.12)'},
-        {k:'or',           label:'Or',          col:'#d4b018', bg:'rgba(212,176,24,0.12)'},
-        {k:'arc-en-ciel',  label:'Incandescent',col:'#a855f7', bg:'rgba(168,85,247,0.10)'},
+        {k:'bronze',      label:'Bronze',       col:'#c87832', bg:'rgba(200,120,50,0.12)'},
+        {k:'argent',      label:'Argent',       col:'#8ab0cc', bg:'rgba(138,176,204,0.12)'},
+        {k:'or',          label:'Or',           col:'#d4b018', bg:'rgba(212,176,24,0.12)'},
+        {k:'arc-en-ciel', label:'Incandescent', col:'#a855f7', bg:'rgba(168,85,247,0.10)'},
     ];
+
     const statsBar = `<div class="col-span-full flex flex-wrap gap-3 mb-2">
         <div class="flex-1 min-w-[120px] bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center">
             <p class="text-[10px] font-black text-amber-500 uppercase tracking-widest">Total</p>
             <p class="text-2xl font-black text-gray-800 mt-0.5">${unlocked.length}<span class="text-sm text-gray-400 font-normal"> / ${all.length}</span></p>
         </div>
-        ${tierBadges.map(b => `<div class="flex-1 min-w-[90px] rounded-2xl px-3 py-3 text-center border" style="background:${b.bg};border-color:${b.col}40">
-            <p class="text-[10px] font-black uppercase tracking-widest" style="color:${b.col}">${b.label}</p>
-            <p class="text-xl font-black text-gray-800 mt-0.5">${tc[b.k]}</p>
-        </div>`).join('')}
+        ${tierBadges.map(b => {
+            const isActive = currentTierFilter === b.k;
+            return `<div class="tier-badge-btn flex-1 min-w-[90px] rounded-2xl px-3 py-3 text-center border"
+                style="background:${b.bg};border-color:${isActive ? b.col : b.col+'40'};${isActive ? 'box-shadow:0 0 0 2px '+b.col+',0 0 10px '+b.col+'44' : ''}"
+                onclick="filterTier('${b.k}')">
+                <p class="text-[10px] font-black uppercase tracking-widest" style="color:${b.col}">${b.label}</p>
+                <p class="text-xl font-black text-gray-800 mt-0.5">${tc[b.k]}</p>
+                ${isActive ? `<p class="text-[8px] font-bold mt-0.5" style="color:${b.col}">✓ Filtré</p>` : ''}
+            </div>`;
+        }).join('')}
     </div>`;
+
+    const filtered = currentTierFilter ? unlocked.filter(t => (t.tier||'').toLowerCase() === currentTierFilter) : unlocked;
 
     if (!unlocked.length) {
         grid.innerHTML = statsBar + '<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée débloqué pour l\'instant. Continue tes efforts ! 💪</p>';
         return;
     }
-    grid.innerHTML = statsBar + unlocked.map(t => `
-        <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
-            <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
-            <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
-            <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
-            ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
-        </div>`).join('');
+
+    let heading = '';
+    if (currentTierFilter) {
+        const b = tierBadges.find(x => x.k === currentTierFilter);
+        heading = `<div class="col-span-full flex items-center gap-2 mb-1">
+            <span class="text-sm font-black" style="color:${b.col}">${b.label}</span>
+            <span class="text-xs text-gray-400">${filtered.length} trophée${filtered.length !== 1 ? 's' : ''}</span>
+            <button onclick="filterTier('${b.k}')" class="ml-auto text-xs text-gray-400 hover:text-gray-700 font-bold border border-gray-200 rounded-lg px-2 py-0.5 transition">✕ Tout voir</button>
+        </div>`;
+    }
+
+    const cards = !filtered.length
+        ? `<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée ${tierBadges.find(x=>x.k===currentTierFilter)?.label||''} pour l'instant.</p>`
+        : filtered.map(t => `
+            <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
+                <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
+                <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
+                <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
+                ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
+            </div>`).join('');
+
+    grid.innerHTML = statsBar + heading + cards;
 }
 
 function buildCatFilter(d) {
@@ -812,6 +861,101 @@ function _showNotifAt(idx) {
 }
 
 function nextNotif() { notifIdx++; _showNotifAt(notifIdx); }
+
+// ======================================
+// ARBRE DES COMPETENCES — HEPTAGONE
+// ======================================
+
+function computeCompetences(actionRows, count) {
+    // Offres: toutes les actions sur des offres ÷ 5
+    const offresAll      = actionRows.filter(r => r.categorie === 'Offres').length;
+    // Étudiants: créations, notes, modifs dossier étudiant + carnet de route ÷ 5
+    const etudiantsAll   = actionRows.filter(r => r.categorie === 'Dossier étudiant' || r.categorie === 'Note étudiant' || r.categorie === 'Carnet de route').length;
+    // Entreprises: créations, notes partenaire, modifs entreprise ÷ 5
+    const entreprisesAll = actionRows.filter(r => r.categorie === 'Entreprise' || r.categorie === 'Note Partenaire' || r.categorie === 'Carnet entreprise' || (r.categorie||'').toLowerCase().includes('partenaire')).length;
+    // Communication: événements créés (1 point par événement, pas ÷ 5)
+    const comAll         = actionRows.filter(r => r.categorie === 'Com & Événements' && r.type === 'Création').length;
+    // Alertes: alertes créées ÷ 5
+    const alertesAll     = actionRows.filter(r => (r.categorie === 'Alertes Partenaires' || r.categorie === 'Alertes Étudiants') && r.type === 'Création').length;
+    // Missions: missions clôturées (1 point par mission — déjà calculé en backend)
+    const missionsScore  = count.Missions || 0;
+    // Vie scolaire: toutes actions vie scolaire ÷ 5
+    const vieScolaireAll = actionRows.filter(r => {
+        const cat = (r.categorie || '').toLowerCase();
+        return cat.includes('scolaire') || cat === 'notes' || cat.includes('délégué') || cat === 'matière' || cat.includes('note vie');
+    }).length;
+
+    const s = {
+        offres:      Math.min(100, Math.round(offresAll / 5)),
+        etudiants:   Math.min(100, Math.round(etudiantsAll / 5)),
+        entreprises: Math.min(100, Math.round(entreprisesAll / 5)),
+        com:         Math.min(100, comAll),
+        alertes:     Math.min(100, Math.round(alertesAll / 5)),
+        missions:    Math.min(100, missionsScore),
+        vieScolaire: Math.min(100, Math.round(vieScolaireAll / 5)),
+    };
+    // Note générale pondérée / 100 : offres×3 + étudiants×2 + entreprises×3 + com×1 + alertes×1 + missions×2 + vieScolaire×2 = /14
+    s.noteGenerale = Math.round((s.offres*3 + s.etudiants*2 + s.entreprises*3 + s.com*1 + s.alertes*1 + s.missions*2 + s.vieScolaire*2) / 14);
+    return s;
+}
+
+function renderHeptagon(d) {
+    const c = computeCompetences(d.actionRows || [], d.count || {});
+    document.getElementById('noteGenerale').textContent = c.noteGenerale;
+
+    const skills = [
+        { label: 'Offres',       icon: '📋', score: c.offres,      poids: 3 },
+        { label: 'Étudiants',    icon: '🎓', score: c.etudiants,   poids: 2 },
+        { label: 'Entreprises',  icon: '🏢', score: c.entreprises, poids: 3 },
+        { label: 'Com.',         icon: '📢', score: c.com,         poids: 1 },
+        { label: 'Alertes',      icon: '🔔', score: c.alertes,     poids: 1 },
+        { label: 'Missions',     icon: '🎯', score: c.missions,    poids: 2 },
+        { label: 'Vie scolaire', icon: '🏫', score: c.vieScolaire, poids: 2 },
+    ];
+
+    const n = 7, cx = 260, cy = 218, maxR = 138, labelR = 190;
+
+    function ptArr(r, i) {
+        const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+        return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    }
+    function pStr(r, i) { return ptArr(r, i).map(v => v.toFixed(1)).join(','); }
+    function polyPts(r) { return skills.map((_, i) => pStr(r, i)).join(' '); }
+
+    // Anneaux de fond
+    const rings = [0.2, 0.4, 0.6, 0.8, 1.0].map((f, fi) =>
+        `<polygon points="${polyPts(maxR*f)}" fill="none" stroke="${fi===4?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.07)'}" stroke-width="${fi===4?1.4:0.8}" ${fi<4?'stroke-dasharray="3,4"':''}/>`)
+        .join('');
+
+    // Axes du centre vers chaque sommet
+    const axes = skills.map((_, i) => {
+        const [x,y] = ptArr(maxR, i);
+        return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.09)" stroke-width="1"/>`;
+    }).join('');
+
+    // Polygone de compétences
+    const skillPoly = `<polygon points="${skills.map((s,i) => pStr(maxR*s.score/100, i)).join(' ')}" fill="rgba(245,158,11,0.18)" stroke="#f59e0b" stroke-width="2.2" stroke-linejoin="round"/>`;
+
+    // Points et étiquettes
+    const labels = skills.map((s, i) => {
+        const [dx,dy] = ptArr(maxR * s.score / 100, i);
+        const [lx,ly] = ptArr(labelR, i);
+        const ang = -Math.PI/2 + i * 2*Math.PI/n;
+        const cosA = Math.cos(ang), sinA = Math.sin(ang);
+        const anchor = cosA > 0.22 ? 'start' : (cosA < -0.22 ? 'end' : 'middle');
+        const yBase = sinA > 0.4 ? ly + 12 : (sinA < -0.4 ? ly - 4 : ly + 4);
+        return `
+            <circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="5.5" fill="#f59e0b" stroke="#0f172a" stroke-width="2.5"/>
+            <text x="${lx.toFixed(1)}" y="${(yBase - 11).toFixed(1)}" text-anchor="${anchor}" font-size="13" dominant-baseline="middle">${s.icon}</text>
+            <text x="${lx.toFixed(1)}" y="${(yBase + 4).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="700" fill="rgba(255,255,255,0.78)" font-family="system-ui,sans-serif">${s.label}</text>
+            <text x="${lx.toFixed(1)}" y="${(yBase + 18).toFixed(1)}" text-anchor="${anchor}" font-size="13" font-weight="900" fill="#f59e0b" font-family="system-ui,sans-serif">${s.score}</text>`;
+    }).join('');
+
+    document.getElementById('heptagonContainer').innerHTML =
+        `<svg viewBox="0 0 520 435" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:520px">
+            ${rings}${axes}${skillPoly}${labels}
+        </svg>`;
+}
 
 // Init
 loadData();
