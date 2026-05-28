@@ -585,9 +585,12 @@
         </div>
       </div>
     </div>
-    <div class="flex justify-end gap-3 mt-6">
-      <button onclick="closeTacheModal()" class="btn-ghost">Annuler</button>
-      <button onclick="saveTache()" class="btn-orange">Enregistrer</button>
+    <div class="flex justify-between items-center mt-6">
+      <button id="btnDeleteTache" onclick="deleteTache(document.getElementById('tacheId').value)" class="btn-danger hidden">Supprimer</button>
+      <div class="flex gap-3">
+        <button onclick="closeTacheModal()" class="btn-ghost">Annuler</button>
+        <button onclick="saveTache()" class="btn-orange">Enregistrer</button>
+      </div>
     </div>
   </div>
 </div>
@@ -975,7 +978,7 @@ function calcGroupStats(g){
       const type = ref ? ref.type : null;
       if (type === 'autre' || c === 0) return; // exclure notes rattrapage et coefficients nuls
       totalPts += p; totalCoeff += c; ueTotal++;
-      if (/^E[5-8](\s|-|$)/i.test(n.matiere.trim())) { proPts += noteNum * c; proCoeff += c; }
+      if (/^E[5-8]\b/i.test(n.matiere.trim())) { proPts += noteNum * c; proCoeff += c; }
     } else {
       totalPts += p; totalCoeff += c; ueTotal++;
       if(noteNum>=10) ueOk++;
@@ -1027,7 +1030,7 @@ function renderNotesGrouped(){
     const gid  = CSS.escape(gkey);
     const isBTSrow = g.diplome==='BTS CG';
     const autoRes  = isBTSrow ? calcBTSResultatAuto(moy, moyPro) : '';
-    const dispRes  = isBTSrow ? (g.resultat || autoRes) : g.resultat;
+    const dispRes  = isBTSrow ? (autoRes === 'Rattrapage' ? (g.resultat || 'Rattrapage') : autoRes) : g.resultat;
     html+=`<tr style="cursor:pointer" onclick="toggleGroup('${gkey}')">
       <td><span id="icon_${gid}" style="font-size:0.7rem;color:#9ca3af">▶</span></td>
       <td style="font-weight:600">${g.nomPrenom}</td>
@@ -2395,8 +2398,10 @@ function openTacheModal(t, preDate=null, preDJ=null){
   const isReadOnly = !canWrite('planning');
   const saveBtn = document.querySelector('#tacheModal button[onclick="saveTache()"]');
   const cancelBtn = document.querySelector('#tacheModal button[onclick="closeTacheModal()"]');
+  const deleteBtn = document.getElementById('btnDeleteTache');
   if (saveBtn) saveBtn.style.display = isReadOnly ? 'none' : '';
   if (cancelBtn) cancelBtn.textContent = isReadOnly ? 'Fermer' : 'Annuler';
+  if (deleteBtn) deleteBtn.classList.toggle('hidden', !t || isReadOnly);
   ['tacheTacheRefSel','tacheTitre','tacheDesc','tacheReferent','tacheStatut','tacheDebut','tacheDemiJournee'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.disabled=isReadOnly;
   });
@@ -2484,7 +2489,7 @@ async function deleteTache(id){
   if (!confirm('Supprimer cette tâche ?')) return;
   const r = await api('deletePlanningTache',{id});
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  toast('Tâche supprimée'); loadPlanning();
+  toast('Tâche supprimée'); closeTacheModal(); loadPlanning();
 }
 
 // ══════════════════════════════════════════════════════════════════
