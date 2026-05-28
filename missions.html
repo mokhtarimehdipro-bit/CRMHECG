@@ -40,11 +40,12 @@
             <a href="missions.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Missions</a>
             <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
             <a href="historique.html" id="navHistorique" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
+            <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
         </div>
     </div>
     <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
 </nav>
-<script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
+<script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
 <main class="max-w-screen-xl mx-auto p-8">
 
@@ -156,6 +157,10 @@
             <div id="sectionCC" class="hidden">
                 <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Copies (CC)</p>
                 <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCC">—</p>
+            </div>
+            <div id="sectionCreateur" class="hidden">
+                <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Créé par</p>
+                <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCreateur">—</p>
             </div>
             <!-- Priorité -->
             <div>
@@ -638,6 +643,8 @@ function openModal(id) {
     document.getElementById('modalMeta').textContent   = `📅 ${m.date} ${m.heure?'· '+m.heure:''} ${m.dateMaj?'· Maj '+m.dateMaj:''}`;
     if (m.cc&&m.cc.trim()) { document.getElementById('modalCC').textContent=m.cc; document.getElementById('sectionCC').classList.remove('hidden'); }
     else document.getElementById('sectionCC').classList.add('hidden');
+    if (m.emailCreateur&&m.emailCreateur.trim()) { document.getElementById('modalCreateur').textContent=m.emailCreateur; document.getElementById('sectionCreateur').classList.remove('hidden'); }
+    else document.getElementById('sectionCreateur').classList.add('hidden');
     document.getElementById('modalCorps').textContent = m.corps || '(Aucun contenu)';
     buildPrioritySelector('modalPrioritySelector', _modalPrio, 'selectModalPrio');
     const canEdit = isAdmin || String(m.email||'').toLowerCase() === String(user.email||'').toLowerCase();
@@ -646,7 +653,8 @@ function openModal(id) {
     ta.readOnly = !canEdit;
     ta.className = `w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none resize-none ${canEdit?'focus:border-[#1A4E8A]':'text-gray-400'}`;
     document.getElementById('btnSaveResume').classList.toggle('hidden', !canEdit);
-    document.getElementById('sectionStatut').classList.toggle('hidden', !isAdmin);
+    const isCreatorOfMission = m.emailCreateur && m.emailCreateur.toLowerCase() === (user.email||'').toLowerCase();
+    document.getElementById('sectionStatut').classList.toggle('hidden', !isAdmin && !isCreatorOfMission);
     renderNotes(m.notes);
     document.getElementById('inputNote').value = '';
     document.getElementById('modalDetail').classList.remove('hidden');
@@ -778,10 +786,10 @@ async function saveNouveauMission() {
 function exportCSV(global) {
     const liste = global ? allMissions : filteredMissions;
     if (!liste.length) { showToast('Aucune mission à exporter.', 'error'); return; }
-    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Maj','Priorité','Résumé'];
+    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Maj','Priorité','Résumé','Créateur'];
     const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
     let csv = headers.map(esc).join(';') + '\n';
-    liste.forEach(m => { csv += [m.id,m.date,m.heure,m.email,m.collab,m.cc,m.objet,m.corps,m.statut,m.notes,m.dateMaj,m.priorite,m.resume].map(esc).join(';') + '\n'; });
+    liste.forEach(m => { csv += [m.id,m.date,m.heure,m.email,m.collab,m.cc,m.objet,m.corps,m.statut,m.notes,m.dateMaj,m.priorite,m.resume,m.emailCreateur].map(esc).join(';') + '\n'; });
     const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global?'_GLOBAL':'_vue'}.csv`;
