@@ -67,6 +67,24 @@
                 <p class="text-3xl font-black text-orange-700 mt-1" id="kpi-action">0</p>
             </div>
         </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-purple-50 p-5 rounded-2xl shadow-sm border border-purple-100">
+                <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">✅ Offres vérifiées</p>
+                <p class="text-3xl font-black text-purple-700 mt-1" id="kpi-offres-verifiees">0</p>
+            </div>
+            <div class="bg-cyan-50 p-5 rounded-2xl shadow-sm border border-cyan-100">
+                <p class="text-[10px] font-black text-cyan-600 uppercase tracking-widest">📤 Offres partagées</p>
+                <p class="text-3xl font-black text-cyan-700 mt-1" id="kpi-offres-partagees">0</p>
+            </div>
+            <div class="bg-indigo-50 p-5 rounded-2xl shadow-sm border border-indigo-100">
+                <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">🏢 Notes entreprise</p>
+                <p class="text-3xl font-black text-indigo-700 mt-1" id="kpi-notes-entreprise">0</p>
+            </div>
+            <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-100">
+                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">🎓 Notes étudiant</p>
+                <p class="text-3xl font-black text-amber-700 mt-1" id="kpi-notes-etudiant">0</p>
+            </div>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-4">🏆 Encadrants les plus actifs</p>
@@ -339,17 +357,30 @@
         function updateKPIs(logs) {
             document.getElementById('kpi-total').innerText = logs.length;
             let crea = 0, modif = 0, supp = 0, action = 0;
+            let offresVerifiees = 0, offresPartagees = 0, notesEntreprise = 0, notesEtudiant = 0;
             logs.forEach(log => {
                 const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
+                const categorie = String(getSafeValue(log, ['catégorie', 'categorie']) || "").toLowerCase();
+                const details = String(getSafeValue(log, ['détail', 'detail']) || "").toLowerCase();
+
                 if (type.includes("créat")) crea++;
                 else if (type.includes("modif")) modif++;
                 else if (type.includes("suppr")) supp++;
                 else action++;
+
+                if (categorie === "offres" && details.includes("→ vérifiée")) offresVerifiees++;
+                if (categorie === "offres" && type === "action" && details.includes("partagé")) offresPartagees++;
+                if (categorie === "note partenaire" && type.includes("créat")) notesEntreprise++;
+                if (categorie === "carnet de route" && type.includes("créat")) notesEtudiant++;
             });
             document.getElementById('kpi-crea').innerText = crea;
             document.getElementById('kpi-modif').innerText = modif;
             document.getElementById('kpi-supp').innerText = supp;
             document.getElementById('kpi-action').innerText = action;
+            document.getElementById('kpi-offres-verifiees').innerText = offresVerifiees;
+            document.getElementById('kpi-offres-partagees').innerText = offresPartagees;
+            document.getElementById('kpi-notes-entreprise').innerText = notesEntreprise;
+            document.getElementById('kpi-notes-etudiant').innerText = notesEtudiant;
         }
 
         function renderLogs(logs) {
