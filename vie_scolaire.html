@@ -1047,16 +1047,32 @@ function renderNotesGrouped(){
       <td colspan="11" style="padding:0;background:#f8fafc">
         <table style="width:100%;background:transparent">
           <thead><tr style="background:#f1f5f9"><th></th><th>Année</th><th>Matière</th><th>Note</th><th>Coeff</th><th>Points</th><th>Résultat</th><th></th></tr></thead>
-          <tbody>${g.notes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>`<tr style="background:transparent">
-            <td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td>
-            <td>${n.matiere}</td>
-            <td style="font-weight:700;${n.note===null||n.note===undefined?'':'color:'+(String(n.note).toUpperCase()==='NE'?'#4338ca':((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A'))}">${fmtNote(n.note)}</td>
-            <td>${n.coeff??'—'}</td>
-            <td>${n.points!==null?n.points.toFixed(2):'—'}</td>
-            <td>${badgeRes(n.resultat)}</td>
-            <td>${canWrite('notes')?`<button onclick="deleteNote('${n.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}
-            </td>
-          </tr>`).join('')}</tbody>
+          <tbody>${(()=>{
+            const rN={};
+            g.notes.forEach(n=>{const m=n.matiere||'';if(m.startsWith('Ratt. '))rN[m.slice(6)+'|'+(n.annee||'')]=n;});
+            const mainNotes=g.notes.filter(n=>!(n.matiere||'').startsWith('Ratt. '));
+            const isRattSt=isBTSrow&&calcBTSResultatAuto(moy,moyPro)==='Rattrapage';
+            const safeId=(g.idEtu||'').replace(/'/g,"\\'");
+            const safeNom=(g.nomPrenom||'').replace(/'/g,"\\'");
+            const safeCls=(g.classe||'').replace(/'/g,"\\'");
+            return mainNotes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>{
+              const nc=n.note===null||n.note===undefined?'':'color:'+(String(n.note).toUpperCase()==='NE'?'#4338ca':((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A'));
+              let row=`<tr style="background:transparent"><td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td><td>${n.matiere}</td><td style="font-weight:700;${nc}">${fmtNote(n.note)}</td><td>${n.coeff??'—'}</td><td>${n.points!==null?n.points.toFixed(2):'—'}</td><td>${badgeRes(n.resultat)}</td><td>${canWrite('notes')?`<button onclick="deleteNote('${n.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td></tr>`;
+              const rk=isBTSrow?btsMatiereRattName(n.matiere):null;
+              const rd=rk?rN[rk+'|'+(n.annee||'')]:null;
+              if(rk&&(isRattSt||rd)){
+                if(rd){
+                  const rnum=parseFloat(rd.note);
+                  const rcol=isNaN(rnum)?'#6b7280':(rnum>=10?'#15803d':'#dc2626');
+                  row+=`<tr style="background:#fefce8"><td></td><td></td><td colspan="2" style="padding:0.2rem 0.75rem 0.2rem 1.75rem;font-size:0.75rem;color:#92400e">↳ Après rattrapage : <strong style="color:${rcol}">${fmtNote(rd.note)}</strong>${canWrite('notes')?` <button onclick="editRattNote(event,'${safeId}','${safeNom}','${safeCls}','${n.annee||''}','${rk}',${rd.note})" style="font-size:0.65rem;background:#fef9c3;color:#92400e;border:1px solid #fcd34d;cursor:pointer;padding:0.15rem 0.35rem;border-radius:0.3rem;font-weight:700;margin-left:0.35rem">✏</button>`:''}</td><td colspan="4"></td></tr>`;
+                }else if(canWrite('notes')){
+                  const inpId='rattInp_'+(g.idEtu||'').replace(/[^a-z0-9]/gi,'_')+'_'+rk;
+                  row+=`<tr style="background:#fefce8"><td></td><td></td><td colspan="4" style="padding:0.2rem 0.75rem 0.2rem 1.75rem"><span style="font-size:0.72rem;color:#9ca3af">↳ Note après rattrapage ${rk} : </span><input id="${inpId}" type="number" min="0" max="20" step="0.5" placeholder="—" style="width:72px;padding:0.15rem 0.4rem;border:1px solid #fcd34d;border-radius:0.35rem;font-size:0.8rem;display:inline-block;vertical-align:middle"><button onclick="saveRattNote(event,'${safeId}','${safeNom}','${safeCls}','${n.annee||''}','${rk}',this)" style="margin-left:0.25rem;font-size:0.7rem;background:#fef9c3;color:#92400e;border:1px solid #fcd34d;cursor:pointer;padding:0.2rem 0.4rem;border-radius:0.35rem;font-weight:700;vertical-align:middle">💾</button></td><td colspan="2"></td></tr>`;
+                }
+              }
+              return row;
+            }).join('');
+          })()}</tbody>
         </table>
       </td>
     </tr>`;
@@ -1071,6 +1087,43 @@ function calcBTSResultatAuto(moy, moyPro){
   if (moy >= 10) return 'Admis';
   if (moy >= 8 && moyPro !== null && moyPro >= 10) return 'Rattrapage';
   return 'Recalé';
+}
+
+// Retourne la clé rattrapage ('CEJM','Math','CGE','Anglais') si la matière BTS est rattrapable, sinon null
+function btsMatiereRattName(matiere) {
+  if (!matiere || matiere.startsWith('Ratt. ')) return null;
+  const m = matiere.toLowerCase();
+  if (m.includes('cejm')) return 'CEJM';
+  if (m.includes('math')) return 'Math';
+  if (m.includes('cge') || (m.includes('comptab') && m.includes('gest'))) return 'CGE';
+  if (m.includes('anglais') || m.includes('langue vivante') || /^e3[\s\-]/.test(m) || /^lv[\s\-]/.test(m)) return 'Anglais';
+  return null;
+}
+
+async function saveRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, btn) {
+  evt.stopPropagation();
+  const inpId = 'rattInp_' + (idEtu||'').replace(/[^a-z0-9]/gi,'_') + '_' + rattKey;
+  const inp = document.getElementById(inpId);
+  if (!inp) return;
+  const val = (inp.value||'').trim();
+  if (!val || isNaN(parseFloat(val)) || parseFloat(val) < 0 || parseFloat(val) > 20) { toast('Entrez une note entre 0 et 20.', false); return; }
+  if (btn && typeof btn === 'object') { btn.textContent = '…'; btn.disabled = true; }
+  const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: parseFloat(val) }] });
+  if (!r.success) { toast('Erreur : ' + r.message, false); if(btn&&typeof btn==='object'){btn.textContent='💾';btn.disabled=false;} return; }
+  toast('Note rattrapage enregistrée ✓');
+  loadNotes();
+}
+
+async function editRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, currentNote) {
+  evt.stopPropagation();
+  const newVal = prompt('Note après rattrapage ' + rattKey + '\nActuelle : ' + (currentNote||'—') + '/20\n\nNouvelle valeur :', currentNote||'');
+  if (newVal === null || newVal.trim() === '') return;
+  const num = parseFloat(newVal);
+  if (isNaN(num) || num < 0 || num > 20) { toast('Note invalide (0-20).', false); return; }
+  const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: num }] });
+  if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+  toast('Note rattrapage mise à jour ✓');
+  loadNotes();
 }
 
 function computeAndShowStats(groups){
