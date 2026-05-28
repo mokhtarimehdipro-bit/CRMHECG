@@ -975,7 +975,7 @@ function calcGroupStats(g){
       const type = ref ? ref.type : null;
       if (type === 'autre' || c === 0) return; // exclure notes rattrapage et coefficients nuls
       totalPts += p; totalCoeff += c; ueTotal++;
-      if (type === 'pro') { proPts += noteNum * c; proCoeff += c; }
+      if (/^E[5-8](\s|-|$)/i.test(n.matiere.trim())) { proPts += noteNum * c; proCoeff += c; }
     } else {
       totalPts += p; totalCoeff += c; ueTotal++;
       if(noteNum>=10) ueOk++;
