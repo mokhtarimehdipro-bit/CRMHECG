@@ -877,6 +877,13 @@ async function loadNotes(){
   _loadNotesRunning = true;
   try {
     const diplome = document.getElementById('filterDiplome').value;
+    if (!diplome) {
+      allNotes = [];
+      document.getElementById('notesTbody').innerHTML='<tr><td colspan="11" class="text-center text-gray-400 py-8">Sélectionnez un diplôme pour afficher la liste.</td></tr>';
+      document.getElementById('statsPanel')?.classList.add('hidden');
+      document.getElementById('matiereStatsPanel')?.classList.add('hidden');
+      return;
+    }
     const annee   = document.getElementById('filterAnnee').value;
     const classe  = document.getElementById('filterClasse').value;
     const isDCG   = diplome==='DCG'||diplome==='DSCG';
@@ -985,6 +992,12 @@ function calcGroupStats(g){
 }
 
 function renderNotesGrouped(){
+  if (!allNotes.length) {
+    document.getElementById('notesTbody').innerHTML='<tr><td colspan="11" class="text-center text-gray-400 py-8">Sélectionnez un diplôme et cliquez Afficher.</td></tr>';
+    document.getElementById('statsPanel')?.classList.add('hidden');
+    document.getElementById('matiereStatsPanel')?.classList.add('hidden');
+    return;
+  }
   const qEtu   = (document.getElementById('filterEtu').value||'').toLowerCase();
   const qMat   = matKey(document.getElementById('filterMatiere').value);
   const qAnnee = document.getElementById('filterAnnee').value||'';
@@ -1056,7 +1069,7 @@ function renderNotesGrouped(){
 function calcBTSResultatAuto(moy, moyPro){
   if (moy === null) return 'En cours';
   if (moy >= 10) return 'Admis';
-  if (moy >= 8 && moyPro !== null && moyPro > 10) return 'Rattrapage';
+  if (moy >= 8 && moyPro !== null && moyPro >= 10) return 'Rattrapage';
   return 'Recalé';
 }
 
@@ -1106,11 +1119,10 @@ function computeAndShowStats(groups){
       else              resultatAuto = 'En cours';
     }
 
-    // Pour BTS : définitif = auto pour Admis/Recalé ; pour Rattrapage = valeur saisie manuellement
-    // Le taux de réussite se base sur le statut définitif
+    // BTS: Admis/Recalé → statut_final = statut_auto (identiques) ; Rattrapage → statut_final vide (en attente des rattrapages)
     // Pour DCG : résultat = auto (100 % calculé depuis les notes)
     const resultat = isBTSstats
-      ? (resultatAuto === 'Rattrapage' ? (resultatManuel || resultatAuto) : resultatAuto)
+      ? (resultatAuto === 'Rattrapage' ? (resultatManuel || '') : resultatAuto)
       : resultatAuto;
 
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
@@ -1194,7 +1206,7 @@ function computeAndShowStats(groups){
     if (isBTSstats){
       // Colonne Définitif : auto pour Admis/Recalé ; valeur saisie pour Rattrapage
       const defCell = x.resultatAuto==='Rattrapage'
-        ? (x.resultatManuel ? badgeRes(x.resultatManuel) : '<span style="color:#9ca3af;font-size:0.75rem">—</span>')
+        ? (x.resultatManuel ? badgeRes(x.resultatManuel) : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>')
         : badgeRes(x.resultatAuto);
       return `<tr>
         <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
@@ -1716,7 +1728,7 @@ async function saveNotesBulk(){
   const nomPrenom = bulkCurrentEtu.nomPrenom || document.getElementById('noteEtuSearch').value || '';
   const r = await api('saveNotesBulk',{
     idEtu: bulkCurrentEtu.idEtu, nomPrenom,
-    classe: bulkCurrentEtu.classe, annee: bulkCurrentEtu.annee, notes
+    classe: bulkCurrentEtu.classe, diplome: bulkCurrentEtu.diplome, annee: bulkCurrentEtu.annee, notes
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   toast(`✓ ${r.nbInsert} créées, ${r.nbUpdate} mises à jour`);
