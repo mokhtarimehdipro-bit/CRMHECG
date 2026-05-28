@@ -1005,11 +1005,12 @@ function calcGroupStats(g){
     const noteNum = parseFloat(n.note);
     if (isNaN(noteNum)) return;
     const c = parseFloat(n.coeff??0);
+    if (c === 0) return; // exclure notes rattrapage (coeff=0) et "Autre"
     const p = parseFloat(n.points??0);
-    if (isBTS && btsRef) {
-      const ref = btsRef.find(r=>r.matiere===n.matiere);
+    if (isBTS) {
+      const ref = btsRef ? btsRef.find(r=>r.matiere===n.matiere) : null;
       const type = ref ? ref.type : null;
-      if (type === 'autre' || c === 0) return; // exclure notes rattrapage et coefficients nuls
+      if (type === 'autre') return;
       totalPts += p; totalCoeff += c; ueTotal++;
       if (/^E[5-8]\b/i.test(n.matiere.trim())) { proPts += noteNum * c; proCoeff += c; }
     } else {
