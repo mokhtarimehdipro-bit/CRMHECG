@@ -59,6 +59,11 @@
         .notif-pop { animation: notifPop 0.42s cubic-bezier(0.34,1.56,0.64,1); }
         .tier-badge-btn { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; user-select: none; }
         .tier-badge-btn:hover { transform: scale(1.04); }
+        @keyframes goldPulse {
+            0%,100% { box-shadow:0 0 28px rgba(245,158,11,.7),0 0 60px rgba(245,158,11,.25); border-color:#f59e0b; }
+            50%      { box-shadow:0 0 52px rgba(245,158,11,1),0 0 100px rgba(245,158,11,.38); border-color:#fcd34d; }
+        }
+        .notif-special-gold { animation: goldPulse 1.8s ease-in-out infinite; border:3px solid #f59e0b !important; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -262,6 +267,22 @@
         </div>
     </div>
 
+    <!-- NOTIFICATION SPÉCIALE PLEIN ÉCRAN -->
+    <div id="notifSpecial" class="fixed inset-0 z-[300] hidden items-center justify-center" style="background:rgba(2,2,8,0.96)">
+        <div id="notifSpecialBox" class="notif-pop bg-gray-950 rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center" style="border:3px solid #f59e0b">
+            <div class="text-5xl mb-2">🌟</div>
+            <p class="text-[10px] font-black text-amber-400/70 uppercase tracking-widest mb-1">Trophée Spécial Débloqué !</p>
+            <h2 class="text-xl font-black text-white mb-1">Félicitations !</h2>
+            <p class="text-xs text-gray-400 mb-5">Vous avez obtenu le trophée spécial suivant :</p>
+            <div id="notifSpecialImg" class="flex justify-center items-center mb-4" style="min-height:130px"></div>
+            <p id="notifSpecialName" class="font-black text-white text-xl mb-1"></p>
+            <p id="notifSpecialTier" class="text-xs font-black uppercase tracking-widest mb-3"></p>
+            <div id="notifSpecialDesc" class="hidden text-xs text-gray-300 bg-white/5 rounded-2xl px-4 py-3 mb-5 text-left leading-relaxed"></div>
+            <button onclick="nextSpecialNotif()" class="bg-amber-500 text-white font-black px-8 py-3 rounded-xl hover:bg-amber-600 active:scale-95 transition w-full text-sm">Continuer →</button>
+            <p id="notifSpecialCounter" class="text-xs text-gray-500 mt-3"></p>
+        </div>
+    </div>
+
     <!-- MODAL: EDIT PSEUDO -->
     <div id="modalPseudo" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
@@ -314,10 +335,19 @@ async function loadData(force) {
         const badgeEl = document.getElementById('navTropheesBadge');
         if (badgeEl) badgeEl.style.display = 'none';
 
-        // Marquer vus + notifier
+        // Marquer vus + notifier (spéciaux d'abord, puis réguliers)
         if (res.newUnlocks && res.newUnlocks.length > 0) {
             apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
-            showTropheeNotifs(res.newUnlocks);
+            const allT = res.trophees || [];
+            const newSpecial  = res.newUnlocks.map(id => allT.find(t => t.id === id && t.isSpecial)).filter(Boolean);
+            const newRegIds   = res.newUnlocks.filter(id => !allT.find(t => t.id === id && t.isSpecial));
+            if (newSpecial.length > 0) {
+                notifQueue = newRegIds.map(id => allT.find(t => t.id === id)).filter(Boolean);
+                notifIdx = 0;
+                showSpecialNotifs(newSpecial);
+            } else {
+                showTropheeNotifs(newRegIds);
+            }
         }
     } catch(e) { console.error(e); }
 }
@@ -597,13 +627,16 @@ function renderTrophees(d) {
 
     const cards = !filtered.length
         ? `<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée ${tierBadges.find(x=>x.k===currentTierFilter)?.label||''} pour l'instant.</p>`
-        : filtered.map(t => `
-            <div class="trophy-card bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')">
+        : filtered.map(t => {
+            const sp = t.isSpecial;
+            return `<div class="trophy-card ${sp?'bg-yellow-950/20 border-amber-400/50 ring-1 ring-amber-400/20':'bg-amber-50 border-amber-100'} border rounded-2xl p-4 text-center cursor-pointer relative" onclick="openTropheeById('${escH(t.id)}')">
+                ${sp ? `<span class="absolute top-2 right-2 text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">Spécial</span>` : ''}
                 <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
                 <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
                 <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
                 ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
     grid.innerHTML = statsBar + heading + cards;
 }
@@ -680,6 +713,12 @@ function openTropheeDetail(t) {
     // Info body
     const isEmbleme = tropheeData && tropheeData.prefs && tropheeData.prefs.emblemeChoisi === t.id;
     document.getElementById('tropheeDetailBody').innerHTML = `
+        ${t.isSpecial && t.description ? `
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+            <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">🏆 Comment ce trophée a été débloqué</p>
+            <p class="text-sm text-gray-700 leading-relaxed">${escH(t.description)}</p>
+        </div>` : ''}
+        ${!t.isSpecial ? `
         <div class="flex gap-3 mb-4">
             <div class="flex-1 bg-gray-50 rounded-2xl p-3 text-center">
                 <p class="text-[10px] text-gray-400 uppercase tracking-widest font-black mb-1">Catégorie</p>
@@ -690,7 +729,7 @@ function openTropheeDetail(t) {
                 <p class="text-sm font-black text-gray-800">${t.count} <span class="text-gray-400 font-normal">/ ${t.quantite}</span></p>
             </div>
         </div>
-        <div class="bg-gray-100 rounded-full h-2 mb-4"><div class="bg-amber-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>
+        <div class="bg-gray-100 rounded-full h-2 mb-4"><div class="bg-amber-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>` : ''}
         ${t.unlocked ? `
             <p class="text-xs text-green-600 font-bold text-center mb-4">✅ Débloqué${t.dateObtention ? ' le '+escH(t.dateObtention) : ''}</p>
             <button onclick="pickEmblemeFromDetail('${esc(t.id)}')" class="w-full py-2.5 rounded-xl font-black text-sm transition ${isEmbleme ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200'}">
@@ -814,7 +853,8 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-        // Dismiss notification first if open
+        const notifSpec = document.getElementById('notifSpecial');
+        if (!notifSpec.classList.contains('hidden')) { nextSpecialNotif(); return; }
         const notif = document.getElementById('notifTrophee');
         if (!notif.classList.contains('hidden')) { nextNotif(); return; }
         ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(closeModal);
@@ -825,8 +865,8 @@ document.addEventListener('keydown', e => {
 ['modalSalle','modalTrophee','modalPersonnage','modalEmbleme','modalPseudo'].forEach(id => {
     document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) closeModal(id); });
 });
-// Click outside notif box → next
 document.getElementById('notifTrophee').addEventListener('click', function(e){ if(e.target===this) nextNotif(); });
+document.getElementById('notifSpecial').addEventListener('click', function(e){ if(e.target===this) nextSpecialNotif(); });
 
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function esc(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
@@ -964,6 +1004,67 @@ function renderHeptagon(d) {
             ${rings}${axes}${skillPoly}${labels}
         </svg>`;
 }
+
+// ── NOTIFICATIONS TROPHÉES SPÉCIAUX ──────────────────────────────────────────
+let notifSpecialQueue = [];
+let notifSpecialIdx   = 0;
+
+function showSpecialNotifs(specials) {
+    if (!specials || !specials.length) return;
+    notifSpecialQueue = specials;
+    notifSpecialIdx   = 0;
+    _showSpecialAt(0);
+}
+
+function _showSpecialAt(idx) {
+    const overlay = document.getElementById('notifSpecial');
+    if (idx >= notifSpecialQueue.length) {
+        overlay.style.display = '';
+        overlay.classList.add('hidden');
+        if (notifQueue.length > 0) _showNotifAt(0);
+        return;
+    }
+    const t    = notifSpecialQueue[idx];
+    const tier = (t.tier||'').toLowerCase();
+    const box  = document.getElementById('notifSpecialBox');
+
+    box.className = 'notif-pop bg-gray-950 rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center';
+    if (tier === 'arc-en-ciel') {
+        box.classList.add('portrait-rainbow-border');
+        box.style.border = '3px solid';
+    } else {
+        box.classList.add('notif-special-gold');
+        box.style.border = '';
+    }
+
+    document.getElementById('notifSpecialImg').innerHTML = tropheeImg(t, true, 160);
+    document.getElementById('notifSpecialName').textContent = t.nom;
+
+    const tierEl = document.getElementById('notifSpecialTier');
+    if (tier === 'arc-en-ciel') {
+        tierEl.className = 'text-xs font-black uppercase tracking-widest mb-3 level-rainbow';
+        tierEl.textContent = '✨ Incandescent';
+    } else {
+        tierEl.className = 'text-xs font-black uppercase tracking-widest mb-3 text-amber-400';
+        tierEl.textContent = '⭐ Or';
+    }
+
+    const descEl = document.getElementById('notifSpecialDesc');
+    if (t.description) { descEl.textContent = t.description; descEl.classList.remove('hidden'); }
+    else descEl.classList.add('hidden');
+
+    document.getElementById('notifSpecialCounter').textContent =
+        notifSpecialQueue.length > 1 ? (idx+1) + ' / ' + notifSpecialQueue.length : '';
+
+    box.classList.remove('notif-pop');
+    void box.offsetWidth;
+    box.classList.add('notif-pop');
+
+    overlay.style.display = 'flex';
+    overlay.classList.remove('hidden');
+}
+
+function nextSpecialNotif() { notifSpecialIdx++; _showSpecialAt(notifSpecialIdx); }
 
 // Init
 loadData();
