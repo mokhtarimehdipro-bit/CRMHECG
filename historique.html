@@ -198,6 +198,8 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         let allLogs = [];
         let filteredLogs = [];
+        let studentsMap = {};
+        let personnelSet = new Set();
 
         // IDENTITÉ & SÉCURITÉ
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -231,8 +233,10 @@
                 const result = await response.json();
                 if (result.success) {
                     allLogs = result.logs;
+                    studentsMap = result.studentsMap || {};
+                    personnelSet = new Set((result.personnelNames || []).map(n => n.toLowerCase()));
                     populateFilters();
-                    applyFilters(); 
+                    applyFilters();
                 }
             } catch (e) { console.error(e); }
         }
@@ -320,11 +324,17 @@
             const byPerson = {}, byStudent = {};
             logs.forEach(log => {
                 const a = getSafeValue(log, ['auteur']) || 'Inconnu';
-                byPerson[a] = (byPerson[a] || 0) + 1;
+                // Encadrants uniquement : filtrer sur le Personnel si la liste est chargée
+                if (personnelSet.size === 0 || personnelSet.has(a.toLowerCase())) {
+                    byPerson[a] = (byPerson[a] || 0) + 1;
+                }
                 const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
                 if (STU_CATS.some(c => cat.includes(c))) {
                     const cible = getSafeValue(log, ['cible']) || '';
-                    if (cible) byStudent[cible] = (byStudent[cible] || 0) + 1;
+                    if (cible) {
+                        const nom = studentsMap[cible] || cible;
+                        byStudent[nom] = (byStudent[nom] || 0) + 1;
+                    }
                 }
             });
             renderRanking('rankingEncadrant', byPerson, '#1A4E8A');
@@ -516,7 +526,9 @@
             const byPerson = {};
             filteredLogs.forEach(log => {
                 const a = getSafeValue(log, ['auteur']) || 'Inconnu';
-                byPerson[a] = (byPerson[a] || 0) + 1;
+                if (personnelSet.size === 0 || personnelSet.has(a.toLowerCase())) {
+                    byPerson[a] = (byPerson[a] || 0) + 1;
+                }
             });
             const entries = Object.entries(byPerson).sort((a,b) => b[1]-a[1]).slice(0,10);
             if (!entries.length) return;
