@@ -596,6 +596,55 @@
   </div>
 </div>
 
+<!-- Tâche Détail Modal -->
+<div id="tacheDetailModal" class="modal-overlay hidden">
+  <div class="modal-box p-0" style="max-width:520px;overflow:hidden">
+    <div id="tacheDetailHeader" style="padding:1.5rem 1.5rem 1rem;border-bottom:3px solid #e5e7eb">
+      <div class="flex justify-between items-start">
+        <div style="flex:1;min-width:0">
+          <div id="tacheDetailPrio" style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9ca3af;margin-bottom:0.25rem"></div>
+          <h3 id="tacheDetailTitre" style="font-size:1.25rem;font-weight:900;color:#1f2937;line-height:1.2;word-break:break-word"></h3>
+        </div>
+        <button onclick="document.getElementById('tacheDetailModal').classList.add('hidden')" style="color:#9ca3af;font-size:1.5rem;line-height:1;margin-left:1rem;flex-shrink:0;background:none;border:none;cursor:pointer">×</button>
+      </div>
+    </div>
+    <div style="padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:0.85rem">
+      <div class="flex items-center gap-3">
+        <span id="tacheDetailPersonDot" style="width:12px;height:12px;border-radius:50%;flex-shrink:0;display:inline-block"></span>
+        <div>
+          <div style="font-size:0.7rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Assigné à</div>
+          <div id="tacheDetailPerson" style="font-weight:700;color:#1f2937"></div>
+        </div>
+      </div>
+      <div class="flex gap-6">
+        <div>
+          <div style="font-size:0.7rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Date</div>
+          <div id="tacheDetailDate" style="font-weight:700;color:#1f2937"></div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Créneau</div>
+          <div id="tacheDetailDJ" style="font-weight:700;color:#1f2937"></div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Statut</div>
+          <div id="tacheDetailStatut"></div>
+        </div>
+      </div>
+      <div id="tacheDetailDescDiv" style="display:none">
+        <div style="font-size:0.7rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem">Description</div>
+        <div id="tacheDetailDesc" style="background:#f8fafc;border-radius:0.75rem;padding:0.75rem 1rem;font-size:0.9rem;color:#374151;line-height:1.5;white-space:pre-wrap"></div>
+      </div>
+    </div>
+    <div id="tacheDetailActions" style="padding:1rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center">
+      <button id="tacheDetailDeleteBtn" onclick="tacheDetailDelete()" class="btn-danger hidden">Supprimer</button>
+      <div class="flex gap-3">
+        <button onclick="document.getElementById('tacheDetailModal').classList.add('hidden')" class="btn-ghost">Fermer</button>
+        <button id="tacheDetailEditBtn" onclick="tacheDetailEdit()" class="btn-orange hidden">Modifier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Listing Tâches Modal (Super-admin uniquement) -->
 <div id="listingTachesModal" class="modal-overlay hidden">
   <div class="modal-box p-6" style="max-width:900px;max-height:85vh;display:flex;flex-direction:column">
@@ -1236,10 +1285,18 @@ function computeAndShowStats(groups){
     : students;
 
   const total  = statsStudents.length;
-  const admis  = statsStudents.filter(s=>s.resultat==='Admis').length;
-  const ratt   = statsStudents.filter(s=>s.resultat==='Rattrapage').length;
-  const recale = statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
-  const enCours= total-admis-ratt-recale;
+  // BTS : rattrapage = statut AUTO (tous ceux qui sont passés en ratt, indep. du résultat final)
+  //       admis/recalé = statut DÉFINITIF (auto ou post-ratt)
+  const admis  = isBTSstats
+    ? statsStudents.filter(s=>s.resultatAuto==='Admis' || s.resultatManuel==='Admis').length
+    : statsStudents.filter(s=>s.resultat==='Admis').length;
+  const ratt   = isBTSstats
+    ? statsStudents.filter(s=>s.resultatAuto==='Rattrapage').length
+    : statsStudents.filter(s=>s.resultat==='Rattrapage').length;
+  const recale = isBTSstats
+    ? statsStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé').length
+    : statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
+  const enCours= statsStudents.filter(s=>s.resultatAuto==='En cours').length;
 
   const noteVals = isUEfilter
     ? statsStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
@@ -1247,6 +1304,7 @@ function computeAndShowStats(groups){
   const moyGlobal= noteVals.length?(noteVals.reduce((a,b)=>a+b,0)/noteVals.length).toFixed(2):'—';
   const noteMax= noteVals.length?Math.max(...noteVals).toFixed(2):'—';
   const noteMin= noteVals.length?Math.min(...noteVals).toFixed(2):'—';
+  // Taux réussite BTS = admis définitifs / total (y compris post-ratt admis)
   const taux   = total?Math.round(admis/total*100):0;
 
   const titleParts=[qDiplome,qAnnee,qClasse].filter(Boolean);
@@ -2376,12 +2434,11 @@ function renderWeek(){
         const missionBadge=t.missionId
           ? (t.statut==='Terminé'?'<span title="Mission clôturée" style="font-size:0.6rem;color:#15803d">✓</span> ':'<span title="Mission liée" style="font-size:0.6rem">🎯</span> ')
           : '';
-        const tJson=JSON.stringify(t).replace(/'/g,"&#39;");
         html+=`<div
           draggable="${canDrop?'true':'false'}"
           ondragstart="startDragTache('${t.id}',event)"
           ondragend="endDragTache(event)"
-          onclick="openTacheModal(${tJson},null,null)"
+          onclick="openTacheDetail('${t.id}')"
           style="background:${bg};border-left:3px solid ${pc};border-radius:0.5rem;padding:0.35rem 0.5rem;margin-bottom:0.3rem;cursor:${canDrop?'grab':'pointer'};font-size:0.75rem;transition:opacity 0.15s;user-select:none">
           <div style="font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="${t.titre}">${sirenIcon}${missionBadge}${t.titre}</div>
           <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">${t.referentNom||t.referent||''}</div>
@@ -2397,6 +2454,43 @@ function renderWeek(){
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
+}
+
+let _detailTaskId = null;
+function openTacheDetail(id){
+  const t = allTaches.find(x=>x.id===id);
+  if (!t){ toast('Tâche introuvable.',false); return; }
+  _detailTaskId = id;
+  const pc = getPersonColor(t.referentRef||t.referent);
+  const STATUT_COLOR = {'À faire':'#3b82f6','En cours':'#f59e0b','Terminé':'#15803d','Annulé':'#9ca3af'};
+  const prio = t.priorite||1;
+  // Header border color = person color
+  document.getElementById('tacheDetailHeader').style.borderBottomColor = pc;
+  document.getElementById('tacheDetailPrio').textContent = prio>=4 ? '🚨 Priorité '+prio : 'Priorité '+prio;
+  document.getElementById('tacheDetailTitre').textContent = t.titre||'—';
+  document.getElementById('tacheDetailPersonDot').style.background = pc;
+  document.getElementById('tacheDetailPerson').textContent = t.referentNom||t.referent||'—';
+  document.getElementById('tacheDetailDate').textContent = t.dateDebut ? fmtDateFr(t.dateDebut) : '—';
+  document.getElementById('tacheDetailDJ').textContent = t.demiJournee||'—';
+  const sc = STATUT_COLOR[t.statut]||'#6b7280';
+  document.getElementById('tacheDetailStatut').innerHTML = `<span style="color:${sc};font-weight:700">${t.statut||'—'}</span>`;
+  const desc = (t.description||'').trim();
+  const descDiv = document.getElementById('tacheDetailDescDiv');
+  if (desc){ descDiv.style.display=''; document.getElementById('tacheDetailDesc').textContent=desc; }
+  else { descDiv.style.display='none'; }
+  const canEdit = canWrite('planning');
+  document.getElementById('tacheDetailDeleteBtn').classList.toggle('hidden',!canEdit);
+  document.getElementById('tacheDetailEditBtn').classList.toggle('hidden',!canEdit);
+  document.getElementById('tacheDetailModal').classList.remove('hidden');
+}
+function tacheDetailEdit(){
+  document.getElementById('tacheDetailModal').classList.add('hidden');
+  const t = allTaches.find(x=>x.id===_detailTaskId);
+  if (t) openTacheModal(t, null, null);
+}
+async function tacheDetailDelete(){
+  await deleteTache(_detailTaskId);
+  document.getElementById('tacheDetailModal').classList.add('hidden');
 }
 
 function openTacheModal(t, preDate=null, preDJ=null){
@@ -2524,7 +2618,10 @@ async function deleteTache(id){
   if (!confirm('Supprimer cette tâche ?')) return;
   const r = await api('deletePlanningTache',{id});
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  toast('Tâche supprimée'); closeTacheModal(); loadPlanning();
+  toast('Tâche supprimée');
+  document.getElementById('tacheModal').classList.add('hidden');
+  document.getElementById('tacheDetailModal').classList.add('hidden');
+  loadPlanning();
 }
 
 // ── Listing tâches (Super-admin) ──────────────────────────────────
@@ -2578,7 +2675,7 @@ function renderListingTaches(){
       <td style="padding:0.45rem 0.75rem;white-space:nowrap"><span style="color:${sc};font-weight:700;font-size:0.78rem">${t.statut||'—'}</span></td>
       <td style="padding:0.45rem 0.75rem;text-align:center;color:#9ca3af;font-size:0.78rem">${prio}</td>
       <td style="padding:0.45rem 0.75rem">
-        <button onclick="document.getElementById('listingTachesModal').classList.add('hidden');openTacheModal(${tJson},null,null)" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:#eff6ff;color:#1A4E8A;border:1px solid #bfdbfe;border-radius:0.4rem;cursor:pointer;font-weight:700">✏</button>
+        <button onclick="document.getElementById('listingTachesModal').classList.add('hidden');openTacheDetail('${t.id}')" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:#eff6ff;color:#1A4E8A;border:1px solid #bfdbfe;border-radius:0.4rem;cursor:pointer;font-weight:700">✏</button>
       </td>
     </tr>`;
   }).join('');
