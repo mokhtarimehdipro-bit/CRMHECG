@@ -32,7 +32,7 @@
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
     </nav>
-    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if((u.email||'').toLowerCase()==='m.mokhtari@hecg.fr'){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -46,7 +46,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-7 gap-4 mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-9 gap-4 mb-8">
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div><p class="text-[10px] font-black text-gray-400 uppercase">Élèves Affichés</p><p class="text-3xl font-black text-[#1A4E8A]" id="kpi-tot">0</p></div>
                 <div class="text-3xl">🎓</div>
@@ -62,6 +62,14 @@
             <div class="bg-orange-50 p-4 rounded-2xl shadow-sm border border-orange-100 flex items-center justify-between">
                 <div><p class="text-[10px] font-black text-orange-600 uppercase">En Recherche</p><p class="text-3xl font-black text-orange-700" id="kpi-rech">0</p></div>
                 <div class="text-3xl">🔍</div>
+            </div>
+            <div class="bg-teal-50 p-4 rounded-2xl shadow-sm border border-teal-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-teal-600 uppercase">En Contrat</p><p class="text-3xl font-black text-teal-700" id="kpi-contrat">0</p></div>
+                <div class="text-3xl">💼</div>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-gray-500 uppercase">Non su</p><p class="text-3xl font-black text-gray-600" id="kpi-nonsu">0</p></div>
+                <div class="text-3xl">❓</div>
             </div>
             <div class="bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between">
                 <div><p class="text-[10px] font-black text-red-600 uppercase">Sorties / Refusés</p><p class="text-3xl font-black text-red-700" id="kpi-sorties">0</p></div>
@@ -130,6 +138,8 @@
                     <label class="flex items-center gap-2 p-2 rounded-xl hover:bg-gray-50 cursor-pointer text-sm font-bold"><input type="checkbox" value="recherche" class="w-4 h-4 rounded" onchange="msdToggleOption('statut','recherche')"> 🔍 En recherche</label>
                     <label class="flex items-center gap-2 p-2 rounded-xl hover:bg-gray-50 cursor-pointer text-sm font-bold"><input type="checkbox" value="alternance" class="w-4 h-4 rounded" onchange="msdToggleOption('statut','alternance')"> 🏢 En Alternance</label>
                     <label class="flex items-center gap-2 p-2 rounded-xl hover:bg-gray-50 cursor-pointer text-sm font-bold"><input type="checkbox" value="initial" class="w-4 h-4 rounded" onchange="msdToggleOption('statut','initial')"> 🎒 En initial</label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl hover:bg-gray-50 cursor-pointer text-sm font-bold"><input type="checkbox" value="contrat" class="w-4 h-4 rounded" onchange="msdToggleOption('statut','contrat')"> 💼 En contrat</label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl hover:bg-gray-50 cursor-pointer text-sm font-bold"><input type="checkbox" value="non su" class="w-4 h-4 rounded" onchange="msdToggleOption('statut','non su')"> ❓ Non su</label>
                 </div>
             </div>
 
@@ -239,6 +249,8 @@
                             <option value="En recherche">🔍 En recherche</option>
                             <option value="En Alternance">🏢 En Alternance</option>
                             <option value="En Initial">🎒 En Initial</option>
+                            <option value="En contrat">💼 En contrat</option>
+                            <option value="Non su">❓ Non su</option>
                         </select>
                     </div>
                     <div>
@@ -306,6 +318,7 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+
         // LA STATION D'EXPÉDITION CENTRALE
 async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
@@ -428,7 +441,7 @@ async function apiPost(payload) {
         const msOptionName = {
             typo:    { inscrit:'Inscrits', 'préinscrit':'Préinscrits', prospect:'Prospects', sortie:'Sorties' },
             campus:  { HECG:'Marseille', HECG_AIX:'Aix' },
-            statut:  { recherche:'Recherche', alternance:'Alternance', initial:'Initial' },
+            statut:  { recherche:'Recherche', alternance:'Alternance', initial:'Initial', contrat:'Contrat', 'non su':'Non su' },
             atelier: { CV:'CV✅', CV_NON:'CV❌', LI:'LI✅', LI_NON:'LI❌', BOTH:'Les deux✅' },
             periode: { '7':'<7j', '30':'>30j', NEVER:'Jamais' }
         };
@@ -635,23 +648,27 @@ async function apiPost(payload) {
         function renderTable() {
             const filtered = getFilteredData();
 
-            // MISE À JOUR DES 5 KPI DYNAMIQUES
-            let countAlt = 0, countInit = 0, countRech = 0, countSorties = 0;
+            // MISE À JOUR DES 7 KPI DYNAMIQUES
+            let countAlt = 0, countInit = 0, countRech = 0, countContrat = 0, countNonSu = 0, countSorties = 0;
             filtered.forEach(e => {
                 const s = (e.statut || "").toLowerCase();
                 const t = (e.typo || "").toLowerCase();
 
                 if(s.includes('alternance') || s.includes('placé') || s.includes('poste')) countAlt++;
                 else if(s.includes('initial')) countInit++;
+                else if(s.includes('contrat')) countContrat++;
+                else if(s.includes('non su')) countNonSu++;
                 else countRech++;
 
                 if(t === 'sortie' || t === 'refuse') countSorties++;
             });
-            
+
             document.getElementById('kpi-tot').innerText = filtered.length;
             document.getElementById('kpi-alt').innerText = countAlt;
             document.getElementById('kpi-init').innerText = countInit;
             document.getElementById('kpi-rech').innerText = countRech;
+            document.getElementById('kpi-contrat').innerText = countContrat;
+            document.getElementById('kpi-nonsu').innerText = countNonSu;
             document.getElementById('kpi-sorties').innerText = countSorties;
 
             const list = document.getElementById('studentList');
@@ -665,6 +682,10 @@ async function apiPost(payload) {
                     badgeStatut = `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-green-200 shadow-sm">🏢 En Alternance</span>`;
                 } else if (stLow.includes('initial')) {
                     badgeStatut = `<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-purple-200 shadow-sm">🎒 En Initial</span>`;
+                } else if (stLow.includes('contrat')) {
+                    badgeStatut = `<span class="bg-teal-100 text-teal-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-teal-200 shadow-sm">💼 En contrat</span>`;
+                } else if (stLow.includes('non su')) {
+                    badgeStatut = `<span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-gray-300 shadow-sm">❓ Non su</span>`;
                 } else {
                     badgeStatut = `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-orange-200 shadow-sm">🔍 En recherche</span>`;
                 }
