@@ -355,7 +355,8 @@ async function apiPost(payload) {
         let catalogueTuteurs = [];
         let catalogueReferents = [];
         let user = null;
-        let showAlumniOnly = false; // Variable du bouton Alumni
+        let showAlumniOnly = false;
+        let canDeleteStudent = false;
 
         window.onload = () => {
             try {
@@ -363,6 +364,8 @@ async function apiPost(payload) {
                 if (stored) {
                     user = JSON.parse(stored);
                     
+                    canDeleteStudent = ['Administrateur', 'Superviseur', 'RP'].includes(user.role);
+
                     // Sécurité Redirection
                     if (user.role === 'Etudiant') {
                         window.location.href = 'dossier.html';
@@ -708,6 +711,7 @@ async function apiPost(payload) {
                     <td class="p-5 text-center flex justify-center space-x-2">
                         <a href="dossier.html?id=${e.id}" target="_blank" class="bg-slate-100 text-[#1A4E8A] px-4 py-2 rounded-xl text-[10px] font-black hover:bg-[#1A4E8A] hover:text-white transition uppercase">Dossier</a>
                         <button onclick="openModal('${e.id}')" class="text-slate-300 hover:text-orange-500 transition-colors text-lg">✏️</button>
+                        ${canDeleteStudent ? `<button onclick="deleteStudent('${e.id}','${e.nom} ${e.prenom}')" class="text-slate-300 hover:text-red-500 transition-colors text-lg" title="Supprimer l'étudiant">🗑️</button>` : ''}
                     </td>
                 </tr>
                 `;
@@ -728,6 +732,17 @@ async function apiPost(payload) {
             });
             if (document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
             if (showAlumniOnly) { toggleAlumni(); } else { renderTable(); }
+        }
+
+        async function deleteStudent(id, nom) {
+            if (!confirm(`⚠️ Supprimer définitivement la fiche de ${nom} ?\n\nCette action est irréversible.`)) return;
+            const res = await apiPost({ action: 'deleteStudent', id_etu: id });
+            if (res.success) {
+                fullData = fullData.filter(e => e.id !== id);
+                renderTable();
+            } else {
+                alert("Erreur lors de la suppression : " + (res.message || "Erreur inconnue"));
+            }
         }
 
         // --- 4. MODALE & SAUVEGARDE ---
