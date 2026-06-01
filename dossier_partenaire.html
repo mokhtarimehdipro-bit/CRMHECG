@@ -22,7 +22,10 @@
                             <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse">✏️</button>
                         </div>
                     </div>
-                    <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
+                        <span id="btnDeleteEntDP"></span>
+                    </div>
                 </div>
                 <div id="contactsList" class="space-y-2"></div>
                 <button onclick="toggleAddContactForm()" class="mt-3 text-sm font-bold text-[#1A4E8A] hover:underline">+ Ajouter un contact</button>
@@ -34,6 +37,23 @@
                         <input type="email" id="newMail2"  placeholder="Email 2"        class="border p-2 rounded-lg text-sm bg-white">
                         <input type="text"  id="newTel"    placeholder="Téléphone 1"    class="border p-2 rounded-lg text-sm bg-white">
                         <input type="text"  id="newTel2"   placeholder="Téléphone 2"    class="border p-2 rounded-lg text-sm bg-white">
+                    </div>
+                    <select id="newPoste" class="w-full border p-2 rounded-lg text-sm bg-white">
+                        <option value="">-- Poste du contact --</option>
+                        <option value="RH">RH</option>
+                        <option value="Gérant">Gérant</option>
+                        <option value="Expert comptable">Expert comptable</option>
+                        <option value="Collaborateur comptable">Collaborateur comptable</option>
+                    </select>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="newIsMA" onchange="toggleDPMASelector()" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                            <label for="newIsMA" class="text-xs font-black text-amber-700 cursor-pointer">🎓 Maître d'apprentissage (MA)</label>
+                        </div>
+                        <div id="dpMABlock" class="hidden space-y-1">
+                            <p class="text-[10px] text-amber-600 font-bold">Sélectionner le ou les étudiants :</p>
+                            <div id="dpMAStudentList" class="max-h-32 overflow-y-auto space-y-1 bg-white border border-amber-200 rounded-lg p-2 text-xs text-gray-400 italic">Chargement...</div>
+                        </div>
                     </div>
                     <button onclick="addContact()" class="w-full bg-[#1A4E8A] text-white py-2 rounded-xl font-black text-sm hover:bg-blue-800">Enregistrer le contact</button>
                 </div>
@@ -134,6 +154,10 @@
         let nomEntrepriseActuelle = "";
         let contactsData = [];
         let adresseData = { adresse: "", cp: "", ville: "" };
+        let allStudentsCacheDP = [];
+
+        const _dpUserSession = JSON.parse(localStorage.getItem('user') || '{}');
+        const dpCanDelete = ['Administrateur', 'Superviseur', 'RP'].includes(_dpUserSession.role || '');
 
         try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
         if(!currentUser) currentUser = { nom: "Utilisateur" };
@@ -153,6 +177,12 @@
                     adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
                     const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
                     document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
+
+                    // Bouton supprimer entreprise (RP uniquement)
+                    const btnDelEnt = document.getElementById('btnDeleteEntDP');
+                    if (btnDelEnt) btnDelEnt.innerHTML = dpCanDelete
+                        ? '<button onclick="deleteEnterprise()" class="text-xs text-red-400 hover:text-red-600 font-bold border border-red-200 px-3 py-1.5 rounded-xl hover:bg-red-50 transition">⚠️ Supprimer l\'entreprise</button>'
+                        : '';
 
                     // Stockage global + rendu contacts
                     contactsData = d.contacts || [];
@@ -271,15 +301,18 @@
                 const mailsHtml = mails.map(m => '<a href="mailto:' + m + '" class="text-blue-500 hover:underline">' + m + '</a>').join(' &nbsp;·&nbsp; ');
                 const telsHtml  = tels.map(t => '<span>' + t + '</span>').join(' &nbsp;·&nbsp; ');
 
+                const posteBadge = c.poste ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black rounded-full">' + c.poste + '</span>' : '';
+                const maBadge = c.is_ma === 'Oui' ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-black rounded-full">🎓 MA</span>' : '';
+
                 return '<div class="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
                     + '<div class="text-sm space-y-0.5">'
-                    + '<p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>'
+                    + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge + '</div>'
                     + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
                     + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
                     + '</div>'
                     + '<div class="flex gap-1 shrink-0">'
                     + '<button data-idx="' + idx + '" data-action="edit" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>'
-                    + '<button data-idx="' + idx + '" data-action="delete" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>'
+                    + (dpCanDelete ? '<button data-idx="' + idx + '" data-action="delete" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>' : '')
                     + '</div></div>';
             }).join('');
         }
@@ -312,27 +345,73 @@
             f.classList.toggle('hidden');
         }
 
+        async function toggleDPMASelector() {
+            const isMA = document.getElementById('newIsMA').checked;
+            const block = document.getElementById('dpMABlock');
+            if (isMA) {
+                block.classList.remove('hidden');
+                if (allStudentsCacheDP.length === 0) {
+                    const res = await apiPost({ action: 'getStudentsMinList' });
+                    if (res.success) allStudentsCacheDP = res.data;
+                }
+                const listEl = document.getElementById('dpMAStudentList');
+                listEl.innerHTML = allStudentsCacheDP.map(s =>
+                    '<label class="flex items-center gap-2 p-1 rounded hover:bg-amber-50 cursor-pointer">'
+                    + '<input type="checkbox" value="' + s.id + '" class="dp-ma-chk w-3 h-3 accent-amber-500">'
+                    + '<span class="font-bold text-gray-700">' + s.nom + ' ' + s.prenom + '</span>'
+                    + '<span class="text-gray-400 text-[10px]">' + (s.classe || '') + '</span></label>'
+                ).join('') || 'Aucun étudiant trouvé.';
+            } else {
+                block.classList.add('hidden');
+            }
+        }
+
+        async function deleteEnterprise() {
+            if (!confirm('⚠️ Supprimer l\'entreprise ' + nomEntrepriseActuelle + ' et TOUS ses contacts ?\n\nCette action est irréversible.')) return;
+            const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId });
+            if (res.success) {
+                alert('✅ Entreprise supprimée.');
+                window.close();
+            } else {
+                alert('Erreur : ' + res.message);
+            }
+        }
+
         async function addContact() {
             const nom = document.getElementById('newNom').value.trim();
             const prenom = document.getElementById('newPrenom').value.trim();
             const mail = document.getElementById('newMail').value.trim();
             const tel = document.getElementById('newTel').value.trim();
             if (!nom && !prenom) return alert("Veuillez saisir au moins un nom.");
+            const isMA = document.getElementById('newIsMA').checked;
+            if (isMA && !document.querySelector('.dp-ma-chk:checked')) {
+                return alert("⚠️ Un Maître d'apprentissage doit être rattaché à au moins un étudiant.");
+            }
             const res = await apiPost({
                 action: 'addPartner',
                 id_entreprise: partId,
                 nom_entreprise: nomEntrepriseActuelle,
                 nom, prenom,
                 mail1: mail, mail2: document.getElementById('newMail2').value.trim(),
-                tel1: tel,   tel2:  document.getElementById('newTel2').value.trim()
+                tel1: tel,   tel2:  document.getElementById('newTel2').value.trim(),
+                poste: document.getElementById('newPoste').value,
+                is_ma: isMA ? 'Oui' : 'Non'
             });
             if (res.success) {
-                document.getElementById('newNom').value = '';
-                document.getElementById('newPrenom').value = '';
-                document.getElementById('newMail').value = '';
-                document.getElementById('newMail2').value = '';
-                document.getElementById('newTel').value = '';
-                document.getElementById('newTel2').value = '';
+                if (isMA) {
+                    const ids_etudiants = [...document.querySelectorAll('.dp-ma-chk:checked')].map(c => c.value);
+                    await apiPost({
+                        action: 'linkMAToStudents',
+                        ids_etudiants,
+                        id_entreprise: partId,
+                        id_contact: res.id_contact || "",
+                        nom_entreprise: nomEntrepriseActuelle
+                    });
+                }
+                ['newNom','newPrenom','newMail','newMail2','newTel','newTel2'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('newPoste').value = '';
+                document.getElementById('newIsMA').checked = false;
+                document.getElementById('dpMABlock').classList.add('hidden');
                 document.getElementById('addContactForm').classList.add('hidden');
                 loadDetails();
             } else {
