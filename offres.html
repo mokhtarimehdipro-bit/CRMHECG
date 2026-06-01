@@ -135,9 +135,14 @@
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-[10px] font-black text-orange-500 mb-1 uppercase">📝 (notes interne) - Suivi équipe</label>
-                    <textarea id="offreMissions" rows="3" class="w-full border p-3 rounded-xl text-sm" placeholder="Détails..."></textarea>
+                <input type="hidden" id="offreMissions">
+                <div id="missionsLegacyBlock" class="hidden">
+                    <label class="block text-[10px] font-black text-gray-400 mb-1 uppercase">📝 Notes internes (historique)</label>
+                    <div id="missionsLegacyText" class="w-full border border-gray-200 bg-gray-50 p-3 rounded-xl text-sm text-gray-500 italic leading-relaxed"></div>
+                    <p class="text-[10px] text-orange-500 font-bold mt-1">⚠️ Ce champ est en lecture seule. Utilisez le Journal de suivi ci-dessous pour ajouter de nouvelles notes.</p>
+                </div>
+                <div id="missionsJournalHint" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-3">
+                    <p class="text-xs font-black text-[#1A4E8A]">📋 Pour ajouter des notes de suivi, utilisez le Journal de suivi directement sur la carte de l'offre.</p>
                 </div>
             </div>
 
@@ -463,6 +468,23 @@
         }
 
         // 4. MODAL AJOUT / MODIF
+        function _setMissionsDisplay(missions) {
+            const legacyBlock = document.getElementById('missionsLegacyBlock');
+            const hint        = document.getElementById('missionsJournalHint');
+            const legacyText  = document.getElementById('missionsLegacyText');
+            const existingVal = String(missions || '').trim();
+            if (existingVal) {
+                // Offre avec notes internes existantes → affichage lecture seule
+                legacyText.innerText = existingVal;
+                legacyBlock.classList.remove('hidden');
+                hint.classList.add('hidden');
+            } else {
+                // Nouvelle offre ou offre sans notes → pointer vers le journal
+                legacyBlock.classList.add('hidden');
+                hint.classList.remove('hidden');
+            }
+        }
+
         function openModal(id = null) {
             document.getElementById('offreModal').classList.replace('hidden', 'flex');
             if(id) {
@@ -474,9 +496,10 @@
                 document.getElementById('offreUrl').value = o.url;
                 document.getElementById('offrePlateforme').value = o.plateforme || '';
                 document.getElementById('offreVille').value = o.ville || '';
-                document.getElementById('offreMissions').value = o.missions || '';
+                document.getElementById('offreMissions').value = o.missions || '';  // conserve la valeur existante
                 setSelectCI('offreQualite', o.qualite);
                 setSelectCI('offreEtat', o.etat || 'Non partagée');
+                _setMissionsDisplay(o.missions);
             } else {
                 document.getElementById('modalTitle').innerText = "Ajouter une Offre";
                 document.getElementById('formOffreId').value = "";
@@ -484,8 +507,10 @@
                 document.getElementById('offreEnt').value = "";
                 document.getElementById('offreUrl').value = "";
                 document.getElementById('offrePlateforme').value = "";
+                document.getElementById('offreMissions').value = "";
                 document.getElementById('offreQualite').value = "À Qualifier";
                 document.getElementById('offreEtat').value = "Non partagée";
+                _setMissionsDisplay("");
             }
         }
         function closeModal() { document.getElementById('offreModal').classList.replace('flex', 'hidden'); }
