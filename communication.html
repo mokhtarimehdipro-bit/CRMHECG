@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -18,6 +18,9 @@
                 <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
                 <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
                 <a href="communication.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Com & Événements</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -25,6 +28,7 @@
             <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
         </div>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex justify-between items-center mb-10">
@@ -137,18 +141,41 @@
 
     </div>
 
-    <div id="boxAtelierExtras" class="hidden bg-blue-50 p-4 rounded-2xl border border-blue-100">
-        <label class="block text-[10px] font-black uppercase text-[#1A4E8A] mb-2">📧 Ajouter des destinataires manuellement (séparés par virgule)</label>
-        <textarea id="formEmailsExtras" rows="2" placeholder="mail1@test.com, mail2@test.com..." class="w-full border-2 border-white p-3 rounded-xl text-xs outline-none focus:border-[#1A4E8A]"></textarea>
+    <div id="boxAtelierExtras" class="hidden space-y-4">
+        <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-[10px] font-black uppercase text-[#1A4E8A]">🎓 Filtrer par Classe</h3>
+                <div class="flex gap-3">
+                    <button onclick="selectAllClasses(true)" class="text-[9px] font-bold text-blue-500 hover:underline">Tout cocher</button>
+                    <button onclick="selectAllClasses(false)" class="text-[9px] font-bold text-blue-500 hover:underline">Tout décocher</button>
+                </div>
+            </div>
+            <div id="classeFilterContainer" class="flex flex-wrap gap-2">
+                <span class="text-[10px] text-gray-400 italic">Chargement des classes...</span>
+            </div>
+        </div>
+        <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+            <h3 class="text-[10px] font-black uppercase text-amber-700 mb-3">📧 Ajouter un destinataire manuellement</h3>
+            <div class="flex gap-2 mb-3">
+                <input type="email" id="inputAddEmail" placeholder="adresse@email.com"
+                       class="flex-grow border-2 border-white p-2.5 rounded-xl text-xs font-bold outline-none focus:border-amber-300"
+                       onkeydown="if(event.key==='Enter'){addManualEmail();}">
+                <button onclick="addManualEmail()" class="px-4 py-2 bg-[#F26522] text-white rounded-xl text-[10px] font-black hover:bg-orange-600 transition shrink-0">+ Ajouter</button>
+            </div>
+            <div id="manualEmailsList" class="space-y-1.5 max-h-28 overflow-y-auto"></div>
+        </div>
     </div>
 
     <div class="mt-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-        <div class="flex justify-between items-center mb-2">
-            <h4 class="text-[10px] font-black uppercase text-slate-400">👥 Destinataires détectés en temps réel</h4>
-            <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+        <div class="flex justify-between items-center mb-3">
+            <h4 class="text-[10px] font-black uppercase text-slate-400">👥 Destinataires sélectionnés</h4>
+            <div class="flex items-center gap-2">
+                <span id="liveLoader" class="hidden text-[10px] text-blue-400 animate-pulse font-bold">Actualisation...</span>
+                <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+            </div>
         </div>
-        <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1">
-            Modifiez les paramètres pour voir la liste...
+        <div id="livePreviewList" class="max-h-48 overflow-y-auto space-y-1.5">
+            <span class="text-[10px] text-gray-400 italic">Modifiez les paramètres pour voir la liste...</span>
         </div>
     </div>
 
@@ -213,6 +240,9 @@
         let testEmail = "mokhtarimehdi.pro@gmail.com";
         let removedEmails = new Set();
         let livePreviewContacts = [];
+        let manualAddedEmails = [];
+        let allClasses = [];
+        let selectedClasses = [];
 
         window.onload = () => {
             user = JSON.parse(localStorage.getItem('user'));
@@ -224,6 +254,7 @@
                 fetchSettings();
             }
             loadCampaigns();
+            loadClasses();
         };
 
         async function fetchSettings() {
@@ -378,44 +409,57 @@
         }
 
         function openModal(id = null) {
-            // 1. On affiche la modale
             const modal = document.getElementById('cmpModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
 
+            // Reset état
+            removedEmails = new Set();
+            livePreviewContacts = [];
+            manualAddedEmails = [];
+            selectedClasses = [...allClasses];
+
             if (id) {
-                // CAS ÉDITION : On remplit avec les données existantes
+                // CAS ÉDITION
                 const c = campaigns.find(x => x.id === id);
                 document.getElementById('modalTitle').innerText = "Modifier la Campagne";
                 document.getElementById('formId').value = c.id;
                 document.getElementById('formNom').value = c.nom || "";
                 document.getElementById('formType').value = c.type || "Atelier CV";
                 document.getElementById('formObjet').value = c.objet || "";
-                
-                // Pour les dates, on s'assure du format YYYY-MM-DD pour l'input
+
                 if(c.dateEvt) {
                     const d = new Date(c.dateEvt);
                     document.getElementById('formDateEvt').value = d.toISOString().split('T')[0];
                 }
-
                 document.getElementById('formHoraires').value = c.horaires || "";
                 document.getElementById('formCampus').value = c.campus || "Marseille";
                 document.getElementById('formLienExterne').value = c.lienExterne || "";
-                document.getElementById('formEmailsExtras').value = (c.type !== "Salon") ? (c.emailsLibres || "") : "";
-                
-                // On déverrouille l'objet si c'est une édition pour permettre la correction
+
+                // Restauration des emails manuels pour les ateliers
+                if (c.type !== "Salon" && c.emailsLibres) {
+                    manualAddedEmails = String(c.emailsLibres).split(',')
+                        .map(e => e.trim().toLowerCase()).filter(e => e.includes('@'))
+                        .map(e => ({ email: e, nom: e }));
+                }
+                // Restauration du filtre de classes
+                let savedCible = {};
+                try { savedCible = typeof c.cible === 'string' ? JSON.parse(c.cible) : (c.cible || {}); } catch(e) {}
+                if (Array.isArray(savedCible.classesCibles) && savedCible.classesCibles.length > 0) {
+                    selectedClasses = [...savedCible.classesCibles];
+                }
+
                 const objField = document.getElementById('formObjet');
                 objField.readOnly = false;
                 objField.classList.remove('bg-gray-50', 'text-gray-400');
             } else {
-                // CAS NOUVELLE CAMPAGNE : On vide tout
+                // CAS NOUVELLE CAMPAGNE
                 document.getElementById('modalTitle').innerText = "Paramétrer la Campagne";
                 document.getElementById('formId').value = "";
                 document.getElementById('formNom').value = "";
                 document.getElementById('formDateEvt').value = "";
                 document.getElementById('formHoraires').value = "";
                 document.getElementById('formLienExterne').value = "";
-                document.getElementById('formEmailsExtras').value = "";
 
                 const objField = document.getElementById('formObjet');
                 objField.value = "";
@@ -423,15 +467,13 @@
                 objField.classList.add('bg-gray-50', 'text-gray-400');
 
                 updateAutoSubject();
+            }
+
+            renderClassFilters();
+            renderManualEmails();
+            toggleTargeting();
+            setTimeout(updateLivePreview, 500);
         }
-
-        // Reset de la gestion manuelle des destinataires
-        removedEmails = new Set();
-        livePreviewContacts = [];
-
-        toggleTargeting();
-        setTimeout(updateLivePreview, 500);
-    }
 
     function closeModal() { document.getElementById('cmpModal').classList.add('hidden'); }
 
@@ -443,14 +485,16 @@
             btn.disabled = true;
             btn.innerText = "Sauvegarde en cours...";
 
-            // 1. Préparation du ciblage pour le mode Salon
+            // 1. Préparation du ciblage
+            const isAtelierSave = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
             const cible = {
                 b2b_avec: document.getElementById('cb_b2b_avec').checked,
                 b2b_sans: document.getElementById('cb_b2b_sans').checked,
                 b2c_prospects: document.getElementById('cb_b2c_prospects').checked,
                 b2c_preinscrits: document.getElementById('cb_b2c_preinscrits').checked,
                 b2c_inscrits: document.getElementById('cb_b2c_inscrits').checked,
-                b2c_sorties: document.getElementById('cb_b2c_sorties').checked
+                b2c_sorties: document.getElementById('cb_b2c_sorties').checked,
+                classesCibles: isAtelierSave ? (selectedClasses.length === allClasses.length ? [] : [...selectedClasses]) : []
             };
 
             // 2. Récupération des fichiers (Flyer et PJ)
@@ -498,7 +542,7 @@
                 horaires: document.getElementById('formHoraires').value,
                 accroche: document.getElementById('formAccroche').value,
                 lienExterne: document.getElementById('formLienExterne').value,
-                emailsLibres: type === "Salon" ? document.getElementById('formEmailsLibres').value : document.getElementById('formEmailsExtras').value,
+                emailsLibres: type === "Salon" ? document.getElementById('formEmailsLibres').value : manualAddedEmails.map(e => e.email).join(','),
                 cible: cible,
                 flyerUrl: flyerUrl,
                 pjUrl: pjUrl
@@ -795,17 +839,36 @@ async function executeFinalSend(cmpId, isTest, emailList) {
             if (!listDiv || !countSpan) return;
             const type = document.getElementById('formType').value;
             const isAtelier = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
-            const filtered = livePreviewContacts.filter(c => !removedEmails.has(c.email));
-            countSpan.innerText = filtered.length;
-            listDiv.innerHTML = filtered.slice(0, 60).map(c => `
-                <div class="flex justify-between items-center border-b border-slate-100 py-1">
-                    <span class="truncate pr-2">${c.nom}</span>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <span class="text-slate-400 text-[9px]">${c.source}</span>
-                        ${isAtelier ? `<button data-email="${c.email}" class="preview-remove text-red-400 hover:text-red-600 text-[10px] font-black ml-1" title="Retirer">✕</button>` : ''}
+
+            const autoContacts = livePreviewContacts.filter(c => !removedEmails.has(c.email));
+            const manualContacts = manualAddedEmails.filter(m => !removedEmails.has(m.email));
+            countSpan.innerText = autoContacts.length + manualContacts.length;
+
+            let html = autoContacts.map(c => `
+                <div class="flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-slate-100 gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-bold text-gray-800 text-[11px] truncate">${c.nom}</span>
+                        ${c.classe ? `<span class="shrink-0 bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded text-[9px] font-black">${c.classe}</span>` : ''}
                     </div>
+                    ${isAtelier ? `<button data-email="${c.email}" class="preview-remove shrink-0 text-red-400 hover:text-red-600 hover:bg-red-50 w-6 h-6 flex items-center justify-center rounded-lg transition font-black text-xs" title="Retirer">✕</button>` : ''}
                 </div>
-            `).join('') || "Aucun destinataire.";
+            `).join('');
+
+            if (manualContacts.length > 0) {
+                html += `<div class="flex items-center gap-2 my-2">
+                    <div class="flex-grow border-t border-dashed border-amber-200"></div>
+                    <span class="text-[9px] font-black uppercase text-amber-500 shrink-0">Ajoutés manuellement</span>
+                    <div class="flex-grow border-t border-dashed border-amber-200"></div>
+                </div>`;
+                html += manualContacts.map(m => `
+                    <div class="flex justify-between items-center bg-amber-50 px-3 py-2 rounded-xl border border-amber-100 gap-2">
+                        <span class="font-bold text-gray-700 text-[11px] truncate">${m.email}</span>
+                        <button onclick="removeManualEmail('${m.email}')" class="shrink-0 text-red-400 hover:text-red-600 hover:bg-red-50 w-6 h-6 flex items-center justify-center rounded-lg transition font-black text-xs" title="Retirer">✕</button>
+                    </div>
+                `).join('');
+            }
+
+            listDiv.innerHTML = html || '<span class="text-[10px] text-gray-400 italic">Aucun destinataire sélectionné.</span>';
         }
 
         async function updateLivePreview() {
@@ -814,19 +877,26 @@ async function executeFinalSend(cmpId, isTest, emailList) {
             if (!listDiv || !countSpan) return;
             const type = document.getElementById('formType').value;
             const isAtelier = type === "Atelier CV" || type === "Atelier LinkedIn" || type === "Atelier Mixte";
+            const loader = document.getElementById('liveLoader');
+            if (loader) loader.classList.remove('hidden');
+
+            const classesCibles = isAtelier
+                ? (selectedClasses.length === allClasses.length ? [] : [...selectedClasses])
+                : [];
 
             const payload = {
                 action: 'previewComMail',
                 type: type,
                 campus: document.getElementById('formCampus').value,
-                emailsLibres: isAtelier ? (document.getElementById('formEmailsExtras')?.value || "") : (document.getElementById('formEmailsLibres')?.value || ""),
+                emailsLibres: isAtelier ? "" : (document.getElementById('formEmailsLibres')?.value || ""),
                 cible: {
                     b2c_prospects: document.getElementById('cb_b2c_prospects')?.checked || false,
                     b2c_preinscrits: document.getElementById('cb_b2c_preinscrits')?.checked || false,
                     b2c_inscrits: document.getElementById('cb_b2c_inscrits')?.checked || false,
                     b2c_sorties: document.getElementById('cb_b2c_sorties')?.checked || false,
                     b2b_avec: document.getElementById('cb_b2b_avec')?.checked || false,
-                    b2b_sans: document.getElementById('cb_b2b_sans')?.checked || false
+                    b2b_sans: document.getElementById('cb_b2b_sans')?.checked || false,
+                    classesCibles: classesCibles
                 }
             };
 
@@ -835,6 +905,7 @@ async function executeFinalSend(cmpId, isTest, emailList) {
                 const d = await res.json();
                 if (d.success) { livePreviewContacts = d.data; renderLivePreview(); }
             } catch(e) { console.error("Erreur de prévisualisation"); }
+            finally { if (loader) loader.classList.add('hidden'); }
         }
 
         // Délégation pour le bouton "Retirer" dans la liste live
@@ -850,7 +921,71 @@ async function executeFinalSend(cmpId, isTest, emailList) {
             if (e.target.closest('#cmpModal')) updateLivePreview();
         });
         document.getElementById('formEmailsLibres')?.addEventListener('keyup', updateLivePreview);
-        document.getElementById('formEmailsExtras')?.addEventListener('keyup', updateLivePreview);
+
+        // ==========================================
+        // GESTION DES CLASSES ET DESTINATAIRES MANUELS (ATELIERS)
+        // ==========================================
+        async function loadClasses() {
+            try {
+                const d = await apiPost({ action: 'getClassesList' });
+                if (d.success) { allClasses = d.data; selectedClasses = [...allClasses]; }
+            } catch(e) {}
+        }
+
+        function renderClassFilters() {
+            const container = document.getElementById('classeFilterContainer');
+            if (!container) return;
+            if (allClasses.length === 0) {
+                container.innerHTML = '<span class="text-[10px] text-gray-400 italic">Aucune classe trouvée.</span>';
+                return;
+            }
+            container.innerHTML = allClasses.map(c => `
+                <label class="flex items-center gap-1.5 cursor-pointer hover:bg-white px-2 py-1 rounded-lg transition">
+                    <input type="checkbox" class="classe-checkbox" value="${c}" ${selectedClasses.includes(c) ? 'checked' : ''} onchange="handleClasseToggle()">
+                    <span class="text-xs font-bold text-gray-700">${c}</span>
+                </label>
+            `).join('');
+        }
+
+        function handleClasseToggle() {
+            selectedClasses = [...document.querySelectorAll('.classe-checkbox:checked')].map(cb => cb.value);
+            updateLivePreview();
+        }
+
+        function selectAllClasses(check) {
+            document.querySelectorAll('.classe-checkbox').forEach(cb => cb.checked = check);
+            selectedClasses = check ? [...allClasses] : [];
+            updateLivePreview();
+        }
+
+        function addManualEmail() {
+            const input = document.getElementById('inputAddEmail');
+            if (!input) return;
+            const email = input.value.trim().toLowerCase();
+            if (!email.includes('@')) return;
+            if (manualAddedEmails.find(e => e.email === email)) { input.value = ''; return; }
+            manualAddedEmails.push({ email, nom: email });
+            input.value = '';
+            renderManualEmails();
+            renderLivePreview();
+        }
+
+        function removeManualEmail(email) {
+            manualAddedEmails = manualAddedEmails.filter(e => e.email !== email);
+            renderManualEmails();
+            renderLivePreview();
+        }
+
+        function renderManualEmails() {
+            const container = document.getElementById('manualEmailsList');
+            if (!container) return;
+            container.innerHTML = manualAddedEmails.map(e => `
+                <div class="flex justify-between items-center bg-white px-3 py-1.5 rounded-xl border border-amber-100">
+                    <span class="text-xs font-bold text-gray-700 truncate">${e.email}</span>
+                    <button onclick="removeManualEmail('${e.email}')" class="shrink-0 text-red-400 hover:text-red-600 font-black text-sm ml-2" title="Retirer">✕</button>
+                </div>
+            `).join('') || '';
+        }
     </script>
 <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-[60] p-4">
     <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -883,5 +1018,6 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         </div>
     </div>
 </div>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
