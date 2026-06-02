@@ -3106,9 +3106,11 @@ const MAILS_CAT = {
   'Échange étudiant':{ bg:'bg-purple-50', text:'text-purple-700', icon:'💬' },
 };
 function mailCatStyle(cat) {
-  for (const key of Object.keys(MAILS_CAT)) { if (cat.includes(key)) return MAILS_CAT[key]; }
+  for (const key of Object.keys(MAILS_CAT)) { if (String(cat).includes(key)) return MAILS_CAT[key]; }
   return { bg:'bg-slate-50', text:'text-slate-600', icon:'📧' };
 }
+
+let mailsData = []; // cache pour le détail local (lignes sans LOGS_MAILS_DETAIL)
 
 async function loadMails() {
   const tbody = document.getElementById('mailsTbody');
@@ -3118,6 +3120,7 @@ async function loadMails() {
   tbody.innerHTML = `<tr><td colspan="5" class="text-center text-[#1A4E8A] font-black py-12 animate-pulse">Chargement de l'historique…</td></tr>`;
   if (stats) stats.innerHTML = '';
   if (count) count.textContent = '';
+  mailsData = [];
 
   const r = await api('getMailsLog', {
     dateDebut: document.getElementById('mailsDateDebut')?.value  || '',
@@ -3145,38 +3148,80 @@ async function loadMails() {
   </div>`).join('');
 
   const data = r.data || [];
+  mailsData = data;
+
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-400 py-12 italic">Aucun e-mail trouvé pour ces critères.</td></tr>`;
     if (count) count.textContent = '0 résultat';
     return;
   }
 
-  tbody.innerHTML = data.map(e => {
+  tbody.innerHTML = data.map((e, idx) => {
     const d  = e.date ? new Date(e.date) : null;
     const ds = d ? d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
     const st = mailCatStyle(e.categorie);
-    const det = (e.apercu || e.details || '').replace(/\|/g,'<span class="text-gray-300 mx-1">|</span>');
-    const clickable = e.hasDetail ? `style="cursor:pointer" onclick="openMailDetail('${e.id}')" title="Cliquer pour voir les destinataires et le contenu"` : '';
-    const detailBtn = e.hasDetail
-      ? `<button onclick="openMailDetail('${e.id}')" class="shrink-0 text-[10px] font-black text-[#1A4E8A] hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg transition">👁 Détail</button>`
-      : `<span class="text-[10px] text-gray-300 italic">—</span>`;
-    return `<tr class="border-b border-slate-50 hover:bg-blue-50/30 transition ${e.hasDetail ? 'cursor-pointer' : ''}" ${clickable}>
+    const det = (e.apercu || '').replace(/\|/g,'<span class="text-gray-300 mx-1">|</span>');
+    const hasFull = e.hasDetail === true;
+    const detailLabel = hasFull
+      ? `<span class="inline-flex items-center gap-1 text-[10px] font-black text-blue-600"><span class="w-2 h-2 bg-blue-500 rounded-full"></span> Complet</span>`
+      : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400"><span class="w-2 h-2 bg-gray-300 rounded-full"></span> Résumé</span>`;
+    return `<tr class="border-b border-slate-50 hover:bg-blue-50/40 transition cursor-pointer" onclick="openMailRow(${idx})">
       <td class="p-3 text-xs font-bold text-gray-500 whitespace-nowrap">${ds}</td>
       <td class="p-3 text-xs font-bold text-gray-700">${e.auteur || '—'}</td>
       <td class="p-3 whitespace-nowrap">
         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${st.bg} ${st.text}">${st.icon} ${e.categorie}</span>
-        ${e.sousCat ? `<br><span class="text-[9px] text-gray-400 font-bold">${e.sousCat}</span>` : ''}
+        ${e.sousCat ? `<br><span class="text-[9px] text-gray-400 font-bold mt-0.5 block">${e.sousCat}</span>` : ''}
       </td>
       <td class="p-3">
         <div class="font-bold text-xs text-gray-800 mb-0.5">${e.objet || '—'}</div>
         <div class="text-[10px] text-gray-400 leading-relaxed line-clamp-2">${det}</div>
         <div class="text-[10px] text-gray-400 mt-0.5">${e.nbDest || 0} destinataire(s)</div>
       </td>
-      <td class="p-3 text-center">${detailBtn}</td>
+      <td class="p-3 text-center">${detailLabel}</td>
     </tr>`;
   }).join('');
 
   if (count) count.textContent = data.length + ' résultat' + (data.length > 1 ? 's' : '') + (data.length >= 500 ? ' (limité à 500)' : '');
+}
+
+function openMailRow(idx) {
+  const e = mailsData[idx];
+  if (!e) return;
+  if (e.hasDetail) {
+    openMailDetail(e.id);
+  } else {
+    showMailLocalDetail(e);
+  }
+}
+
+function showMailLocalDetail(e) {
+  const modal = document.getElementById('mailDetailModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  const d = e.date ? new Date(e.date) : null;
+  const ds = d ? d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const st = mailCatStyle(e.categorie);
+  document.getElementById('mailDetailContent').innerHTML = `
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Date</span><p class="font-bold text-gray-800 mt-0.5">${ds}</p></div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Émetteur</span><p class="font-bold text-gray-800 mt-0.5">${e.auteur || '—'}</p></div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Catégorie</span>
+          <p class="mt-0.5"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${st.bg} ${st.text}">${st.icon} ${e.categorie}</span></p>
+        </div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Nb destinataires (approx.)</span><p class="font-bold text-gray-800 mt-0.5">${e.nbDest || '?'}</p></div>
+      </div>
+      <div class="bg-gray-50 rounded-xl p-3">
+        <span class="text-gray-400 font-black uppercase text-[10px]">Objet / Résumé</span>
+        <p class="font-bold text-[#1A4E8A] mt-1">${e.objet || '—'}</p>
+        ${e.sousCat ? `<p class="text-xs text-gray-500 mt-1">${e.sousCat}</p>` : ''}
+        ${e.apercu ? `<p class="text-xs text-gray-600 mt-2 leading-relaxed">${e.apercu}</p>` : ''}
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 leading-relaxed">
+        <b>ℹ️ Détail partiel</b> — La liste complète des destinataires et le contenu exact du mail ne sont disponibles que pour les envois effectués <b>après la mise à jour du système de logs (juin 2026)</b>. Les envois antérieurs sont tracés en résumé uniquement.
+      </div>
+      ${e.sourceId ? `<div class="text-[10px] text-gray-300 text-right">Réf : ${e.sourceId}</div>` : ''}
+    </div>`;
 }
 
 async function openMailDetail(id) {
@@ -3196,7 +3241,7 @@ async function openMailDetail(id) {
   const st = mailCatStyle(e.categorie);
   const dests = (e.destinataires || []);
   const destHtml = dests.length > 0
-    ? `<div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">${dests.map(em => `<span class="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">${em}</span>`).join('')}</div>`
+    ? `<div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-1">${dests.map(em => `<span class="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-100">${em}</span>`).join('')}</div>`
     : '<span class="text-gray-400 italic text-xs">Aucun destinataire enregistré</span>';
 
   document.getElementById('mailDetailContent').innerHTML = `
@@ -3209,19 +3254,22 @@ async function openMailDetail(id) {
         </div>
         <div><span class="text-gray-400 font-black uppercase text-[10px]">Sous-catégorie</span><p class="font-bold text-gray-800 mt-0.5">${e.sousCat || '—'}</p></div>
       </div>
-      <div class="bg-gray-50 rounded-xl p-3">
-        <span class="text-gray-400 font-black uppercase text-[10px]">Objet du mail</span>
-        <p class="font-bold text-[#1A4E8A] mt-1">${e.objet || '—'}</p>
+      <div class="bg-blue-50 rounded-xl p-3 border border-blue-100">
+        <span class="text-[#1A4E8A] font-black uppercase text-[10px]">Objet du mail</span>
+        <p class="font-bold text-[#1A4E8A] text-sm mt-1">${e.objet || '—'}</p>
       </div>
       <div>
-        <span class="text-gray-400 font-black uppercase text-[10px]">Destinataires (${e.nbDest || dests.length})</span>
-        <div class="mt-2">${destHtml}</div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-gray-400 font-black uppercase text-[10px]">Destinataires</span>
+          <span class="bg-[#1A4E8A] text-white text-[10px] font-black px-2 py-0.5 rounded-full">${e.nbDest || dests.length}</span>
+        </div>
+        ${destHtml}
       </div>
       <div>
-        <span class="text-gray-400 font-black uppercase text-[10px]">Aperçu du contenu</span>
-        <div class="mt-2 bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-mono">${e.apercuCorps || '(contenu non disponible)'}</div>
+        <span class="text-gray-400 font-black uppercase text-[10px]">Aperçu du contenu (texte extrait)</span>
+        <div class="mt-2 bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-700 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">${e.apercuCorps || '(contenu non disponible)'}</div>
       </div>
-      ${e.sourceId ? `<div class="text-[10px] text-gray-300 text-right">Réf : ${e.sourceId}</div>` : ''}
+      ${e.sourceId ? `<div class="text-[10px] text-gray-300 text-right border-t pt-2">Réf : ${e.sourceId}</div>` : ''}
     </div>`;
 }
 
