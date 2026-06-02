@@ -159,11 +159,20 @@
                 </div>
                 <!-- Lier un dossier -->
                 <div id="gedLinkPanel" class="hidden mb-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                    <p class="text-[10px] font-black text-blue-700 uppercase mb-2">Lier le dossier Drive de l'étudiant</p>
+                    <p class="text-[10px] font-black text-blue-700 uppercase mb-2">Lier le dossier Drive de l'étudiant (URL ou ID direct)</p>
                     <div class="flex gap-2">
                         <input type="text" id="gedFolderInput" placeholder="URL ou ID du dossier Drive…" class="flex-1 border border-blue-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400">
                         <button onclick="gedLinkFolder()" class="bg-blue-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-blue-700">Lier</button>
                     </div>
+                </div>
+                <!-- Résultats du scan -->
+                <div id="gedScanPanel" class="hidden mb-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-[10px] font-black text-indigo-700 uppercase">🔍 Dossiers correspondants trouvés — Sélectionnez le bon</p>
+                        <button onclick="document.getElementById('gedScanPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 font-black text-lg leading-none">×</button>
+                    </div>
+                    <div id="gedScanList" class="space-y-2"></div>
+                    <p id="gedScanEmpty" class="hidden text-sm text-gray-400 italic text-center py-3">Aucun dossier correspondant trouvé dans l'arborescence Drive.</p>
                 </div>
                 <!-- Upload -->
                 <div id="gedUploadPanel" class="hidden mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
@@ -495,11 +504,61 @@
 
         async function gedAutoScan() {
             const btn = document.getElementById('btnGedScan');
-            btn.textContent = '⏳ Scan…'; btn.disabled = true;
-            const r = await apiPost({ action: 'gedAutoScanStudents' });
+            btn.textContent = '⏳ Recherche…'; btn.disabled = true;
+            document.getElementById('gedScanPanel').classList.add('hidden');
+
+            const nomPrenom = document.getElementById('etuNom')?.innerText || '';
+            // Extraire nom et prénom depuis la fiche étudiant affichée
+            const parts = nomPrenom.trim().split(' ');
+            const r = await apiPost({
+                action: 'gedScanForStudent',
+                idEtu: studentId,
+                nom: parts[0] || '',
+                prenom: parts.slice(1).join(' ') || ''
+            });
+
             btn.textContent = '🔍 Scanner les dossiers'; btn.disabled = false;
             if (!r.success) return alert('Erreur : ' + r.message);
-            alert(`Scan terminé : ${r.matched} dossier(s) lié(s) sur ${r.total} trouvé(s).`);
+
+            const panel = document.getElementById('gedScanPanel');
+            const list  = document.getElementById('gedScanList');
+            const empty = document.getElementById('gedScanEmpty');
+
+            panel.classList.remove('hidden');
+            document.getElementById('gedLinkPanel').classList.add('hidden');
+
+            const candidates = r.candidates || [];
+            if (!candidates.length) {
+                list.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+            list.innerHTML = candidates.map(c => `
+                <div class="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
+                    <div class="min-w-0">
+                        <p class="font-black text-sm text-gray-800 truncate">📂 ${c.name}</p>
+                        <p class="text-[10px] text-gray-400 font-bold mt-0.5">Chemin : ${c.path}</p>
+                        <a href="${c.url}" target="_blank" class="text-[10px] text-blue-500 hover:underline font-bold">Voir dans Drive ↗</a>
+                    </div>
+                    <button onclick="gedConfirmScanLink('${c.id}', '${c.url}', '${c.name.replace(/'/g,"\\'")}'')"
+                        class="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-indigo-700 transition">
+                        ✓ Lier
+                    </button>
+                </div>`).join('');
+        }
+
+        async function gedConfirmScanLink(folderId, folderUrl, folderName) {
+            if (!confirm(`Lier le dossier "${folderName}" à cet étudiant ?`)) return;
+            const r = await apiPost({
+                action: 'gedLinkStudentFolder',
+                idEtu: studentId,
+                nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                folderId: folderId,
+                folderUrl: folderUrl
+            });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            document.getElementById('gedScanPanel').classList.add('hidden');
             loadGedEtu();
         }
 
