@@ -368,7 +368,11 @@
             `).join('') || "<p class='text-[10px] text-slate-300 italic font-bold'>Aucun contact enregistré.</p>";
 
             document.getElementById('dossierAlternants').innerHTML = (ent.alternants || []).map(a => `
-                <span class="px-4 py-2 bg-white border border-green-200 rounded-xl font-black text-green-700 text-xs shadow-sm">🎓 ${a.prenom} ${a.nom}</span>
+                <div class="flex items-center gap-2 px-3 py-2 bg-white border border-green-200 rounded-xl shadow-sm group/alt">
+                    <span class="font-black text-green-700 text-xs">🎓 ${a.prenom} ${a.nom}</span>
+                    <button onclick="retirerAlternant('${a.id}','${(a.prenom+' '+a.nom).replace(/'/g,"\\'")}')"
+                        class="opacity-0 group-hover/alt:opacity-100 text-[9px] text-red-400 hover:text-red-600 font-black transition-opacity" title="Retirer cet alternant">✕</button>
+                </div>
             `).join('') || "<p class='text-xs text-slate-300 italic'>Aucun alternant HECG en poste.</p>";
 
             // Anciens alternants
@@ -420,6 +424,21 @@
             await apiPost({ action: 'removeFormerAlternant', id });
             const ent = allPartners.find(p => p.id === currentId);
             if (ent) ent.anciensAlternants = (ent.anciensAlternants || []).filter(x => x.id !== id);
+            openDossier(currentId);
+        }
+
+        async function retirerAlternant(idEtu, nomEtu) {
+            const ent = allPartners.find(p => p.id === currentId);
+            const nomEnt = ent ? ent.nom : '';
+            if (!confirm('Retirer ' + nomEtu + ' des alternants de « ' + nomEnt + ' » ?\n\nCela effacera l\'entreprise dans le dossier étudiant et créera une entrée "Ancien alternant" en attente de confirmation.')) return;
+            const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: idEtu });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert(nomEtu + ' retiré(e) des alternants actifs. Un mouvement "À confirmer" a été enregistré.');
+            if (ent) {
+                ent.alternants = (ent.alternants || []).filter(a => a.id !== idEtu);
+                ent.anciensAlternants = ent.anciensAlternants || [];
+                ent.anciensAlternants.push({ id: 'ANC-' + Date.now(), nom: nomEtu.split(' ')[1] || '', prenom: nomEtu.split(' ')[0] || '', date: new Date().toISOString(), status: 'À_confirmer' });
+            }
             openDossier(currentId);
         }
 
