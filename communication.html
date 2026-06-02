@@ -80,6 +80,7 @@
             <div id="boxCampus">
                 <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Campus *</label>
                 <select id="formCampus" onchange="updateAutoSubject()" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none">
+                    <option value="">Tous les campus</option>
                     <option value="Marseille">Marseille</option>
                     <option value="Aix">Aix-en-Provence</option>
                 </select>
@@ -349,15 +350,14 @@
                 </div>
                 ` : ''}
 
-                ${isAdmin ? `
                 <div class="flex space-x-2 pt-3 border-t">
                     ${!isArchived ? `
                         <button onclick="openModal('${c.id}')" class="flex-1 text-slate-400 hover:text-[#1A4E8A] text-[11px] font-black uppercase transition">✏️ Modifier</button>
-                        <button onclick="deleteCampaign('${c.id}')" class="flex-1 text-slate-400 hover:text-red-500 text-[11px] font-black uppercase transition">📦 Ranger</button>
+                        ${isAdmin ? `<button onclick="deleteCampaign('${c.id}')" class="flex-1 text-slate-400 hover:text-red-500 text-[11px] font-black uppercase transition">📦 Ranger</button>` : ''}
                     ` : `
                         <button class="flex-1 text-gray-400 text-[11px] font-black uppercase cursor-not-allowed">Élément Historisé</button>
                     `}
-                </div>` : ''}
+                </div>
             </div>
         </div>`;
     }).join('') || '<div class="col-span-full text-center text-gray-400 font-bold italic py-10">Aucune campagne.</div>';
@@ -388,20 +388,21 @@
 
             const type = document.getElementById('formType').value;
             const dateVal = document.getElementById('formDateEvt').value;
-            const campus = document.getElementById('formCampus').value;
+            const campusVal = document.getElementById('formCampus').value;
+            const campusLabel = campusVal || "Tous les campus";
             const horaires = document.getElementById('formHoraires').value || "Xh à Xh";
-            
+
             const dateFormatted = dateVal ? new Date(dateVal).toLocaleDateString('fr-FR') : "le XXXX";
-            
+
             let str = "";
             if (type === "Atelier CV") {
-                str = `HECG - Organisation atelier CV le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+                str = `HECG - Organisation atelier CV le ${dateFormatted} sur le Campus ${campusLabel} de ${horaires}`;
             } else if (type === "Atelier LinkedIn") {
-                str = `HECG - Organisation atelier Linkedin le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+                str = `HECG - Organisation atelier Linkedin le ${dateFormatted} sur le Campus ${campusLabel} de ${horaires}`;
             } else if (type === "Atelier Mixte") {
-                str = `HECG - Organisation atelier CV + Linkedin le ${dateFormatted} sur le Campus ${campus} de ${horaires}`;
+                str = `HECG - Organisation atelier CV + Linkedin le ${dateFormatted} sur le Campus ${campusLabel} de ${horaires}`;
             } else if (type === "JPO") {
-                str = `HECG - /!\\ JPO /!\\ - Venez nous retrouver le ${dateFormatted} sur le campus ${campus}`;
+                str = `HECG - /!\\ JPO /!\\ - Venez nous retrouver le ${dateFormatted} sur le campus ${campusLabel}`;
             } else if (type === "Salon") {
                 str = `HECG - /!\\ EVENEMENT /!\\ - Venez nous retrouver le ${dateFormatted}`;
             }
@@ -461,6 +462,10 @@
                 document.getElementById('formDateEvt').value = "";
                 document.getElementById('formHoraires').value = "";
                 document.getElementById('formLienExterne').value = "";
+                // Ateliers : par défaut tous les campus pour voir tous les étudiants éligibles
+                const defaultType = document.getElementById('formType').value;
+                const isAtelierDefault = defaultType === "Atelier CV" || defaultType === "Atelier LinkedIn" || defaultType === "Atelier Mixte";
+                document.getElementById('formCampus').value = isAtelierDefault ? "" : "Marseille";
 
                 const objField = document.getElementById('formObjet');
                 objField.value = "";
@@ -681,33 +686,37 @@ async function executeFinalSend(cmpId, isTest, emailList) {
     const getVal = (formId, cmpProp) => (isModalOpen && isCurrentCampaign) ? document.getElementById(formId).value : (cmpProp || "");
 
     try {
-        const res = await apiPost({ 
-            action: 'sendComMail', 
-            id: cmpId, type: cmp.type, 
+        const res = await apiPost({
+            action: 'sendComMail',
+            id: cmpId, type: cmp.type,
             objet: getVal('formObjet', cmp.objet),
-            accroche: getVal('formAccroche', cmp.accroche), 
+            accroche: getVal('formAccroche', cmp.accroche),
             emailsLibres: getVal('formEmailsLibres', cmp.emailsLibres),
             lienExterne: getVal('formLienExterne', cmp.lienExterne),
-            cible: cmp.cible, pjUrl: cmp.pjUrl, flyerUrl: cmp.flyerUrl, campus: cmp.campus, 
+            cible: cmp.cible, pjUrl: cmp.pjUrl, flyerUrl: cmp.flyerUrl, campus: cmp.campus,
             dateEvt: cmp.dateEvt, horaires: cmp.horaires,
             isTest: isTest, testEmail: isTest ? emailList[0] : null,
             finalEmails: !isTest ? emailList : null
         });
-        
-        
-        alert(result.message);
 
-        // --- LA CORRECTION EST ICI ---
-        if(!isTest) {
-            // 1. On change le statut "en direct" dans la mémoire du navigateur
+        if (!res) { alert("Erreur : pas de réponse du serveur."); return; }
+
+        let msg = res.message || (res.success ? "Envoi réussi." : "Erreur lors de l'envoi.");
+        if (res.sent !== undefined && !isTest) {
+            msg += "\n\n✅ Envoyé : " + res.sent + "  |  ❌ Échec : " + (res.failed || 0);
+        }
+        if (res.errors && res.errors.length > 0) {
+            msg += "\n\n⚠️ Détail des erreurs (" + res.errors.length + " lot(s) en échec) :\n" + res.errors.slice(0, 5).join("\n");
+        }
+        alert(msg);
+
+        if (!isTest && (res.success || res.partialSuccess)) {
             cmp.statut = "Diffusé";
-            // 2. On redessine les cartes immédiatement
             renderCampaigns();
-            // 3. On recharge quand même depuis le serveur après 1 seconde pour être sûr
             setTimeout(loadCampaigns, 1000);
         }
     } catch(e) {
-        alert("Erreur serveur lors de l'envoi.");
+        alert("Erreur serveur lors de l'envoi : " + (e.message || e));
     }
 }
         
@@ -889,7 +898,7 @@ async function executeFinalSend(cmpId, isTest, emailList) {
             const payload = {
                 action: 'previewComMail',
                 type: type,
-                campus: document.getElementById('formCampus')?.value || "Marseille",
+                campus: document.getElementById('formCampus')?.value ?? "",
                 emailsLibres: isAtelier ? "" : (document.getElementById('formEmailsLibres')?.value || ""),
                 cible: {
                     b2c_prospects: document.getElementById('cb_b2c_prospects')?.checked || false,
