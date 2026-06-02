@@ -545,7 +545,7 @@
                         <p class="text-[10px] text-gray-400 font-bold mt-0.5">Chemin : ${c.path}</p>
                         <a href="${c.url}" target="_blank" class="text-[10px] text-blue-500 hover:underline font-bold">Voir dans Drive ↗</a>
                     </div>
-                    <button onclick="gedConfirmScanLink('${c.id}', '${c.url}', '${c.name.replace(/'/g,"\\'")}'')"
+                    <button onclick="gedConfirmScanLink('${c.id}', '${c.url}', '${c.name.replace(/'/g,"\\'")}')"
                         class="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-indigo-700 transition">
                         ✓ Lier
                     </button>
