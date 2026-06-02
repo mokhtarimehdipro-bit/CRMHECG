@@ -104,6 +104,7 @@
     <button onclick="showModule('inscription')" id="nav-inscription" class="nav-btn hidden">📬 Inscriptions</button>
     <button onclick="showModule('ged')"        id="nav-ged"         class="nav-btn hidden">📁 GED</button>
     <button onclick="showModule('qualiopi')"   id="nav-qualiopi"    class="nav-btn hidden">✅ Qualiopi</button>
+    <button onclick="showModule('mails')"      id="nav-mails"       class="nav-btn hidden">📧 Mails</button>
   </aside>
 
   <!-- CONTENT -->
@@ -367,6 +368,69 @@
         </div>
       </div>
       <div id="qualiopiContent"></div>
+    </div>
+
+    <!-- ===================== MAILS — Super-admin uniquement ===================== -->
+    <div id="section-mails" class="section">
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-black text-[#1A4E8A]">📧 Mails — Historique des envois</h1>
+          <p class="text-sm text-gray-400 mt-1">Récapitulatif de tous les e-mails sortants de l'application (campagnes, offres, relances automatiques)</p>
+        </div>
+        <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
+      </div>
+
+      <!-- Filtres -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Période — Du</label>
+            <input type="date" id="mailsDateDebut" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Au</label>
+            <input type="date" id="mailsDateFin" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Catégorie</label>
+            <select id="mailsCategorie" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#1A4E8A]">
+              <option value="">Toutes les catégories</option>
+              <option value="Campagne">Campagne / Événement</option>
+              <option value="Offre">Offre partagée</option>
+              <option value="Relance">Relance automatique</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Recherche (destinataire, objet, campagne...)</label>
+            <input type="text" id="mailsRecherche" placeholder="Ex: Atelier CV, Jean D., COM-..." onkeydown="if(event.key==='Enter')loadMails()" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+        </div>
+        <button onclick="loadMails()" class="btn-primary">🔍 Filtrer</button>
+        <button onclick="resetMailsFilters()" class="btn-ghost ml-2">✕ Réinitialiser</button>
+      </div>
+
+      <!-- Stats rapides -->
+      <div id="mailsStats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-36">Date & Heure</th>
+                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-32">Émetteur</th>
+                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-44">Catégorie</th>
+                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider">Détails</th>
+              </tr>
+            </thead>
+            <tbody id="mailsTbody">
+              <tr><td colspan="4" class="text-center text-gray-400 py-12 italic text-sm">Appliquez des filtres ou actualisez pour afficher les mails.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="mailsCount" class="px-5 py-3 text-xs text-gray-400 font-bold border-t border-slate-100 bg-slate-50"></div>
+      </div>
     </div>
 
   </main>
@@ -836,6 +900,7 @@ const ACCESS = {
   inscription: ['Super-admin'],
   ged:         ['Super-admin','Pédagogie','Administratif'],
   qualiopi:    ['Super-admin','Pédagogie'],
+  mails:       ['Super-admin'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -845,6 +910,7 @@ const WRITE = {
   inscription: ['Super-admin'],
   ged:         ['Super-admin','Pédagogie'],
   qualiopi:    ['Super-admin','Pédagogie'],
+  mails:       ['Super-admin'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -908,10 +974,10 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  ['notes','delegues','formateurs','planning','inscription','ged','qualiopi'].forEach(m => {
+  ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails'].forEach(m => {
     if (canAccess(m)) show('nav-'+m);
   });
-  const first = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi'].find(m=>canAccess(m));
+  const first = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails'].find(m=>canAccess(m));
   if (first) showModule(first);
   // Référentiel
   try { const r = await api('getReferentielMatieres'); if (r.success) refMatieres = r.data; } catch(e){}
@@ -932,6 +998,7 @@ function showModule(m){
   if (m==='planning')    loadPlanning();
   if (m==='ged')         loadGed();
   if (m==='qualiopi')    loadQualiopi();
+  if (m==='mails')       loadMails();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3012,6 +3079,81 @@ async function deleteQualiopiPreuve(indicateur, nomPreuve, urlFichier){
   const r=await api('deleteQualiopiPreuve',{indicateur,nomPreuve,urlFichier});
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
   toast('Preuve supprimée'); loadQualiopi();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAILS — HISTORIQUE DES ENVOIS (Super-admin)
+// ══════════════════════════════════════════════════════════════════
+const MAILS_CAT_COLORS = {
+  'Campagne / Événement': { bg: 'bg-blue-50',   text: 'text-blue-700',  icon: '📢' },
+  'Offre partagée':       { bg: 'bg-green-50',  text: 'text-green-700', icon: '💼' },
+  'Relance automatique':  { bg: 'bg-amber-50',  text: 'text-amber-700', icon: '⚙️' },
+};
+
+async function loadMails() {
+  const tbody  = document.getElementById('mailsTbody');
+  const stats  = document.getElementById('mailsStats');
+  const count  = document.getElementById('mailsCount');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="4" class="text-center text-[#1A4E8A] font-black py-12 animate-pulse">Chargement de l'historique…</td></tr>`;
+  if (stats) stats.innerHTML = '';
+  if (count) count.textContent = '';
+
+  const r = await api('getMailsLog', {
+    dateDebut:  document.getElementById('mailsDateDebut')?.value  || '',
+    dateFin:    document.getElementById('mailsDateFin')?.value    || '',
+    categorie:  document.getElementById('mailsCategorie')?.value  || '',
+    recherche:  document.getElementById('mailsRecherche')?.value  || '',
+  });
+
+  if (!r.success) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-red-400 font-bold py-10">⚠️ ${r.message}</td></tr>`;
+    return;
+  }
+
+  // Stats
+  const s = r.stats || {};
+  if (stats) stats.innerHTML = [
+    { label: 'Total e-mails', val: s.total || 0,    color: 'bg-[#1A4E8A] text-white' },
+    { label: 'Campagnes',     val: s.campagne || 0, color: 'bg-blue-50 text-blue-700' },
+    { label: 'Offres',        val: s.offre || 0,    color: 'bg-green-50 text-green-700' },
+    { label: 'Relances auto', val: s.relance || 0,  color: 'bg-amber-50 text-amber-700' },
+  ].map(c => `<div class="${c.color} rounded-2xl p-4 flex flex-col items-center shadow-sm border border-white/30">
+    <span class="text-3xl font-black">${c.val}</span>
+    <span class="text-[10px] font-black uppercase mt-1 opacity-75">${c.label}</span>
+  </div>`).join('');
+
+  // Table
+  const data = r.data || [];
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-400 py-12 italic">Aucun e-mail trouvé pour ces critères.</td></tr>`;
+    if (count) count.textContent = '0 résultat';
+    return;
+  }
+
+  tbody.innerHTML = data.map(e => {
+    const d    = e.date ? new Date(e.date) : null;
+    const ds   = d ? d.toLocaleDateString('fr-FR') + '<br><span class="text-[10px] text-gray-400">' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>' : '—';
+    const cat  = MAILS_CAT_COLORS[e.categorie] || { bg:'bg-slate-50', text:'text-slate-600', icon:'📧' };
+    const det  = (e.details || '').replace(/\|/g, '<span class="text-gray-300 mx-1">|</span>');
+    const auteurShort = (e.auteur || '—').split(' ')[0];
+    return `<tr class="border-b border-slate-50 hover:bg-slate-50 transition">
+      <td class="p-4 text-xs font-bold text-gray-600 whitespace-nowrap">${ds}</td>
+      <td class="p-4 text-xs font-bold text-gray-800">${auteurShort}</td>
+      <td class="p-4">
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black ${cat.bg} ${cat.text}">${cat.icon} ${e.categorie}</span>
+      </td>
+      <td class="p-4 text-xs text-gray-600 leading-relaxed">${det}</td>
+    </tr>`;
+  }).join('');
+
+  if (count) count.textContent = data.length + ' résultat' + (data.length > 1 ? 's' : '') + (data.length >= 500 ? ' (limité à 500)' : '');
+}
+
+function resetMailsFilters() {
+  ['mailsDateDebut','mailsDateFin','mailsRecherche'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const cat = document.getElementById('mailsCategorie'); if (cat) cat.value = '';
+  loadMails();
 }
 
 // ══════════════════════════════════════════════════════════════════
