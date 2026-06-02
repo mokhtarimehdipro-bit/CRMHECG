@@ -653,26 +653,26 @@
                 return;
             }
             const total = allEntries.reduce((s, [,v]) => s + v, 0);
-            const mainEntries = allEntries.filter(([,v]) => v / total >= 0.01);
-            const smallEntries = allEntries.filter(([,v]) => v / total < 0.01);
-            const chartEntries = [...mainEntries];
-            if (smallEntries.length > 0) {
-                const smallTotal = smallEntries.reduce((s, [,v]) => s + v, 0);
-                chartEntries.push([`Autres (${smallEntries.length} étudiants)`, smallTotal]);
+            const chartEntries = allEntries.filter(([,v]) => v / total >= 0.01).slice(0, 15);
+            if (!chartEntries.length) {
+                chartEtudiant = null;
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'center';
+                ctx.fillText('Aucune action étudiant sur cette période', ctx.canvas.width/2, 100);
+                return;
             }
-            const bgColors = [...PIE_COLORS].slice(0, chartEntries.length);
-            if (smallEntries.length > 0) bgColors[chartEntries.length - 1] = '#94a3b8';
+            const chartTotal = chartEntries.reduce((s, [,v]) => s + v, 0);
             chartEtudiant = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: chartEntries.map(e => e[0]),
-                    datasets: [{ data: chartEntries.map(e => e[1]), backgroundColor: bgColors, borderWidth: 2, borderColor: '#fff' }]
+                    datasets: [{ data: chartEntries.map(e => e[1]), backgroundColor: [...PIE_COLORS, '#6366f1','#ec4899','#0ea5e9','#10b981','#8b5cf6'].slice(0, chartEntries.length), borderWidth: 2, borderColor: '#fff' }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'right', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 8 } },
-                        tooltip: { callbacks: { label: c => ` ${c.label} : ${c.raw} action${c.raw>1?'s':''} (${Math.round(c.raw/total*100)}%)` } }
+                        tooltip: { callbacks: { label: c => ` ${c.label} : ${c.raw} action${c.raw>1?'s':''} (${Math.round(c.raw/chartTotal*100)}%)` } }
                     }
                 }
             });
@@ -702,16 +702,8 @@
         }
 
         function buildTimelineLineChart() {
-            const ACTION_TYPES = [
-                { key: 'créat', label: 'Création', color: '#22c55e' },
-                { key: 'modif', label: 'Modification', color: '#3b82f6' },
-                { key: 'suppr', label: 'Suppression', color: '#ef4444' },
-                { key: 'note', label: 'Note', color: '#f59e0b' },
-                { key: '_autre', label: 'Autre', color: '#F26522' },
-            ];
             const ctx = document.getElementById('chartTimelineLine').getContext('2d');
             if (chartTimelineLine) { chartTimelineLine.destroy(); chartTimelineLine = null; }
-
             if (!filteredLogs.length) return;
 
             const rawDates = filteredLogs.map(l => { const dv=getSafeValue(l,['date']); return dv ? new Date(dv) : null; }).filter(Boolean);
@@ -728,62 +720,39 @@
             }
             if (!workDays.length) return;
 
-            const dayData = {};
-            ACTION_TYPES.forEach(t => { dayData[t.key] = {}; });
-
+            const dayCount = {};
             filteredLogs.forEach(log => {
                 const dv = getSafeValue(log, ['date']);
                 if (!dv) return;
                 const d = new Date(dv);
                 if (isNaN(d) || !isJourOuvre(d)) return;
-                const dayKey = d.toISOString().split('T')[0];
-                if (!workDays.includes(dayKey)) return;
-                const type = String(getSafeValue(log, ['type','action']) || '').toLowerCase();
-                let matched = false;
-                for (const at of ACTION_TYPES) {
-                    if (at.key !== '_autre' && type.includes(at.key)) {
-                        dayData[at.key][dayKey] = (dayData[at.key][dayKey] || 0) + 1;
-                        matched = true; break;
-                    }
-                }
-                if (!matched) dayData['_autre'][dayKey] = (dayData['_autre'][dayKey] || 0) + 1;
+                const key = d.toISOString().split('T')[0];
+                dayCount[key] = (dayCount[key] || 0) + 1;
             });
 
-            const hasSomeData = ACTION_TYPES.some(at => Object.values(dayData[at.key]).some(v => v > 0));
-            if (!hasSomeData) return;
-
-            const labels = workDays.map(d => {
-                const dt = new Date(d + 'T00:00:00');
-                return dt.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' });
-            });
             const isSparse = workDays.length > 60;
-
-            const datasets = ACTION_TYPES.map(at => {
-                const data = workDays.map(d => dayData[at.key][d] || 0);
-                const hasData = data.some(v => v > 0);
-                return {
-                    label: at.label, data,
-                    borderColor: at.color,
-                    backgroundColor: at.color + '18',
-                    borderWidth: 2,
-                    pointRadius: isSparse ? 0 : 3,
-                    pointHoverRadius: 5,
-                    tension: 0.35, fill: false,
-                    hidden: !hasData,
-                };
-            });
+            const labels = workDays.map(d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }));
+            const data = workDays.map(d => dayCount[d] || 0);
 
             chartTimelineLine = new Chart(ctx, {
                 type: 'line',
-                data: { labels, datasets },
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Actions (jours ouvrés)',
+                        data,
+                        borderColor: '#1A4E8A',
+                        backgroundColor: 'rgba(26,78,138,0.08)',
+                        borderWidth: 2.5,
+                        pointRadius: isSparse ? 0 : 3,
+                        pointHoverRadius: 5,
+                        tension: 0.35,
+                        fill: true,
+                    }]
+                },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 12,
-                            filter: item => !datasets[item.datasetIndex].hidden || true
-                        }},
-                        tooltip: { mode: 'index', intersect: false }
-                    },
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
                     scales: {
                         x: { ticks: { font: { weight: 'bold', size: 9 }, maxRotation: 45, maxTicksLimit: 30 } },
                         y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold', size: 9 } } }
