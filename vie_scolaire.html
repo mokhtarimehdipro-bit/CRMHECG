@@ -395,9 +395,11 @@
             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Catégorie</label>
             <select id="mailsCategorie" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#1A4E8A]">
               <option value="">Toutes les catégories</option>
-              <option value="Campagne">Campagne / Événement</option>
+              <option value="Com &">Com & Événement (Ateliers, JPO, Salons)</option>
               <option value="Offre">Offre partagée</option>
-              <option value="Relance">Relance automatique</option>
+              <option value="Relance auto">Relance auto (Hebdo / CRON)</option>
+              <option value="Alerte">Alerte (Partenaires, Suivi Pédago)</option>
+              <option value="Échange">Échange étudiant (Carnet de route)</option>
             </select>
           </div>
           <div>
@@ -410,7 +412,7 @@
       </div>
 
       <!-- Stats rapides -->
-      <div id="mailsStats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+      <div id="mailsStats" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6"></div>
 
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -418,10 +420,11 @@
           <table class="w-full text-sm">
             <thead class="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-36">Date & Heure</th>
-                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-32">Émetteur</th>
-                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-44">Catégorie</th>
-                <th class="p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider">Détails</th>
+                <th class="p-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-32">Date</th>
+                <th class="p-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-28">Émetteur</th>
+                <th class="p-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider w-44">Catégorie</th>
+                <th class="p-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider">Objet & Détails</th>
+                <th class="p-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider w-20">Voir</th>
               </tr>
             </thead>
             <tbody id="mailsTbody">
@@ -434,6 +437,17 @@
     </div>
 
   </main>
+</div>
+
+<!-- ================== MODAL DÉTAIL MAIL ================== -->
+<div id="mailDetailModal" class="modal-overlay hidden" onclick="if(event.target===this)closeMailDetailModal()">
+  <div class="modal-box" style="max-width:44rem;">
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+      <h3 class="text-lg font-black text-[#1A4E8A]">📧 Détail du mail</h3>
+      <button onclick="closeMailDetailModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none font-bold">×</button>
+    </div>
+    <div id="mailDetailContent" class="p-6"></div>
+  </div>
 </div>
 
 <!-- ================== MODALS ================== -->
@@ -3084,70 +3098,135 @@ async function deleteQualiopiPreuve(indicateur, nomPreuve, urlFichier){
 // ══════════════════════════════════════════════════════════════════
 // MAILS — HISTORIQUE DES ENVOIS (Super-admin)
 // ══════════════════════════════════════════════════════════════════
-const MAILS_CAT_COLORS = {
-  'Campagne / Événement': { bg: 'bg-blue-50',   text: 'text-blue-700',  icon: '📢' },
-  'Offre partagée':       { bg: 'bg-green-50',  text: 'text-green-700', icon: '💼' },
-  'Relance automatique':  { bg: 'bg-amber-50',  text: 'text-amber-700', icon: '⚙️' },
+const MAILS_CAT = {
+  'Com & Événement': { bg:'bg-blue-50',   text:'text-blue-700',   icon:'📢' },
+  'Offre partagée':  { bg:'bg-green-50',  text:'text-green-700',  icon:'💼' },
+  'Relance auto':    { bg:'bg-amber-50',  text:'text-amber-700',  icon:'⚙️' },
+  'Alerte':          { bg:'bg-red-50',    text:'text-red-700',    icon:'🔔' },
+  'Échange étudiant':{ bg:'bg-purple-50', text:'text-purple-700', icon:'💬' },
 };
+function mailCatStyle(cat) {
+  for (const key of Object.keys(MAILS_CAT)) { if (cat.includes(key)) return MAILS_CAT[key]; }
+  return { bg:'bg-slate-50', text:'text-slate-600', icon:'📧' };
+}
 
 async function loadMails() {
-  const tbody  = document.getElementById('mailsTbody');
-  const stats  = document.getElementById('mailsStats');
-  const count  = document.getElementById('mailsCount');
+  const tbody = document.getElementById('mailsTbody');
+  const stats = document.getElementById('mailsStats');
+  const count = document.getElementById('mailsCount');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="4" class="text-center text-[#1A4E8A] font-black py-12 animate-pulse">Chargement de l'historique…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="text-center text-[#1A4E8A] font-black py-12 animate-pulse">Chargement de l'historique…</td></tr>`;
   if (stats) stats.innerHTML = '';
   if (count) count.textContent = '';
 
   const r = await api('getMailsLog', {
-    dateDebut:  document.getElementById('mailsDateDebut')?.value  || '',
-    dateFin:    document.getElementById('mailsDateFin')?.value    || '',
-    categorie:  document.getElementById('mailsCategorie')?.value  || '',
-    recherche:  document.getElementById('mailsRecherche')?.value  || '',
+    dateDebut: document.getElementById('mailsDateDebut')?.value  || '',
+    dateFin:   document.getElementById('mailsDateFin')?.value    || '',
+    categorie: document.getElementById('mailsCategorie')?.value  || '',
+    recherche: document.getElementById('mailsRecherche')?.value  || '',
   });
 
   if (!r.success) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-red-400 font-bold py-10">⚠️ ${r.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 font-bold py-10">⚠️ ${r.message}</td></tr>`;
     return;
   }
 
-  // Stats
   const s = r.stats || {};
   if (stats) stats.innerHTML = [
-    { label: 'Total e-mails', val: s.total || 0,    color: 'bg-[#1A4E8A] text-white' },
-    { label: 'Campagnes',     val: s.campagne || 0, color: 'bg-blue-50 text-blue-700' },
-    { label: 'Offres',        val: s.offre || 0,    color: 'bg-green-50 text-green-700' },
-    { label: 'Relances auto', val: s.relance || 0,  color: 'bg-amber-50 text-amber-700' },
-  ].map(c => `<div class="${c.color} rounded-2xl p-4 flex flex-col items-center shadow-sm border border-white/30">
+    { label:'Total e-mails',  val: s.total    || 0, color:'bg-[#1A4E8A] text-white' },
+    { label:'Com & Évén.',    val: s.campagne  || 0, color:'bg-blue-50 text-blue-700' },
+    { label:'Offres',         val: s.offre     || 0, color:'bg-green-50 text-green-700' },
+    { label:'Relances auto',  val: s.relance   || 0, color:'bg-amber-50 text-amber-700' },
+    { label:'Alertes',        val: s.alerte    || 0, color:'bg-red-50 text-red-700' },
+    { label:'Échanges etu.',  val: s.echange   || 0, color:'bg-purple-50 text-purple-700' },
+  ].map(c => `<div class="${c.color} rounded-2xl p-4 flex flex-col items-center shadow-sm">
     <span class="text-3xl font-black">${c.val}</span>
-    <span class="text-[10px] font-black uppercase mt-1 opacity-75">${c.label}</span>
+    <span class="text-[10px] font-black uppercase mt-1 opacity-75 text-center">${c.label}</span>
   </div>`).join('');
 
-  // Table
   const data = r.data || [];
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-400 py-12 italic">Aucun e-mail trouvé pour ces critères.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-400 py-12 italic">Aucun e-mail trouvé pour ces critères.</td></tr>`;
     if (count) count.textContent = '0 résultat';
     return;
   }
 
   tbody.innerHTML = data.map(e => {
-    const d    = e.date ? new Date(e.date) : null;
-    const ds   = d ? d.toLocaleDateString('fr-FR') + '<br><span class="text-[10px] text-gray-400">' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>' : '—';
-    const cat  = MAILS_CAT_COLORS[e.categorie] || { bg:'bg-slate-50', text:'text-slate-600', icon:'📧' };
-    const det  = (e.details || '').replace(/\|/g, '<span class="text-gray-300 mx-1">|</span>');
-    const auteurShort = (e.auteur || '—').split(' ')[0];
-    return `<tr class="border-b border-slate-50 hover:bg-slate-50 transition">
-      <td class="p-4 text-xs font-bold text-gray-600 whitespace-nowrap">${ds}</td>
-      <td class="p-4 text-xs font-bold text-gray-800">${auteurShort}</td>
-      <td class="p-4">
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black ${cat.bg} ${cat.text}">${cat.icon} ${e.categorie}</span>
+    const d  = e.date ? new Date(e.date) : null;
+    const ds = d ? d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const st = mailCatStyle(e.categorie);
+    const det = (e.apercu || e.details || '').replace(/\|/g,'<span class="text-gray-300 mx-1">|</span>');
+    const clickable = e.hasDetail ? `style="cursor:pointer" onclick="openMailDetail('${e.id}')" title="Cliquer pour voir les destinataires et le contenu"` : '';
+    const detailBtn = e.hasDetail
+      ? `<button onclick="openMailDetail('${e.id}')" class="shrink-0 text-[10px] font-black text-[#1A4E8A] hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg transition">👁 Détail</button>`
+      : `<span class="text-[10px] text-gray-300 italic">—</span>`;
+    return `<tr class="border-b border-slate-50 hover:bg-blue-50/30 transition ${e.hasDetail ? 'cursor-pointer' : ''}" ${clickable}>
+      <td class="p-3 text-xs font-bold text-gray-500 whitespace-nowrap">${ds}</td>
+      <td class="p-3 text-xs font-bold text-gray-700">${e.auteur || '—'}</td>
+      <td class="p-3 whitespace-nowrap">
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${st.bg} ${st.text}">${st.icon} ${e.categorie}</span>
+        ${e.sousCat ? `<br><span class="text-[9px] text-gray-400 font-bold">${e.sousCat}</span>` : ''}
       </td>
-      <td class="p-4 text-xs text-gray-600 leading-relaxed">${det}</td>
+      <td class="p-3">
+        <div class="font-bold text-xs text-gray-800 mb-0.5">${e.objet || '—'}</div>
+        <div class="text-[10px] text-gray-400 leading-relaxed line-clamp-2">${det}</div>
+        <div class="text-[10px] text-gray-400 mt-0.5">${e.nbDest || 0} destinataire(s)</div>
+      </td>
+      <td class="p-3 text-center">${detailBtn}</td>
     </tr>`;
   }).join('');
 
   if (count) count.textContent = data.length + ' résultat' + (data.length > 1 ? 's' : '') + (data.length >= 500 ? ' (limité à 500)' : '');
+}
+
+async function openMailDetail(id) {
+  const modal = document.getElementById('mailDetailModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  document.getElementById('mailDetailContent').innerHTML = '<p class="text-center text-[#1A4E8A] animate-pulse py-8">Chargement…</p>';
+
+  const r = await api('getMailDetail', { id });
+  if (!r.success) {
+    document.getElementById('mailDetailContent').innerHTML = `<p class="text-red-400 font-bold">⚠️ ${r.message}</p>`;
+    return;
+  }
+  const e = r.data;
+  const d = e.date ? new Date(e.date) : null;
+  const ds = d ? d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const st = mailCatStyle(e.categorie);
+  const dests = (e.destinataires || []);
+  const destHtml = dests.length > 0
+    ? `<div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">${dests.map(em => `<span class="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">${em}</span>`).join('')}</div>`
+    : '<span class="text-gray-400 italic text-xs">Aucun destinataire enregistré</span>';
+
+  document.getElementById('mailDetailContent').innerHTML = `
+    <div class="space-y-5">
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Date</span><p class="font-bold text-gray-800 mt-0.5">${ds}</p></div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Émetteur</span><p class="font-bold text-gray-800 mt-0.5">${e.auteur || '—'}</p></div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Catégorie</span>
+          <p class="mt-0.5"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${st.bg} ${st.text}">${st.icon} ${e.categorie}</span></p>
+        </div>
+        <div><span class="text-gray-400 font-black uppercase text-[10px]">Sous-catégorie</span><p class="font-bold text-gray-800 mt-0.5">${e.sousCat || '—'}</p></div>
+      </div>
+      <div class="bg-gray-50 rounded-xl p-3">
+        <span class="text-gray-400 font-black uppercase text-[10px]">Objet du mail</span>
+        <p class="font-bold text-[#1A4E8A] mt-1">${e.objet || '—'}</p>
+      </div>
+      <div>
+        <span class="text-gray-400 font-black uppercase text-[10px]">Destinataires (${e.nbDest || dests.length})</span>
+        <div class="mt-2">${destHtml}</div>
+      </div>
+      <div>
+        <span class="text-gray-400 font-black uppercase text-[10px]">Aperçu du contenu</span>
+        <div class="mt-2 bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-mono">${e.apercuCorps || '(contenu non disponible)'}</div>
+      </div>
+      ${e.sourceId ? `<div class="text-[10px] text-gray-300 text-right">Réf : ${e.sourceId}</div>` : ''}
+    </div>`;
+}
+
+function closeMailDetailModal() {
+  document.getElementById('mailDetailModal')?.classList.add('hidden');
 }
 
 function resetMailsFilters() {
