@@ -61,7 +61,10 @@
                         </div>
 
                         <div class="p-4 bg-orange-50 rounded-2xl mb-3">
-                            <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise actuelle / Alternance</h4>
+                            <div class="flex justify-between items-center mb-1">
+                                <h4 class="text-[10px] font-black text-orange-600 uppercase">Entreprise actuelle / Alternance</h4>
+                                <button id="btnRetirerEnt" onclick="retirerEntreprise()" class="hidden text-[9px] font-black text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded-lg transition">✕ Retirer</button>
+                            </div>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
                         </div>
                         <!-- Historique alternance -->
@@ -302,6 +305,8 @@
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
+                    const btnRet = document.getElementById('btnRetirerEnt');
+                    if (btnRet) btnRet.classList.toggle('hidden', !(p.id_ent && currentUser.role !== 'Etudiant'));
                     if (p.referent && (p.referent.nom || p.referent.prenom)) {
                         const refMail = p.referent.mail ? ` &nbsp;·&nbsp; <a href="mailto:${p.referent.mail}" class="text-[#1A4E8A] hover:underline">${p.referent.mail}</a>` : '';
                         document.getElementById('etuRef').innerHTML = `<span class="font-bold">${p.referent.prenom} ${p.referent.nom}</span>${refMail}`;
@@ -461,39 +466,7 @@
             ).join('');
         }
 
-        // ══ GED Étudiant ══
-        async function loadGedEtu() {
-            const isAdmin = currentUser.role !== 'Etudiant';
-            if (isAdmin) {
-                document.getElementById('btnGedScan').classList.remove('hidden');
-                document.getElementById('btnGedLink').classList.remove('hidden');
-                document.getElementById('btnGedUploadAdmin').classList.remove('hidden');
-            } else {
-                document.getElementById('gedEtuUploadZone').classList.remove('hidden');
-            }
-            const r = await apiPost({ action: 'gedGetStudentDocs', idEtu: studentId });
-            const container = document.getElementById('gedEtuFiles');
-            if (!r.success) { container.innerHTML = `<p class="text-red-400 text-sm text-center py-4">${r.message}</p>`; return; }
-            if (!r.linked) {
-                container.innerHTML = `<p class="text-gray-400 text-sm italic text-center py-4">Aucun dossier Drive lié à cet étudiant.${isAdmin?' Utilisez "Lier un dossier" ou "Scanner les dossiers".':''}</p>`;
-                return;
-            }
-            document.getElementById('gedEtuFolderLink').classList.remove('hidden');
-            document.getElementById('gedEtuFolderUrl').href = r.folderUrl || '#';
-            const files = r.files || [];
-            if (!files.length) { container.innerHTML = '<p class="text-gray-400 text-sm italic text-center py-4">Dossier vide.</p>'; return; }
-            container.innerHTML = `<div class="space-y-2">${files.map(f => {
-                const icon = f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : '📎';
-                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#f9fafb">
-                    <span style="font-size:1.3rem">${icon}</span>
-                    <div style="flex:1;min-width:0">
-                        <p style="font-weight:600;font-size:0.8rem;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</p>
-                        <p style="font-size:0.7rem;color:#9ca3af">${f.date} · ${(f.size/1024).toFixed(0)} KB</p>
-                    </div>
-                    <a href="${f.url}" target="_blank" style="font-size:0.75rem;font-weight:700;color:#1A4E8A;white-space:nowrap">Ouvrir</a>
-                </div>`;
-            }).join('')}</div>`;
-        }
+        // ══ GED Étudiant — remplacée par la version avec sous-dossiers (Update 5) ══
 
         async function gedLinkFolder() {
             const val = document.getElementById('gedFolderInput').value.trim();
@@ -604,6 +577,115 @@
                 document.getElementById('gedFileInputEtuStu').value = '';
             };
             reader.readAsDataURL(file);
+        }
+
+        // ══ Retrait entreprise (Update 4) ══
+        async function retirerEntreprise() {
+            const nom = document.getElementById('etuEntreprise').innerText;
+            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nUne entrée "Ancien alternant" sera créée en attente de confirmation dans le dossier entreprise.')) return;
+            const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: studentId });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert('Entreprise retirée. Un mouvement "Ancien alternant — À confirmer" a été créé dans le dossier entreprise.');
+            loadDossier();
+        }
+
+        // ══ GED sous-dossiers (Update 5) ══
+        let gedBreadcrumb = [];
+
+        async function loadGedEtu(folderId) {
+            if (!folderId) gedBreadcrumb = [];
+            const isAdmin = currentUser.role !== 'Etudiant';
+            if (isAdmin) {
+                document.getElementById('btnGedScan').classList.remove('hidden');
+                document.getElementById('btnGedLink').classList.remove('hidden');
+                document.getElementById('btnGedUploadAdmin').classList.remove('hidden');
+            } else {
+                document.getElementById('gedEtuUploadZone').classList.remove('hidden');
+            }
+
+            const container = document.getElementById('gedEtuFiles');
+            container.innerHTML = '<p class="text-center text-gray-400 text-sm italic py-4">Chargement…</p>';
+
+            let r;
+            if (folderId) {
+                r = await apiPost({ action: 'gedGetSubfolder', folderId: folderId });
+            } else {
+                r = await apiPost({ action: 'gedGetStudentDocs', idEtu: studentId });
+            }
+
+            if (!r.success) { container.innerHTML = `<p class="text-red-400 text-sm text-center py-4">${r.message}</p>`; return; }
+            if (!folderId && !r.linked) {
+                container.innerHTML = `<p class="text-gray-400 text-sm italic text-center py-4">Aucun dossier Drive lié à cet étudiant.${isAdmin ? ' Utilisez "Lier un dossier" ou "Scanner les dossiers".' : ''}</p>`;
+                return;
+            }
+
+            if (!folderId) {
+                document.getElementById('gedEtuFolderLink').classList.remove('hidden');
+                document.getElementById('gedEtuFolderUrl').href = r.folderUrl || '#';
+            }
+
+            const files = r.files || [];
+            const subfolders = r.subfolders || [];
+
+            // Breadcrumb
+            let breadcrumbHtml = '';
+            if (gedBreadcrumb.length > 0) {
+                const crumbs = [{ id: null, name: '📁 Racine' }, ...gedBreadcrumb];
+                breadcrumbHtml = `<div class="flex items-center gap-1 text-[10px] font-bold text-blue-500 mb-3 flex-wrap">` +
+                    crumbs.map((c, i) => {
+                        if (i < crumbs.length - 1) {
+                            return `<button onclick="gedNavTo(${i})" class="hover:underline">${c.name}</button><span class="text-gray-300">/</span>`;
+                        }
+                        return `<span class="text-gray-600">${c.name}</span>`;
+                    }).join('') +
+                `</div>`;
+            }
+
+            if (!subfolders.length && !files.length) {
+                container.innerHTML = breadcrumbHtml + '<p class="text-gray-400 text-sm italic text-center py-4">Dossier vide.</p>';
+                return;
+            }
+
+            const subHtml = subfolders.map(sf => `
+                <div onclick="gedOpenSubfolder('${sf.id}','${sf.name.replace(/'/g,"\\'")}')"
+                    style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #c7d2fe;background:#eef2ff;cursor:pointer"
+                    class="hover:bg-indigo-100 transition">
+                    <span style="font-size:1.3rem">📂</span>
+                    <div style="flex:1;min-width:0">
+                        <p style="font-weight:700;font-size:0.8rem;color:#3730a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sf.name}</p>
+                        <p style="font-size:0.7rem;color:#6366f1">Sous-dossier</p>
+                    </div>
+                    <span style="font-size:0.7rem;color:#6366f1;font-weight:700">Ouvrir ›</span>
+                </div>`).join('');
+
+            const filesHtml = files.map(f => {
+                const icon = f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : '📎';
+                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#f9fafb">
+                    <span style="font-size:1.3rem">${icon}</span>
+                    <div style="flex:1;min-width:0">
+                        <p style="font-weight:600;font-size:0.8rem;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</p>
+                        <p style="font-size:0.7rem;color:#9ca3af">${f.date} · ${(f.size/1024).toFixed(0)} KB</p>
+                    </div>
+                    <a href="${f.url}" target="_blank" style="font-size:0.75rem;font-weight:700;color:#1A4E8A;white-space:nowrap">Ouvrir</a>
+                </div>`;
+            }).join('');
+
+            container.innerHTML = `<div class="space-y-2">${breadcrumbHtml}${subHtml}${filesHtml}</div>`;
+        }
+
+        function gedOpenSubfolder(id, name) {
+            gedBreadcrumb.push({ id: id, name: name });
+            loadGedEtu(id);
+        }
+
+        function gedNavTo(crumbIndex) {
+            if (crumbIndex === 0) {
+                gedBreadcrumb = [];
+                loadGedEtu(null);
+            } else {
+                gedBreadcrumb = gedBreadcrumb.slice(0, crumbIndex);
+                loadGedEtu(gedBreadcrumb[gedBreadcrumb.length - 1].id);
+            }
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
