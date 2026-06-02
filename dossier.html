@@ -507,14 +507,10 @@
             btn.textContent = '⏳ Recherche…'; btn.disabled = true;
             document.getElementById('gedScanPanel').classList.add('hidden');
 
-            const nomPrenom = document.getElementById('etuNom')?.innerText || '';
-            // Extraire nom et prénom depuis la fiche étudiant affichée
-            const parts = nomPrenom.trim().split(' ');
+            // Le backend récupère NOM et Prénom directement dans ETUDIANTS (format canonique)
             const r = await apiPost({
                 action: 'gedScanForStudent',
-                idEtu: studentId,
-                nom: parts[0] || '',
-                prenom: parts.slice(1).join(' ') || ''
+                idEtu: studentId
             });
 
             btn.textContent = '🔍 Scanner les dossiers'; btn.disabled = false;
