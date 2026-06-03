@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HECG - Vie Scolaire</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     /* nav sidebar */
     .nav-btn { display:flex; align-items:center; gap:0.75rem; width:100%; padding:0.75rem 1rem; border-radius:0.75rem; text-align:left; font-size:0.875rem; font-weight:600; color:#6b7280; background:transparent; border:none; cursor:pointer; transition:background 0.15s, color 0.15s; }
@@ -53,6 +54,26 @@
     .ac-drop { position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;z-index:300;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12); }
     .ac-item { padding:0.5rem 1rem;cursor:pointer;font-size:0.8rem;color:#374151; }
     .ac-item:hover { background:#eff6ff;color:#1A4E8A; }
+    /* Salles */
+    .salle-card { background:#fff;border:1px solid #f3f4f6;border-radius:1rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.07);cursor:pointer;transition:box-shadow 0.15s; }
+    .salle-card:hover { box-shadow:0 4px 16px rgba(26,78,138,.12); }
+    .taux-bar { width:100%;background:#f3f4f6;border-radius:9999px;height:6px;margin-top:4px; }
+    .taux-fill { height:6px;border-radius:9999px;transition:width 0.4s; }
+    /* Semainier simulation */
+    .sim-cell { cursor:pointer;transition:background 0.15s;min-width:110px; }
+    .sim-cell:hover { background:#eff6ff !important; }
+    .sim-slot { margin-bottom:3px;padding:3px 6px;border-radius:6px;font-size:0.72rem; }
+    /* EXB */
+    .exb-check { color:#16a34a;font-size:1.1rem;font-weight:900; }
+    .exb-empty { color:#d1d5db;font-size:1.1rem; }
+    /* MMOK */
+    .plat-badge { font-size:0.7rem;font-weight:700;color:#fff;padding:0.2rem 0.6rem;border-radius:9999px; }
+    /* Print */
+    @media print {
+      nav, aside, .no-print { display:none !important; }
+      #mainLayout { display:block !important; }
+      main { padding:0 !important; }
+    }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -105,6 +126,9 @@
     <button onclick="showModule('ged')"        id="nav-ged"         class="nav-btn hidden">📁 GED</button>
     <button onclick="showModule('qualiopi')"   id="nav-qualiopi"    class="nav-btn hidden">✅ Qualiopi</button>
     <button onclick="showModule('mails')"      id="nav-mails"       class="nav-btn hidden">📧 Mails</button>
+    <button onclick="showModule('salles')"     id="nav-salles"      class="nav-btn hidden">🏫 Salles & Simulations</button>
+    <button onclick="showModule('suiviexb')"   id="nav-suiviexb"    class="nav-btn hidden">📋 Suivi EXB</button>
+    <button onclick="showModule('mmok')"       id="nav-mmok"        class="nav-btn hidden">📱 MMOK</button>
   </aside>
 
   <!-- CONTENT -->
@@ -368,6 +392,127 @@
         </div>
       </div>
       <div id="qualiopiContent"></div>
+    </div>
+
+    <!-- ===================== SALLES & SIMULATIONS ===================== -->
+    <div id="section-salles" class="section">
+      <div class="flex gap-3 mb-6 items-center justify-between flex-wrap">
+        <div class="flex gap-2">
+          <button onclick="sallesTab('salles')" id="sallesTabBtn" class="btn-primary">🏫 Salles</button>
+          <button onclick="sallesTab('simulations')" id="simulationsTabBtn" class="btn-ghost">🔬 Simulations</button>
+        </div>
+        <div id="sallesActions">
+          <button onclick="openSalleModal(null)" id="btnAddSalle" class="btn-orange hidden">+ Ajouter une salle</button>
+        </div>
+        <div id="simulationsActions" class="hidden">
+          <button onclick="openSimulationModal(null)" class="btn-orange">+ Nouvelle simulation</button>
+        </div>
+      </div>
+
+      <!-- === SALLES VIEW === -->
+      <div id="sallesTabContent">
+        <div class="grid grid-cols-3 gap-4 mb-5" id="sallesKPI"></div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 flex gap-3 flex-wrap items-center">
+          <span class="text-xs font-black text-gray-400 uppercase">Campus :</span>
+          <div id="campusFilterChips" class="flex gap-2 flex-wrap"></div>
+        </div>
+        <div id="sallesContent"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+      </div>
+
+      <!-- === SIMULATIONS VIEW === -->
+      <div id="simulationsTabContent" class="hidden">
+        <div id="simulationsList"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+      </div>
+    </div>
+
+    <!-- ===================== SUIVI EXB ===================== -->
+    <div id="section-suiviexb" class="section">
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-black text-[#1A4E8A]">📋 Suivi Examens Blancs (EXB)</h1>
+        <div class="flex gap-3">
+          <button onclick="exportSuiviEXB()" class="btn-ghost">📥 Export CSV</button>
+          <button id="btnAddSuiviEXB" onclick="openSuiviEXBModal(null)" class="btn-orange hidden">+ Ajouter</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div><label>Année scolaire</label>
+            <select id="exbAnneeScolaire" onchange="buildRefEXBOptions()">
+              <option>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
+            </select>
+          </div>
+          <div><label>Session</label>
+            <select id="exbSession" onchange="buildRefEXBOptions()">
+              <option value="">Toutes</option><option value="1">Session 1</option>
+              <option value="2">Session 2</option><option value="3">Session 3</option>
+            </select>
+          </div>
+          <div><label>Classe</label>
+            <select id="exbClasse" onchange="renderSuiviEXB()"><option value="">Toutes</option></select>
+          </div>
+          <div class="flex items-end">
+            <button onclick="loadSuiviEXB()" class="btn-primary w-full">🔍 Afficher</button>
+          </div>
+        </div>
+      </div>
+      <div id="exbRapport" class="hidden mb-5"></div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr>
+              <th>REFEXB</th><th>Classe</th><th>Matière</th><th>Formateur</th>
+              <th class="text-center">Sujet</th><th class="text-center">Corrigé</th>
+              <th class="text-center">Impression</th><th>Commentaire</th><th></th>
+            </tr></thead>
+            <tbody id="suiviEXBTbody"><tr><td colspan="9" class="text-center text-gray-400 py-8">Sélectionnez une année et cliquez Afficher.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== MMOK ===================== -->
+    <div id="section-mmok" class="section">
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-black text-[#1A4E8A]">📱 MMOK — Gestion Réseaux Sociaux</h1>
+          <p class="text-sm text-gray-400 mt-1">Posts publiés et à venir — visible Super-admin uniquement</p>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="loadMMOK()" class="btn-ghost">↺ Actualiser</button>
+          <button onclick="openMMOKModal(null)" class="btn-orange">+ Nouveau post</button>
+        </div>
+      </div>
+      <div id="mmokRapport" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 flex gap-3 flex-wrap">
+        <div class="flex-1" style="min-width:140px"><label>Plateforme</label>
+          <select id="mmokFilterPlatform" onchange="renderMMOK()">
+            <option value="">Toutes</option><option>LinkedIn</option><option>Instagram</option>
+            <option>Facebook</option><option>TikTok</option><option>X / Twitter</option>
+          </select>
+        </div>
+        <div class="flex-1" style="min-width:140px"><label>Période</label>
+          <select id="mmokFilterPeriod" onchange="renderMMOK()">
+            <option value="">Toutes</option><option value="week">Cette semaine</option>
+            <option value="month">Ce mois</option><option value="year">Cette année</option>
+          </select>
+        </div>
+        <div class="flex-1" style="min-width:140px"><label>État</label>
+          <select id="mmokFilterEtat" onchange="renderMMOK()">
+            <option value="">Tous</option><option>Publié</option><option>Planifié</option><option>Brouillon</option>
+          </select>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr>
+              <th>REFPOST</th><th>Plateforme</th><th>Thème</th>
+              <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th></th>
+            </tr></thead>
+            <tbody id="mmokTbody"><tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ===================== MAILS — Super-admin uniquement ===================== -->
@@ -892,6 +1037,185 @@
   </div>
 </div>
 
+<!-- ================== MODAL SALLE ================== -->
+<div id="salleModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSalleModal()">
+  <div class="modal-box p-8 max-w-lg">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-5" id="salleModalTitle">Nouvelle salle</h3>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="col-span-2">
+        <label>Campus</label>
+        <input type="text" id="salleCampus" list="salleCampusList" placeholder="ex: Aix, Marseille, Mars_Annexe">
+        <datalist id="salleCampusList">
+          <option value="Aix"><option value="Marseille"><option value="Mars_Annexe">
+        </datalist>
+      </div>
+      <div><label>Numéro / Nom de salle</label><input type="text" id="salleNumsalle" placeholder="ex: 1, A, Amphi"></div>
+      <div><label>Capacité totale <span class="text-red-500">*</span></label><input type="number" id="salleCapacite" placeholder="ex: 20" min="1"></div>
+      <div class="col-span-2"><label>Classe début de semaine</label><select id="salleClasseDebut"><option value="">— Aucune —</option></select></div>
+      <div class="col-span-2"><label>Classe fin de semaine</label><select id="salleClasseFin"><option value="">— Aucune —</option></select></div>
+      <div class="col-span-2"><label>Commentaire</label><input type="text" id="salleCommentaire" placeholder="Remarque libre…"></div>
+    </div>
+    <div class="flex justify-between gap-3 mt-6">
+      <button id="btnDeleteSalle" onclick="deleteSalleFromModal()" class="btn-danger hidden">Supprimer</button>
+      <div class="flex gap-3 ml-auto">
+        <button onclick="closeSalleModal()" class="btn-ghost">Annuler</button>
+        <button onclick="saveSalle()" class="btn-orange">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================== MODAL GRAPHIQUE SALLE ================== -->
+<div id="salleChartModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSalleChartModal()">
+  <div class="modal-box p-6" style="max-width:560px">
+    <div class="flex justify-between items-center mb-1">
+      <h3 class="text-lg font-black text-[#1A4E8A]" id="salleChartTitle">Graphique salle</h3>
+      <button onclick="closeSalleChartModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+    </div>
+    <p class="text-sm text-gray-400 mb-4" id="salleChartSubtitle"></p>
+    <canvas id="salleChartCanvas" height="220"></canvas>
+    <div id="salleChartKPIs" class="grid grid-cols-2 gap-3 mt-4"></div>
+  </div>
+</div>
+
+<!-- ================== MODAL SIMULATION ================== -->
+<div id="simulationModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSimulationModal()">
+  <div class="modal-box" style="max-width:900px;max-height:92vh;overflow-y:auto">
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl sticky top-0 z-10">
+      <h3 class="text-lg font-black text-[#1A4E8A]">🔬 Simulation d'occupation</h3>
+      <div class="flex gap-2">
+        <button onclick="saveSimulation()" class="btn-primary text-sm">💾 Sauvegarder</button>
+        <button onclick="printCurrentSimulation()" class="btn-ghost text-sm">📄 PDF</button>
+        <button onclick="closeSimulationModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none ml-2">×</button>
+      </div>
+    </div>
+    <div class="p-6">
+      <!-- Config -->
+      <div class="bg-gray-50 rounded-2xl p-5 mb-5">
+        <h4 class="font-black text-gray-700 mb-4">⚙ Configuration de la simulation</h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div class="col-span-2"><label>Titre</label><input type="text" id="simTitre" placeholder="ex: Examens blancs S2 2026"></div>
+          <div><label>Type de période</label>
+            <select id="simType" onchange="updateSimRoomView()">
+              <option value="jour">1 jour</option>
+              <option value="semaine" selected>1 semaine</option>
+              <option value="mois">1 mois</option>
+            </select>
+          </div>
+          <div></div>
+          <div><label>Date début</label><input type="date" id="simDateDebut" onchange="updateSimRoomView()"></div>
+          <div><label>Date fin</label><input type="date" id="simDateFin"></div>
+        </div>
+        <div><label class="mb-2">Campus concernés</label>
+          <div id="simCampusCheckboxes" class="flex gap-4 flex-wrap mt-1"></div>
+        </div>
+      </div>
+      <!-- Rooms config -->
+      <div id="simRoomsContainer">
+        <div class="text-center text-gray-400 py-8">Sélectionnez un ou plusieurs campus.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================== MODAL CRÉNEAU SIMULATION ================== -->
+<div id="simSlotModal" class="modal-overlay hidden" onclick="if(event.target===this)document.getElementById('simSlotModal').classList.add('hidden')">
+  <div class="modal-box p-6 max-w-lg">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-black text-[#1A4E8A]" id="simSlotTitle">Configurer les créneaux</h3>
+      <button onclick="document.getElementById('simSlotModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+    </div>
+    <div id="simSlotFormContent"></div>
+    <div class="flex justify-end gap-3 mt-4">
+      <button onclick="document.getElementById('simSlotModal').classList.add('hidden')" class="btn-ghost">Annuler</button>
+      <button onclick="saveSimSlots()" class="btn-orange">Valider les créneaux</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================== MODAL SUIVI EXB ================== -->
+<div id="exbModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSuiviEXBModal()">
+  <div class="modal-box p-8 max-w-2xl">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-5" id="exbModalTitle">Nouvel EXB</h3>
+    <input type="hidden" id="exbModalId">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div class="col-span-2"><label>Année scolaire</label>
+        <select id="exbModalAnnee">
+          <option>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
+        </select>
+      </div>
+      <div class="col-span-2"><label>Session</label>
+        <select id="exbModalSession"><option value="1">Session 1</option><option value="2">Session 2</option><option value="3">Session 3</option></select>
+      </div>
+      <div class="col-span-2"><label>Classe</label>
+        <select id="exbModalClasse" onchange="updateExbMatieres()"><option value="">— Choisir —</option></select>
+      </div>
+      <div class="col-span-2"><label>Matière / UE</label>
+        <select id="exbModalMatiere"><option value="">— Choisir la classe d'abord —</option></select>
+      </div>
+      <div class="col-span-2 md:col-span-4"><label>Formateur</label>
+        <select id="exbModalFormateur"><option value="">— Choisir —</option></select>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
+        <input type="checkbox" id="exbModalSujet" style="width:auto">
+        <div><div class="font-bold text-sm">Sujet reçu</div><div class="text-xs text-gray-400">✓ = reçu</div></div>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
+        <input type="checkbox" id="exbModalCorrige" style="width:auto">
+        <div><div class="font-bold text-sm">Corrigé reçu</div><div class="text-xs text-gray-400">✓ = reçu</div></div>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
+        <input type="checkbox" id="exbModalImpression" style="width:auto">
+        <div><div class="font-bold text-sm">Impression OK</div><div class="text-xs text-gray-400">✓ = imprimé</div></div>
+      </label>
+    </div>
+    <div><label>Commentaire (libre)</label><textarea id="exbModalCommentaire" rows="2" placeholder="Remarque éventuelle…"></textarea></div>
+    <div class="flex justify-between gap-3 mt-6">
+      <button id="btnDeleteExb" onclick="deleteSuiviEXBFromModal()" class="btn-danger hidden">Supprimer</button>
+      <div class="flex gap-3 ml-auto">
+        <button onclick="closeSuiviEXBModal()" class="btn-ghost">Annuler</button>
+        <button onclick="saveSuiviEXB()" class="btn-orange">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================== MODAL MMOK ================== -->
+<div id="mmokModal" class="modal-overlay hidden" onclick="if(event.target===this)closeMMOKModal()">
+  <div class="modal-box p-8 max-w-2xl">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-5" id="mmokModalTitle">Nouveau post</h3>
+    <input type="hidden" id="mmokModalId">
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div><label>REFPOST</label><input type="text" id="mmokModalRefpost" placeholder="auto-généré si vide"></div>
+      <div><label>Plateforme</label>
+        <select id="mmokModalPlateforme">
+          <option>LinkedIn</option><option>Instagram</option><option>Facebook</option>
+          <option>TikTok</option><option>X / Twitter</option>
+        </select>
+      </div>
+      <div><label>Thème</label><input type="text" id="mmokModalTheme" placeholder="ex: JPO, Témoignage, Formation…"></div>
+      <div><label>Date prévisionnelle</label><input type="date" id="mmokModalDatePrevue"></div>
+      <div><label>Date réelle de publication</label><input type="date" id="mmokModalDateReelle"></div>
+      <div><label>État</label>
+        <select id="mmokModalEtat">
+          <option>Planifié</option><option>Publié</option><option>Brouillon</option><option>Annulé</option>
+        </select>
+      </div>
+      <div class="col-span-2 md:col-span-3"><label>Idée de contenu</label><input type="text" id="mmokModalIdeeContenu" placeholder="Résumé court de l'idée…"></div>
+      <div class="col-span-2 md:col-span-3"><label>Contenu (texte du post)</label><textarea id="mmokModalContenu" rows="4" placeholder="Tapez le texte du post ici…"></textarea></div>
+    </div>
+    <div class="flex justify-between gap-3 mt-6">
+      <button id="btnDeleteMmok" onclick="deleteMMOKFromModal()" class="btn-danger hidden">Supprimer</button>
+      <div class="flex gap-3 ml-auto">
+        <button onclick="closeMMOKModal()" class="btn-ghost">Annuler</button>
+        <button onclick="saveMMOK()" class="btn-orange">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast" class="fixed bottom-6 right-6 z-50 hidden">
   <div id="toastMsg" class="px-5 py-3 rounded-2xl shadow-lg text-sm font-bold text-white"></div>
@@ -915,6 +1239,9 @@ const ACCESS = {
   ged:         ['Super-admin','Pédagogie','Administratif'],
   qualiopi:    ['Super-admin','Pédagogie'],
   mails:       ['Super-admin'],
+  salles:      ['Super-admin','Pédagogie'],
+  suiviexb:    ['Super-admin','Pédagogie','Administratif'],
+  mmok:        ['Super-admin'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -925,6 +1252,9 @@ const WRITE = {
   ged:         ['Super-admin','Pédagogie'],
   qualiopi:    ['Super-admin','Pédagogie'],
   mails:       ['Super-admin'],
+  salles:      ['Super-admin','Pédagogie'],
+  suiviexb:    ['Super-admin','Pédagogie'],
+  mmok:        ['Super-admin'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -988,10 +1318,9 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails'].forEach(m => {
-    if (canAccess(m)) show('nav-'+m);
-  });
-  const first = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails'].find(m=>canAccess(m));
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok'];
+  ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
+  const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
   // Référentiel
   try { const r = await api('getReferentielMatieres'); if (r.success) refMatieres = r.data; } catch(e){}
@@ -1013,6 +1342,9 @@ function showModule(m){
   if (m==='ged')         loadGed();
   if (m==='qualiopi')    loadQualiopi();
   if (m==='mails')       loadMails();
+  if (m==='salles')      loadSalles();
+  if (m==='suiviexb')    { if(canWrite('suiviexb')) show('btnAddSuiviEXB'); }
+  if (m==='mmok')        loadMMOK();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3957,6 +4289,864 @@ async function exportObjectifsPeriode(){
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download=`Objectifs_${dateDebut}_${dateFin}.csv`; a.click();
   URL.revokeObjectURL(url); closeExportPeriodeModal();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SALLES & SIMULATIONS
+// ══════════════════════════════════════════════════════════════════
+let allSalles = [], campusFilter = 'all', sallesChartInstance = null;
+let allSimulations = [], currentSim = null, editingSalleId = null;
+let simData = {}, simSlotContext = {roomId:'',dateKey:'',period:''}, simCurrentSlots = [];
+
+async function loadSalles() {
+  document.getElementById('sallesContent').innerHTML='<p class="text-center text-gray-400 py-12">Chargement…</p>';
+  const r = await api('getSalles');
+  if (!r.success) { toast('Erreur salles : '+r.message, false); return; }
+  allSalles = r.data || [];
+  if (canWrite('salles')) show('btnAddSalle');
+  renderSallesKPI();
+  renderCampusChips();
+  renderSalles();
+}
+
+function renderSallesKPI() {
+  const avecCap = allSalles.filter(s=>s.capacite>0);
+  const avgTaux = avecCap.filter(s=>s.effectifDebut>0).reduce((a,s)=>a+s.effectifDebut/s.capacite*100,0);
+  const avg = avecCap.filter(s=>s.effectifDebut>0).length ? (avgTaux/avecCap.filter(s=>s.effectifDebut>0).length).toFixed(0)+'%' : '—';
+  const atCap = allSalles.filter(s=>s.capacite>0&&s.effectifDebut>=s.capacite).length;
+  document.getElementById('sallesKPI').innerHTML=[
+    ['Salles configurées',allSalles.length,'#1A4E8A'],
+    ["Taux moyen d'occupation",avg,'#F26522'],
+    ['Salles à pleine capacité',atCap,'#dc2626'],
+  ].map(([l,v,c])=>`<div class="kpi-card"><p class="text-3xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
+}
+
+function renderCampusChips() {
+  const campuses=[...new Set(allSalles.map(s=>s.campus).filter(Boolean))].sort();
+  document.getElementById('campusFilterChips').innerHTML=
+    `<button onclick="setCampusFilter('all')" style="border-radius:9999px;padding:0.2rem 0.75rem;font-size:0.75rem;font-weight:700;cursor:pointer;border:none;background:${campusFilter==='all'?'#1A4E8A':'#f3f4f6'};color:${campusFilter==='all'?'#fff':'#374151'}">Tous</button>`+
+    campuses.map(c=>`<button onclick="setCampusFilter('${c}')" style="border-radius:9999px;padding:0.2rem 0.75rem;font-size:0.75rem;font-weight:700;cursor:pointer;border:none;background:${campusFilter===c?'#1A4E8A':'#f3f4f6'};color:${campusFilter===c?'#fff':'#374151'}">${c}</button>`).join('');
+}
+
+function setCampusFilter(c){campusFilter=c;renderCampusChips();renderSalles();}
+
+function tauxColor(t){return t>=100?'#dc2626':t>=80?'#f97316':t>=60?'#eab308':'#16a34a';}
+
+function renderSalles(){
+  const fil=campusFilter==='all'?allSalles:allSalles.filter(s=>s.campus===campusFilter);
+  const byCampus={};
+  fil.forEach(s=>{(byCampus[s.campus]||(byCampus[s.campus]=[])).push(s);});
+  const canW=canWrite('salles');
+  let html='';
+  Object.entries(byCampus).sort(([a],[b])=>a.localeCompare(b)).forEach(([campus,salles])=>{
+    html+=`<div class="mb-6"><h3 class="text-base font-black text-[#1A4E8A] mb-3">
+      <span style="background:#dbeafe;color:#1e40af;padding:0.2rem 0.75rem;border-radius:9999px;font-size:0.8rem">${campus}</span></h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${salles.map(s=>renderSalleCard(s,canW)).join('')}</div></div>`;
+  });
+  if(!html) html='<div class="text-center text-gray-400 py-12">Aucune salle trouvée.</div>';
+  document.getElementById('sallesContent').innerHTML=html;
+}
+
+function renderSalleCard(s,canW){
+  const tD=s.capacite>0&&s.effectifDebut>0?Math.round(s.effectifDebut/s.capacite*100):null;
+  const tF=s.capacite>0&&s.effectifFin>0?Math.round(s.effectifFin/s.capacite*100):null;
+  const cD=tD!==null?tauxColor(tD):'#9ca3af',cF=tF!==null?tauxColor(tF):'#9ca3af';
+  return `<div class="salle-card" onclick="openSalleChart('${s.id}')">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <div style="font-size:0.7rem;font-weight:700;color:#9ca3af;text-transform:uppercase">${s.campus}</div>
+        <div style="font-size:1.5rem;font-weight:900;color:#1A4E8A">Salle ${s.numsalle}</div>
+        <div style="font-size:0.85rem;color:#6b7280;font-weight:600">${s.capacite||'?'} places</div>
+      </div>
+      <div class="flex gap-1">
+        ${canW?`<button onclick="event.stopPropagation();openSalleModal('${s.id}')" class="btn-ghost py-1 px-2 text-xs">✏</button>
+        <button onclick="event.stopPropagation();deleteSalle('${s.id}')" class="btn-danger py-1 px-2">🗑</button>`:''}
+      </div>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:0.7rem;font-weight:700;color:#9ca3af;text-transform:uppercase">Début semaine</div>
+          <div style="font-size:0.75rem;font-weight:700;color:${cD}">${tD!==null?tD+'%':'—'}</div>
+        </div>
+        <div style="font-size:0.85rem;font-weight:600;color:#374151;margin:2px 0">${s.classeDebut||'<span style="color:#d1d5db">Non attribuée</span>'}</div>
+        ${s.effectifDebut?`<div style="font-size:0.75rem;color:#6b7280">${s.effectifDebut} étudiant${s.effectifDebut>1?'s':''}</div>`:''}
+        <div class="taux-bar"><div class="taux-fill" style="width:${Math.min(tD||0,100)}%;background:${cD}"></div></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:0.7rem;font-weight:700;color:#9ca3af;text-transform:uppercase">Fin semaine</div>
+          <div style="font-size:0.75rem;font-weight:700;color:${cF}">${tF!==null?tF+'%':'—'}</div>
+        </div>
+        <div style="font-size:0.85rem;font-weight:600;color:#374151;margin:2px 0">${s.classeFin||'<span style="color:#d1d5db">Non attribuée</span>'}</div>
+        ${s.effectifFin?`<div style="font-size:0.75rem;color:#6b7280">${s.effectifFin} étudiant${s.effectifFin>1?'s':''}</div>`:''}
+        <div class="taux-bar"><div class="taux-fill" style="width:${Math.min(tF||0,100)}%;background:${cF}"></div></div>
+      </div>
+      ${s.commentaire?`<div style="font-size:0.75rem;color:#9ca3af;font-style:italic">${s.commentaire}</div>`:''}
+    </div>
+    <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:#1A4E8A;font-weight:700;opacity:0.7">📊 Voir graphique</div>
+  </div>`;
+}
+
+function openSalleChart(id){
+  const s=allSalles.find(x=>x.id===id); if(!s) return;
+  const tD=s.capacite>0&&s.effectifDebut>0?Math.round(s.effectifDebut/s.capacite*100):0;
+  const tF=s.capacite>0&&s.effectifFin>0?Math.round(s.effectifFin/s.capacite*100):0;
+  document.getElementById('salleChartTitle').textContent=`Salle ${s.numsalle} — ${s.campus} (${s.capacite||'?'} places)`;
+  document.getElementById('salleChartSubtitle').textContent=`Début semaine: ${s.classeDebut||'—'} | Fin semaine: ${s.classeFin||'—'}`;
+  document.getElementById('salleChartKPIs').innerHTML=[
+    ['Capacité',s.capacite||'—','#1A4E8A'],
+    ['Effectif début',s.effectifDebut||'—',tauxColor(tD)],
+    ['Taux début',tD+'%',tauxColor(tD)],
+    ['Effectif fin',s.effectifFin||'—',tauxColor(tF)],
+  ].map(([l,v,c])=>`<div class="kpi-card"><p class="text-2xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
+  show('salleChartModal');
+  if(sallesChartInstance){sallesChartInstance.destroy();sallesChartInstance=null;}
+  const ctx=document.getElementById('salleChartCanvas').getContext('2d');
+  sallesChartInstance=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:['Capacité totale','Effectif début sem.','Effectif fin sem.'],
+      datasets:[{
+        data:[s.capacite||0,s.effectifDebut||0,s.effectifFin||0],
+        backgroundColor:['rgba(219,234,254,0.8)',tauxColor(tD)+'BB',tauxColor(tF)+'BB'],
+        borderColor:['#1A4E8A',tauxColor(tD),tauxColor(tF)],
+        borderWidth:2,borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' personnes'}}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1},max:Math.max((s.capacite||0)+2,(s.effectifDebut||0)+2,(s.effectifFin||0)+2)}}
+    }
+  });
+}
+
+function closeSalleChartModal(){
+  hide('salleChartModal');
+  if(sallesChartInstance){sallesChartInstance.destroy();sallesChartInstance=null;}
+}
+
+async function openSalleModal(id){
+  editingSalleId=id||null;
+  const s=id?allSalles.find(x=>x.id===id):null;
+  document.getElementById('salleModalTitle').textContent=s?'Modifier la salle':'Nouvelle salle';
+  document.getElementById('salleCampus').value=s?.campus||'';
+  document.getElementById('salleNumsalle').value=s?.numsalle||'';
+  document.getElementById('salleCapacite').value=s?.capacite||'';
+  document.getElementById('salleClasseDebut').value=s?.classeDebut||'';
+  document.getElementById('salleClasseFin').value=s?.classeFin||'';
+  document.getElementById('salleCommentaire').value=s?.commentaire||'';
+  document.getElementById('btnDeleteSalle').classList.toggle('hidden',!s);
+  const classes=[...new Set(allEtudiants.map(e=>e.classe).filter(Boolean))].sort();
+  ['salleClasseDebut','salleClasseFin'].forEach(selId=>{
+    const sel=document.getElementById(selId);const cur=sel.value;
+    sel.innerHTML='<option value="">— Aucune —</option>'+classes.map(c=>`<option value="${c}" ${(c===s?.[selId==='salleClasseDebut'?'classeDebut':'classeFin'])?'selected':''}>${c}</option>`).join('');
+  });
+  show('salleModal');
+}
+
+function closeSalleModal(){hide('salleModal');}
+function deleteSalleFromModal(){if(editingSalleId) deleteSalle(editingSalleId);}
+
+async function saveSalle(){
+  const campus=document.getElementById('salleCampus').value.trim();
+  const numsalle=document.getElementById('salleNumsalle').value.trim();
+  const capacite=parseInt(document.getElementById('salleCapacite').value)||0;
+  if(!campus||!numsalle||!capacite){toast('Campus, n° de salle et capacité obligatoires.',false);return;}
+  const btn=document.querySelector('#salleModal .btn-orange');
+  btn.textContent='…';btn.disabled=true;
+  const r=await api('saveSalle',{
+    id:editingSalleId||'',campus,numsalle,capacite,
+    classeDebut:document.getElementById('salleClasseDebut').value||'',
+    classeFin:document.getElementById('salleClasseFin').value||'',
+    commentaire:document.getElementById('salleCommentaire').value||'',
+  });
+  btn.textContent='Enregistrer';btn.disabled=false;
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast(editingSalleId?'Salle mise à jour ✓':'Salle créée ✓');
+  closeSalleModal();loadSalles();
+}
+
+async function deleteSalle(id){
+  if(!confirm('Supprimer cette salle ?')) return;
+  const r=await api('deleteSalle',{id});
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('Salle supprimée ✓');closeSalleModal();loadSalles();
+}
+
+function sallesTab(tab){
+  document.getElementById('sallesTabContent').classList.toggle('hidden',tab!=='salles');
+  document.getElementById('simulationsTabContent').classList.toggle('hidden',tab!=='simulations');
+  document.getElementById('sallesActions').classList.toggle('hidden',tab!=='salles');
+  document.getElementById('simulationsActions').classList.toggle('hidden',tab!=='simulations');
+  document.getElementById('sallesTabBtn').className=tab==='salles'?'btn-primary':'btn-ghost';
+  document.getElementById('simulationsTabBtn').className=tab==='simulations'?'btn-primary':'btn-ghost';
+  if(tab==='simulations') loadSimulations();
+}
+
+// ── Simulations ──────────────────────────────────────────────────
+async function loadSimulations(){
+  document.getElementById('simulationsList').innerHTML='<p class="text-center text-gray-400 py-12">Chargement…</p>';
+  const r=await api('getSimulations');
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  allSimulations=r.data||[];
+  renderSimulations();
+}
+
+function renderSimulations(){
+  if(!allSimulations.length){
+    document.getElementById('simulationsList').innerHTML=`<div class="text-center text-gray-400 py-16 bg-white rounded-2xl border border-gray-100">
+      <p style="font-size:3rem;margin-bottom:1rem">🔬</p>
+      <p class="font-bold text-gray-500">Aucune simulation sauvegardée</p>
+      <p class="text-sm mt-1">Créez votre première simulation pour organiser des examens blancs ou événements ponctuels</p>
+    </div>`;return;
+  }
+  document.getElementById('simulationsList').innerHTML='<div class="space-y-3">'+allSimulations.map(sim=>{
+    const data=typeof sim.data==='string'?JSON.parse(sim.data||'{}'):(sim.data||{});
+    const nbSalles=Object.keys(data.salles||{}).length;
+    const camps=(data.campus||[]).join(', ')||'—';
+    return `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div class="flex justify-between items-start">
+        <div>
+          <h3 class="text-lg font-black text-[#1A4E8A]">${sim.titre||'Sans titre'}</h3>
+          <div class="flex gap-4 mt-1 text-sm text-gray-500">
+            <span>📅 ${sim.dateDebut||'—'}${sim.dateFin&&sim.dateFin!==sim.dateDebut?' → '+sim.dateFin:''}</span>
+            <span>🏫 ${camps}</span>
+            <span>${nbSalles} salle${nbSalles>1?'s':''} configurée${nbSalles>1?'s':''}</span>
+          </div>
+        </div>
+        <div class="flex gap-2 flex-shrink-0">
+          <button onclick="openSimulationModal('${sim.id}')" class="btn-ghost text-xs py-1">✏ Modifier</button>
+          <button onclick="printSimulation('${sim.id}')" class="btn-primary text-xs py-1">📄 PDF</button>
+          <button onclick="deleteSimulation('${sim.id}')" class="btn-danger text-xs py-1">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function openSimulationModal(id){
+  currentSim=id?allSimulations.find(s=>s.id===id):null;
+  simData=currentSim?(typeof currentSim.data==='string'?JSON.parse(currentSim.data||'{}'):currentSim.data||{}):{campus:[],salles:{}};
+  if(!simData.salles) simData.salles={};
+  document.getElementById('simTitre').value=currentSim?.titre||'';
+  document.getElementById('simType').value=simData.type||'semaine';
+  document.getElementById('simDateDebut').value=currentSim?.dateDebut||'';
+  document.getElementById('simDateFin').value=currentSim?.dateFin||'';
+  const campuses=[...new Set(allSalles.map(s=>s.campus).filter(Boolean))].sort();
+  document.getElementById('simCampusCheckboxes').innerHTML=campuses.map(c=>
+    `<label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+      <input type="checkbox" ${(simData.campus||[]).includes(c)?'checked':''} value="${c}" onchange="updateSimCampusSelection()" style="width:auto">
+      ${c}
+    </label>`
+  ).join('');
+  updateSimRoomView();
+  show('simulationModal');
+}
+
+function closeSimulationModal(){hide('simulationModal');}
+
+function updateSimCampusSelection(){
+  simData.campus=Array.from(document.querySelectorAll('#simCampusCheckboxes input:checked')).map(c=>c.value);
+  updateSimRoomView();
+}
+
+function updateSimRoomView(){
+  const type=document.getElementById('simType').value;
+  simData.type=type;
+  const campuses=simData.campus||[];
+  const rooms=allSalles.filter(s=>campuses.includes(s.campus));
+  if(!rooms.length){
+    document.getElementById('simRoomsContainer').innerHTML='<div class="text-center text-gray-400 py-8 text-sm">Sélectionnez au moins un campus pour configurer les salles.</div>';
+    return;
+  }
+  let html='';
+  rooms.forEach(room=>{
+    const rKey=room.id;
+    if(!simData.salles[rKey]) simData.salles[rKey]={commentaire:'',surveillants:[],autresSurveillants:['',''],creneaux:{}};
+    const rData=simData.salles[rKey];
+    html+=`<div class="bg-gray-50 rounded-2xl p-5 border border-gray-200 mb-4">
+      <div class="flex justify-between items-center mb-4">
+        <div><span class="font-black text-[#1A4E8A] text-lg">Salle ${room.numsalle}</span>
+          <span class="text-gray-400 text-sm ml-2">${room.campus} — ${room.capacite||'?'} places</span>
+        </div>
+      </div>
+      ${type==='semaine'?renderSimSemainier(room,rData,rKey):renderSimJour(room,rData,rKey)}
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label>Commentaire (s'affiche en grand sur le PDF)</label>
+          <input type="text" value="${(rData.commentaire||'').replace(/"/g,'&quot;')}" oninput="simData.salles['${rKey}'].commentaire=this.value" placeholder="ex : Épreuve de UE 1" class="mt-1">
+        </div>
+        <div>
+          <label>Surveillants</label>
+          <select multiple onchange="simData.salles['${rKey}'].surveillants=Array.from(this.selectedOptions).map(o=>o.value)" style="height:72px;margin-top:4px">
+            ${allFormateurs.map(f=>`<option value="${f.nom} ${f.prenom}" ${(rData.surveillants||[]).includes(f.nom+' '+f.prenom)?'selected':''}>${f.nom} ${f.prenom}</option>`).join('')}
+          </select>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <input type="text" placeholder="Autre 1 (prof / ext.)" value="${rData.autresSurveillants?.[0]||''}" oninput="simData.salles['${rKey}'].autresSurveillants[0]=this.value">
+            <input type="text" placeholder="Autre 2 (prof / ext.)" value="${rData.autresSurveillants?.[1]||''}" oninput="simData.salles['${rKey}'].autresSurveillants[1]=this.value">
+          </div>
+        </div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('simRoomsContainer').innerHTML=html;
+}
+
+function getSimWeekDates(){
+  const dateDebut=document.getElementById('simDateDebut').value;
+  const dates=[];
+  if(dateDebut){
+    const d=new Date(dateDebut);const dow=d.getDay();
+    const monday=new Date(d);monday.setDate(d.getDate()-(dow===0?6:dow-1));
+    for(let i=0;i<5;i++){const dd=new Date(monday);dd.setDate(monday.getDate()+i);dates.push(dd.toISOString().slice(0,10));}
+  } else {for(let i=0;i<5;i++) dates.push('J'+i);}
+  return dates;
+}
+
+function renderSimSemainier(room,rData,rKey){
+  const jours=['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const dates=getSimWeekDates();
+  dates.forEach(dk=>{if(!rData.creneaux[dk]) rData.creneaux[dk]={matin:[],apresmidi:[]};});
+  return `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+      <thead>
+        <tr style="background:#1A4E8A;color:#fff">
+          <th style="padding:6px 8px;border-radius:8px 0 0 0;width:70px">Période</th>
+          ${jours.map((j,i)=>`<th style="padding:6px 8px">${j}${dates[i]&&!dates[i].startsWith('J')?'<br><span style="font-weight:400;font-size:0.7rem;opacity:0.8">'+dates[i].slice(8)+'/'+dates[i].slice(5,7)+'</span>':''}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#eff6ff">
+          <td style="padding:6px 8px;font-weight:700;color:#1A4E8A;text-align:center;border-right:1px solid #bfdbfe">Matin</td>
+          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #bfdbfe;vertical-align:top;min-width:110px" onclick="openSimSlotModal('${rKey}','${dk}','matin')">
+            ${renderSimSlotMini(rData.creneaux[dk]?.matin||[],room)}
+            <div style="text-align:center;color:#93c5fd;font-size:0.7rem;margin-top:2px">＋</div>
+          </td>`).join('')}
+        </tr>
+        <tr style="background:#fff7ed">
+          <td style="padding:6px 8px;font-weight:700;color:#F26522;text-align:center;border-right:1px solid #fed7aa">Après-midi</td>
+          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #fed7aa;vertical-align:top;min-width:110px" onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')">
+            ${renderSimSlotMini(rData.creneaux[dk]?.apresmidi||[],room)}
+            <div style="text-align:center;color:#fdba74;font-size:0.7rem;margin-top:2px">＋</div>
+          </td>`).join('')}
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderSimJour(room,rData,rKey){
+  const dk=document.getElementById('simDateDebut').value||'jour';
+  if(!rData.creneaux[dk]) rData.creneaux[dk]={matin:[],apresmidi:[]};
+  return `<div class="grid grid-cols-2 gap-4">
+    <div style="background:#eff6ff;border-radius:0.75rem;padding:0.75rem">
+      <div style="font-weight:700;color:#1A4E8A;margin-bottom:0.5rem">Matin</div>
+      ${renderSimSlotMini(rData.creneaux[dk].matin,room)}
+      <button onclick="openSimSlotModal('${rKey}','${dk}','matin')" class="btn-ghost text-xs mt-2 w-full">＋ Configurer les créneaux</button>
+    </div>
+    <div style="background:#fff7ed;border-radius:0.75rem;padding:0.75rem">
+      <div style="font-weight:700;color:#F26522;margin-bottom:0.5rem">Après-midi</div>
+      ${renderSimSlotMini(rData.creneaux[dk].apresmidi,room)}
+      <button onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')" class="btn-ghost text-xs mt-2 w-full">＋ Configurer les créneaux</button>
+    </div>
+  </div>`;
+}
+
+function renderSimSlotMini(slots,room){
+  if(!slots||!slots.length) return '<div style="color:#d1d5db;font-size:0.72rem;text-align:center;padding:4px">Vide</div>';
+  return slots.map(sl=>{
+    const eff=(sl.classes||[]).reduce((a,c)=>{
+      const cnt=allEtudiants.filter(e=>e.classe===c&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
+      return a+cnt;
+    },0);
+    const over=room.capacite>0&&eff>room.capacite;
+    return `<div class="sim-slot" style="background:${over?'#fee2e2':'#f0fdf4'};border:1px solid ${over?'#fecaca':'#bbf7d0'}">
+      ${sl.heure?`<span style="font-size:0.65rem;color:#6b7280;font-weight:700">${sl.heure} </span>`:''}
+      <span style="font-weight:600;color:${over?'#dc2626':'#15803d'}">${(sl.classes||[]).join(', ')||'—'}</span>
+      ${over?`<div style="font-size:0.65rem;color:#dc2626;font-weight:700">⚠ ${eff}/${room.capacite}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function openSimSlotModal(roomId,dateKey,period){
+  simSlotContext={roomId,dateKey,period};
+  if(!simData.salles) simData.salles={};
+  if(!simData.salles[roomId]) simData.salles[roomId]={commentaire:'',surveillants:[],autresSurveillants:['',''],creneaux:{}};
+  if(!simData.salles[roomId].creneaux[dateKey]) simData.salles[roomId].creneaux[dateKey]={matin:[],apresmidi:[]};
+  simCurrentSlots=JSON.parse(JSON.stringify(simData.salles[roomId].creneaux[dateKey][period]||[]));
+  const room=allSalles.find(r=>r.id===roomId);
+  const jours=['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const jourLabel=getSimWeekDates().map((d,i)=>d===dateKey?jours[i]:null).find(Boolean)||dateKey;
+  document.getElementById('simSlotTitle').textContent=`${room?'Salle '+room.numsalle:''} — ${period==='matin'?'Matin':'Après-midi'} — ${jourLabel}`;
+  renderSimSlotForm(room);
+  show('simSlotModal');
+}
+
+function renderSimSlotForm(room){
+  const classes=[...new Set(allEtudiants.map(e=>e.classe).filter(Boolean))].sort();
+  let html=simCurrentSlots.map((sl,i)=>renderOneSlotForm(sl,i,room,classes)).join('');
+  if(simCurrentSlots.length<4) html+=`<button onclick="addSimSlot()" class="btn-ghost text-sm w-full mt-2">+ Ajouter un créneau (${4-simCurrentSlots.length} restant${4-simCurrentSlots.length>1?'s':''})</button>`;
+  document.getElementById('simSlotFormContent').innerHTML=html||'<p class="text-center text-gray-400 py-4 text-sm">Aucun créneau. Cliquez "+ Ajouter".</p>';
+  if(!simCurrentSlots.length) document.getElementById('simSlotFormContent').innerHTML+='<button onclick="addSimSlot()" class="btn-ghost text-sm w-full mt-2">+ Ajouter un créneau</button>';
+}
+
+function renderOneSlotForm(sl,i,room,classes){
+  const eff=(sl.classes||[]).reduce((a,c)=>{
+    return a+allEtudiants.filter(e=>e.classe===c&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
+  },0);
+  const over=room?.capacite>0&&eff>room.capacite;
+  return `<div style="border:1px solid ${over?'#fecaca':'#e5e7eb'};background:${over?'#fef2f2':'#f9fafb'};border-radius:0.75rem;padding:1rem;margin-bottom:0.75rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+      <div style="font-weight:700;color:#374151;font-size:0.875rem">Créneau ${i+1}</div>
+      <button onclick="removeSimSlot(${i})" class="btn-danger text-xs">✕ Supprimer</button>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mb-2">
+      <div><label>Heure début</label><input type="time" value="${sl.heureDebut||''}" onchange="simCurrentSlots[${i}].heureDebut=this.value;updateSlotHeure(${i})"></div>
+      <div><label>Heure fin</label><input type="time" value="${sl.heureFin||''}" onchange="simCurrentSlots[${i}].heureFin=this.value;updateSlotHeure(${i})"></div>
+    </div>
+    <div>
+      <label>Classes assignées (Ctrl+clic pour multi-sélection)</label>
+      <select multiple onchange="updateSimSlotClasses(${i},this)" style="height:100px;margin-top:4px">
+        ${classes.map(c=>`<option value="${c}" ${(sl.classes||[]).includes(c)?'selected':''}>${c}</option>`).join('')}
+      </select>
+      ${over?`<div style="color:#dc2626;font-size:0.78rem;font-weight:700;margin-top:4px">⚠ Suroccupation : ${eff} étudiants pour ${room.capacite} places. Vous pouvez valider quand même.</div>`:''}
+      ${eff&&!over?`<div style="color:#6b7280;font-size:0.75rem;margin-top:4px">${eff} étudiant${eff>1?'s':''} / ${room.capacite} places</div>`:''}
+    </div>
+  </div>`;
+}
+
+function addSimSlot(){
+  if(simCurrentSlots.length>=4) return;
+  simCurrentSlots.push({heureDebut:'',heureFin:'',heure:'',classes:[]});
+  renderSimSlotForm(allSalles.find(r=>r.id===simSlotContext.roomId));
+}
+
+function removeSimSlot(i){
+  simCurrentSlots.splice(i,1);
+  renderSimSlotForm(allSalles.find(r=>r.id===simSlotContext.roomId));
+}
+
+function updateSlotHeure(i){
+  const d=simCurrentSlots[i].heureDebut,f=simCurrentSlots[i].heureFin;
+  simCurrentSlots[i].heure=(d&&f)?d+'-'+f:(d||f||'');
+}
+
+function updateSimSlotClasses(i,sel){
+  simCurrentSlots[i].classes=Array.from(sel.selectedOptions).map(o=>o.value);
+  renderSimSlotForm(allSalles.find(r=>r.id===simSlotContext.roomId));
+}
+
+function saveSimSlots(){
+  const{roomId,dateKey,period}=simSlotContext;
+  if(!simData.salles) simData.salles={};
+  if(!simData.salles[roomId]) simData.salles[roomId]={commentaire:'',surveillants:[],autresSurveillants:['',''],creneaux:{}};
+  if(!simData.salles[roomId].creneaux[dateKey]) simData.salles[roomId].creneaux[dateKey]={matin:[],apresmidi:[]};
+  simData.salles[roomId].creneaux[dateKey][period]=simCurrentSlots;
+  hide('simSlotModal');
+  updateSimRoomView();
+}
+
+async function saveSimulation(){
+  const titre=document.getElementById('simTitre').value.trim();
+  if(!titre){toast('Saisissez un titre pour la simulation.',false);return;}
+  simData.type=document.getElementById('simType').value;
+  simData.campus=Array.from(document.querySelectorAll('#simCampusCheckboxes input:checked')).map(c=>c.value);
+  const btn=document.querySelector('#simulationModal .btn-primary');
+  btn.textContent='…';btn.disabled=true;
+  const r=await api('saveSimulation',{
+    id:currentSim?.id||'',titre,
+    dateDebut:document.getElementById('simDateDebut').value,
+    dateFin:document.getElementById('simDateFin').value||document.getElementById('simDateDebut').value,
+    data:JSON.stringify(simData),
+  });
+  btn.textContent='💾 Sauvegarder';btn.disabled=false;
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast(currentSim?'Simulation mise à jour ✓':'Simulation sauvegardée ✓');
+  closeSimulationModal();loadSimulations();
+}
+
+async function deleteSimulation(id){
+  if(!confirm('Supprimer définitivement cette simulation ?')) return;
+  const r=await api('deleteSimulation',{id});
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('Simulation supprimée ✓');loadSimulations();
+}
+
+function printCurrentSimulation(){
+  const titre=document.getElementById('simTitre').value||'Simulation';
+  const fakeId='__current__';
+  const fakeSim={id:fakeId,titre,
+    dateDebut:document.getElementById('simDateDebut').value,
+    dateFin:document.getElementById('simDateFin').value,
+    data:JSON.stringify(simData)};
+  _doPrintSim(fakeSim);
+}
+
+function printSimulation(id){
+  const sim=allSimulations.find(s=>s.id===id); if(!sim) return;
+  _doPrintSim(sim);
+}
+
+function _doPrintSim(sim){
+  const data=typeof sim.data==='string'?JSON.parse(sim.data||'{}'):(sim.data||{});
+  const campuses=data.campus||[];
+  const rooms=allSalles.filter(s=>campuses.includes(s.campus));
+  const jours=['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const dates=getSimWeekDatesFromSim(sim);
+  let html=`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${sim.titre||'Simulation'}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:11px;margin:15mm;color:#1f2937}
+    h1{color:#1A4E8A;font-size:18px;margin-bottom:3px}
+    h2{color:#1A4E8A;font-size:13px;border-bottom:2px solid #1A4E8A;padding-bottom:3px;margin:14px 0 6px;page-break-before:auto}
+    .subtitle{color:#6b7280;font-size:11px;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px;font-size:10px}
+    th{background:#1A4E8A;color:#fff;padding:4px 6px;text-align:center}
+    td{border:1px solid #e5e7eb;padding:4px 6px;vertical-align:top}
+    .per{background:#eff6ff;font-weight:700;text-align:center;color:#1A4E8A}
+    .per2{background:#fff7ed;font-weight:700;text-align:center;color:#c2410c}
+    .slot{margin:2px 0;padding:2px 4px;background:#f0fdf4;border-radius:3px}
+    .slotOver{background:#fef2f2;border:1px solid #fecaca}
+    .commentaire{background:#fff7ed;border:1px solid #fed7aa;padding:5px 8px;border-radius:5px;font-size:12px;font-weight:700;color:#c2410c;margin:4px 0 6px}
+    .meta{font-size:9px;color:#9ca3af;margin-bottom:4px}
+    @media print{body{margin:10mm}}
+  </style></head><body>
+  <h1>${sim.titre||'Simulation d\'occupation'}</h1>
+  <div class="subtitle">Période : ${sim.dateDebut||'—'}${sim.dateFin&&sim.dateFin!==sim.dateDebut?' → '+sim.dateFin:''} | Campus : ${campuses.join(', ')||'—'} | Exporté le ${new Date().toLocaleDateString('fr-FR')}</div>`;
+
+  rooms.forEach(room=>{
+    const rData=data.salles?.[room.id]||{};
+    html+=`<h2>Salle ${room.numsalle} — ${room.campus} (${room.capacite||'?'} places)</h2>`;
+    if(rData.commentaire) html+=`<div class="commentaire">📌 ${rData.commentaire}</div>`;
+    const survAll=[...(rData.surveillants||[]),...(rData.autresSurveillants||[]).filter(Boolean)];
+    if(survAll.length) html+=`<div class="meta">Surveillants : ${survAll.join(' | ')}</div>`;
+    if(data.type==='semaine'&&dates.length){
+      html+=`<table><thead><tr><th style="width:60px">Période</th>${dates.map((dk,i)=>`<th>${jours[i]}<br><span style="font-weight:400;font-size:9px">${dk.slice(8)}/${dk.slice(5,7)}</span></th>`).join('')}</tr></thead><tbody>`;
+      [['matin','Matin','per'],['apresmidi','Après-midi','per2']].forEach(([per,label,cls])=>{
+        html+=`<tr><td class="${cls}">${label}</td>`;
+        dates.forEach(dk=>{
+          const slots=rData.creneaux?.[dk]?.[per]||[];
+          if(!slots.length){html+='<td><span style="color:#d1d5db">—</span></td>';return;}
+          html+='<td>';
+          slots.forEach(sl=>{
+            const eff=(sl.classes||[]).reduce((a,c)=>a+allEtudiants.filter(e=>e.classe===c).length,0);
+            const over=room.capacite>0&&eff>room.capacite;
+            html+=`<div class="slot${over?' slotOver':''}">
+              ${sl.heure?`<span style="font-size:9px;color:#6b7280">${sl.heure} </span>`:''}
+              <strong>${(sl.classes||[]).join(', ')||'—'}</strong>
+              ${over?`<div style="font-size:9px;color:#dc2626">⚠ ${eff}/${room.capacite}</div>`:''}</div>`;
+          });
+          html+='</td>';
+        });
+        html+='</tr>';
+      });
+      html+='</tbody></table>';
+    } else {
+      const dk=sim.dateDebut||'jour';
+      [['matin','Matin'],['apresmidi','Après-midi']].forEach(([per,label])=>{
+        const slots=rData.creneaux?.[dk]?.[per]||[];
+        if(!slots.length) return;
+        html+=`<strong>${label}</strong><table><tbody>`;
+        slots.forEach(sl=>{html+=`<tr><td style="width:80px">${sl.heure||'—'}</td><td>${(sl.classes||[]).join(', ')}</td></tr>`;});
+        html+='</tbody></table>';
+      });
+    }
+  });
+  html+='</body></html>';
+  const win=window.open('','_blank','width=900,height=700');
+  win.document.write(html);win.document.close();
+  win.onload=()=>{win.focus();win.print();};
+}
+
+function getSimWeekDatesFromSim(sim){
+  const dateDebut=sim.dateDebut||'';
+  const dates=[];
+  if(dateDebut){
+    const d=new Date(dateDebut);const dow=d.getDay();
+    const monday=new Date(d);monday.setDate(d.getDate()-(dow===0?6:dow-1));
+    for(let i=0;i<5;i++){const dd=new Date(monday);dd.setDate(monday.getDate()+i);dates.push(dd.toISOString().slice(0,10));}
+  }
+  return dates;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SUIVI EXB
+// ══════════════════════════════════════════════════════════════════
+let allSuiviEXB=[];
+
+async function loadSuiviEXB(){
+  document.getElementById('suiviEXBTbody').innerHTML='<tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr>';
+  const r=await api('getSuiviEXB');
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  allSuiviEXB=r.data||[];
+  buildRefEXBOptions();
+  renderSuiviEXBRapport();
+  renderSuiviEXB();
+}
+
+function buildRefEXBOptions(){
+  renderSuiviEXBClasses();
+  renderSuiviEXBRapport();
+  renderSuiviEXB();
+}
+
+function getExbFilter(){
+  const annee=document.getElementById('exbAnneeScolaire').value;
+  const session=document.getElementById('exbSession').value;
+  return{annee,session,ref:session?`${annee}-${session}`:annee};
+}
+
+function renderSuiviEXBClasses(){
+  const{annee,session,ref}=getExbFilter();
+  let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
+  if(session) filtered=filtered.filter(e=>e.refexb===ref);
+  const classes=[...new Set(filtered.map(e=>e.classe).filter(Boolean))].sort();
+  const sel=document.getElementById('exbClasse');const cur=sel.value;
+  sel.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+}
+
+function renderSuiviEXBRapport(){
+  const{annee,session,ref}=getExbFilter();
+  let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
+  if(session) filtered=filtered.filter(e=>e.refexb===ref);
+  if(!filtered.length){hide('exbRapport');return;}
+  const byRef={};
+  filtered.forEach(e=>{(byRef[e.refexb]||(byRef[e.refexb]=[])).push(e);});
+  let html=Object.entries(byRef).sort(([a],[b])=>a.localeCompare(b)).map(([ref,items])=>{
+    const noSujet=items.filter(i=>!i.sujet||String(i.sujet).trim().toLowerCase()!=='x').length;
+    const noCorrige=items.filter(i=>!i.corrige||String(i.corrige).trim().toLowerCase()!=='x').length;
+    const noImpression=items.filter(i=>String(i.impression||'').trim().toLowerCase()!=='ok').length;
+    const toRelancer=[...new Set(items.filter(i=>!i.sujet||String(i.sujet).trim().toLowerCase()!=='x').map(i=>i.formateur).filter(Boolean))];
+    const sansCor=[...new Set(items.filter(i=>!i.corrige||String(i.corrige).trim().toLowerCase()!=='x').map(i=>i.formateur).filter(Boolean))];
+    return `<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+      <h3 style="font-size:0.95rem;font-weight:900;color:#1A4E8A;margin-bottom:0.75rem">📋 REF EXB : ${ref} — ${items.length} matière${items.length>1?'s':''}</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        ${[['Sujets manquants',noSujet,noSujet?'#dc2626':'#16a34a'],['Corrigés manquants',noCorrige,noCorrige?'#f97316':'#16a34a'],['Impressions manquantes',noImpression,noImpression?'#eab308':'#16a34a'],['Complètes ✓',items.filter(i=>String(i.sujet||'').toLowerCase()==='x'&&String(i.corrige||'').toLowerCase()==='x'&&String(i.impression||'').toLowerCase()==='ok').length,'#16a34a']].map(([l,v,c])=>`<div class="kpi-card"><p class="text-2xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('')}
+      </div>
+      ${toRelancer.length?`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:0.75rem;padding:0.75rem;margin-bottom:0.5rem">
+        <div style="font-size:0.7rem;font-weight:900;color:#dc2626;text-transform:uppercase;margin-bottom:0.25rem">⚠ Formateurs à relancer (sujet manquant)</div>
+        <div style="font-size:0.85rem;color:#dc2626">${toRelancer.join(' — ')}</div>
+      </div>`:''}
+      ${sansCor.length?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:0.75rem;padding:0.75rem">
+        <div style="font-size:0.7rem;font-weight:900;color:#c2410c;text-transform:uppercase;margin-bottom:0.25rem">Formateurs sans corrigé</div>
+        <div style="font-size:0.85rem;color:#c2410c">${sansCor.join(' — ')}</div>
+      </div>`:''}
+    </div>`;
+  }).join('');
+  document.getElementById('exbRapport').innerHTML=html;
+  show('exbRapport');
+}
+
+function renderSuiviEXB(){
+  const{annee,session,ref}=getExbFilter();
+  const classe=document.getElementById('exbClasse').value;
+  let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
+  if(session) filtered=filtered.filter(e=>e.refexb===ref);
+  if(classe) filtered=filtered.filter(e=>e.classe===classe);
+  filtered.sort((a,b)=>(a.refexb+a.classe+a.matiere).localeCompare(b.refexb+b.classe+b.matiere));
+  const canW=canWrite('suiviexb');
+  if(!filtered.length){
+    document.getElementById('suiviEXBTbody').innerHTML='<tr><td colspan="9" class="text-center text-gray-400 py-8">Aucune donnée. Cliquez "Afficher" ou ajoutez des entrées.</td></tr>';
+    return;
+  }
+  document.getElementById('suiviEXBTbody').innerHTML=filtered.map(e=>{
+    const sujet=String(e.sujet||'').trim().toLowerCase()==='x';
+    const corrige=String(e.corrige||'').trim().toLowerCase()==='x';
+    const impression=String(e.impression||'').trim().toLowerCase()==='ok';
+    return `<tr>
+      <td><span class="badge bg-blue-100 text-blue-800">${e.refexb||'—'}</span></td>
+      <td style="font-weight:600">${e.classe||'—'}</td>
+      <td>${e.matiere||'—'}</td>
+      <td style="font-size:0.8rem;color:#4b5563">${e.formateur||'—'}</td>
+      <td class="text-center">${sujet?'<span class="exb-check">✓</span>':'<span class="exb-empty">○</span>'}</td>
+      <td class="text-center">${corrige?'<span class="exb-check">✓</span>':'<span class="exb-empty">○</span>'}</td>
+      <td class="text-center">${impression?'<span class="badge badge-admis">OK</span>':'<span class="exb-empty">○</span>'}</td>
+      <td style="font-size:0.78rem;color:#9ca3af">${e.commentaire||''}</td>
+      <td style="white-space:nowrap">${canW?`<button onclick="openSuiviEXBModal('${e.id}')" class="btn-ghost py-1 text-xs">✏</button>
+        <button onclick="deleteSuiviEXBById('${e.id}')" class="btn-danger py-1 text-xs">🗑</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openSuiviEXBModal(id){
+  const e=id?allSuiviEXB.find(x=>x.id===id):null;
+  document.getElementById('exbModalTitle').textContent=e?'Modifier entrée EXB':'Nouvelle entrée EXB';
+  document.getElementById('exbModalId').value=e?.id||'';
+  const{annee}=getExbFilter();
+  document.getElementById('exbModalAnnee').value=e?.refexb?.slice(0,9)||annee;
+  document.getElementById('exbModalSession').value=e?.refexb?.slice(10)||'1';
+  const classes=[...new Set(allEtudiants.map(et=>et.classe).filter(Boolean))].sort();
+  document.getElementById('exbModalClasse').innerHTML='<option value="">— Choisir —</option>'+classes.map(c=>`<option value="${c}" ${c===e?.classe?'selected':''}>${c}</option>`).join('');
+  document.getElementById('exbModalFormateur').innerHTML='<option value="">— Choisir —</option>'+allFormateurs.map(f=>{const n=f.nom+' '+f.prenom;return`<option value="${n}" ${n===e?.formateur?'selected':''}>${n}</option>`;}).join('');
+  document.getElementById('exbModalFormateur').value=e?.formateur||'';
+  document.getElementById('exbModalSujet').checked=String(e?.sujet||'').toLowerCase()==='x';
+  document.getElementById('exbModalCorrige').checked=String(e?.corrige||'').toLowerCase()==='x';
+  document.getElementById('exbModalImpression').checked=String(e?.impression||'').toLowerCase()==='ok';
+  document.getElementById('exbModalCommentaire').value=e?.commentaire||'';
+  document.getElementById('btnDeleteExb').classList.toggle('hidden',!e);
+  updateExbMatieres(e?.matiere);
+  show('exbModal');
+}
+
+function updateExbMatieres(selectedMat){
+  const classe=document.getElementById('exbModalClasse').value;
+  const diplome=classe.includes('BTS')?'BTS CG':classe.includes('DSCG')?'DSCG':classe.includes('DCG')?'DCG':'';
+  const mats=diplome?(refMatieres[diplome]||[]).map(m=>m.matiere):[];
+  const sel=document.getElementById('exbModalMatiere');
+  sel.innerHTML='<option value="">— Choisir —</option>'+mats.map(m=>`<option value="${m}" ${m===selectedMat?'selected':''}>${m}</option>`).join('');
+  if(selectedMat&&!mats.includes(selectedMat)) sel.innerHTML+=`<option value="${selectedMat}" selected>${selectedMat}</option>`;
+}
+
+function closeSuiviEXBModal(){hide('exbModal');}
+function deleteSuiviEXBFromModal(){const id=document.getElementById('exbModalId').value;if(id) deleteSuiviEXBById(id);}
+
+async function saveSuiviEXB(){
+  const refexb=document.getElementById('exbModalAnnee').value.trim()+'-'+document.getElementById('exbModalSession').value;
+  const classe=document.getElementById('exbModalClasse').value;
+  const matiere=document.getElementById('exbModalMatiere').value;
+  if(!refexb||!classe||!matiere){toast('REFEXB, classe et matière sont obligatoires.',false);return;}
+  const r=await api('saveSuiviEXB',{
+    id:document.getElementById('exbModalId').value||'',refexb,classe,matiere,
+    formateur:document.getElementById('exbModalFormateur').value||'',
+    sujet:document.getElementById('exbModalSujet').checked?'x':'',
+    corrige:document.getElementById('exbModalCorrige').checked?'x':'',
+    impression:document.getElementById('exbModalImpression').checked?'OK':'',
+    commentaire:document.getElementById('exbModalCommentaire').value||'',
+  });
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('EXB enregistré ✓');closeSuiviEXBModal();loadSuiviEXB();
+}
+
+async function deleteSuiviEXBById(id){
+  if(!confirm('Supprimer cet enregistrement EXB ?')) return;
+  const r=await api('deleteSuiviEXB',{id});
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('EXB supprimé ✓');loadSuiviEXB();
+}
+
+function exportSuiviEXB(){
+  const rows=[['REFEXB','Classe','Matière','Formateur','Sujet','Corrigé','Impression','Commentaire']];
+  allSuiviEXB.forEach(e=>rows.push([e.refexb||'',e.classe||'',e.matiere||'',e.formateur||'',e.sujet||'',e.corrige||'',e.impression||'',e.commentaire||'']));
+  const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download='SuiviEXB.csv';a.click();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MMOK
+// ══════════════════════════════════════════════════════════════════
+let allMMOK=[];
+const PLAT_COLORS={LinkedIn:'#0077b5',Instagram:'#e1306c',Facebook:'#1877f2',TikTok:'#ff0050','X / Twitter':'#1da1f2'};
+
+async function loadMMOK(){
+  document.getElementById('mmokTbody').innerHTML='<tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr>';
+  const r=await api('getMMOK');
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  allMMOK=r.data||[];
+  renderMMOKRapport();
+  renderMMOK();
+}
+
+function renderMMOKRapport(){
+  const now=new Date();
+  const startWeek=new Date(now);startWeek.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1));startWeek.setHours(0,0,0,0);
+  const startMonth=new Date(now.getFullYear(),now.getMonth(),1);
+  const startYear=new Date(now.getFullYear(),0,1);
+  const byPlat={};
+  allMMOK.forEach(p=>{byPlat[p.plateforme]=(byPlat[p.plateforme]||0)+1;});
+  const platStr=Object.entries(byPlat).sort(([,a],[,b])=>b-a).map(([p,n])=>`${p} : ${n}`).join(' | ');
+  const themes=[...new Set(allMMOK.map(p=>p.theme).filter(Boolean))];
+  const parseDate=p=>{const d=new Date(p.dateReelle||p.datePrevue||'');return isNaN(d)?null:d;};
+  const week=allMMOK.filter(p=>{const d=parseDate(p);return d&&d>=startWeek;}).length;
+  const month=allMMOK.filter(p=>{const d=parseDate(p);return d&&d>=startMonth;}).length;
+  const year=allMMOK.filter(p=>{const d=parseDate(p);return d&&d>=startYear;}).length;
+  document.getElementById('mmokRapport').innerHTML=[
+    ['Total posts',allMMOK.length,'#1A4E8A',platStr],
+    ['Cette semaine',week,'#3b82f6',''],
+    ['Ce mois',month,'#8b5cf6',''],
+    ["Cette année",year,'#F26522',''],
+  ].map(([l,v,c,sub])=>`<div class="kpi-card"><p class="text-3xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p>${sub?`<p style="font-size:0.65rem;color:#9ca3af;margin-top:4px">${sub}</p>`:''}</div>`).join('')+
+  (themes.length?`<div class="col-span-2 md:col-span-4 bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+    <div style="font-size:0.7rem;font-weight:900;color:#9ca3af;text-transform:uppercase;margin-bottom:0.5rem">Thèmes abordés</div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem">${themes.map(t=>`<span class="badge bg-gray-100 text-gray-700 px-3 py-1">${t}</span>`).join('')}</div>
+  </div>`:'');
+}
+
+function renderMMOK(){
+  const platform=document.getElementById('mmokFilterPlatform').value;
+  const period=document.getElementById('mmokFilterPeriod').value;
+  const etat=document.getElementById('mmokFilterEtat').value;
+  const now=new Date();
+  const startWeek=new Date(now);startWeek.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1));startWeek.setHours(0,0,0,0);
+  const starts={week:startWeek,month:new Date(now.getFullYear(),now.getMonth(),1),year:new Date(now.getFullYear(),0,1)};
+  let f=[...allMMOK];
+  if(platform) f=f.filter(p=>p.plateforme===platform);
+  if(etat) f=f.filter(p=>p.etat===etat);
+  if(period&&starts[period]){const st=starts[period];f=f.filter(p=>{const d=new Date(p.dateReelle||p.datePrevue||'');return !isNaN(d)&&d>=st;});}
+  f.sort((a,b)=>new Date(b.datePrevue||b.dateReelle||0)-new Date(a.datePrevue||a.dateReelle||0));
+  document.getElementById('mmokTbody').innerHTML=f.length?f.map(p=>{
+    const col=PLAT_COLORS[p.plateforme]||'#6b7280';
+    const eBadge=p.etat==='Publié'?'badge-admis':p.etat==='Planifié'?'badge-ratt':'bg-gray-100 text-gray-500';
+    return `<tr>
+      <td style="font-family:monospace;font-size:0.75rem;color:#9ca3af">${p.refpost||'—'}</td>
+      <td><span class="plat-badge" style="background:${col}">${p.plateforme||'—'}</span></td>
+      <td style="font-weight:600">${p.theme||'—'}</td>
+      <td style="font-size:0.85rem">${p.datePrevue||'—'}</td>
+      <td style="font-size:0.82rem;color:#4b5563;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.ideeContenu||'').replace(/"/g,'&quot;')}">${p.ideeContenu||'—'}</td>
+      <td style="font-size:0.85rem">${p.dateReelle||'—'}</td>
+      <td><span class="badge ${eBadge}">${p.etat||'—'}</span></td>
+      <td style="white-space:nowrap">
+        <button onclick="openMMOKModal('${p.id}')" class="btn-ghost py-1 text-xs">✏</button>
+        <button onclick="deleteMMOKById('${p.id}')" class="btn-danger py-1 text-xs">🗑</button>
+      </td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="8" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+}
+
+function openMMOKModal(id){
+  const p=id?allMMOK.find(x=>x.id===id):null;
+  document.getElementById('mmokModalTitle').textContent=p?'Modifier le post':'Nouveau post';
+  document.getElementById('mmokModalId').value=p?.id||'';
+  document.getElementById('mmokModalRefpost').value=p?.refpost||'';
+  document.getElementById('mmokModalPlateforme').value=p?.plateforme||'LinkedIn';
+  document.getElementById('mmokModalTheme').value=p?.theme||'';
+  document.getElementById('mmokModalDatePrevue').value=p?.datePrevue||'';
+  document.getElementById('mmokModalIdeeContenu').value=p?.ideeContenu||'';
+  document.getElementById('mmokModalContenu').value=p?.contenu||'';
+  document.getElementById('mmokModalDateReelle').value=p?.dateReelle||'';
+  document.getElementById('mmokModalEtat').value=p?.etat||'Planifié';
+  document.getElementById('btnDeleteMmok').classList.toggle('hidden',!p);
+  show('mmokModal');
+}
+
+function closeMMOKModal(){hide('mmokModal');}
+function deleteMMOKFromModal(){const id=document.getElementById('mmokModalId').value;if(id) deleteMMOKById(id);}
+
+async function saveMMOK(){
+  const plateforme=document.getElementById('mmokModalPlateforme').value;
+  if(!plateforme){toast('Sélectionnez une plateforme.',false);return;}
+  const r=await api('saveMMOK',{
+    id:document.getElementById('mmokModalId').value||'',
+    refpost:document.getElementById('mmokModalRefpost').value||'',
+    plateforme,
+    theme:document.getElementById('mmokModalTheme').value||'',
+    datePrevue:document.getElementById('mmokModalDatePrevue').value||'',
+    ideeContenu:document.getElementById('mmokModalIdeeContenu').value||'',
+    contenu:document.getElementById('mmokModalContenu').value||'',
+    dateReelle:document.getElementById('mmokModalDateReelle').value||'',
+    etat:document.getElementById('mmokModalEtat').value||'Planifié',
+  });
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('Post enregistré ✓');closeMMOKModal();loadMMOK();
+}
+
+async function deleteMMOKById(id){
+  if(!confirm('Supprimer ce post ?')) return;
+  const r=await api('deleteMMOK',{id});
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast('Post supprimé ✓');loadMMOK();
 }
 
 // ── Démarrage ────────────────────────────────────────────────────
