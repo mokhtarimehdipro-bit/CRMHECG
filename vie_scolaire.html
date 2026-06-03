@@ -60,9 +60,17 @@
     .taux-bar { width:100%;background:#f3f4f6;border-radius:9999px;height:6px;margin-top:4px; }
     .taux-fill { height:6px;border-radius:9999px;transition:width 0.4s; }
     /* Semainier simulation */
-    .sim-cell { cursor:pointer;transition:background 0.15s;min-width:110px; }
+    .sim-cell { cursor:pointer;transition:background 0.15s,outline 0.1s;min-width:110px; }
     .sim-cell:hover { background:#eff6ff !important; }
-    .sim-slot { margin-bottom:3px;padding:3px 6px;border-radius:6px;font-size:0.72rem; }
+    .sim-cell.drag-over { background:rgba(26,78,138,0.08) !important; outline:2px dashed #1A4E8A !important; }
+    .sim-slot { margin-bottom:3px;padding:3px 6px;border-radius:6px;font-size:0.72rem;cursor:grab;transition:opacity 0.15s; }
+    .sim-slot:active { cursor:grabbing; }
+    .sim-slot.dragging { opacity:0.4; }
+    .sim-slot-conflict { outline:2px solid #f97316 !important;position:relative; }
+    .sim-slot-conflict::after { content:'⚠';position:absolute;top:-5px;right:-5px;font-size:0.65rem;background:#f97316;color:#fff;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;line-height:1; }
+    /* EXB */
+    .exb-check { color:#16a34a;font-size:1.1rem;font-weight:900; }
+    .exb-empty { color:#d1d5db;font-size:1.1rem; }
     /* EXB */
     .exb-check { color:#16a34a;font-size:1.1rem;font-weight:900; }
     .exb-empty { color:#d1d5db;font-size:1.1rem; }
@@ -1158,6 +1166,18 @@
         <div><label class="mb-2">Campus concernés</label>
           <div id="simCampusCheckboxes" class="flex gap-4 flex-wrap mt-1"></div>
         </div>
+      </div>
+      <!-- Panneau conflits -->
+      <div id="simConflictsPanel" class="hidden mb-4 rounded-2xl overflow-hidden" style="border:1.5px solid #fca5a5">
+        <div style="background:#fef2f2;padding:0.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between">
+          <div class="flex items-center gap-2">
+            <span style="font-size:1.1rem">⚠</span>
+            <span style="font-weight:900;color:#dc2626">Conflits détectés</span>
+            <span id="simConflictsCount" style="background:#dc2626;color:#fff;font-size:0.7rem;font-weight:700;padding:0.1rem 0.5rem;border-radius:9999px"></span>
+          </div>
+          <span style="font-size:0.72rem;color:#9ca3af;font-style:italic">Vous pouvez quand même valider — les conflits sont conservés tels quels</span>
+        </div>
+        <div id="simConflictsList" style="padding:0.5rem 1.25rem 0.75rem;background:#fff9f9"></div>
       </div>
       <!-- Rooms config -->
       <div id="simRoomsContainer">
@@ -4987,17 +5007,25 @@ function renderSimSemainier(room,rData,rKey){
       </thead>
       <tbody>
         <tr style="background:#eff6ff">
-          <td style="padding:6px 8px;font-weight:700;color:#1A4E8A;text-align:center;border-right:1px solid #bfdbfe">Matin</td>
-          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #bfdbfe;vertical-align:top;min-width:110px" onclick="openSimSlotModal('${rKey}','${dk}','matin')">
-            ${renderSimSlotMini(rData.creneaux[dk]?.matin||[],room)}
-            <div style="text-align:center;color:#93c5fd;font-size:0.7rem;margin-top:2px">＋</div>
+          <td style="padding:6px 8px;font-weight:700;color:#1A4E8A;text-align:center;border-right:1px solid #bfdbfe;white-space:nowrap">Matin</td>
+          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #bfdbfe;vertical-align:top;min-width:110px"
+              onclick="openSimSlotModal('${rKey}','${dk}','matin')"
+              ondragover="onCellDragOver(event,'${rKey}','${dk}','matin')"
+              ondragleave="onCellDragLeave(event)"
+              ondrop="onCellDrop(event,'${rKey}','${dk}','matin')">
+            ${renderSimSlotMini(rData.creneaux[dk]?.matin||[],room,rKey,dk,'matin')}
+            <div style="text-align:center;color:#93c5fd;font-size:0.65rem;margin-top:2px;pointer-events:none">＋ ajouter</div>
           </td>`).join('')}
         </tr>
         <tr style="background:#fff7ed">
-          <td style="padding:6px 8px;font-weight:700;color:#F26522;text-align:center;border-right:1px solid #fed7aa">Après-midi</td>
-          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #fed7aa;vertical-align:top;min-width:110px" onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')">
-            ${renderSimSlotMini(rData.creneaux[dk]?.apresmidi||[],room)}
-            <div style="text-align:center;color:#fdba74;font-size:0.7rem;margin-top:2px">＋</div>
+          <td style="padding:6px 8px;font-weight:700;color:#F26522;text-align:center;border-right:1px solid #fed7aa;white-space:nowrap">Après-midi</td>
+          ${dates.map(dk=>`<td class="sim-cell" style="padding:4px;border:1px solid #fed7aa;vertical-align:top;min-width:110px"
+              onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')"
+              ondragover="onCellDragOver(event,'${rKey}','${dk}','apresmidi')"
+              ondragleave="onCellDragLeave(event)"
+              ondrop="onCellDrop(event,'${rKey}','${dk}','apresmidi')">
+            ${renderSimSlotMini(rData.creneaux[dk]?.apresmidi||[],room,rKey,dk,'apresmidi')}
+            <div style="text-align:center;color:#fdba74;font-size:0.65rem;margin-top:2px;pointer-events:none">＋ ajouter</div>
           </td>`).join('')}
         </tr>
       </tbody>
@@ -5009,34 +5037,50 @@ function renderSimJour(room,rData,rKey){
   const dk=document.getElementById('simDateDebut').value||'jour';
   if(!rData.creneaux[dk]) rData.creneaux[dk]={matin:[],apresmidi:[]};
   return `<div class="grid grid-cols-2 gap-4">
-    <div style="background:#eff6ff;border-radius:0.75rem;padding:0.75rem">
-      <div style="font-weight:700;color:#1A4E8A;margin-bottom:0.5rem">Matin</div>
-      ${renderSimSlotMini(rData.creneaux[dk].matin,room)}
-      <button onclick="openSimSlotModal('${rKey}','${dk}','matin')" class="btn-ghost text-xs mt-2 w-full">＋ Configurer les créneaux</button>
+    <div class="sim-cell" style="background:#eff6ff;border-radius:0.75rem;padding:0.75rem;min-height:80px"
+        onclick="openSimSlotModal('${rKey}','${dk}','matin')"
+        ondragover="onCellDragOver(event,'${rKey}','${dk}','matin')"
+        ondragleave="onCellDragLeave(event)"
+        ondrop="onCellDrop(event,'${rKey}','${dk}','matin')">
+      <div style="font-weight:700;color:#1A4E8A;margin-bottom:0.5rem;font-size:0.85rem">☀ Matin</div>
+      ${renderSimSlotMini(rData.creneaux[dk].matin,room,rKey,dk,'matin')}
+      <div style="text-align:center;color:#93c5fd;font-size:0.65rem;margin-top:4px;pointer-events:none">＋ ajouter un créneau</div>
     </div>
-    <div style="background:#fff7ed;border-radius:0.75rem;padding:0.75rem">
-      <div style="font-weight:700;color:#F26522;margin-bottom:0.5rem">Après-midi</div>
-      ${renderSimSlotMini(rData.creneaux[dk].apresmidi,room)}
-      <button onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')" class="btn-ghost text-xs mt-2 w-full">＋ Configurer les créneaux</button>
+    <div class="sim-cell" style="background:#fff7ed;border-radius:0.75rem;padding:0.75rem;min-height:80px"
+        onclick="openSimSlotModal('${rKey}','${dk}','apresmidi')"
+        ondragover="onCellDragOver(event,'${rKey}','${dk}','apresmidi')"
+        ondragleave="onCellDragLeave(event)"
+        ondrop="onCellDrop(event,'${rKey}','${dk}','apresmidi')">
+      <div style="font-weight:700;color:#F26522;margin-bottom:0.5rem;font-size:0.85rem">🌙 Après-midi</div>
+      ${renderSimSlotMini(rData.creneaux[dk].apresmidi,room,rKey,dk,'apresmidi')}
+      <div style="text-align:center;color:#fdba74;font-size:0.65rem;margin-top:4px;pointer-events:none">＋ ajouter un créneau</div>
     </div>
   </div>`;
 }
 
-function renderSimSlotMini(slots,room){
+function renderSimSlotMini(slots, room, rKey, dk, per){
   if(!slots||!slots.length) return '<div style="color:#d1d5db;font-size:0.72rem;text-align:center;padding:4px">Vide</div>';
-  return slots.map(sl=>{
+  // Calculer les conflits pour ce groupe de créneaux (même cellule)
+  const conflicts = rKey ? detectSimConflicts() : [];
+  return slots.map((sl,i)=>{
     const eff=(sl.classes||[]).reduce((a,c)=>{
       const cnt=allEtudiants.filter(e=>e.classe===c&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
       return a+cnt;
     },0);
     const over=room.capacite>0&&eff>room.capacite;
     const survAll=[...(sl.surveillants||[]),[sl.autre1,sl.autre2].filter(Boolean)].flat().filter(Boolean);
-    return `<div style="background:${over?'#fef2f2':'#f0fdf4'};border:1px solid ${over?'#fecaca':'#bbf7d0'};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:0.72rem">
+    // Vérifier si ce slot est impliqué dans un conflit
+    const slotKey = `${rKey}||${dk}||${per}||${i}`;
+    const hasConflict = conflicts.some(c=>c.keys&&c.keys.includes(slotKey));
+    const draggable = rKey ? `draggable="true" ondragstart="onSlotDragStart(event,'${rKey}','${dk}','${per}',${i})" ondragend="onSlotDragEnd(event)"` : '';
+    return `<div ${draggable} class="sim-slot${hasConflict?' sim-slot-conflict':''}" onclick="event.stopPropagation();openSimSlotModal('${rKey||''}','${dk||''}','${per||''}')"
+      style="background:${over?'#fef2f2':'#f0fdf4'};border:1px solid ${over?'#fecaca':'#bbf7d0'};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:0.72rem">
       ${sl.titre?`<div style="font-weight:900;color:#1A4E8A;font-size:0.72rem;margin-bottom:2px">${sl.titre}</div>`:''}
       ${sl.heure?`<div style="color:#6b7280;font-weight:700;font-size:0.65rem">${sl.heure}</div>`:''}
       <div style="font-weight:700;color:${over?'#dc2626':'#15803d'}">${(sl.classes||[]).join(', ')||'—'}</div>
       ${over?`<div style="font-size:0.65rem;color:#dc2626;font-weight:700">⚠ ${eff}/${room.capacite}</div>`:''}
       ${survAll.length?`<div style="font-size:0.65rem;color:#6b7280;margin-top:2px">👁 ${survAll.join(' · ')}</div>`:''}
+      ${rKey?`<div style="font-size:0.6rem;color:#c4b5fd;margin-top:1px;text-align:right">⠿ glisser</div>`:''}
     </div>`;
   }).join('');
 }
@@ -5850,6 +5894,166 @@ async function deleteMMOKById(id){
   const r=await api('deleteMMOK',{id});
   if(!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Post supprimé ✓');loadMMOK();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SIMULATION — DRAG & DROP + DÉTECTION DE CONFLITS
+// ══════════════════════════════════════════════════════════════════
+let _dragSlot = null; // {roomId, dateKey, period, slotIdx}
+
+// ── Drag & Drop ──────────────────────────────────────────────────
+function onSlotDragStart(event, roomId, dateKey, period, slotIdx){
+  event.stopPropagation();
+  _dragSlot = {roomId, dateKey, period, slotIdx};
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', JSON.stringify(_dragSlot));
+  event.currentTarget.classList.add('dragging');
+  setTimeout(()=>event.currentTarget?.classList.add('dragging'), 0);
+}
+
+function onSlotDragEnd(event){
+  event.currentTarget.classList.remove('dragging');
+  _dragSlot = null;
+}
+
+function onCellDragOver(event, roomId, dateKey, period){
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  event.currentTarget.classList.add('drag-over');
+}
+
+function onCellDragLeave(event){
+  // Ne retirer la classe que si on quitte vraiment la cellule (pas un enfant)
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    event.currentTarget.classList.remove('drag-over');
+  }
+}
+
+function onCellDrop(event, roomId, dateKey, period){
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+  let drag = _dragSlot;
+  if (!drag) {
+    try { drag = JSON.parse(event.dataTransfer.getData('text/plain')); } catch(e){ return; }
+  }
+  if (!drag) return;
+  // Même emplacement → pas de déplacement
+  if (drag.roomId === roomId && drag.dateKey === dateKey && drag.period === period) return;
+
+  // Récupérer le slot source
+  const srcCreneaux = simData.salles?.[drag.roomId]?.creneaux?.[drag.dateKey]?.[drag.period];
+  if (!srcCreneaux || drag.slotIdx >= srcCreneaux.length) return;
+
+  const slot = JSON.parse(JSON.stringify(srcCreneaux[drag.slotIdx])); // deep copy
+
+  // Retirer de la source (sans auto-supprimer les doublons)
+  srcCreneaux.splice(drag.slotIdx, 1);
+
+  // Ajouter à la cible
+  if (!simData.salles[roomId]) simData.salles[roomId] = {commentaire:'', creneaux:{}};
+  if (!simData.salles[roomId].creneaux[dateKey]) simData.salles[roomId].creneaux[dateKey] = {matin:[], apresmidi:[]};
+  simData.salles[roomId].creneaux[dateKey][period].push(slot);
+
+  _dragSlot = null;
+  updateSimRoomView();
+  toast(`Créneau déplacé vers ${period==='matin'?'Matin':'Après-midi'} — ${dateKey}`, true);
+}
+
+// ── Détection de conflits ────────────────────────────────────────
+function timeToMin(t){ // "08:30" → 510
+  if(!t) return null;
+  const [h,m]=t.split(':').map(Number); return h*60+(m||0);
+}
+
+function slotsOverlap(a, b){
+  // Si aucune heure → même demi-journée → conflit présumé
+  if(!a.heureDebut&&!a.heureFin&&!b.heureDebut&&!b.heureFin) return true;
+  const aD=timeToMin(a.heureDebut), aF=timeToMin(a.heureFin);
+  const bD=timeToMin(b.heureDebut), bF=timeToMin(b.heureFin);
+  if(aD===null||aF===null||bD===null||bF===null) return false;
+  return aD < bF && bD < aF;
+}
+
+function detectSimConflicts(){
+  const conflicts = [];
+  const rooms = allSalles.filter(s=>(simData.campus||[]).includes(s.campus));
+  // Construire la liste complète de tous les créneaux avec leur contexte
+  const all = [];
+  rooms.forEach(room=>{
+    const rData = simData.salles?.[room.id]||{};
+    Object.entries(rData.creneaux||{}).forEach(([dk,day])=>{
+      ['matin','apresmidi'].forEach(per=>{
+        (day[per]||[]).forEach((sl,idx)=>{
+          all.push({room, dk, per, sl, idx});
+        });
+      });
+    });
+  });
+
+  // Comparer chaque paire
+  for(let i=0; i<all.length; i++){
+    for(let j=i+1; j<all.length; j++){
+      const a=all[i], b=all[j];
+      if(a.dk!==b.dk || a.per!==b.per) continue; // Jours/périodes différents → pas de conflit
+      if(!slotsOverlap(a.sl, b.sl)) continue; // Pas de chevauchement horaire
+
+      // ── Conflit de salle ──
+      if(a.room.id===b.room.id){
+        const ta=a.sl.titre?`"${a.sl.titre}"`:a.sl.heure||'créneau '+( a.idx+1);
+        const tb=b.sl.titre?`"${b.sl.titre}"`:b.sl.heure||'créneau '+(b.idx+1);
+        conflicts.push({
+          type:'room', icon:'🏫',
+          msg:`Salle ${a.room.numsalle} (${a.room.campus}) — ${ta} et ${tb} se chevauchent le ${fmtConflictDate(a.dk)} ${a.per==='matin'?'matin':'après-midi'}`,
+          keys:[`${a.room.id}||${a.dk}||${a.per}||${a.idx}`,`${b.room.id}||${b.dk}||${b.per}||${b.idx}`]
+        });
+      } else {
+        // Salles différentes : vérifier surveillants et classes
+        const survA=[...(a.sl.surveillants||[]),a.sl.autre1,a.sl.autre2].filter(Boolean);
+        const survB=[...(b.sl.surveillants||[]),b.sl.autre1,b.sl.autre2].filter(Boolean);
+        survA.forEach(s=>{
+          if(s&&survB.includes(s)) conflicts.push({
+            type:'surv', icon:'👁',
+            msg:`Surveillant "${s}" — en même temps le ${fmtConflictDate(a.dk)} ${a.per==='matin'?'matin':'après-midi'} : Salle ${a.room.numsalle} et Salle ${b.room.numsalle}`,
+            keys:[]
+          });
+        });
+        const clA=a.sl.classes||[], clB=b.sl.classes||[];
+        clA.forEach(c=>{
+          if(c&&clB.includes(c)) conflicts.push({
+            type:'class', icon:'🎓',
+            msg:`Classe "${c}" — présente en même temps dans deux salles le ${fmtConflictDate(a.dk)} ${a.per==='matin'?'matin':'après-midi'} : Salle ${a.room.numsalle} et Salle ${b.room.numsalle}`,
+            keys:[]
+          });
+        });
+      }
+    }
+  }
+  return conflicts;
+}
+
+function fmtConflictDate(dk){
+  if(!dk||dk.startsWith('J')) return dk||'';
+  const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const d=new Date(dk); if(isNaN(d)) return dk;
+  return jours[d.getDay()]+' '+d.getDate()+'/'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+function renderSimConflicts(){
+  const conflicts = detectSimConflicts();
+  const panel = document.getElementById('simConflictsPanel');
+  const count = document.getElementById('simConflictsCount');
+  const list  = document.getElementById('simConflictsList');
+  if(!panel||!count||!list) return;
+  if(!conflicts.length){ panel.classList.add('hidden'); return; }
+  count.textContent = conflicts.length;
+  panel.classList.remove('hidden');
+  const byType = {room:[], surv:[], class:[]};
+  conflicts.forEach(c=>{ (byType[c.type]||(byType[c.type]=[])).push(c); });
+  list.innerHTML = [
+    byType.room.length?`<div style="margin-bottom:6px"><div style="font-size:0.72rem;font-weight:900;color:#dc2626;text-transform:uppercase;margin-bottom:3px">🏫 Conflits de salle (${byType.room.length})</div>${byType.room.map(c=>`<div style="font-size:0.8rem;color:#dc2626;padding:2px 0;border-bottom:1px solid #fee2e2">• ${c.msg}</div>`).join('')}</div>`:'',
+    byType.class.length?`<div style="margin-bottom:6px"><div style="font-size:0.72rem;font-weight:900;color:#c2410c;text-transform:uppercase;margin-bottom:3px">🎓 Conflits de classe (${byType.class.length})</div>${byType.class.map(c=>`<div style="font-size:0.8rem;color:#c2410c;padding:2px 0;border-bottom:1px solid #fed7aa">• ${c.msg}</div>`).join('')}</div>`:'',
+    byType.surv.length?`<div><div style="font-size:0.72rem;font-weight:900;color:#b45309;text-transform:uppercase;margin-bottom:3px">👁 Conflits de surveillant (${byType.surv.length})</div>${byType.surv.map(c=>`<div style="font-size:0.8rem;color:#92400e;padding:2px 0;border-bottom:1px solid #fde68a">• ${c.msg}</div>`).join('')}</div>`:'',
+  ].filter(Boolean).join('');
 }
 
 // ── Démarrage ────────────────────────────────────────────────────
