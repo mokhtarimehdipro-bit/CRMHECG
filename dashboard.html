@@ -962,10 +962,6 @@ async function envoyerSaveEtu(finalCvUrl) {
     
     if (res.success) {
         closeModal();
-        const savedTypo = document.getElementById('formForceTypo').value;
-        if (savedTypo === 'SORTIE' || savedTypo === 'REFUSE') {
-            document.getElementById('fTypo').value = 'tous';
-        }
         await loadDashboardData();
     } else {
         alert("Erreur : " + (res.message || "Inconnue"));
