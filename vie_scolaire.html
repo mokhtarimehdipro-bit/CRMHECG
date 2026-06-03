@@ -401,8 +401,12 @@
           <button onclick="sallesTab('salles')" id="sallesTabBtn" class="btn-primary">🏫 Salles</button>
           <button onclick="sallesTab('simulations')" id="simulationsTabBtn" class="btn-ghost">🔬 Simulations</button>
         </div>
-        <div id="sallesActions">
-          <button onclick="openSalleModal(null)" id="btnAddSalle" class="btn-orange hidden">+ Ajouter une salle</button>
+        <div id="sallesActions" class="flex gap-2 items-center">
+          <div class="flex rounded-xl overflow-hidden border border-gray-200">
+            <button onclick="setSallesView('cards')" id="btnSallesCards" class="btn-ghost text-xs rounded-none border-0 py-1.5 px-3">🃏 Cards</button>
+            <button onclick="setSallesView('table')" id="btnSallesTable" class="btn-ghost text-xs rounded-none border-0 border-l border-gray-200 py-1.5 px-3">📋 Tableau</button>
+          </div>
+          <button onclick="openSalleModal(null)" id="btnAddSalle" class="btn-orange hidden">+ Ajouter</button>
         </div>
         <div id="simulationsActions" class="hidden">
           <button onclick="openSimulationModal(null)" class="btn-orange">+ Nouvelle simulation</button>
@@ -422,6 +426,26 @@
       <!-- === SIMULATIONS VIEW === -->
       <div id="simulationsTabContent" class="hidden">
         <div id="simulationsList"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+      <!-- Vue lecture simulation avec filtres -->
+      <div id="simViewPanel" class="hidden mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-black text-[#1A4E8A]" id="simViewTitle">Planning</h3>
+          <button onclick="closeSimView()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+        </div>
+        <!-- Filtres lecture -->
+        <div class="flex gap-3 flex-wrap mb-4">
+          <div style="min-width:160px"><label>Filtrer par classe</label>
+            <select id="simViewFiltreClasse" onchange="renderSimView()"><option value="">Toutes les classes</option></select>
+          </div>
+          <div style="min-width:160px"><label>Filtrer par surveillant</label>
+            <select id="simViewFiltreSurv" onchange="renderSimView()"><option value="">Tous les surveillants</option></select>
+          </div>
+          <div style="min-width:160px"><label>Filtrer par salle</label>
+            <select id="simViewFiltreSalle" onchange="renderSimView()"><option value="">Toutes les salles</option></select>
+          </div>
+        </div>
+        <div id="simViewContent"></div>
+      </div>
       </div>
     </div>
 
@@ -435,10 +459,10 @@
         </div>
       </div>
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div><label>Année scolaire</label>
             <select id="exbAnneeScolaire" onchange="buildRefEXBOptions()">
-              <option>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
+              <option>2026-2027</option><option selected>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
             </select>
           </div>
           <div><label>Session</label>
@@ -450,9 +474,23 @@
           <div><label>Classe</label>
             <select id="exbClasse" onchange="renderSuiviEXB()"><option value="">Toutes</option></select>
           </div>
+          <div><label>Formateur</label>
+            <select id="exbFiltreFormateur" onchange="renderSuiviEXB()"><option value="">Tous</option></select>
+          </div>
           <div class="flex items-end">
             <button onclick="loadSuiviEXB()" class="btn-primary w-full">🔍 Afficher</button>
           </div>
+        </div>
+        <div class="flex gap-4 mt-3">
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-600">
+            <input type="checkbox" id="exbFiltreNoSujet" onchange="renderSuiviEXB()" style="width:auto"> Sujets manquants
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-600">
+            <input type="checkbox" id="exbFiltreNoCorrige" onchange="renderSuiviEXB()" style="width:auto"> Corrigés manquants
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-600">
+            <input type="checkbox" id="exbFiltreNoImpression" onchange="renderSuiviEXB()" style="width:auto"> Impressions manquantes
+          </label>
         </div>
       </div>
       <div id="exbRapport" class="hidden mb-5"></div>
@@ -460,7 +498,7 @@
         <div class="overflow-x-auto">
           <table>
             <thead><tr>
-              <th>REFEXB</th><th>Classe</th><th>Matière</th><th>Formateur</th>
+              <th>REFEXB</th><th>Classe</th><th>Matière</th><th>Formateur(s)</th>
               <th class="text-center">Sujet</th><th class="text-center">Corrigé</th>
               <th class="text-center">Impression</th><th>Commentaire</th><th></th>
             </tr></thead>
@@ -1135,48 +1173,140 @@
 
 <!-- ================== MODAL SUIVI EXB ================== -->
 <div id="exbModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSuiviEXBModal()">
-  <div class="modal-box p-8 max-w-2xl">
-    <h3 class="text-xl font-black text-[#1A4E8A] mb-5" id="exbModalTitle">Nouvel EXB</h3>
-    <input type="hidden" id="exbModalId">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-      <div class="col-span-2"><label>Année scolaire</label>
-        <select id="exbModalAnnee">
-          <option>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
-        </select>
-      </div>
-      <div class="col-span-2"><label>Session</label>
-        <select id="exbModalSession"><option value="1">Session 1</option><option value="2">Session 2</option><option value="3">Session 3</option></select>
-      </div>
-      <div class="col-span-2"><label>Classe</label>
-        <select id="exbModalClasse" onchange="updateExbMatieres()"><option value="">— Choisir —</option></select>
-      </div>
-      <div class="col-span-2"><label>Matière / UE</label>
-        <select id="exbModalMatiere"><option value="">— Choisir la classe d'abord —</option></select>
-      </div>
-      <div class="col-span-2 md:col-span-4"><label>Formateur</label>
-        <select id="exbModalFormateur"><option value="">— Choisir —</option></select>
-      </div>
+  <div class="modal-box" style="max-width:780px;max-height:92vh;overflow-y:auto">
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl sticky top-0 z-10">
+      <h3 class="text-lg font-black text-[#1A4E8A]" id="exbModalTitle">Nouvel EXB</h3>
+      <button onclick="closeSuiviEXBModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
     </div>
-    <div class="grid grid-cols-3 gap-4 mb-4">
-      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
-        <input type="checkbox" id="exbModalSujet" style="width:auto">
-        <div><div class="font-bold text-sm">Sujet reçu</div><div class="text-xs text-gray-400">✓ = reçu</div></div>
-      </label>
-      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
-        <input type="checkbox" id="exbModalCorrige" style="width:auto">
-        <div><div class="font-bold text-sm">Corrigé reçu</div><div class="text-xs text-gray-400">✓ = reçu</div></div>
-      </label>
-      <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
-        <input type="checkbox" id="exbModalImpression" style="width:auto">
-        <div><div class="font-bold text-sm">Impression OK</div><div class="text-xs text-gray-400">✓ = imprimé</div></div>
-      </label>
-    </div>
-    <div><label>Commentaire (libre)</label><textarea id="exbModalCommentaire" rows="2" placeholder="Remarque éventuelle…"></textarea></div>
-    <div class="flex justify-between gap-3 mt-6">
-      <button id="btnDeleteExb" onclick="deleteSuiviEXBFromModal()" class="btn-danger hidden">Supprimer</button>
-      <div class="flex gap-3 ml-auto">
-        <button onclick="closeSuiviEXBModal()" class="btn-ghost">Annuler</button>
-        <button onclick="saveSuiviEXB()" class="btn-orange">Enregistrer</button>
+    <div class="p-6">
+      <input type="hidden" id="exbModalId">
+
+      <!-- Sélecteur Typo (affiché seulement à la création) -->
+      <div id="exbTypoPanel" class="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-5">
+        <div class="font-black text-[#1A4E8A] mb-3">Type de création</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <label class="flex flex-col items-center gap-1 cursor-pointer p-3 border-2 rounded-xl hover:bg-white transition-all" id="typoCard1">
+            <input type="radio" name="exbTypo" value="1" class="hidden" onchange="onExbTypoChange()">
+            <div class="text-2xl">1️⃣</div>
+            <div class="font-bold text-sm text-center">Typo 1</div>
+            <div class="text-xs text-gray-400 text-center">BTS CG + DCG</div>
+          </label>
+          <label class="flex flex-col items-center gap-1 cursor-pointer p-3 border-2 rounded-xl hover:bg-white transition-all" id="typoCard2">
+            <input type="radio" name="exbTypo" value="2" class="hidden" onchange="onExbTypoChange()">
+            <div class="text-2xl">2️⃣</div>
+            <div class="font-bold text-sm text-center">Typo 2</div>
+            <div class="text-xs text-gray-400 text-center">DSCG 1 & 2</div>
+          </label>
+          <label class="flex flex-col items-center gap-1 cursor-pointer p-3 border-2 rounded-xl hover:bg-white transition-all" id="typoCard3">
+            <input type="radio" name="exbTypo" value="3" class="hidden" onchange="onExbTypoChange()">
+            <div class="text-2xl">3️⃣</div>
+            <div class="font-bold text-sm text-center">Typo 3</div>
+            <div class="text-xs text-gray-400 text-center">GPME / Bachelor / Autres</div>
+          </label>
+          <label class="flex flex-col items-center gap-1 cursor-pointer p-3 border-2 rounded-xl hover:bg-white transition-all" id="typoCardA">
+            <input type="radio" name="exbTypo" value="autre" checked class="hidden" onchange="onExbTypoChange()">
+            <div class="text-2xl">✏️</div>
+            <div class="font-bold text-sm text-center">Autre</div>
+            <div class="text-xs text-gray-400 text-center">Saisie manuelle</div>
+          </label>
+        </div>
+        <!-- Ref EXB pour batch -->
+        <div class="grid grid-cols-2 gap-3">
+          <div><label>Année scolaire</label>
+            <select id="exbModalAnnee">
+              <option>2026-2027</option><option>2025-2026</option><option>2024-2025</option><option>2023-2024</option>
+            </select>
+          </div>
+          <div><label>Session</label>
+            <select id="exbModalSession"><option value="1">Session 1</option><option value="2">Session 2</option><option value="3">Session 3</option></select>
+          </div>
+        </div>
+        <!-- Aperçu + bouton batch -->
+        <div id="exbBatchPreview" class="hidden mt-3">
+          <div id="exbBatchPreviewContent" class="text-sm text-gray-600 bg-white rounded-xl p-3 mb-3 max-h-48 overflow-y-auto border border-gray-200"></div>
+          <button onclick="createEXBBatch()" class="btn-orange w-full">⚡ Créer toutes les entrées</button>
+        </div>
+      </div>
+
+      <!-- Formulaire individuel -->
+      <div id="exbIndivForm">
+        <div class="grid grid-cols-2 md:grid-cols-2 gap-4 mb-4">
+          <div><label>Classe</label>
+            <select id="exbModalClasse" onchange="updateExbMatieres()"><option value="">— Choisir —</option></select>
+          </div>
+          <div><label>Matière / UE</label>
+            <select id="exbModalMatiere"><option value="">— Choisir la classe d'abord —</option></select>
+          </div>
+          <div class="col-span-2"><label>Formateurs (Ctrl+clic pour multi-sélection — non sortis uniquement)</label>
+            <select id="exbModalFormateurs" multiple style="height:90px;margin-top:4px"></select>
+          </div>
+        </div>
+
+        <!-- Sujet -->
+        <div class="border border-gray-200 rounded-xl p-4 mb-3">
+          <div class="flex justify-between items-center mb-2">
+            <label class="flex items-center gap-2 cursor-pointer" style="text-transform:none;font-size:0.875rem;font-weight:700;color:#374151;margin:0">
+              <input type="checkbox" id="exbModalSujet" style="width:auto"> Sujet reçu
+            </label>
+            <div class="flex gap-2">
+              <a id="exbSujetViewBtn" href="#" target="_blank" class="hidden btn-ghost text-xs py-1">🔗 Voir</a>
+              <button onclick="triggerEXBUpload('sujet')" class="btn-ghost text-xs py-1">📎 Joindre/Remplacer</button>
+            </div>
+          </div>
+          <div id="exbSujetFileInfo" class="text-xs text-gray-400 italic"></div>
+          <input type="hidden" id="exbModalSujetUrl">
+          <input type="hidden" id="exbModalSujetFileId">
+          <div id="exbSujetUploadZone" class="hidden mt-2 p-3 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+            <div><label style="text-transform:none;font-size:0.75rem">Dossier GDrive de destination (collez l'URL ou l'ID)</label>
+              <input type="text" id="exbSujetFolderUrl" placeholder="https://drive.google.com/drive/folders/...">
+            </div>
+            <div class="mt-2"><label style="text-transform:none;font-size:0.75rem">Fichier (PDF, Word…)</label>
+              <input type="file" id="exbSujetFileInput" accept=".pdf,.doc,.docx,.jpg,.png">
+            </div>
+            <button onclick="uploadEXBFile('sujet')" id="btnUploadSujet" class="btn-primary text-xs mt-2">⬆ Envoyer</button>
+          </div>
+        </div>
+
+        <!-- Corrigé -->
+        <div class="border border-gray-200 rounded-xl p-4 mb-3">
+          <div class="flex justify-between items-center mb-2">
+            <label class="flex items-center gap-2 cursor-pointer" style="text-transform:none;font-size:0.875rem;font-weight:700;color:#374151;margin:0">
+              <input type="checkbox" id="exbModalCorrige" style="width:auto"> Corrigé reçu
+            </label>
+            <div class="flex gap-2">
+              <a id="exbCorrigeViewBtn" href="#" target="_blank" class="hidden btn-ghost text-xs py-1">🔗 Voir</a>
+              <button onclick="triggerEXBUpload('corrige')" class="btn-ghost text-xs py-1">📎 Joindre/Remplacer</button>
+            </div>
+          </div>
+          <div id="exbCorrigeFileInfo" class="text-xs text-gray-400 italic"></div>
+          <input type="hidden" id="exbModalCorrigeUrl">
+          <input type="hidden" id="exbModalCorrigeFileId">
+          <div id="exbCorrigeUploadZone" class="hidden mt-2 p-3 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+            <div><label style="text-transform:none;font-size:0.75rem">Dossier GDrive de destination</label>
+              <input type="text" id="exbCorrigeFolderUrl" placeholder="https://drive.google.com/drive/folders/...">
+            </div>
+            <div class="mt-2"><label style="text-transform:none;font-size:0.75rem">Fichier</label>
+              <input type="file" id="exbCorrigeFileInput" accept=".pdf,.doc,.docx,.jpg,.png">
+            </div>
+            <button onclick="uploadEXBFile('corrige')" id="btnUploadCorrige" class="btn-primary text-xs mt-2">⬆ Envoyer</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <label class="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50">
+            <input type="checkbox" id="exbModalImpression" style="width:auto">
+            <div><div class="font-bold text-sm">Impression OK</div><div class="text-xs text-gray-400">✓ = imprimé</div></div>
+          </label>
+          <div><label>Commentaire</label><textarea id="exbModalCommentaire" rows="2" placeholder="Remarque…"></textarea></div>
+        </div>
+      </div>
+
+      <div class="flex justify-between gap-3">
+        <button id="btnDeleteExb" onclick="deleteSuiviEXBFromModal()" class="btn-danger hidden">Supprimer</button>
+        <div class="flex gap-3 ml-auto">
+          <button onclick="closeSuiviEXBModal()" class="btn-ghost">Annuler</button>
+          <button id="btnSaveExbIndiv" onclick="saveSuiviEXB()" class="btn-orange">Enregistrer</button>
+        </div>
       </div>
     </div>
   </div>
@@ -4298,6 +4428,17 @@ let allSalles = [], campusFilter = 'all', sallesChartInstance = null;
 let allSimulations = [], currentSim = null, editingSalleId = null;
 let simData = {}, simSlotContext = {roomId:'',dateKey:'',period:''}, simCurrentSlots = [];
 
+let sallesViewMode = 'cards';
+
+function setSallesView(mode){
+  sallesViewMode=mode;
+  document.getElementById('btnSallesCards').style.background=mode==='cards'?'#1A4E8A':'';
+  document.getElementById('btnSallesCards').style.color=mode==='cards'?'#fff':'';
+  document.getElementById('btnSallesTable').style.background=mode==='table'?'#1A4E8A':'';
+  document.getElementById('btnSallesTable').style.color=mode==='table'?'#fff':'';
+  renderSalles();
+}
+
 async function loadSalles() {
   document.getElementById('sallesContent').innerHTML='<p class="text-center text-gray-400 py-12">Chargement…</p>';
   const r = await api('getSalles');
@@ -4333,6 +4474,7 @@ function setCampusFilter(c){campusFilter=c;renderCampusChips();renderSalles();}
 function tauxColor(t){return t>=100?'#dc2626':t>=80?'#f97316':t>=60?'#eab308':'#16a34a';}
 
 function renderSalles(){
+  if(sallesViewMode==='table') { renderSallesTable(); return; }
   const fil=campusFilter==='all'?allSalles:allSalles.filter(s=>s.campus===campusFilter);
   const byCampus={};
   fil.forEach(s=>{(byCampus[s.campus]||(byCampus[s.campus]=[])).push(s);});
@@ -4344,6 +4486,45 @@ function renderSalles(){
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${salles.map(s=>renderSalleCard(s,canW)).join('')}</div></div>`;
   });
   if(!html) html='<div class="text-center text-gray-400 py-12">Aucune salle trouvée.</div>';
+  document.getElementById('sallesContent').innerHTML=html;
+}
+
+function renderSallesTable(){
+  const fil=campusFilter==='all'?allSalles:allSalles.filter(s=>s.campus===campusFilter);
+  const canW=canWrite('salles');
+  if(!fil.length){document.getElementById('sallesContent').innerHTML='<div class="text-center text-gray-400 py-12">Aucune salle.</div>';return;}
+  let html=`<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div class="overflow-x-auto">
+    <table>
+      <thead><tr>
+        <th>Campus</th><th>Salle</th><th>Capacité</th>
+        <th>Classe début</th><th>Effectif début</th><th>Taux début</th>
+        <th>Classe fin</th><th>Effectif fin</th><th>Taux fin</th>
+        <th>Commentaire</th>${canW?'<th></th>':''}
+      </tr></thead>
+      <tbody>
+        ${fil.sort((a,b)=>a.campus.localeCompare(b.campus)||a.numsalle.localeCompare(b.numsalle)).map(s=>{
+          const tD=s.tauxDebut||0, tF=s.tauxFin||0;
+          const cD=tauxColor(tD), cF=tauxColor(tF);
+          const tauxBadge=(t,c)=>t?`<span style="background:${c}22;color:${c};font-weight:700;padding:0.1rem 0.5rem;border-radius:9999px;font-size:0.75rem">${t}%</span>`:'<span style="color:#d1d5db">—</span>';
+          return `<tr onclick="openSalleChart('${s.id}')" style="cursor:pointer">
+            <td><span style="background:#dbeafe;color:#1e40af;padding:0.1rem 0.5rem;border-radius:9999px;font-size:0.75rem;font-weight:700">${s.campus}</span></td>
+            <td style="font-weight:700;color:#1A4E8A">Salle ${s.numsalle}</td>
+            <td class="text-center font-bold">${s.capacite||'—'}</td>
+            <td>${s.classeDebut||'<span style="color:#d1d5db">—</span>'}</td>
+            <td class="text-center">${s.effectifDebut||'—'}</td>
+            <td class="text-center">${tauxBadge(tD,cD)}</td>
+            <td>${s.classeFin||'<span style="color:#d1d5db">—</span>'}</td>
+            <td class="text-center">${s.effectifFin||'—'}</td>
+            <td class="text-center">${tauxBadge(tF,cF)}</td>
+            <td style="font-size:0.78rem;color:#9ca3af;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.commentaire||''}</td>
+            ${canW?`<td style="white-space:nowrap">
+              <button onclick="event.stopPropagation();openSalleModal('${s.id}')" class="btn-ghost py-1 text-xs">✏</button>
+              <button onclick="event.stopPropagation();deleteSalle('${s.id}')" class="btn-danger py-1 text-xs">🗑</button>
+            </td>`:''}
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div></div>`;
   document.getElementById('sallesContent').innerHTML=html;
 }
 
@@ -4494,6 +4675,8 @@ async function loadSimulations(){
   renderSimulations();
 }
 
+let currentViewSimId = null;
+
 function renderSimulations(){
   if(!allSimulations.length){
     document.getElementById('simulationsList').innerHTML=`<div class="text-center text-gray-400 py-16 bg-white rounded-2xl border border-gray-100">
@@ -4510,13 +4693,14 @@ function renderSimulations(){
       <div class="flex justify-between items-start">
         <div>
           <h3 class="text-lg font-black text-[#1A4E8A]">${sim.titre||'Sans titre'}</h3>
-          <div class="flex gap-4 mt-1 text-sm text-gray-500">
+          <div class="flex gap-4 mt-1 text-sm text-gray-500 flex-wrap">
             <span>📅 ${sim.dateDebut||'—'}${sim.dateFin&&sim.dateFin!==sim.dateDebut?' → '+sim.dateFin:''}</span>
             <span>🏫 ${camps}</span>
             <span>${nbSalles} salle${nbSalles>1?'s':''} configurée${nbSalles>1?'s':''}</span>
           </div>
         </div>
-        <div class="flex gap-2 flex-shrink-0">
+        <div class="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+          <button onclick="openSimView('${sim.id}')" class="btn-ghost text-xs py-1">👁 Voir</button>
           <button onclick="openSimulationModal('${sim.id}')" class="btn-ghost text-xs py-1">✏ Modifier</button>
           <button onclick="printSimulation('${sim.id}')" class="btn-primary text-xs py-1">📄 PDF</button>
           <button onclick="deleteSimulation('${sim.id}')" class="btn-danger text-xs py-1">🗑</button>
@@ -4524,6 +4708,99 @@ function renderSimulations(){
       </div>
     </div>`;
   }).join('')+'</div>';
+}
+
+function openSimView(id){
+  const sim=allSimulations.find(s=>s.id===id); if(!sim) return;
+  currentViewSimId=id;
+  const data=typeof sim.data==='string'?JSON.parse(sim.data||'{}'):(sim.data||{});
+  const rooms=allSalles.filter(s=>(data.campus||[]).includes(s.campus));
+  // Populate filters
+  const allClasses=new Set(), allSurvs=new Set();
+  rooms.forEach(room=>{
+    const rData=data.salles?.[room.id]||{};
+    Object.values(rData.creneaux||{}).forEach(day=>{
+      ['matin','apresmidi'].forEach(per=>{
+        (day[per]||[]).forEach(sl=>{
+          (sl.classes||[]).forEach(c=>allClasses.add(c));
+          (sl.surveillants||[]).forEach(s=>allSurvs.add(s));
+          if(sl.autre1) allSurvs.add(sl.autre1);
+          if(sl.autre2) allSurvs.add(sl.autre2);
+        });
+      });
+    });
+  });
+  const selC=document.getElementById('simViewFiltreClasse');
+  const selS=document.getElementById('simViewFiltreSurv');
+  const selR=document.getElementById('simViewFiltreSalle');
+  const curC=selC.value,curS=selS.value,curR=selR.value;
+  selC.innerHTML='<option value="">Toutes les classes</option>'+[...allClasses].sort().map(c=>`<option value="${c}" ${c===curC?'selected':''}>${c}</option>`).join('');
+  selS.innerHTML='<option value="">Tous les surveillants</option>'+[...allSurvs].sort().map(s=>`<option value="${s}" ${s===curS?'selected':''}>${s}</option>`).join('');
+  selR.innerHTML='<option value="">Toutes les salles</option>'+rooms.map(r=>`<option value="${r.id}" ${r.id===curR?'selected':''}>Salle ${r.numsalle} (${r.campus})</option>`).join('');
+  document.getElementById('simViewTitle').textContent=sim.titre||'Planning';
+  show('simViewPanel');
+  document.getElementById('simViewPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  renderSimView();
+}
+
+function closeSimView(){
+  currentViewSimId=null;
+  hide('simViewPanel');
+  document.getElementById('simViewContent').innerHTML='';
+}
+
+function renderSimView(){
+  const sim=allSimulations.find(s=>s.id===currentViewSimId); if(!sim) return;
+  const data=typeof sim.data==='string'?JSON.parse(sim.data||'{}'):(sim.data||{});
+  const filtClasse=document.getElementById('simViewFiltreClasse').value;
+  const filtSurv=document.getElementById('simViewFiltreSurv').value;
+  const filtSalle=document.getElementById('simViewFiltreSalle').value;
+  let rooms=allSalles.filter(s=>(data.campus||[]).includes(s.campus));
+  if(filtSalle) rooms=rooms.filter(r=>r.id===filtSalle);
+  const jours=['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const dates=getSimWeekDatesFromSim(sim);
+  let html='';
+  rooms.forEach(room=>{
+    const rData=data.salles?.[room.id]||{};
+    let hasContent=false;
+    const tableRows=['matin','apresmidi'].map(per=>{
+      const perLabel=per==='matin'?'Matin':'Après-midi';
+      const cells=dates.length?dates:['jour'];
+      const cellHtml=cells.map(dk=>{
+        const slots=(rData.creneaux?.[dk]?.[per]||[]).filter(sl=>{
+          if(filtClasse&&!(sl.classes||[]).includes(filtClasse)) return false;
+          if(filtSurv){const all=[...(sl.surveillants||[]),sl.autre1,sl.autre2].filter(Boolean);if(!all.includes(filtSurv)) return false;}
+          return true;
+        });
+        if(slots.length) hasContent=true;
+        if(!slots.length) return '<td style="border:1px solid #e5e7eb;padding:4px;min-width:100px"><span style="color:#d1d5db;font-size:0.75rem">—</span></td>';
+        return '<td style="border:1px solid #e5e7eb;padding:4px;vertical-align:top;min-width:100px">'+slots.map(sl=>{
+          const surv=[...(sl.surveillants||[]),[sl.autre1,sl.autre2].filter(Boolean)].flat().filter(Boolean);
+          const eff=(sl.classes||[]).reduce((a,c)=>a+allEtudiants.filter(e=>e.classe===c).length,0);
+          const over=room.capacite>0&&eff>room.capacite;
+          return `<div style="background:${over?'#fef2f2':'#f0fdf4'};border:1px solid ${over?'#fecaca':'#bbf7d0'};border-radius:4px;padding:3px 5px;margin-bottom:3px;font-size:0.75rem">
+            ${sl.heure?`<div style="font-weight:700;color:#6b7280">${sl.heure}</div>`:''}
+            <div style="font-weight:700;color:${over?'#dc2626':'#15803d'}">${(sl.classes||[]).join(', ')||'—'}</div>
+            ${surv.length?`<div style="color:#6b7280;font-size:0.7rem">👁 ${surv.join(', ')}</div>`:''}
+          </div>`;
+        }).join('')+'</td>';
+      }).join('');
+      return `<tr><td style="border:1px solid #e5e7eb;padding:6px 8px;font-weight:700;background:${per==='matin'?'#eff6ff':'#fff7ed'};color:${per==='matin'?'#1A4E8A':'#c2410c'};text-align:center;width:70px">${perLabel}</td>${cellHtml}</tr>`;
+    }).join('');
+    if(filtClasse||filtSurv) { if(!hasContent) return; }
+    html+=`<div class="mb-4">
+      <h4 style="font-weight:700;color:#1A4E8A;margin-bottom:6px">Salle ${room.numsalle} <span style="color:#9ca3af;font-weight:400;font-size:0.85rem">${room.campus} — ${room.capacite||'?'} places</span></h4>
+      ${rData.commentaire?`<div style="background:#fff7ed;border-left:3px solid #F26522;padding:4px 10px;margin-bottom:6px;font-size:0.85rem;font-weight:600;color:#c2410c">${rData.commentaire}</div>`:''}
+      <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:0.8rem;width:100%">
+        <thead><tr style="background:#1A4E8A;color:#fff">
+          <th style="padding:5px 8px;width:70px">Période</th>
+          ${(dates.length?dates:['Jour']).map((dk,i)=>`<th style="padding:5px 8px">${dates.length?jours[i]:dk}${dates.length&&dk?'<br><span style="font-weight:400;font-size:0.7rem">'+dk.slice(8)+'/'+dk.slice(5,7)+'</span>':''}</th>`).join('')}
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>
+    </div>`;
+  });
+  document.getElementById('simViewContent').innerHTML=html||'<div class="text-center text-gray-400 py-8">Aucun créneau correspondant aux filtres.</div>';
 }
 
 function openSimulationModal(id){
@@ -4564,7 +4841,7 @@ function updateSimRoomView(){
   let html='';
   rooms.forEach(room=>{
     const rKey=room.id;
-    if(!simData.salles[rKey]) simData.salles[rKey]={commentaire:'',surveillants:[],autresSurveillants:['',''],creneaux:{}};
+    if(!simData.salles[rKey]) simData.salles[rKey]={commentaire:'',creneaux:{}};
     const rData=simData.salles[rKey];
     html+=`<div class="bg-gray-50 rounded-2xl p-5 border border-gray-200 mb-4">
       <div class="flex justify-between items-center mb-4">
@@ -4573,21 +4850,9 @@ function updateSimRoomView(){
         </div>
       </div>
       ${type==='semaine'?renderSimSemainier(room,rData,rKey):renderSimJour(room,rData,rKey)}
-      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label>Commentaire (s'affiche en grand sur le PDF)</label>
-          <input type="text" value="${(rData.commentaire||'').replace(/"/g,'&quot;')}" oninput="simData.salles['${rKey}'].commentaire=this.value" placeholder="ex : Épreuve de UE 1" class="mt-1">
-        </div>
-        <div>
-          <label>Surveillants</label>
-          <select multiple onchange="simData.salles['${rKey}'].surveillants=Array.from(this.selectedOptions).map(o=>o.value)" style="height:72px;margin-top:4px">
-            ${allFormateurs.map(f=>`<option value="${f.nom} ${f.prenom}" ${(rData.surveillants||[]).includes(f.nom+' '+f.prenom)?'selected':''}>${f.nom} ${f.prenom}</option>`).join('')}
-          </select>
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            <input type="text" placeholder="Autre 1 (prof / ext.)" value="${rData.autresSurveillants?.[0]||''}" oninput="simData.salles['${rKey}'].autresSurveillants[0]=this.value">
-            <input type="text" placeholder="Autre 2 (prof / ext.)" value="${rData.autresSurveillants?.[1]||''}" oninput="simData.salles['${rKey}'].autresSurveillants[1]=this.value">
-          </div>
-        </div>
+      <div class="mt-4">
+        <label>Commentaire salle (s'affiche en grand sur le PDF)</label>
+        <input type="text" value="${(rData.commentaire||'').replace(/"/g,'&quot;')}" oninput="simData.salles['${rKey}'].commentaire=this.value" placeholder="ex : Épreuve de UE 1" class="mt-1">
       </div>
     </div>`;
   });
@@ -4662,10 +4927,12 @@ function renderSimSlotMini(slots,room){
       return a+cnt;
     },0);
     const over=room.capacite>0&&eff>room.capacite;
+    const survAll=[...(sl.surveillants||[]),[sl.autre1,sl.autre2].filter(Boolean)].flat().filter(Boolean);
     return `<div class="sim-slot" style="background:${over?'#fee2e2':'#f0fdf4'};border:1px solid ${over?'#fecaca':'#bbf7d0'}">
       ${sl.heure?`<span style="font-size:0.65rem;color:#6b7280;font-weight:700">${sl.heure} </span>`:''}
       <span style="font-weight:600;color:${over?'#dc2626':'#15803d'}">${(sl.classes||[]).join(', ')||'—'}</span>
       ${over?`<div style="font-size:0.65rem;color:#dc2626;font-weight:700">⚠ ${eff}/${room.capacite}</div>`:''}
+      ${survAll.length?`<div style="font-size:0.65rem;color:#6b7280;margin-top:2px">👁 ${survAll.join(', ')}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -4706,20 +4973,34 @@ function renderOneSlotForm(sl,i,room,classes){
       <div><label>Heure début</label><input type="time" value="${sl.heureDebut||''}" onchange="simCurrentSlots[${i}].heureDebut=this.value;updateSlotHeure(${i})"></div>
       <div><label>Heure fin</label><input type="time" value="${sl.heureFin||''}" onchange="simCurrentSlots[${i}].heureFin=this.value;updateSlotHeure(${i})"></div>
     </div>
-    <div>
+    <div class="mb-2">
       <label>Classes assignées (Ctrl+clic pour multi-sélection)</label>
-      <select multiple onchange="updateSimSlotClasses(${i},this)" style="height:100px;margin-top:4px">
+      <select multiple onchange="updateSimSlotClasses(${i},this)" style="height:90px;margin-top:4px">
         ${classes.map(c=>`<option value="${c}" ${(sl.classes||[]).includes(c)?'selected':''}>${c}</option>`).join('')}
       </select>
       ${over?`<div style="color:#dc2626;font-size:0.78rem;font-weight:700;margin-top:4px">⚠ Suroccupation : ${eff} étudiants pour ${room.capacite} places. Vous pouvez valider quand même.</div>`:''}
       ${eff&&!over?`<div style="color:#6b7280;font-size:0.75rem;margin-top:4px">${eff} étudiant${eff>1?'s':''} / ${room.capacite} places</div>`:''}
     </div>
+    <div>
+      <label>Surveillants de ce créneau (Personnel — Ctrl+clic pour multi)</label>
+      <select multiple onchange="updateSimSlotSurvs(${i},this)" style="height:72px;margin-top:4px">
+        ${allFormateurs.map(f=>`<option value="${f.nom} ${f.prenom}" ${(sl.surveillants||[]).includes(f.nom+' '+f.prenom)?'selected':''}>${f.nom} ${f.prenom}</option>`).join('')}
+      </select>
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <input type="text" placeholder="Autre 1 (prof / ext.)" value="${sl.autre1||''}" oninput="simCurrentSlots[${i}].autre1=this.value">
+        <input type="text" placeholder="Autre 2 (prof / ext.)" value="${sl.autre2||''}" oninput="simCurrentSlots[${i}].autre2=this.value">
+      </div>
+    </div>
   </div>`;
+}
+
+function updateSimSlotSurvs(i,sel){
+  simCurrentSlots[i].surveillants=Array.from(sel.selectedOptions).map(o=>o.value);
 }
 
 function addSimSlot(){
   if(simCurrentSlots.length>=4) return;
-  simCurrentSlots.push({heureDebut:'',heureFin:'',heure:'',classes:[]});
+  simCurrentSlots.push({heureDebut:'',heureFin:'',heure:'',classes:[],surveillants:[],autre1:'',autre2:''});
   renderSimSlotForm(allSalles.find(r=>r.id===simSlotContext.roomId));
 }
 
@@ -4904,6 +5185,10 @@ function renderSuiviEXBClasses(){
   const classes=[...new Set(filtered.map(e=>e.classe).filter(Boolean))].sort();
   const sel=document.getElementById('exbClasse');const cur=sel.value;
   sel.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+  // Formateurs filter
+  const formateurs=[...new Set(filtered.flatMap(e=>String(e.formateur||'').split(';').map(f=>f.trim())).filter(Boolean))].sort();
+  const selF=document.getElementById('exbFiltreFormateur');const curF=selF.value;
+  selF.innerHTML='<option value="">Tous</option>'+formateurs.map(f=>`<option value="${f}" ${f===curF?'selected':''}>${f}</option>`).join('');
 }
 
 function renderSuiviEXBRapport(){
@@ -4941,9 +5226,17 @@ function renderSuiviEXBRapport(){
 function renderSuiviEXB(){
   const{annee,session,ref}=getExbFilter();
   const classe=document.getElementById('exbClasse').value;
+  const filtForm=document.getElementById('exbFiltreFormateur').value;
+  const noSujet=document.getElementById('exbFiltreNoSujet').checked;
+  const noCorrige=document.getElementById('exbFiltreNoCorrige').checked;
+  const noImpression=document.getElementById('exbFiltreNoImpression').checked;
   let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
   if(session) filtered=filtered.filter(e=>e.refexb===ref);
   if(classe) filtered=filtered.filter(e=>e.classe===classe);
+  if(filtForm) filtered=filtered.filter(e=>String(e.formateur||'').split(';').map(f=>f.trim()).includes(filtForm));
+  if(noSujet) filtered=filtered.filter(e=>String(e.sujet||'').trim().toLowerCase()!=='x');
+  if(noCorrige) filtered=filtered.filter(e=>String(e.corrige||'').trim().toLowerCase()!=='x');
+  if(noImpression) filtered=filtered.filter(e=>String(e.impression||'').trim().toLowerCase()!=='ok');
   filtered.sort((a,b)=>(a.refexb+a.classe+a.matiere).localeCompare(b.refexb+b.classe+b.matiere));
   const canW=canWrite('suiviexb');
   if(!filtered.length){
@@ -4954,13 +5247,14 @@ function renderSuiviEXB(){
     const sujet=String(e.sujet||'').trim().toLowerCase()==='x';
     const corrige=String(e.corrige||'').trim().toLowerCase()==='x';
     const impression=String(e.impression||'').trim().toLowerCase()==='ok';
+    const sujetUrl=e.sujetUrl||'';const corrigeUrl=e.corrigeUrl||'';
     return `<tr>
       <td><span class="badge bg-blue-100 text-blue-800">${e.refexb||'—'}</span></td>
       <td style="font-weight:600">${e.classe||'—'}</td>
-      <td>${e.matiere||'—'}</td>
-      <td style="font-size:0.8rem;color:#4b5563">${e.formateur||'—'}</td>
-      <td class="text-center">${sujet?'<span class="exb-check">✓</span>':'<span class="exb-empty">○</span>'}</td>
-      <td class="text-center">${corrige?'<span class="exb-check">✓</span>':'<span class="exb-empty">○</span>'}</td>
+      <td style="font-size:0.82rem">${e.matiere||'—'}</td>
+      <td style="font-size:0.78rem;color:#4b5563">${(e.formateur||'—').replace(/;/g,'<br>')}</td>
+      <td class="text-center">${sujet?`<span class="exb-check">✓</span>${sujetUrl?` <a href="${sujetUrl}" target="_blank" style="font-size:0.65rem;color:#1A4E8A">🔗</a>`:''}`:' <span class="exb-empty">○</span>'}</td>
+      <td class="text-center">${corrige?`<span class="exb-check">✓</span>${corrigeUrl?` <a href="${corrigeUrl}" target="_blank" style="font-size:0.65rem;color:#1A4E8A">🔗</a>`:''}`:' <span class="exb-empty">○</span>'}</td>
       <td class="text-center">${impression?'<span class="badge badge-admis">OK</span>':'<span class="exb-empty">○</span>'}</td>
       <td style="font-size:0.78rem;color:#9ca3af">${e.commentaire||''}</td>
       <td style="white-space:nowrap">${canW?`<button onclick="openSuiviEXBModal('${e.id}')" class="btn-ghost py-1 text-xs">✏</button>
@@ -4977,17 +5271,156 @@ function openSuiviEXBModal(id){
   const{annee}=getExbFilter();
   document.getElementById('exbModalAnnee').value=e?.refexb?.slice(0,9)||annee;
   document.getElementById('exbModalSession').value=e?.refexb?.slice(10)||'1';
+  // Typo panel — visible seulement à la création
+  const typoPan=document.getElementById('exbTypoPanel');
+  if(e){ typoPan.classList.add('hidden'); } else { typoPan.classList.remove('hidden'); onExbTypoChange(); }
   const classes=[...new Set(allEtudiants.map(et=>et.classe).filter(Boolean))].sort();
   document.getElementById('exbModalClasse').innerHTML='<option value="">— Choisir —</option>'+classes.map(c=>`<option value="${c}" ${c===e?.classe?'selected':''}>${c}</option>`).join('');
-  document.getElementById('exbModalFormateur').innerHTML='<option value="">— Choisir —</option>'+allFormateurs.map(f=>{const n=f.nom+' '+f.prenom;return`<option value="${n}" ${n===e?.formateur?'selected':''}>${n}</option>`;}).join('');
-  document.getElementById('exbModalFormateur').value=e?.formateur||'';
+  // Formateurs multi-select — exclure sortis (dateSortie vide)
+  const formateursFiltres=allFormateurs.filter(f=>!f.dateSortie||String(f.dateSortie).trim()==='');
+  const selectedFormats=(e?.formateur||'').split(';').map(s=>s.trim()).filter(Boolean);
+  document.getElementById('exbModalFormateurs').innerHTML=formateursFiltres.map(f=>{const n=f.nom+' '+f.prenom;return`<option value="${n}" ${selectedFormats.includes(n)?'selected':''}>${n}</option>`;}).join('');
   document.getElementById('exbModalSujet').checked=String(e?.sujet||'').toLowerCase()==='x';
   document.getElementById('exbModalCorrige').checked=String(e?.corrige||'').toLowerCase()==='x';
   document.getElementById('exbModalImpression').checked=String(e?.impression||'').toLowerCase()==='ok';
   document.getElementById('exbModalCommentaire').value=e?.commentaire||'';
   document.getElementById('btnDeleteExb').classList.toggle('hidden',!e);
+  // Fichiers
+  document.getElementById('exbModalSujetUrl').value=e?.sujetUrl||'';
+  document.getElementById('exbModalSujetFileId').value=e?.sujetFileId||'';
+  document.getElementById('exbModalCorrigeUrl').value=e?.corrigeUrl||'';
+  document.getElementById('exbModalCorrigeFileId').value=e?.corrigeFileId||'';
+  const sUrl=e?.sujetUrl||'';const cUrl=e?.corrigeUrl||'';
+  document.getElementById('exbSujetFileInfo').textContent=sUrl?'Fichier lié':'';
+  document.getElementById('exbCorrigeFileInfo').textContent=cUrl?'Fichier lié':'';
+  const bvS=document.getElementById('exbSujetViewBtn');const bvC=document.getElementById('exbCorrigeViewBtn');
+  if(sUrl){bvS.href=sUrl;bvS.classList.remove('hidden');}else bvS.classList.add('hidden');
+  if(cUrl){bvC.href=cUrl;bvC.classList.remove('hidden');}else bvC.classList.add('hidden');
+  hide('exbSujetUploadZone');hide('exbCorrigeUploadZone');
   updateExbMatieres(e?.matiere);
   show('exbModal');
+}
+
+// ── Typo EXB ─────────────────────────────────────────────────────
+function onExbTypoChange(){
+  const typo=document.querySelector('input[name="exbTypo"]:checked')?.value||'autre';
+  // Style des cartes
+  ['1','2','3','A'].forEach(t=>{
+    const card=document.getElementById('typoCard'+t);
+    if(!card) return;
+    const match=(t==='A'?'autre':t)===typo;
+    card.style.borderColor=match?'#1A4E8A':'#e5e7eb';
+    card.style.background=match?'#eff6ff':'#fff';
+  });
+  // Activer radio
+  const radios=document.querySelectorAll('input[name="exbTypo"]');
+  radios.forEach(r=>{if(r.value===typo){r.checked=true;}});
+  const indivForm=document.getElementById('exbIndivForm');
+  const batchPreview=document.getElementById('exbBatchPreview');
+  if(typo==='autre'){
+    indivForm.classList.remove('hidden');batchPreview.classList.add('hidden');
+  } else {
+    indivForm.classList.add('hidden');batchPreview.classList.remove('hidden');
+    previewEXBBatch(typo);
+  }
+}
+
+function getClassesByTypo(typo){
+  const all=[...new Set(allEtudiants.map(e=>e.classe).filter(Boolean))].sort();
+  if(typo==='1') return all.filter(c=>/bts\s*cg/i.test(c)||(/dcg/i.test(c)&&!/dscg/i.test(c)));
+  if(typo==='2') return all.filter(c=>/dscg/i.test(c));
+  if(typo==='3') return all.filter(c=>!/bts\s*cg/i.test(c)&&!/dcg/i.test(c)&&!/dscg/i.test(c));
+  return all;
+}
+
+function getDiplomeFromClasse(classe){
+  if(/bts\s*cg/i.test(classe)) return 'BTS CG';
+  if(/dscg/i.test(classe)) return 'DSCG';
+  if(/dcg/i.test(classe)) return 'DCG';
+  if(/gpme/i.test(classe)) return 'BTS GPME';
+  return null;
+}
+
+function previewEXBBatch(typo){
+  const annee=document.getElementById('exbModalAnnee').value;
+  const session=document.getElementById('exbModalSession').value;
+  const refexb=`${annee}-${session}`;
+  const classes=getClassesByTypo(typo);
+  let rows=[];
+  classes.forEach(classe=>{
+    const diplome=getDiplomeFromClasse(classe);
+    const matieres=diplome?(refMatieres[diplome]||[]).filter(m=>m.type!=='autre').map(m=>m.matiere):[];
+    if(!matieres.length){rows.push({classe,matiere:'(à définir)'});}
+    else matieres.forEach(matiere=>{
+      const exists=allSuiviEXB.some(e=>e.refexb===refexb&&e.classe===classe&&e.matiere===matiere);
+      rows.push({classe,matiere,exists});
+    });
+  });
+  const content=document.getElementById('exbBatchPreviewContent');
+  const noExists=rows.filter(r=>!r.exists);
+  if(!noExists.length){
+    content.innerHTML='<span class="text-green-600 font-bold">✓ Toutes ces entrées existent déjà pour '+refexb+'</span>';
+    return;
+  }
+  content.innerHTML=`<div class="font-bold mb-2">${noExists.length} nouvelle${noExists.length>1?'s':''} entrée${noExists.length>1?'s':''} à créer pour <span class="text-[#1A4E8A]">${refexb}</span> :</div>`+
+    noExists.slice(0,20).map(r=>`<div>${r.classe} — ${r.matiere}</div>`).join('')+
+    (noExists.length>20?`<div class="text-gray-400">... et ${noExists.length-20} autres</div>`:'');
+  document.getElementById('exbBatchPreview').classList.remove('hidden');
+}
+
+async function createEXBBatch(){
+  const typo=document.querySelector('input[name="exbTypo"]:checked')?.value;
+  if(!typo||typo==='autre') return;
+  const annee=document.getElementById('exbModalAnnee').value;
+  const session=document.getElementById('exbModalSession').value;
+  const refexb=`${annee}-${session}`;
+  const classes=getClassesByTypo(typo);
+  const toCreate=[];
+  classes.forEach(classe=>{
+    const diplome=getDiplomeFromClasse(classe);
+    const matieres=diplome?(refMatieres[diplome]||[]).filter(m=>m.type!=='autre').map(m=>m.matiere):['(à définir)'];
+    matieres.forEach(matiere=>{
+      const exists=allSuiviEXB.some(e=>e.refexb===refexb&&e.classe===classe&&e.matiere===matiere);
+      if(!exists) toCreate.push({refexb,classe,matiere,formateur:'',sujet:'',corrige:'',impression:'',commentaire:''});
+    });
+  });
+  if(!toCreate.length){toast('Toutes les entrées existent déjà.',false);return;}
+  const btn=document.querySelector('#exbModal .btn-orange');btn.textContent='⏳ Création…';btn.disabled=true;
+  const r=await api('createEXBBatch',{items:toCreate});
+  btn.textContent='⚡ Créer toutes les entrées';btn.disabled=false;
+  if(!r.success){toast('Erreur : '+r.message,false);return;}
+  toast(`${toCreate.length} entrée${toCreate.length>1?'s':''} créée${toCreate.length>1?'s':''} ✓`);
+  closeSuiviEXBModal();loadSuiviEXB();
+}
+
+// ── Upload fichier EXB ────────────────────────────────────────────
+function triggerEXBUpload(type){
+  const zone=document.getElementById('exb'+type.charAt(0).toUpperCase()+type.slice(1)+'UploadZone');
+  zone.classList.toggle('hidden');
+}
+
+async function uploadEXBFile(type){
+  const cap=type.charAt(0).toUpperCase()+type.slice(1);
+  const fileInput=document.getElementById('exb'+cap+'FileInput');
+  const folderInput=document.getElementById('exb'+cap+'FolderUrl');
+  if(!fileInput.files[0]){toast('Sélectionnez un fichier.',false);return;}
+  const file=fileInput.files[0];
+  const folderId=(folderInput.value||'').replace(/.*\/folders\//,'').replace(/[?&].*/,'').trim();
+  const btn=document.getElementById('btnUpload'+cap);btn.textContent='⏳…';btn.disabled=true;
+  const base64=await new Promise(res=>{const fr=new FileReader();fr.onload=e=>res(e.target.result.split(',')[1]);fr.readAsDataURL(file);});
+  const r=await api('uploadEXBFile',{base64Data:base64,fileName:file.name,mimeType:file.type,folderId});
+  btn.textContent='⬆ Envoyer';btn.disabled=false;
+  if(!r.success){toast('Erreur upload : '+r.message,false);return;}
+  document.getElementById('exbModal'+cap+'Url').value=r.url||'';
+  document.getElementById('exbModal'+cap+'FileId').value=r.id||'';
+  document.getElementById('exb'+cap+'FileInfo').textContent='Fichier : '+file.name;
+  const bv=document.getElementById('exb'+cap.toLowerCase()+'ViewBtn')||document.getElementById('exb'+cap+'ViewBtn');
+  if(bv){bv.href=r.url||'#';bv.classList.remove('hidden');}
+  // Cocher automatiquement le statut correspondant
+  if(type==='sujet') document.getElementById('exbModalSujet').checked=true;
+  if(type==='corrige') document.getElementById('exbModalCorrige').checked=true;
+  document.getElementById('exb'+cap+'UploadZone').classList.add('hidden');
+  toast('Fichier importé ✓');
 }
 
 function updateExbMatieres(selectedMat){
@@ -5007,13 +5440,18 @@ async function saveSuiviEXB(){
   const classe=document.getElementById('exbModalClasse').value;
   const matiere=document.getElementById('exbModalMatiere').value;
   if(!refexb||!classe||!matiere){toast('REFEXB, classe et matière sont obligatoires.',false);return;}
+  const formateurs=Array.from(document.getElementById('exbModalFormateurs').selectedOptions).map(o=>o.value);
   const r=await api('saveSuiviEXB',{
     id:document.getElementById('exbModalId').value||'',refexb,classe,matiere,
-    formateur:document.getElementById('exbModalFormateur').value||'',
+    formateur:formateurs.join(';'),
     sujet:document.getElementById('exbModalSujet').checked?'x':'',
     corrige:document.getElementById('exbModalCorrige').checked?'x':'',
     impression:document.getElementById('exbModalImpression').checked?'OK':'',
     commentaire:document.getElementById('exbModalCommentaire').value||'',
+    sujetUrl:document.getElementById('exbModalSujetUrl').value||'',
+    sujetFileId:document.getElementById('exbModalSujetFileId').value||'',
+    corrigeUrl:document.getElementById('exbModalCorrigeUrl').value||'',
+    corrigeFileId:document.getElementById('exbModalCorrigeFileId').value||'',
   });
   if(!r.success){toast('Erreur : '+r.message,false);return;}
   toast('EXB enregistré ✓');closeSuiviEXBModal();loadSuiviEXB();
