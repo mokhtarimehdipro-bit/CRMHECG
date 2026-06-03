@@ -466,6 +466,16 @@
         </div>
       </div>
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5">
+        <!-- Recherche rapide par REFEXB -->
+        <div class="mb-3 flex gap-2 items-center">
+          <div class="flex-1">
+            <label>Recherche directe par REF EXB</label>
+            <input type="text" id="exbSearchRef" placeholder="Ex : 2025-2026-2-T1" oninput="renderSuiviEXB()" style="margin-top:4px">
+          </div>
+          <div class="flex items-end" style="padding-bottom:0">
+            <button onclick="document.getElementById('exbSearchRef').value='';renderSuiviEXB()" class="btn-ghost text-xs mt-5">✕</button>
+          </div>
+        </div>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div><label>Année scolaire</label>
             <select id="exbAnneeScolaire" onchange="buildRefEXBOptions()">
@@ -1469,8 +1479,10 @@ async function init(){
   try { const r = await api('getReferentielMatieres'); if (r.success) refMatieres = r.data; } catch(e){}
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
-  // Formateurs
+  // Formateurs (onglet Adultes — enseignants)
   try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; renderFormateurs(); } } catch(e){}
+  // Personnel staff (onglet Personnel — staff admin, pour les surveillants de simulation)
+  try { const r = await api('getPersonnelList'); if (r.success) allPersonnelStaff = r.data; } catch(e){}
 }
 
 function showModule(m){
@@ -4438,6 +4450,7 @@ async function exportObjectifsPeriode(){
 // SALLES & SIMULATIONS
 // ══════════════════════════════════════════════════════════════════
 let allSalles = [], campusFilter = 'all', sallesChartInstance = null;
+let allPersonnelStaff = []; // Membres du sheet "Personnel" (staff admin) pour les surveillants
 let allSimulations = [], currentSim = null, editingSalleId = null;
 let simData = {}, simSlotContext = {roomId:'',dateKey:'',period:''}, simCurrentSlots = [];
 
@@ -4748,6 +4761,9 @@ function openSimView(id){
   const selR=document.getElementById('simViewFiltreSalle');
   const curC=selC.value,curS=selS.value,curR=selR.value;
   selC.innerHTML='<option value="">Toutes les classes</option>'+[...allClasses].sort().map(c=>`<option value="${c}" ${c===curC?'selected':''}>${c}</option>`).join('');
+  // Ajouter aussi tous les membres Personnel pour le filtre (même si pas encore dans cette sim)
+  const staffNames=(allPersonnelStaff.length?allPersonnelStaff:allFormateurs).map(f=>f.nom).filter(Boolean);
+  staffNames.forEach(n=>{if(n) allSurvs.add(n);});
   selS.innerHTML='<option value="">Tous les surveillants</option>'+[...allSurvs].sort().map(s=>`<option value="${s}" ${s===curS?'selected':''}>${s}</option>`).join('');
   selR.innerHTML='<option value="">Toutes les salles</option>'+rooms.map(r=>`<option value="${r.id}" ${r.id===curR?'selected':''}>Salle ${r.numsalle} (${r.campus})</option>`).join('');
   document.getElementById('simViewTitle').textContent=sim.titre||'Planning';
@@ -5074,9 +5090,9 @@ function renderOneSlotForm(sl,i,room,classes){
       <input type="text" placeholder="ex : Épreuve E1 — CEJM" value="${(sl.titre||'').replace(/"/g,'&quot;')}" oninput="simCurrentSlots[${i}].titre=this.value">
     </div>
     <div>
-      <label>Surveillants (Personnel — Ctrl+clic pour multi-sélection)</label>
+      <label>Surveillants — onglet Personnel (Ctrl+clic pour multi-sélection)</label>
       <select multiple onchange="updateSimSlotSurvs(${i},this)" style="height:72px;margin-top:4px">
-        ${allFormateurs.filter(f=>String(f.etatFormateur||'NON').toUpperCase()!=='OUI').map(f=>`<option value="${f.nom} ${f.prenom}" ${(sl.surveillants||[]).includes(f.nom+' '+f.prenom)?'selected':''}>${f.nom} ${f.prenom}</option>`).join('')}
+        ${(allPersonnelStaff.length?allPersonnelStaff:allFormateurs.filter(f=>String(f.etatFormateur||'NON').toUpperCase()!=='OUI')).map(f=>{const n=f.nom||'';return`<option value="${n}" ${(sl.surveillants||[]).includes(n)?'selected':''}>${n}</option>`;}).join('')}
       </select>
       <div class="grid grid-cols-2 gap-2 mt-2">
         <input type="text" placeholder="Autre 1 (libre)" value="${sl.autre1||''}" oninput="simCurrentSlots[${i}].autre1=this.value">
@@ -5327,13 +5343,21 @@ function exbStatusBadge(val, url){
 
 function renderSuiviEXB(){
   const{annee,session,ref}=getExbFilter();
+  const searchRef=(document.getElementById('exbSearchRef')?.value||'').trim().toLowerCase();
   const classe=document.getElementById('exbClasse').value;
   const filtForm=document.getElementById('exbFiltreFormateur').value;
   const noSujet=document.getElementById('exbFiltreNoSujet').checked;
   const noCorrige=document.getElementById('exbFiltreNoCorrige').checked;
   const noImpression=document.getElementById('exbFiltreNoImpression').checked;
   let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
-  if(session) filtered=filtered.filter(e=>e.refexb===ref);
+  if(searchRef){ // Recherche directe prioritaire
+    filtered=allSuiviEXB.filter(e=>String(e.refexb||'').toLowerCase().includes(searchRef));
+    // Ouvrir automatiquement les refs trouvées
+    const refs=[...new Set(filtered.map(e=>e.refexb))];
+    refs.forEach(r=>exbOpenRefs.add(r));
+  } else {
+    if(session) filtered=filtered.filter(e=>e.refexb===ref);
+  }
   if(classe) filtered=filtered.filter(e=>e.classe===classe);
   if(filtForm) filtered=filtered.filter(e=>String(e.formateur||'').split(';').map(f=>f.trim()).includes(filtForm));
   if(noSujet) filtered=filtered.filter(e=>{const v=String(e.sujet||'').trim().toLowerCase();return v!=='x'&&v!=='nc';});
@@ -5517,34 +5541,70 @@ function onExbTypoChange(){
   if(typo==='autre'){
     indivForm.classList.remove('hidden');batchPreview.classList.add('hidden');
   } else {
-    indivForm.classList.add('hidden');batchPreview.classList.remove('hidden');
+    indivForm.classList.add('hidden');
+    // Montrer la ref EXB résultante
+    const annee=document.getElementById('exbModalAnnee').value;
+    const session=document.getElementById('exbModalSession').value;
+    const refLabel=getBatchRefexb(annee,session,typo);
+    document.querySelector('#exbTypoPanel .grid:last-of-type')?.insertAdjacentHTML?.('afterend','');
+    batchPreview.classList.remove('hidden');
     previewEXBBatch(typo);
   }
 }
 
-function getYearLevelsByTypo(typo){
-  // Extrait les niveaux d'année (ex: "BTS CG 1","DCG 2") depuis les classes réelles
-  // sans doublons de sections (BTS CG 1A et BTS CG 1B → "BTS CG 1")
-  const all=[...new Set(allEtudiants.map(e=>e.classe).filter(Boolean))];
-  const levels=new Set();
-  all.forEach(c=>{
-    // BTS CG 1A → BTS CG 1, BTS CG 2B → BTS CG 2
-    let m=c.match(/^(BTS\s*CG)\s*(\d)/i); if(m){levels.add('BTS CG '+m[2]);return;}
-    m=c.match(/^(DSCG)\s*(\d)/i); if(m){levels.add('DSCG '+m[2]);return;}
-    m=c.match(/^(DCG)\s*(\d)/i); if(m&&!/dscg/i.test(c)){levels.add('DCG '+m[2]);return;}
-    m=c.match(/^(BTS\s*GPME)\s*(\d)/i); if(m){levels.add('BTS GPME '+m[2]);return;}
-    m=c.match(/^(Bachelor)/i); if(m){levels.add(c.replace(/\s*[A-Z]$/,'').trim());return;}
-    // Autres : garder tel quel
-    if(!/bts\s*cg/i.test(c)&&!/dcg/i.test(c)&&!/dscg/i.test(c)&&!/gpme/i.test(c)) levels.add(c);
+// ── Configuration hardcodée des typologies EXB ────────────────────
+const EXB_TYPO_CONFIG = {
+  '1': {
+    groups: [
+      // BTS CG : classes depuis allEtudiants + 6 matières fixes
+      { source: 'bts_cg', matieres: ['Math', 'Anglais', 'CGE', 'CEJM', 'E5', 'Oraux PROS'] },
+      // DCG : UE 1 à UE 12, classe = "DCG"
+      { source: 'dcg_fixed', matieres: ['UE 1','UE 2','UE 3','UE 4','UE 5','UE 6','UE 7','UE 8','UE 9','UE 10','UE 11','UE 12'] },
+    ]
+  },
+  '2': {
+    groups: [
+      { source: 'dscg', matieres: null } // Matières issues de refMatieres['DSCG']
+    ]
+  },
+  '3': {
+    groups: [
+      { source: 'other', matieres: null } // Autres classes
+    ]
+  }
+};
+
+function getItemsForTypo(typo, refexb){
+  const config = EXB_TYPO_CONFIG[typo]; if(!config) return [];
+  const allClasses = [...new Set(allEtudiants.map(e=>e.classe).filter(Boolean))].sort();
+  const items = [];
+  config.groups.forEach(g => {
+    let classes = [], matieres = g.matieres;
+    if(g.source === 'bts_cg'){
+      classes = allClasses.filter(c => /bts\s*cg/i.test(c));
+    } else if(g.source === 'dcg_fixed'){
+      classes = ['DCG'];
+    } else if(g.source === 'dscg'){
+      classes = allClasses.filter(c => /dscg/i.test(c));
+      if(!matieres) matieres = (refMatieres['DSCG']||[]).filter(m=>m.type!=='autre').map(m=>m.matiere);
+    } else if(g.source === 'other'){
+      classes = allClasses.filter(c => !/bts\s*cg/i.test(c) && !/dcg/i.test(c) && !/dscg/i.test(c));
+      if(!matieres) matieres = ['(à définir)'];
+    }
+    classes.forEach(classe => {
+      (matieres||['(à définir)']).forEach(matiere => {
+        const exists = allSuiviEXB.some(e => e.refexb===refexb && e.classe===classe && e.matiere===matiere);
+        items.push({classe, matiere, exists});
+      });
+    });
   });
-  const sorted=[...levels].sort();
-  if(typo==='1') return sorted.filter(c=>/bts\s*cg\s*\d/i.test(c)||(/dcg\s*\d/i.test(c)&&!/dscg/i.test(c)));
-  if(typo==='2') return sorted.filter(c=>/dscg\s*\d/i.test(c));
-  if(typo==='3') return sorted.filter(c=>!/bts\s*cg/i.test(c)&&!/dcg/i.test(c)&&!/dscg/i.test(c));
-  return sorted;
+  return items;
 }
 
-function getClassesByTypo(typo){ return getYearLevelsByTypo(typo); }
+function getBatchRefexb(annee, session, typo){
+  if(!typo || typo === 'autre') return `${annee}-${session}`;
+  return `${annee}-${session}-T${typo}`;
+}
 
 function getDiplomeFromClasse(classe){
   if(/bts\s*cg/i.test(classe)) return 'BTS CG';
@@ -5557,27 +5617,27 @@ function getDiplomeFromClasse(classe){
 function previewEXBBatch(typo){
   const annee=document.getElementById('exbModalAnnee').value;
   const session=document.getElementById('exbModalSession').value;
-  const refexb=`${annee}-${session}`;
-  const classes=getClassesByTypo(typo);
-  let rows=[];
-  classes.forEach(classe=>{
-    const diplome=getDiplomeFromClasse(classe);
-    const matieres=diplome?(refMatieres[diplome]||[]).filter(m=>m.type!=='autre').map(m=>m.matiere):[];
-    if(!matieres.length){rows.push({classe,matiere:'(à définir)'});}
-    else matieres.forEach(matiere=>{
-      const exists=allSuiviEXB.some(e=>e.refexb===refexb&&e.classe===classe&&e.matiere===matiere);
-      rows.push({classe,matiere,exists});
-    });
-  });
+  const refexb=getBatchRefexb(annee,session,typo);
+  const rows=getItemsForTypo(typo,refexb);
   const content=document.getElementById('exbBatchPreviewContent');
   const noExists=rows.filter(r=>!r.exists);
-  if(!noExists.length){
-    content.innerHTML='<span class="text-green-600 font-bold">✓ Toutes ces entrées existent déjà pour '+refexb+'</span>';
-    return;
+  const nbExist=rows.filter(r=>r.exists).length;
+  if(!rows.length){
+    content.innerHTML='<span class="text-red-500 font-bold">Aucune classe trouvée pour cette typo. Vérifiez les étudiants inscrits.</span>';
+    document.getElementById('exbBatchPreview').classList.remove('hidden');return;
   }
-  content.innerHTML=`<div class="font-bold mb-2">${noExists.length} nouvelle${noExists.length>1?'s':''} entrée${noExists.length>1?'s':''} à créer pour <span class="text-[#1A4E8A]">${refexb}</span> :</div>`+
-    noExists.slice(0,20).map(r=>`<div>${r.classe} — ${r.matiere}</div>`).join('')+
-    (noExists.length>20?`<div class="text-gray-400">... et ${noExists.length-20} autres</div>`:'');
+  if(!noExists.length){
+    content.innerHTML=`<span class="text-green-600 font-bold">✓ Les ${rows.length} entrées existent déjà pour ${refexb}</span>`;
+    document.getElementById('exbBatchPreview').classList.remove('hidden');return;
+  }
+  // Afficher la ref qui sera créée + aperçu des entrées
+  content.innerHTML=`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+    <div style="font-size:0.78rem;color:#6b7280">REFEXB qui sera créée :</div>
+    <div style="font-weight:900;color:#1A4E8A;font-size:1rem">${refexb}</div>
+  </div>
+  <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px">${noExists.length} entrée${noExists.length>1?'s':''} à créer${nbExist?' ('+nbExist+' déjà existante'+((nbExist>1?'s':''))+')'  :''} :</div>`+
+    noExists.slice(0,30).map(r=>`<div style="font-size:0.82rem;padding:2px 0;border-bottom:1px solid #f3f4f6">${r.classe} — <strong>${r.matiere}</strong></div>`).join('')+
+    (noExists.length>30?`<div style="color:#9ca3af;font-size:0.78rem;margin-top:4px">... et ${noExists.length-30} autres</div>`:'');
   document.getElementById('exbBatchPreview').classList.remove('hidden');
 }
 
@@ -5586,17 +5646,9 @@ async function createEXBBatch(){
   if(!typo||typo==='autre') return;
   const annee=document.getElementById('exbModalAnnee').value;
   const session=document.getElementById('exbModalSession').value;
-  const refexb=`${annee}-${session}`;
-  const classes=getClassesByTypo(typo);
-  const toCreate=[];
-  classes.forEach(classe=>{
-    const diplome=getDiplomeFromClasse(classe);
-    const matieres=diplome?(refMatieres[diplome]||[]).filter(m=>m.type!=='autre').map(m=>m.matiere):['(à définir)'];
-    matieres.forEach(matiere=>{
-      const exists=allSuiviEXB.some(e=>e.refexb===refexb&&e.classe===classe&&e.matiere===matiere);
-      if(!exists) toCreate.push({refexb,classe,matiere,formateur:'',sujet:'',corrige:'',impression:'',commentaire:''});
-    });
-  });
+  const refexb=getBatchRefexb(annee,session,typo);
+  const allItems=getItemsForTypo(typo,refexb);
+  const toCreate=allItems.filter(r=>!r.exists).map(r=>({refexb,classe:r.classe,matiere:r.matiere,formateur:'',sujet:'',corrige:'',impression:'',commentaire:''}));
   if(!toCreate.length){toast('Toutes les entrées existent déjà.',false);return;}
   const btn=document.querySelector('#exbModal .btn-orange');btn.textContent='⏳ Création…';btn.disabled=true;
   const r=await api('createEXBBatch',{items:toCreate});
