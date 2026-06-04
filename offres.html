@@ -1,10 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HECG - Bourse aux Offres</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -23,19 +28,31 @@
                 <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
                 <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
                 <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50 transition">Déconnexion</button>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-black text-[#1A4E8A]">Bourse aux Offres</h1>
-            <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
+            <div class="flex gap-3 items-center">
+                <button id="btnTogglePartagee" onclick="togglePartagee()" class="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Voir les partagées (0)</button>
+                <button id="btnToggleObsolete" onclick="toggleObsolete()" class="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Voir les obsolètes (0)</button>
+                <button onclick="toggleMap()" id="btnToggleMap" class="px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition">🗺️ Carte</button>
+                <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
+            </div>
         </div>
-        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+
+        <div id="statsSection" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6"></div>
+
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-center">
             <input type="text" id="fOffreRecherche" onkeyup="filterOffres()" placeholder="🔍 Chercher un N° (OFR...) ou Titre" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
-            
+
             <select id="fOffreQualite" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
                 <option value="">🎯 Toutes les qualités (Statut)</option>
                 <option value="vérifiée">✅ Vérifiée (Valide)</option>
@@ -48,10 +65,24 @@
                 <option value="partagée">Partagée aux étudiants</option>
                 <option value="non partagée">Non partagée</option>
             </select>
+
+            <select id="fOffreVille" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">📍 Toutes les villes</option>
+            </select>
+
+            <select id="fOffreEntreprise" onchange="filterOffres()" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A]">
+                <option value="">🏢 Toutes les entreprises</option>
+            </select>
+
+            <input type="date" id="fOffreDate" onchange="filterOffres()" title="Filtrer par date de parution" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A] text-gray-500">
         </div>
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des annonces...</div>
-        
+
+        <div id="mapContainer" class="hidden mb-8">
+            <div id="mapView" style="height:480px;border-radius:1.5rem;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 4px 24px rgba(0,0,0,.08)"></div>
+        </div>
+
         <div id="offresGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
     </main>
 
@@ -84,21 +115,8 @@
                 
                 <div class="grid grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Contrat</label>
-                        <select id="offreType" class="w-full border p-3 rounded-xl font-bold text-sm">
-                            <option value="Alternance">Alternance</option>
-                            <option value="Stage">Stage</option>
-                            <option value="CDI">CDI</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">État</label>
-                        <select id="offreEtat" class="w-full border p-3 rounded-xl font-bold text-sm">
-                            <option value="Reçue">Reçue</option>
-                            <option value="En cours">En cours</option>
-                            <option value="Pourvue">Pourvue</option>
-                            <option value="Annulée">Annulée</option>
-                        </select>
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">📍 Ville</label>
+                        <input type="text" id="offreVille" placeholder="Ex: Marseille 13e, Aix..." class="w-full border p-3 rounded-xl font-bold text-sm outline-none focus:border-[#1A4E8A]">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Qualité</label>
@@ -108,11 +126,23 @@
                             <option value="Obsolète">❌ Obsolète</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Statut partage</label>
+                        <select id="offreEtat" class="w-full border p-3 rounded-xl font-bold text-sm">
+                            <option value="Non partagée">📭 Non partagée</option>
+                            <option value="Partagée">📡 Partagée</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div>
-                    <label class="block text-[10px] font-black text-orange-500 mb-1 uppercase">📝 (notes interne) - Suivi équipe</label>
-                    <textarea id="offreMissions" rows="3" class="w-full border p-3 rounded-xl text-sm" placeholder="Détails..."></textarea>
+                <input type="hidden" id="offreMissions">
+                <div id="missionsLegacyBlock" class="hidden">
+                    <label class="block text-[10px] font-black text-gray-400 mb-1 uppercase">📝 Notes internes (historique)</label>
+                    <div id="missionsLegacyText" class="w-full border border-gray-200 bg-gray-50 p-3 rounded-xl text-sm text-gray-500 italic leading-relaxed"></div>
+                    <p class="text-[10px] text-orange-500 font-bold mt-1">⚠️ Ce champ est en lecture seule. Utilisez le Journal de suivi ci-dessous pour ajouter de nouvelles notes.</p>
+                </div>
+                <div id="missionsJournalHint" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-3">
+                    <p class="text-xs font-black text-[#1A4E8A]">📋 Pour ajouter des notes de suivi, utilisez le Journal de suivi directement sur la carte de l'offre.</p>
                 </div>
             </div>
 
@@ -124,53 +154,87 @@
     </div>
 
    <div id="shareModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[100] p-4">
-        <div class="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-md border border-gray-100">
-            <h2 class="text-2xl font-black text-[#1A4E8A] mb-2">📡 Partager l'offre</h2>
-            <p id="shareOffreTitle" class="text-[#F26522] text-sm mb-4 font-bold truncate"></p>
-            <p class="text-[10px] text-gray-500 mb-6 italic leading-tight">Note: L'envoi est automatiquement restreint aux <b>Inscrits/Préinscrits</b> ayant le statut <b>En recherche</b>.</p>
-            
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-lg border border-gray-100">
+            <h2 class="text-2xl font-black text-[#1A4E8A] mb-1">📡 Partager l'offre</h2>
+            <p id="shareOffreTitle" class="text-[#F26522] text-sm mb-1 font-bold truncate"></p>
+            <p class="text-[10px] text-gray-400 mb-5 italic">Restreint aux Inscrits/Préinscrits en recherche active.</p>
+
             <input type="hidden" id="shareOffreId">
-            
-            <div class="space-y-4">
-                <div class="pb-4 border-b border-gray-100">
-                    <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded-xl transition">
-                        <input type="checkbox" id="checkTous" class="w-5 h-5 text-[#1A4E8A] rounded" checked onchange="toggleClassesSelection()">
-                        <span class="font-black text-gray-800 text-sm tracking-wide">Toutes les classes éligibles</span>
-                    </label>
-                </div>
 
-                <div>
-                    <label class="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Ou cibler des classes :</label>
-                    <div id="zoneClasses" class="space-y-1 opacity-50 pointer-events-none max-h-40 overflow-y-auto custom-scrollbar">
-                        </div>
+            <!-- 1. Sélection des classes -->
+            <div class="mb-5">
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Cibler par classe :</label>
+                <div id="zoneClassesPills" class="flex flex-wrap gap-2">
+                    <button id="pillTous" onclick="togglePillTous()" class="px-3 py-1.5 text-xs font-black rounded-xl border-2 border-[#1A4E8A] bg-[#1A4E8A] text-white transition">Toutes</button>
                 </div>
+            </div>
 
-                <div class="pt-4 space-y-2">
-                    <button onclick="confirmShare()" id="btnConfirmShare" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-all">🚀 DIFFUSER L'OFFRE</button>
-                    <button onclick="closeShareModal()" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 hover:bg-slate-50 rounded-xl">Annuler</button>
+            <!-- 2. Destinataires en temps réel -->
+            <div class="mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest">Destinataires</label>
+                    <span id="nbDestinataires" class="text-xs font-black text-[#1A4E8A] bg-blue-50 px-2 py-0.5 rounded-full">0</span>
+                    <span id="loadingStudents" class="hidden text-[10px] text-gray-400 animate-pulse ml-auto">Chargement...</span>
                 </div>
+                <div id="zoneDestinataires" class="min-h-[60px] max-h-44 overflow-y-auto flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-2xl border border-gray-200 custom-scrollbar">
+                    <span class="text-[11px] text-gray-400 italic">Aucun destinataire</span>
+                </div>
+            </div>
+
+            <!-- 3. Ajout manuel -->
+            <div class="flex gap-2 mb-6">
+                <input type="email" id="inputAddEmail" placeholder="Ajouter un email manuellement..." class="flex-1 border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:border-[#1A4E8A]" onkeydown="if(event.key==='Enter') addManualEmail()">
+                <button onclick="addManualEmail()" class="px-4 py-2 bg-gray-100 rounded-xl text-sm font-black text-gray-600 hover:bg-gray-200 transition whitespace-nowrap">+ Ajouter</button>
+            </div>
+
+            <!-- 4. Actions -->
+            <div class="space-y-2">
+                <button onclick="confirmShare()" id="btnConfirmShare" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-all">🚀 DIFFUSER L'OFFRE</button>
+                <button onclick="closeShareModal()" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 hover:bg-slate-50 rounded-xl">Annuler</button>
             </div>
         </div>
     </div>
 
+    <!-- MODAL STATS DETAIL -->
+    <div id="statsModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
+                <h3 id="statsModalTitle" class="text-xl font-black text-[#1A4E8A]"></h3>
+                <button onclick="closeStatsModal()" class="text-gray-300 hover:text-gray-600 font-black text-2xl leading-none">×</button>
+            </div>
+            <div id="statsModalList" class="overflow-y-auto flex-1 custom-scrollbar pr-2 space-y-0"></div>
+        </div>
+    </div>
+
     <script>
+        window.onerror = function(msg, src, line, col, err) {
+            const loader = document.getElementById('loader');
+            if (loader) { loader.classList.remove('hidden'); loader.innerHTML = `<p class="text-red-600 font-black">🚨 Erreur JS (ligne ${line}): ${msg}</p><p class="text-xs text-gray-400 mt-1 font-mono">${src}</p>`; }
+        };
+
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-        
+
         let currentOffres = [];
-        let listEtu = [];
+        let showObsolete = false;
+        let showPartagee = true;
+        let _statsClickData = [];
 
         // --- POSTIER CENTRAL ---
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
-            payload.roleAuteur = userSession.role || "Utilisateur";
+            payload.idAuteur     = userSession.nom   || "Utilisateur Inconnu";
+            payload.roleAuteur   = userSession.role  || "Utilisateur";
+            payload.emailAuteur  = userSession.email || "";
+            payload.sessionToken = userSession.sessionToken || "";
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(payload)
                 });
-                return await response.json();
+                const result = await response.json();
+                if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+                return result;
             } catch (e) {
                 console.error("Erreur API :", e);
                 return { success: false, message: "Erreur réseau." };
@@ -183,63 +247,121 @@
             try {
                 loader.classList.remove('hidden');
                 document.getElementById('offresGrid').classList.add('hidden');
-                
+
                 const data = await apiPost({ action: 'getOffres' });
-                
+
                 loader.classList.add('hidden');
                 document.getElementById('offresGrid').classList.remove('hidden');
 
-                if (data.success && data.data && data.data.length > 0) {
-                    currentOffres = data.data; // On stocke en mémoire
-                    filterOffres(); // On lance l'affichage filtré
-                } else {
-                    document.getElementById('offresGrid').innerHTML = '<div class="col-span-full text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200"><p class="text-gray-400 italic font-bold">Aucune offre disponible.</p></div>';
+                currentOffres = (data.success && Array.isArray(data.data)) ? data.data : [];
+                populateVilleFilter();
+                populateEntrepriseFilter();
+                renderStats(computeStats());
+                updateToggleBtns();
+                filterOffres();
+                if (!data.success) {
+                    console.warn('getOffres API error:', data.message);
                 }
-            } catch (err) { 
-                loader.innerHTML = '<p class="text-red-500 font-bold uppercase text-xs">⚠️ Erreur de communication</p>'; 
+            } catch (err) {
+                loader.classList.add('hidden');
+                const grid = document.getElementById('offresGrid');
+                grid.classList.remove('hidden');
+                grid.innerHTML = `<div class="col-span-full text-center py-16">
+                    <p class="text-red-500 font-black text-lg mb-2">⚠️ Erreur de chargement</p>
+                    <p class="text-gray-500 text-sm mb-1">Impossible de contacter le serveur. Vérifiez votre connexion internet.</p>
+                    <p class="text-gray-300 text-xs mt-2 font-mono">${err && err.message ? err.message : String(err)}</p>
+                    <button onclick="loadOffres()" class="mt-4 px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-bold text-sm hover:bg-blue-800 transition">🔄 Réessayer</button>
+                </div>`;
+                renderStats(computeStats());
+                updateToggleBtns();
             }
+        }
+
+        function populateVilleFilter() {
+            const sel = document.getElementById('fOffreVille');
+            const villes = [...new Set(currentOffres.map(o => String(o.ville || "").trim()).filter(Boolean))].sort();
+            sel.innerHTML = '<option value="">📍 Toutes les villes</option>' + villes.map(v => `<option value="${v}">${v}</option>`).join('');
+        }
+
+        function populateEntrepriseFilter() {
+            const sel = document.getElementById('fOffreEntreprise');
+            const entreprises = [...new Set(currentOffres.map(o => String(o.entreprise || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+            sel.innerHTML = '<option value="">🏢 Toutes les entreprises</option>' + entreprises.map(e => `<option value="${e}">${e}</option>`).join('');
         }
 
         // 2. LE MOTEUR DE FILTRAGE
         function filterOffres() {
-            // Si les filtres n'existent pas dans le HTML, on affiche tout par sécurité
             const elSearch = document.getElementById('fOffreRecherche');
             if (!elSearch) return renderOffres(currentOffres);
 
             const search = document.getElementById('fOffreRecherche').value.toLowerCase().trim();
             const qualite = document.getElementById('fOffreQualite').value.toLowerCase();
             const partage = document.getElementById('fOffrePartage').value.toLowerCase();
+            const villeFilter = (document.getElementById('fOffreVille').value || "").trim();
+            const entrepriseFilter = (document.getElementById('fOffreEntreprise').value || "").trim();
+            const dateFilter = document.getElementById('fOffreDate').value; // "YYYY-MM-DD" ou ""
 
-            const filteredData = currentOffres.filter(o => {
-                // Recherche texte (ID + Poste + Entreprise)
-                const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''}`.toLowerCase();
+            let filteredData = currentOffres.filter(o => {
+                const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
                 const matchSearch = textGlobal.includes(search);
 
-                // Recherche Qualité
                 const qualiteOffre = (o.qualite || "").toLowerCase();
                 const matchQualite = qualite === "" || qualiteOffre.includes(qualite);
-                
-                // Recherche Partage (On nettoie les accents pour éviter les bugs)
-                let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
                 let estPartage = etatOffre.includes("partagee") || etatOffre.includes("partage");
                 if (etatOffre.includes("non")) estPartage = false;
-
                 let matchPartage = true;
                 if (partage === "partagée") matchPartage = estPartage === true;
                 if (partage === "non partagée") matchPartage = estPartage === false;
 
-                // Doit correspondre aux 3 filtres
-                return matchSearch && matchQualite && matchPartage;
+                const matchVille = !villeFilter || String(o.ville || "").trim() === villeFilter;
+                const matchEntreprise = !entrepriseFilter || String(o.entreprise || "").trim() === entrepriseFilter;
+
+                let matchDate = true;
+                if (dateFilter) {
+                    const d = new Date(o.date);
+                    if (isNaN(d)) {
+                        matchDate = false;
+                    } else {
+                        const [y, m, day] = dateFilter.split('-').map(Number);
+                        matchDate = d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() === day;
+                    }
+                }
+
+                return matchSearch && matchQualite && matchPartage && matchVille && matchEntreprise && matchDate;
             });
 
+            // Masquer les obsolètes par défaut (sauf si filtre qualité actif sur "obsolète")
+            if (!showObsolete && !qualite.includes("obsolete") && !qualite.includes("obsolète")) {
+                filteredData = filteredData.filter(o => {
+                    const q = (o.qualite || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                    return !q.includes("obsolete");
+                });
+            }
+
+            // Masquer les partagées par défaut (sauf si filtre partage actif)
+            if (!showPartagee && partage === "") {
+                filteredData = filteredData.filter(o => {
+                    const e = (o.etat || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                    const estPartage = (e.includes("partag")) && !e.includes("non");
+                    return !estPartage;
+                });
+            }
+
             renderOffres(filteredData);
+            refreshMapMarkers();
         }
 
         // 3. LE DESSINATEUR (Génère le HTML)
         function renderOffres(data) {
+            _lastRendered = data;
             const grid = document.getElementById('offresGrid');
-            if(data.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-center py-10"><p class="text-gray-400 font-bold italic">Aucune offre ne correspond à ces filtres.</p></div>';
+            if (!data || data.length === 0) {
+                const msg = currentOffres.length === 0
+                    ? 'Aucune offre disponible. Ajoutez votre première offre avec le bouton ci-dessus.'
+                    : 'Aucune offre ne correspond à ces filtres.';
+                grid.innerHTML = `<div class="col-span-full text-center py-10"><p class="text-gray-400 font-bold italic">${msg}</p></div>`;
                 return;
             }
             
@@ -265,10 +387,10 @@
                 let brutEtat = o.etat || "Non partagée";
                 let etatTexte = brutEtat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
                 let estPartage = etatTexte.includes("partagee") || etatTexte.includes("partage");
-                if (etatTexte.includes("non")) estPartage = false; 
-                let badgePartage = estPartage ? "bg-blue-100 text-blue-800 border-blue-300" : "bg-slate-100 text-slate-500 border-slate-200";
+                if (etatTexte.includes("non")) estPartage = false;
+                if (estPartage) bgCarte = "bg-green-50 border-green-500";
+                let badgePartage = estPartage ? "bg-green-100 text-green-800 border-green-300" : "bg-slate-100 text-slate-500 border-slate-200";
 
-                const safePoste = (o.poste || "").replace(/'/g, "\\'");
                 const namesHTML = estPartage && o.destinataires && o.destinataires.length > 0 
                     ? `<details class="mt-3 group">
                          <summary class="text-[9px] font-black text-blue-500 cursor-pointer uppercase list-none focus:outline-none hover:underline">
@@ -279,6 +401,13 @@
                          </div>
                        </details>`
                     : `<p class="text-[9px] text-slate-400 italic mt-3 font-bold uppercase tracking-tighter">Aucun partage effectué</p>`;
+
+                const lastNoteHtml = o.dernierNote
+                    ? `<div class="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                          <p class="text-[9px] font-black text-blue-500 uppercase mb-0.5">💬 Dernière note — ${o.dernierNote.auteur} · ${o.dernierNote.date}</p>
+                          <p class="text-[10px] text-blue-700 italic leading-snug">${o.dernierNote.texte}</p>
+                       </div>`
+                    : '';
 
                 return `
                 <div class="${bgCarte} rounded-[2rem] shadow-sm border p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group">
@@ -292,19 +421,33 @@
                         </div>
                         <span class="text-[10px] font-black text-slate-400 mb-1 block">N° ${o.id || '-'}</span>
                         <h3 class="text-xl font-black text-gray-800 mb-1 leading-tight group-hover:text-[#1A4E8A] transition-colors">${o.poste || 'Sans titre'}</h3>
-                        <p class="text-[#F26522] font-black text-sm mb-4 uppercase">🏢 ${o.entreprise}</p>
+                        <p class="text-[#F26522] font-black text-sm mb-1 uppercase">🏢 ${o.entreprise}</p>
+                        ${o.ville ? `<p class="text-[10px] font-bold text-slate-500 mb-3">📍 ${o.ville}</p>` : '<p class="mb-3"></p>'}
                         <p class="text-[10px] font-bold text-gray-400 tracking-tighter mb-2">📅 Parue le ${new Date(o.date).toLocaleDateString()}</p>
                         <div class="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
                             <p class="text-[9px] font-black text-gray-400 uppercase mb-1">📝 (notes interne) :</p>
                             <p class="text-[11px] text-gray-600 font-medium italic leading-snug">${o.missions || 'Aucune note.'}</p>
                         </div>
+                        ${lastNoteHtml}
                         ${namesHTML}
                     </div>
-                    <div class="flex justify-between items-center mt-8 border-t border-gray-50 pt-4">
+                    <div class="mt-4 border-t border-gray-100 pt-3">
+                        <details class="group/journal">
+                            <summary class="text-[9px] font-black text-[#1A4E8A] uppercase cursor-pointer list-none hover:underline focus:outline-none">📋 Journal de suivi ↓</summary>
+                            <div id="journal-${o.id}" class="mt-2 space-y-1">
+                                <p class="text-[10px] text-gray-400 italic">Chargement...</p>
+                            </div>
+                            <div class="flex gap-2 mt-2">
+                                <input type="text" id="note-input-${o.id}" placeholder="Ajouter une note de suivi..." class="flex-1 border border-gray-200 rounded-xl p-2 text-xs outline-none focus:border-[#1A4E8A]">
+                                <button onclick="addOffreNote('${o.id}')" class="px-3 py-2 bg-[#1A4E8A] text-white rounded-xl text-[10px] font-black hover:bg-blue-800 transition whitespace-nowrap">+ Note</button>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="flex justify-between items-center mt-4 border-t border-gray-50 pt-4">
                         <a href="${o.url}" target="_blank" class="text-blue-500 font-black text-[10px] hover:underline uppercase tracking-widest">Voir l'annonce ↗</a>
                         <div class="flex space-x-1">
                             <button onclick="openModal('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-500 hover:bg-white hover:shadow-sm transition" title="Modifier">✏️</button>
-                            <button onclick="openShareModal('${o.id}', '${safePoste}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white hover:shadow-sm transition" title="Partager">📡</button>
+                            <button onclick="openShareModal('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white hover:shadow-sm transition" title="Partager">📡</button>
                             <button onclick="deleteOffre('${o.id}')" class="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition" title="Supprimer">🗑️</button>
                         </div>
                     </div>
@@ -312,9 +455,42 @@
             }).join('');
         }
 
+        // Helper : set select by value insensible à la casse
+        function setSelectCI(selId, val) {
+            const sel = document.getElementById(selId);
+            if (!sel || val === undefined || val === null) return;
+            const norm = String(val).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+            for (const opt of sel.options) {
+                const optNorm = opt.value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                if (optNorm === norm || norm.includes(optNorm) || optNorm.includes(norm)) {
+                    sel.value = opt.value;
+                    return;
+                }
+            }
+            // fallback : valeur brute
+            sel.value = val;
+        }
+
         // 4. MODAL AJOUT / MODIF
-        function openModal(id = null) { 
-            document.getElementById('offreModal').classList.replace('hidden', 'flex'); 
+        function _setMissionsDisplay(missions) {
+            const legacyBlock = document.getElementById('missionsLegacyBlock');
+            const hint        = document.getElementById('missionsJournalHint');
+            const legacyText  = document.getElementById('missionsLegacyText');
+            const existingVal = String(missions || '').trim();
+            if (existingVal) {
+                // Offre avec notes internes existantes → affichage lecture seule
+                legacyText.innerText = existingVal;
+                legacyBlock.classList.remove('hidden');
+                hint.classList.add('hidden');
+            } else {
+                // Nouvelle offre ou offre sans notes → pointer vers le journal
+                legacyBlock.classList.add('hidden');
+                hint.classList.remove('hidden');
+            }
+        }
+
+        function openModal(id = null) {
+            document.getElementById('offreModal').classList.replace('hidden', 'flex');
             if(id) {
                 const o = currentOffres.find(x => x.id === id);
                 document.getElementById('modalTitle').innerText = "Modifier l'Offre";
@@ -322,11 +498,12 @@
                 document.getElementById('offrePoste').value = o.poste || "";
                 document.getElementById('offreEnt').value = o.entreprise;
                 document.getElementById('offreUrl').value = o.url;
-                document.getElementById('offrePlateforme').value = o.plateforme;
-                document.getElementById('offreType').value = o.type;
-                document.getElementById('offreMissions').value = o.missions;
-                document.getElementById('offreEtat').value = o.etat;
-                document.getElementById('offreQualite').value = o.qualite;
+                document.getElementById('offrePlateforme').value = o.plateforme || '';
+                document.getElementById('offreVille').value = o.ville || '';
+                document.getElementById('offreMissions').value = o.missions || '';  // conserve la valeur existante
+                setSelectCI('offreQualite', o.qualite);
+                setSelectCI('offreEtat', o.etat || 'Non partagée');
+                _setMissionsDisplay(o.missions);
             } else {
                 document.getElementById('modalTitle').innerText = "Ajouter une Offre";
                 document.getElementById('formOffreId').value = "";
@@ -334,8 +511,10 @@
                 document.getElementById('offreEnt').value = "";
                 document.getElementById('offreUrl').value = "";
                 document.getElementById('offrePlateforme').value = "";
-                document.getElementById('offreEtat').value = "Non partagée";
+                document.getElementById('offreMissions').value = "";
                 document.getElementById('offreQualite').value = "À Qualifier";
+                document.getElementById('offreEtat').value = "Non partagée";
+                _setMissionsDisplay("");
             }
         }
         function closeModal() { document.getElementById('offreModal').classList.replace('flex', 'hidden'); }
@@ -349,10 +528,10 @@
                 entreprise: document.getElementById('offreEnt').value,
                 url: document.getElementById('offreUrl').value,
                 plateforme: document.getElementById('offrePlateforme').value,
-                type: document.getElementById('offreType').value,
+                ville: document.getElementById('offreVille').value,
                 missions: document.getElementById('offreMissions').value,
-                etat: document.getElementById('offreEtat').value,
-                qualite: document.getElementById('offreQualite').value
+                qualite: document.getElementById('offreQualite').value,
+                etat: document.getElementById('offreEtat').value
             };
             if(!payload.poste || !payload.entreprise || !payload.url) return alert("Veuillez remplir les champs obligatoires.");
             
@@ -368,81 +547,641 @@
             loadOffres();
         }
 
-        // 5. GESTION DU NOUVEAU PARTAGE INTELLIGENT
-        async function openShareModal(id, titre) {
-            document.getElementById('shareOffreId').value = id;
-            document.getElementById('shareOffreTitle').innerText = titre;
-            document.getElementById('shareModal').classList.replace('hidden', 'flex');
-            
-            document.getElementById('checkTous').checked = true;
-            toggleClassesSelection();
-            
-            if (listEtu.length === 0) {
-                const d = await apiPost({ action: 'getClassesList' });
-                if (d.success) {
-                    listEtu = d.data; 
-                    document.getElementById('zoneClasses').innerHTML = listEtu.map(c => `
-                        <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded-xl transition">
-                            <input type="checkbox" class="chk-classe w-4 h-4 text-[#1A4E8A] rounded border-gray-300" value="${c}">
-                            <span class="text-sm font-bold text-gray-700">${c}</span>
-                        </label>
-                    `).join('');
+        // --- JOURNAL TRACÉ DES OFFRES ---
+        // Délégation : ouvre le journal quand on déplie <details>
+        document.addEventListener('toggle', function(e) {
+            const det = e.target;
+            if (!det || det.tagName !== 'DETAILS') return;
+            const sum = det.querySelector('summary');
+            if (!sum || !sum.innerText.includes('Journal')) return;
+            const offreId = det.closest('[id^=""]') ? null : null;
+            // On cherche l'id via le div journal enfant
+            const journalDiv = det.querySelector('[id^="journal-"]');
+            if (!journalDiv) return;
+            const idOffre = journalDiv.id.replace('journal-', '');
+            if (det.open && journalDiv.innerHTML.includes('Chargement')) {
+                loadOffreNotes(idOffre);
+            }
+        }, true);
+
+        async function loadOffreNotes(idOffre) {
+            const el = document.getElementById('journal-' + idOffre);
+            if (!el) return;
+            const res = await apiPost({ action: 'getOffreNotes', id_offre: idOffre });
+            if (!res.success || res.data.length === 0) {
+                el.innerHTML = '<p class="text-[10px] text-gray-300 italic">Aucune note consignée.</p>';
+                return;
+            }
+            el.innerHTML = res.data.map(n => `
+                <div class="bg-white border border-gray-100 rounded-xl p-2 shadow-sm">
+                    <div class="flex justify-between items-center mb-0.5">
+                        <span class="text-[9px] font-black text-[#1A4E8A] uppercase">${n.auteur}</span>
+                        <span class="text-[9px] text-gray-400">${n.date}</span>
+                    </div>
+                    <p class="text-[10px] text-gray-700 leading-snug">${n.texte}</p>
+                </div>
+            `).join('');
+        }
+
+        async function addOffreNote(idOffre) {
+            const inp = document.getElementById('note-input-' + idOffre);
+            const texte = inp ? inp.value.trim() : '';
+            if (!texte) return;
+            inp.value = '';
+            inp.disabled = true;
+            const res = await apiPost({ action: 'addOffreNote', id_offre: idOffre, texte });
+            inp.disabled = false;
+            if (res.success) {
+                // Recharger le journal ET la note de preview
+                await loadOffreNotes(idOffre);
+                // Mettre à jour la dernière note dans l'objet local
+                const o = currentOffres.find(x => x.id === idOffre);
+                if (o) {
+                    const userSession = JSON.parse(localStorage.getItem('user') || '{}');
+                    o.dernierNote = { auteur: userSession.nom || 'Moi', date: new Date().toLocaleDateString('fr-FR'), texte };
+                    // Rafraîchir juste la preview sans recharger tout
+                    const previewEl = document.querySelector(`#journal-${idOffre}`)?.closest('.group\\/journal')?.previousElementSibling;
                 }
             }
         }
 
-        function toggleClassesSelection() {
-            const isTous = document.getElementById('checkTous').checked;
-            const zoneClasses = document.getElementById('zoneClasses');
-            if (isTous) {
-                zoneClasses.classList.add('opacity-50', 'pointer-events-none');
-                document.querySelectorAll('.chk-classe').forEach(chk => chk.checked = false);
-            } else {
-                zoneClasses.classList.remove('opacity-50', 'pointer-events-none');
+        // 5. GESTION DU PARTAGE AVEC LISTE ÉDITABLE EN TEMPS RÉEL
+        let allStudentsCache = [];
+        let recipientsList = []; // [{nom, prenom, email, isManual}]
+        let selectedClassesSet = new Set(); // vide = TOUTES
+
+        function estEligibleOffre(etu) {
+            const statut = (etu.statut || "").toLowerCase();
+            const typo   = (etu.typo   || "").toLowerCase();
+            if (!statut && !typo) return true; // données incomplètes : on inclut par défaut
+            const enRecherche = statut.includes("recherche");
+            const legitime    = typo.includes("inscrit");
+            const exclu       = typo.includes("sorti") || typo.includes("refus") ||
+                                statut.includes("alternance") || statut.includes("initial") || statut.includes("placé");
+            return enRecherche && legitime && !exclu;
+        }
+
+        async function openShareModal(id) {
+            const offre = currentOffres.find(x => x.id === id);
+            document.getElementById('shareOffreId').value = id;
+            document.getElementById('shareOffreTitle').innerText = offre ? (offre.poste || '') : '';
+            document.getElementById('shareModal').classList.replace('hidden', 'flex');
+
+            selectedClassesSet = new Set();
+            recipientsList = [];
+
+            if (allStudentsCache.length === 0) {
+                document.getElementById('loadingStudents').classList.remove('hidden');
+                const d = await apiPost({ action: 'getStudentsMinList' });
+                document.getElementById('loadingStudents').classList.add('hidden');
+                if (d.success) allStudentsCache = d.data;
             }
+
+            // Pills de classes
+            const classes = [...new Set(allStudentsCache.map(e => e.classe).filter(Boolean))].sort();
+            const zone = document.getElementById('zoneClassesPills');
+            zone.innerHTML = `<button id="pillTous" onclick="togglePillTous()" class="px-3 py-1.5 text-xs font-black rounded-xl border-2 border-[#1A4E8A] bg-[#1A4E8A] text-white transition">Toutes</button>`;
+            classes.forEach(c => {
+                const btn = document.createElement('button');
+                btn.id = 'pill-cls-' + c.replace(/\s/g,'_');
+                btn.innerText = c;
+                btn.dataset.classe = c;
+                btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition hover:border-[#1A4E8A]';
+                btn.onclick = () => togglePillClasse(c);
+                zone.appendChild(btn);
+            });
+
+            updateRecipientsFromClasses();
+        }
+
+        function togglePillTous() {
+            selectedClassesSet = new Set();
+            document.querySelectorAll('#zoneClassesPills button').forEach(btn => {
+                if (btn.id === 'pillTous') {
+                    btn.className = 'px-3 py-1.5 text-xs font-black rounded-xl border-2 border-[#1A4E8A] bg-[#1A4E8A] text-white transition';
+                } else {
+                    btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition hover:border-[#1A4E8A]';
+                }
+            });
+            updateRecipientsFromClasses();
+        }
+
+        function togglePillClasse(classe) {
+            if (selectedClassesSet.has(classe)) {
+                selectedClassesSet.delete(classe);
+            } else {
+                selectedClassesSet.add(classe);
+            }
+            if (selectedClassesSet.size === 0) { togglePillTous(); return; }
+
+            document.getElementById('pillTous').className = 'px-3 py-1.5 text-xs font-bold rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition hover:border-[#1A4E8A]';
+            document.querySelectorAll('#zoneClassesPills button[data-classe]').forEach(btn => {
+                const sel = selectedClassesSet.has(btn.dataset.classe);
+                btn.className = sel
+                    ? 'px-3 py-1.5 text-xs font-black rounded-xl border-2 border-[#1A4E8A] bg-[#1A4E8A] text-white transition'
+                    : 'px-3 py-1.5 text-xs font-bold rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition hover:border-[#1A4E8A]';
+            });
+            updateRecipientsFromClasses();
+        }
+
+        function updateRecipientsFromClasses() {
+            const manuals = recipientsList.filter(r => r.isManual);
+            const autoEntries = allStudentsCache
+                .filter(etu => {
+                    if (!estEligibleOffre(etu)) return false;
+                    if (selectedClassesSet.size === 0) return true;
+                    return selectedClassesSet.has(etu.classe);
+                })
+                .map(etu => ({ nom: etu.nom, prenom: etu.prenom, email: etu.email, isManual: false }));
+
+            const autoEmails = new Set(autoEntries.map(r => r.email.toLowerCase()));
+            recipientsList = [...autoEntries, ...manuals.filter(r => !autoEmails.has(r.email.toLowerCase()))];
+            renderRecipients();
+        }
+
+        function renderRecipients() {
+            const zone = document.getElementById('zoneDestinataires');
+            document.getElementById('nbDestinataires').innerText = recipientsList.length;
+            if (recipientsList.length === 0) {
+                zone.innerHTML = '<span class="text-[11px] text-gray-400 italic">Aucun destinataire éligible</span>';
+                return;
+            }
+            zone.innerHTML = recipientsList.map((r, idx) => {
+                const label = (r.prenom || r.nom) ? `${r.prenom} ${r.nom}`.trim() : r.email;
+                const cls = r.isManual
+                    ? 'bg-orange-50 border-orange-200 text-orange-700'
+                    : 'bg-white border-blue-100 text-[#1A4E8A]';
+                return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-bold ${cls} shadow-sm" title="${r.email}">
+                    ${label}
+                    <button onclick="removeRecipient(${idx})" class="ml-0.5 text-gray-300 hover:text-red-500 font-black leading-none text-sm" title="Retirer">×</button>
+                </span>`;
+            }).join('');
+        }
+
+        function removeRecipient(idx) {
+            recipientsList.splice(idx, 1);
+            renderRecipients();
+        }
+
+        function addManualEmail() {
+            const input = document.getElementById('inputAddEmail');
+            const email = (input.value || "").trim().toLowerCase();
+            if (!email || !email.includes('@')) { alert("Adresse email invalide."); return; }
+            if (recipientsList.some(r => r.email.toLowerCase() === email)) {
+                alert("Cette adresse est déjà dans la liste.");
+                input.value = "";
+                return;
+            }
+            recipientsList.push({ nom: '', prenom: email.split('@')[0], email, isManual: true });
+            input.value = '';
+            renderRecipients();
         }
 
         function closeShareModal() { document.getElementById('shareModal').classList.replace('flex', 'hidden'); }
 
         async function confirmShare() {
+            if (recipientsList.length === 0) return alert("Aucun destinataire sélectionné.");
             const idOffre = document.getElementById('shareOffreId').value;
             const btn = document.getElementById('btnConfirmShare');
-            
-            // Récolte des classes cochées
-            let classesChoisies = [];
-            if (document.getElementById('checkTous').checked) {
-                classesChoisies = ["TOUS"];
-            } else {
-                document.querySelectorAll('.chk-classe:checked').forEach(chk => classesChoisies.push(chk.value));
-            }
-
-            if (classesChoisies.length === 0) return alert("Veuillez choisir 'Toutes les classes' ou sélectionner au moins une classe.");
-
-            btn.disabled = true; 
+            btn.disabled = true;
             btn.innerText = "Diffusion en cours... ⏳";
-
             try {
-                const d = await apiPost({ 
-                    action: 'partagerOffre', 
+                const d = await apiPost({
+                    action: 'partagerOffre',
                     id_offre: idOffre,
-                    classesCibles: classesChoisies 
+                    emailsCibles: recipientsList.map(r => r.email)
                 });
-                
                 alert(d.message);
-                if (d.success) { 
-                    closeShareModal(); 
-                    loadOffres(); // Va rafraîchir le tableau et montrer "Partagée" en bleu !
-                }
+                if (d.success) { closeShareModal(); loadOffres(); }
             } catch (err) {
                 alert("Erreur de connexion lors du partage.");
             } finally {
-                btn.disabled = false; 
+                btn.disabled = false;
                 btn.innerText = "🚀 DIFFUSER L'OFFRE";
             }
+        }
+
+        // ==========================================
+        // STATS & KPIs
+        // ==========================================
+
+        function normalizeStr(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        }
+
+        function computeStats() {
+            const now = new Date();
+            const dow = now.getDay();
+            const diffToMon = (dow === 0 ? -6 : 1 - dow);
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() + diffToMon);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const todayY = now.getFullYear(), todayM = now.getMonth(), todayD = now.getDate();
+            const aujourdhui = currentOffres.filter(o => {
+                const d = new Date(o.date);
+                return !isNaN(d) && d.getFullYear() === todayY && d.getMonth() === todayM && d.getDate() === todayD;
+            });
+            const cetteSemaine = currentOffres.filter(o => {
+                const d = new Date(o.date);
+                return !isNaN(d) && d >= weekStart;
+            });
+            const aQualifier = currentOffres.filter(o => normalizeStr(o.qualite).includes("qualifier"));
+            const partagees   = currentOffres.filter(o => {
+                const e = normalizeStr(o.etat);
+                return e.includes("partag") && !e.includes("non");
+            });
+            const obsoletes  = currentOffres.filter(o => normalizeStr(o.qualite).includes("obsolete"));
+            const verifiees  = currentOffres.filter(o => normalizeStr(o.qualite).includes("verifi"));
+
+            let moyParSemaine = "—";
+            const validDates = currentOffres.map(o => new Date(o.date)).filter(d => !isNaN(d));
+            if (validDates.length > 0) {
+                const firstDate = new Date(Math.min(...validDates.map(d => d.getTime())));
+                const weeksSince = Math.max(1, (now - firstDate) / (7 * 24 * 60 * 60 * 1000));
+                moyParSemaine = (currentOffres.length / weeksSince).toFixed(1);
+            }
+
+            return { aujourdhui, cetteSemaine, total: currentOffres.length, moyParSemaine, aQualifier, partagees, obsoletes, verifiees };
+        }
+
+        function renderStats(st) {
+            const kpis = [
+                { label: "Aujourd'hui",     value: st.aujourdhui.length,   sub: "ajoutées",       color: "orange",  data: st.aujourdhui  },
+                { label: "Cette semaine",   value: st.cetteSemaine.length, sub: "captées",        color: "blue",    data: st.cetteSemaine },
+                { label: "Total captées",   value: st.total,               sub: "depuis le début",color: "indigo",  data: currentOffres  },
+                { label: "Moy. / semaine",  value: st.moyParSemaine,       sub: "offres/sem.",    color: "violet",  data: null           },
+                { label: "À qualifier",     value: st.aQualifier.length,   sub: "en attente",     color: "amber",   data: st.aQualifier  },
+                { label: "Partagées",       value: st.partagees.length,    sub: "diffusées",      color: "teal",    data: st.partagees   },
+                { label: "Obsolètes",       value: st.obsoletes.length,    sub: "à archiver",     color: "red",     data: st.obsoletes   },
+                { label: "Vérifiées",       value: st.verifiees.length,    sub: "validées",       color: "emerald", data: st.verifiees   },
+            ];
+
+            const cm = {
+                orange:  { bg: "bg-orange-50",  border: "border-orange-300",  val: "text-orange-700",  sub: "text-orange-400",  h: "hover:bg-orange-100"  },
+                blue:    { bg: "bg-blue-50",    border: "border-blue-200",    val: "text-blue-700",    sub: "text-blue-400",    h: "hover:bg-blue-100"    },
+                indigo:  { bg: "bg-indigo-50",  border: "border-indigo-200",  val: "text-indigo-700",  sub: "text-indigo-400",  h: "hover:bg-indigo-100"  },
+                violet:  { bg: "bg-violet-50",  border: "border-violet-200",  val: "text-violet-700",  sub: "text-violet-400",  h: ""                     },
+                amber:   { bg: "bg-amber-50",   border: "border-amber-200",   val: "text-amber-700",   sub: "text-amber-400",   h: "hover:bg-amber-100"   },
+                teal:    { bg: "bg-teal-50",    border: "border-teal-200",    val: "text-teal-700",    sub: "text-teal-400",    h: "hover:bg-teal-100"    },
+                red:     { bg: "bg-red-50",     border: "border-red-200",     val: "text-red-700",     sub: "text-red-400",     h: "hover:bg-red-100"     },
+                emerald: { bg: "bg-emerald-50", border: "border-emerald-200", val: "text-emerald-700", sub: "text-emerald-400", h: "hover:bg-emerald-100" },
+            };
+
+            _statsClickData = kpis.map(k => ({ data: k.data, label: k.label }));
+
+            const section = document.getElementById('statsSection');
+            if (!section) return;
+            section.innerHTML = kpis.map((k, idx) => {
+                const c = cm[k.color];
+                const isClickable = k.data !== null;
+                const clickAttr = isClickable ? `onclick="openStatsDetail(${idx})"` : '';
+                return `
+                <div ${clickAttr} class="${c.bg} ${c.border} border rounded-2xl p-4 flex flex-col transition-all shadow-sm ${isClickable ? c.h + ' hover:shadow-md cursor-pointer' : ''}">
+                    <span class="text-[9px] font-black uppercase tracking-widest ${c.sub} mb-1 leading-none">${k.label}</span>
+                    <span class="text-4xl font-black ${c.val} leading-none my-2">${k.value}</span>
+                    <span class="text-[9px] ${c.sub} font-bold">${k.sub}</span>
+                    ${isClickable ? `<span class="text-[8px] ${c.sub} opacity-50 mt-1">Voir le listing →</span>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function openStatsDetail(idx) {
+            const { data, label } = _statsClickData[idx];
+            if (!data || data.length === 0) { alert("Aucune offre dans cette catégorie."); return; }
+            document.getElementById('statsModalTitle').innerText = label + " — " + data.length + " offre" + (data.length > 1 ? "s" : "");
+            document.getElementById('statsModalList').innerHTML = data.map(o => {
+                const q = o.qualite || "—";
+                const qn = normalizeStr(q);
+                let qCol = "text-gray-400";
+                if (qn.includes("qualifier")) qCol = "text-amber-600";
+                else if (qn.includes("obsolete")) qCol = "text-red-500";
+                else if (qn.includes("verifi")) qCol = "text-emerald-600";
+                const dateStr = !isNaN(new Date(o.date)) ? new Date(o.date).toLocaleDateString('fr-FR') : "—";
+                const safeId = (o.id || "").replace(/'/g, "\\'");
+                return `
+                <div class="flex items-center gap-3 border-b border-gray-100 py-3 hover:bg-gray-50 px-2 rounded-xl transition-colors group">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-black text-gray-800 text-sm truncate">${o.poste || 'Sans titre'}</div>
+                        <div class="text-[10px] text-gray-500 font-bold">${o.entreprise || ''}${o.ville ? ' · ' + o.ville : ''}</div>
+                        <div class="text-[9px] text-gray-400">N° ${o.id} · ${dateStr}</div>
+                    </div>
+                    <span class="text-[9px] font-black ${qCol} shrink-0 hidden group-hover:block">${q}</span>
+                    <button onclick="closeStatsModal(); openModal('${safeId}')" class="text-[10px] text-blue-400 hover:text-blue-600 font-bold shrink-0 p-1 opacity-0 group-hover:opacity-100 transition" title="Modifier">✏️</button>
+                </div>`;
+            }).join('');
+            document.getElementById('statsModal').classList.replace('hidden', 'flex');
+        }
+
+        function closeStatsModal() {
+            document.getElementById('statsModal').classList.replace('flex', 'hidden');
+        }
+
+        function updateToggleBtns() {
+            const cntObs = currentOffres.filter(o => normalizeStr(o.qualite).includes("obsolete")).length;
+            const btnObs = document.getElementById('btnToggleObsolete');
+            if (btnObs) {
+                btnObs.textContent = showObsolete ? `Masquer les obsolètes (${cntObs})` : `Voir les obsolètes (${cntObs})`;
+                btnObs.className = showObsolete
+                    ? "px-4 py-3 bg-red-100 text-red-700 border border-red-200 rounded-xl font-bold text-sm hover:bg-red-200 transition"
+                    : "px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition";
+            }
+
+            const cntPart = currentOffres.filter(o => {
+                const e = normalizeStr(o.etat);
+                return e.includes("partag") && !e.includes("non");
+            }).length;
+            const btnPart = document.getElementById('btnTogglePartagee');
+            if (btnPart) {
+                btnPart.textContent = showPartagee ? `Masquer les partagées (${cntPart})` : `Voir les partagées (${cntPart})`;
+                btnPart.className = showPartagee
+                    ? "px-4 py-3 bg-teal-100 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm hover:bg-teal-200 transition"
+                    : "px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition";
+            }
+        }
+
+        function toggleObsolete() {
+            showObsolete = !showObsolete;
+            updateToggleBtns();
+            filterOffres();
+        }
+
+        function togglePartagee() {
+            showPartagee = !showPartagee;
+            updateToggleBtns();
+            filterOffres();
+        }
+
+        // --- CARTE INTERACTIVE ---
+        let _map = null, _markerGroup = null, _mapVisible = false, _lastRendered = [];
+
+        const GEO = {
+            "marseille": [43.2965, 5.3698],
+            "marseille 1": [43.2965, 5.3698], "marseille 2": [43.3047, 5.3660],
+            "marseille 3": [43.3107, 5.3714], "marseille 4": [43.3003, 5.3910],
+            "marseille 5": [43.2944, 5.3997], "marseille 6": [43.2904, 5.3772],
+            "marseille 7": [43.2762, 5.3570], "marseille 8": [43.2616, 5.3762],
+            "marseille 9": [43.2470, 5.3922], "marseille 10": [43.2757, 5.4135],
+            "marseille 11": [43.2949, 5.4318], "marseille 12": [43.3086, 5.4157],
+            "marseille 13": [43.3372, 5.4132], "marseille 14": [43.3396, 5.3701],
+            "marseille 15": [43.3487, 5.3587], "marseille 16": [43.3622, 5.3313],
+            "paris": [48.8566, 2.3522],
+            "paris 1": [48.8600, 2.3477], "paris 2": [48.8639, 2.3497],
+            "paris 3": [48.8627, 2.3577], "paris 4": [48.8534, 2.3543],
+            "paris 5": [48.8462, 2.3448], "paris 6": [48.8496, 2.3345],
+            "paris 7": [48.8558, 2.3134], "paris 8": [48.8742, 2.3070],
+            "paris 9": [48.8765, 2.3450], "paris 10": [48.8765, 2.3643],
+            "paris 11": [48.8590, 2.3776], "paris 12": [48.8448, 2.3878],
+            "paris 13": [48.8310, 2.3637], "paris 14": [48.8297, 2.3275],
+            "paris 15": [48.8418, 2.3001], "paris 16": [48.8638, 2.2756],
+            "paris 17": [48.8848, 2.3111], "paris 18": [48.8901, 2.3479],
+            "paris 19": [48.8817, 2.3787], "paris 20": [48.8642, 2.3968],
+            "lyon": [45.7640, 4.8357], "bordeaux": [44.8378, -0.5792],
+            "toulouse": [43.6047, 1.4442], "nice": [43.7102, 7.2620],
+            "nantes": [47.2184, -1.5536], "strasbourg": [48.5734, 7.7521],
+            "montpellier": [43.6108, 3.8767], "rennes": [48.1173, -1.6778],
+            "grenoble": [45.1885, 5.7245], "lille": [50.6292, 3.0573],
+            "toulon": [43.1242, 5.9280], "aix-en-provence": [43.5297, 5.4474],
+            "aix en provence": [43.5297, 5.4474], "avignon": [43.9493, 4.8055],
+            "nimes": [43.8367, 4.3601], "cannes": [43.5528, 7.0174],
+            "antibes": [43.5804, 7.1283], "vitrolles": [43.4615, 5.2456],
+            "aubagne": [43.2930, 5.5710], "istres": [43.5158, 4.9878],
+            "martigues": [43.4061, 5.0486], "la ciotat": [43.1727, 5.6082],
+            "cassis": [43.2140, 5.5390], "pertuis": [43.6918, 5.5031],
+            "salon-de-provence": [43.6396, 5.0974], "salon de provence": [43.6396, 5.0974],
+            "arles": [43.6767, 4.6277], "marignane": [43.4179, 5.2153],
+            "gardanne": [43.4565, 5.4762], "hyeres": [43.1204, 6.1283],
+            "frejus": [43.4329, 6.7360], "draguignan": [43.5378, 6.4660],
+            "gap": [44.5594, 6.0773], "metz": [49.1193, 6.1757],
+            "nancy": [48.6921, 6.1844], "reims": [49.2583, 4.0317],
+            "rouen": [49.4432, 1.0993], "lille": [50.6292, 3.0573],
+            "caen": [49.1829, -0.3707], "dijon": [47.3220, 5.0415],
+            "clermont-ferrand": [45.7772, 3.0870], "clermont ferrand": [45.7772, 3.0870],
+            "limoges": [45.8336, 1.2611], "besancon": [47.2378, 6.0241],
+            "poitiers": [46.5802, 0.3404], "orleans": [47.9029, 1.9090],
+            "tours": [47.3941, 0.6848], "angers": [47.4784, -0.5632],
+            "le mans": [48.0027, 0.1984], "brest": [48.3904, -4.4861],
+            "le havre": [49.4944, 0.1079], "mulhouse": [47.7508, 7.3359],
+            "perpignan": [42.6976, 2.8954], "beziers": [43.3441, 3.2154],
+            "sete": [43.4025, 3.6975], "montauban": [44.0180, 1.3530],
+            "pau": [43.2951, -0.3708], "la rochelle": [46.1603, -1.1511],
+            "saint-etienne": [45.4347, 4.3922], "saint etienne": [45.4347, 4.3922],
+            "valence": [44.9334, 4.8924], "annecy": [45.8992, 6.1294],
+            "chambery": [45.5646, 5.9178], "france": [46.2276, 2.2137],
+            // Région PACA - communes manquantes
+            "miramas": [43.5831, 5.0002], "berre-l-etang": [43.4782, 5.1713], "berre l etang": [43.4782, 5.1713],
+            "fos-sur-mer": [43.4370, 4.9441], "fos sur mer": [43.4370, 4.9441],
+            "port-de-bouc": [43.4009, 4.9857], "port de bouc": [43.4009, 4.9857],
+            "chateauneuf-les-martigues": [43.3831, 5.1598], "chateauneuf les martigues": [43.3831, 5.1598],
+            "saint-martin-de-crau": [43.6391, 4.8118], "saint martin de crau": [43.6391, 4.8118],
+            "tarascon": [43.8064, 4.6602], "chateaurenard": [43.8831, 4.8537],
+            "cavaillon": [43.8341, 5.0398], "apt": [43.8766, 5.3966],
+            "manosque": [43.8330, 5.7878], "forcalquier": [43.9596, 5.7800],
+            "digne-les-bains": [44.0921, 6.2360], "digne les bains": [44.0921, 6.2360],
+            "gemenos": [43.2957, 5.6289], "aubagne": [43.2930, 5.5710],
+            "roquevaire": [43.3524, 5.6055], "allauch": [43.3351, 5.4817],
+            "plan-de-cuques": [43.3411, 5.4481], "plan de cuques": [43.3411, 5.4481],
+            "rousset": [43.4763, 5.5069], "trets": [43.4457, 5.6823],
+            "lambesc": [43.6534, 5.2620], "pelissanne": [43.6255, 5.1516],
+            "saint-cannat": [43.6180, 5.3018], "saint cannat": [43.6180, 5.3018],
+            "bouc-bel-air": [43.4509, 5.4195], "bouc bel air": [43.4509, 5.4195],
+            "septemes-les-vallons": [43.3941, 5.3705], "septemes les vallons": [43.3941, 5.3705],
+            "carry-le-rouet": [43.3307, 5.1588], "carry le rouet": [43.3307, 5.1588],
+            "chateauneuf-le-rouge": [43.4929, 5.5447],
+            "saint-zacharie": [43.3818, 5.7157], "saint zacharie": [43.3818, 5.7157],
+            "auriol": [43.3668, 5.6368], "cuges-les-pins": [43.2838, 5.7044],
+            "carnoux-en-provence": [43.2494, 5.5697], "carnoux en provence": [43.2494, 5.5697],
+            "la penne-sur-huveaune": [43.2987, 5.5397], "la penne sur huveaune": [43.2987, 5.5397],
+            "ensuès-la-redonne": [43.3534, 5.1521], "ensues la redonne": [43.3534, 5.1521],
+            "sausset-les-pins": [43.3335, 5.1060], "sausset les pins": [43.3335, 5.1060],
+            // Vaucluse
+            "orange": [44.1363, 4.8091], "carpentras": [44.0550, 5.0486],
+            "isle-sur-la-sorgue": [43.9188, 5.0496], "l isle sur la sorgue": [43.9188, 5.0496],
+            "l'isle-sur-la-sorgue": [43.9188, 5.0496], "pernes-les-fontaines": [43.9976, 5.0596],
+            // Var
+            "brignoles": [43.4062, 6.0631], "cuers": [43.2383, 6.0694],
+            "la garde": [43.1242, 5.9798], "la seyne-sur-mer": [43.1044, 5.8784],
+            "la seyne sur mer": [43.1044, 5.8784], "six-fours-les-plages": [43.1028, 5.8256],
+            "six fours les plages": [43.1028, 5.8256], "bandol": [43.1359, 5.7529],
+            "ollioules": [43.1440, 5.8511], "sanary-sur-mer": [43.1203, 5.8000],
+            "sanary sur mer": [43.1203, 5.8000], "saint-raphael": [43.4251, 6.7686],
+            "saint raphael": [43.4251, 6.7686], "sainte-maxime": [43.3071, 6.6384],
+            "sainte maxime": [43.3071, 6.6384], "grimaud": [43.2742, 6.5286],
+            "cogolin": [43.2510, 6.5306], "la londe-les-maures": [43.1418, 6.2337],
+            // Alpes-Maritimes
+            "grasse": [43.6589, 6.9239], "mougins": [43.6001, 7.0028],
+            "sophia antipolis": [43.6200, 7.0567], "valbonne": [43.6436, 7.0052],
+            "mandelieu-la-napoule": [43.5449, 6.9371], "mandelieu la napoule": [43.5449, 6.9371],
+            "cagnes-sur-mer": [43.6641, 7.1486], "cagnes sur mer": [43.6641, 7.1486],
+            "saint-laurent-du-var": [43.6633, 7.1886], "saint laurent du var": [43.6633, 7.1886],
+            "villeneuve-loubet": [43.6597, 7.1186], "villeneuve loubet": [43.6597, 7.1186],
+            "menton": [43.7765, 7.5026], "monaco": [43.7384, 7.4246],
+            "roquebrune-cap-martin": [43.7629, 7.4773],
+            // Île-de-France - petite couronne
+            "boulogne-billancourt": [48.8392, 2.2400], "boulogne billancourt": [48.8392, 2.2400],
+            "saint-cloud": [48.8468, 2.2141], "neuilly-sur-seine": [48.8847, 2.2674],
+            "neuilly sur seine": [48.8847, 2.2674], "levallois-perret": [48.8944, 2.2867],
+            "levallois perret": [48.8944, 2.2867], "issy-les-moulineaux": [48.8224, 2.2706],
+            "issy les moulineaux": [48.8224, 2.2706], "clichy": [48.9043, 2.3079],
+            "saint-denis": [48.9356, 2.3539], "saint denis": [48.9356, 2.3539],
+            "montreuil": [48.8632, 2.4437], "vincennes": [48.8478, 2.4390],
+            "creteil": [48.7773, 2.4554], "créteil": [48.7773, 2.4554],
+            "nanterre": [48.8924, 2.2069], "courbevoie": [48.8976, 2.2545],
+            "asnieres-sur-seine": [48.9167, 2.2842], "asnieres sur seine": [48.9167, 2.2842],
+            "colombes": [48.9223, 2.2574], "antony": [48.7544, 2.2975],
+            "massy": [48.7252, 2.2720], "palaiseau": [48.7143, 2.2478],
+            "versailles": [48.8014, 2.1301], "saint-germain-en-laye": [48.8993, 2.0939],
+            "saint germain en laye": [48.8993, 2.0939], "poissy": [48.9294, 2.0469],
+            "evry": [48.6237, 2.4374], "évry": [48.6237, 2.4374],
+            "cergy": [49.0364, 2.0750], "pontoise": [49.0499, 2.1015],
+            "argenteuil": [48.9479, 2.2499], "sarcelles": [48.9951, 2.3813],
+            "bobigny": [48.9097, 2.4389], "aubervilliers": [48.9172, 2.3834],
+            // Autres grandes villes manquantes
+            "amiens": [49.8942, 2.2957], "troyes": [48.2973, 4.0744],
+            "cherbourg": [49.6333, -1.6167], "lorient": [47.7481, -3.3714],
+            "vannes": [47.6559, -2.7603], "saint-nazaire": [47.2736, -2.2138],
+            "saint nazaire": [47.2736, -2.2138], "la baule": [47.2861, -2.3997],
+            "quimper": [48.0000, -4.1000], "saint-brieuc": [48.5145, -2.7658],
+            "saint brieuc": [48.5145, -2.7658], "brive-la-gaillarde": [45.1576, 1.5335],
+            "brive la gaillarde": [45.1576, 1.5335], "perigueux": [45.1850, 0.7214],
+            "angouleme": [45.6500, 0.1597], "niort": [46.3241, -0.4649],
+            "cholet": [47.0597, -0.8800], "laval": [48.0733, -0.7700],
+            "le puy-en-velay": [45.0426, 3.8854], "le puy en velay": [45.0426, 3.8854],
+            "aurillac": [44.9265, 2.4419], "rodez": [44.3500, 2.5754],
+            "albi": [43.9277, 2.1479], "castres": [43.6048, 2.2483],
+            "tarbes": [43.2328, 0.0782], "auch": [43.6461, 0.5856],
+            "bayonne": [43.4929, -1.4748], "biarritz": [43.4800, -1.5586],
+            "mont-de-marsan": [43.8900, -0.5050], "dax": [43.7108, -1.0536],
+            "agen": [44.2024, 0.6209], "perigueux": [45.1850, 0.7214],
+            "colmar": [48.0793, 7.3585], "haguenau": [48.8150, 7.7881],
+            "thionville": [49.3573, 6.1680], "forbach": [49.1900, 6.9000],
+            "epinal": [48.1796, 6.4510], "belfort": [47.6393, 6.8640],
+            "charleville-mezieres": [49.7713, 4.7194], "soissons": [49.3817, 3.3233],
+            "compiegne": [49.4148, 2.8232], "beauvais": [49.4302, 2.0761],
+            "chartres": [48.4468, 1.4874], "blois": [47.5861, 1.3358],
+            "bourges": [47.0860, 2.3986], "nevers": [46.9900, 3.1570],
+            "chalon-sur-saone": [46.7816, 4.8537], "chalon sur saone": [46.7816, 4.8537],
+            "macon": [46.3061, 4.8282], "bourg-en-bresse": [46.2050, 5.2275],
+            "bourg en bresse": [46.2050, 5.2275], "villefranche-sur-saone": [45.9850, 4.7218],
+            "villefranche sur saone": [45.9850, 4.7218], "roanne": [46.0353, 4.0700]
+        };
+
+        function _normCity(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        }
+
+        function getCoordsForLocation(ville) {
+            const v = _normCity(ville);
+            if (!v) return null;
+
+            // 1. Correspondance exacte
+            if (GEO[v]) return GEO[v];
+
+            // 2. Nettoyer le suffixe département : "Marignane - 13", "Nice (06)", "Paris, 75"
+            const stripped = v.replace(/\s*[-–,]\s*\d+.*$/, '').replace(/\s*\(\d+\).*$/, '').trim();
+            if (stripped !== v && GEO[stripped]) return GEO[stripped];
+
+            // 3. Supprimer les suffixes ordinaux d'arrondissements : "8ème" → "8", "3e" → "3"
+            const stripOrdinal = s => s.replace(/(\d+)\s*(i?eme|ieme|ère|ere|er|e)\b/g, '$1').trim();
+            const vNoOrd = stripOrdinal(v);
+            if (vNoOrd !== v && GEO[vNoOrd]) return GEO[vNoOrd];
+            const strippedNoOrd = stripOrdinal(stripped);
+            if (GEO[strippedNoOrd]) return GEO[strippedNoOrd];
+
+            // 4. Préfixe avec frontière de mot (clés longues en premier pour éviter "marseille 1" avant "marseille 13")
+            const candidates = [v, stripped, vNoOrd, strippedNoOrd].filter((s, i, a) => s && a.indexOf(s) === i);
+            const sortedKeys = Object.keys(GEO).sort((a, b) => b.length - a.length);
+            for (const c of candidates) {
+                for (const key of sortedKeys) {
+                    if (c === key) continue;
+                    if (c.length > key.length) {
+                        const ch = c[key.length];
+                        if (c.startsWith(key) && (ch === ' ' || ch === '-' || ch === ',' || ch === '(')) return GEO[key];
+                    } else if (key.length > c.length) {
+                        const ch = key[c.length];
+                        if (key.startsWith(c) && (ch === ' ' || ch === '-')) return GEO[key];
+                    }
+                }
+            }
+            return null;
+        }
+
+        function toggleMap() {
+            _mapVisible = !_mapVisible;
+            const container = document.getElementById('mapContainer');
+            const btn = document.getElementById('btnToggleMap');
+            if (_mapVisible) {
+                container.classList.remove('hidden');
+                btn.classList.add('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+                if (!_map) {
+                    _map = L.map('mapView').setView([43.3965, 5.2698], 9);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 18
+                    }).addTo(_map);
+                    _markerGroup = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false });
+                    _map.addLayer(_markerGroup);
+                }
+                refreshMapMarkers();
+                setTimeout(() => _map.invalidateSize(), 200);
+            } else {
+                container.classList.add('hidden');
+                btn.classList.remove('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+            }
+        }
+
+        function refreshMapMarkers() {
+            if (!_map || !_mapVisible) return;
+            _markerGroup.clearLayers();
+            const bounds = [];
+            _lastRendered.forEach(o => {
+                const coords = getCoordsForLocation(o.ville);
+                if (!coords) return;
+                const jitter = () => (Math.random() - 0.5) * 0.0015;
+                const ll = [coords[0] + jitter(), coords[1] + jitter()];
+                bounds.push(ll);
+
+                const qn = normalizeStr(o.qualite || "");
+                let markerColor = "#64748b";
+                if (qn.includes("verifi")) markerColor = "#059669";
+                else if (qn.includes("qualifier")) markerColor = "#d97706";
+                else if (qn.includes("obsolete")) markerColor = "#dc2626";
+                const en = normalizeStr(o.etat || "");
+                const isShared = en.includes("partag") && !en.includes("non");
+                if (isShared) markerColor = "#1A4E8A";
+
+                const label = (o.poste || 'Offre').length > 24 ? (o.poste || 'Offre').slice(0, 22) + '…' : (o.poste || 'Offre');
+                const marker = L.marker(ll, {
+                    icon: L.divIcon({
+                        html: `<div style="background:${markerColor};color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
+                        className: '', iconAnchor: [0, 10]
+                    })
+                });
+                const dateStr = !isNaN(new Date(o.date)) ? new Date(o.date).toLocaleDateString('fr-FR') : '—';
+                marker.bindPopup(`
+                    <div style="font-family:sans-serif;min-width:200px;padding:4px">
+                        <div style="font-weight:900;font-size:13px;color:${markerColor};margin-bottom:4px">${o.poste || 'Sans titre'}</div>
+                        <div style="font-size:12px;font-weight:700;color:#F26522;margin-bottom:4px">🏢 ${o.entreprise || '—'}</div>
+                        <div style="font-size:11px;color:#666;margin-bottom:6px">📍 ${o.ville || '—'}</div>
+                        <div style="font-size:11px;color:#888">📅 ${dateStr} · N° ${o.id || '—'}</div>
+                        <div style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #eee">
+                            <span style="font-weight:700">${o.qualite || '—'}</span> · ${o.etat || '—'}
+                        </div>
+                        ${o.url ? `<a href="${o.url}" target="_blank" style="font-size:11px;color:#1A4E8A;font-weight:700;display:block;margin-top:6px">Voir l'annonce ↗</a>` : ''}
+                    </div>`);
+                _markerGroup.addLayer(marker);
+            });
+            if (bounds.length > 0) {
+                try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
+            }
+            setTimeout(() => _map.invalidateSize(), 100);
         }
 
         // INITIALISATION
         loadOffres();
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>

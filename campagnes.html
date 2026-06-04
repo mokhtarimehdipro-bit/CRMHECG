@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -15,10 +15,14 @@
                 <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
                 <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
                 <a href="campagnes.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Campagnes</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex justify-between items-center mb-10">
@@ -75,13 +79,16 @@
         <label class="block text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Motif de sortie spécifique :</label>
        <select id="selectMotif" class="w-full text-xs p-2 border border-red-200 rounded-lg focus:ring-red-500 bg-white font-bold outline-none" onchange="updateLivePreview()">
     <option value="Tous">Tous les motifs</option>
-    <option value="Fin de parcours / Diplôme obtenu">🎓 Diplômé</option>
+    <option value="Autre">❓ Autre</option>
     <option value="Démotivation">🏃 Démotivation</option>
-    <option value="Financement">💰 Problème de financement</option>
+    <option value="Niveau du diplôme trop haut">📚 Niveau du diplôme trop haut</option>
+    <option value="Départ chez Concurrence">🏢 Départ chez Concurrence</option>
+    <option value="Fin de parcours / Diplôme Echoué">❌ Fin de parcours / Diplôme Echoué</option>
+    <option value="Fin de parcours / Diplôme obtenu">🎓 Fin de parcours / Diplôme obtenu</option>
+    <option value="Perte d'alternance / Pas trouvé d'alternance">🔍 Perte d'alternance / Pas trouvé d'alternance</option>
+    <option value="Raison financière">💰 Raison financière</option>
     <option value="Réorientation">🔃 Réorientation</option>
-    <option value="Rupture">❌ Rupture de contrat</option>
-    <option value="Exclusion">🚫 Exclusion</option>
-    <option value="Autre">❓ Autre motif</option>
+    <option value="Sanction Disciplinaire">⚠️ Sanction Disciplinaire</option>
 </select>
     </div>
 </div>
@@ -203,16 +210,20 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Inconnu";
-    payload.roleAuteur = userSession.role || "N/A";
-    
+    payload.idAuteur     = userSession.nom   || "Inconnu";
+    payload.roleAuteur   = userSession.role  || "N/A";
+    payload.emailAuteur  = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+        const result = await response.json();
+        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        return result;
     } catch (e) {
         console.error("Erreur API :", e);
         return { success: false, message: "Erreur de connexion" };
@@ -529,8 +540,9 @@
                     if (cb.id !== 'cbSortis') cb.checked = false;
                 });
             }
-            updateLivePreview(); 
+            updateLivePreview();
         }
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>

@@ -10,12 +10,53 @@
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Analyse du partenaire en cours...</div>
         
         <div id="content" class="hidden space-y-8">
-            <div class="flex justify-between items-start bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                <div>
-                    <h1 id="entNom" class="text-4xl font-black text-[#1A4E8A]">Entreprise</h1>
-                    <p id="entContact" class="text-gray-500 font-medium mt-2 flex items-center gap-2">Contact Principal</p>
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 id="entNom" class="text-4xl font-black text-[#1A4E8A]">Entreprise</h1>
+                            <button onclick="editEntrepriseName()" class="text-gray-400 hover:text-[#1A4E8A] text-lg" title="Renommer l'entreprise">✏️</button>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p id="entAdresse" class="text-sm text-gray-400 font-medium"></p>
+                            <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse">✏️</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
+                        <span id="btnDeleteEntDP"></span>
+                    </div>
                 </div>
-                <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
+                <div id="contactsList" class="space-y-2"></div>
+                <button onclick="toggleAddContactForm()" class="mt-3 text-sm font-bold text-[#1A4E8A] hover:underline">+ Ajouter un contact</button>
+                <div id="addContactForm" class="hidden mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text"  id="newNom"    placeholder="Nom"           class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newPrenom" placeholder="Prénom"         class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="email" id="newMail"   placeholder="Email 1"        class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="email" id="newMail2"  placeholder="Email 2"        class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newTel"    placeholder="Téléphone 1"    class="border p-2 rounded-lg text-sm bg-white">
+                        <input type="text"  id="newTel2"   placeholder="Téléphone 2"    class="border p-2 rounded-lg text-sm bg-white">
+                    </div>
+                    <select id="newPoste" class="w-full border p-2 rounded-lg text-sm bg-white">
+                        <option value="">-- Poste du contact --</option>
+                        <option value="RH">RH</option>
+                        <option value="Gérant">Gérant</option>
+                        <option value="Expert comptable">Expert comptable</option>
+                        <option value="Collaborateur comptable">Collaborateur comptable</option>
+                    </select>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="newIsMA" onchange="toggleDPMASelector()" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                            <label for="newIsMA" class="text-xs font-black text-amber-700 cursor-pointer">🎓 Maître d'apprentissage (MA)</label>
+                        </div>
+                        <div id="dpMABlock" class="hidden space-y-1">
+                            <p class="text-[10px] text-amber-600 font-bold">Sélectionner le ou les étudiants :</p>
+                            <div id="dpMAStudentList" class="max-h-32 overflow-y-auto space-y-1 bg-white border border-amber-200 rounded-lg p-2 text-xs text-gray-400 italic">Chargement...</div>
+                        </div>
+                    </div>
+                    <button onclick="addContact()" class="w-full bg-[#1A4E8A] text-white py-2 rounded-xl font-black text-sm hover:bg-blue-800">Enregistrer le contact</button>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -53,6 +94,15 @@
                         <h3 class="font-black text-blue-100 mb-4 uppercase tracking-wider text-sm">🎓 Alternants en poste</h3>
                         <div id="listEtu" class="text-sm space-y-3"></div>
                     </div>
+
+                    <div id="anciensAlternantsBlock" class="hidden bg-amber-50 p-6 rounded-3xl border border-amber-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-black text-amber-700 text-sm uppercase tracking-wider">📚 Anciens étudiants HECG</h3>
+                            <span id="anciensAlternantsCount" class="text-xs font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <p class="text-xs text-amber-600 mb-4">Étudiants ayant quitté cette entreprise. Confirmez les départs ou signalez les erreurs de saisie.</p>
+                        <div id="anciensAlternantsListDP" class="space-y-3"></div>
+                    </div>
                 </div>
 
                 <div class="lg:col-span-2 space-y-6">
@@ -84,17 +134,21 @@
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
             
             // On prépare les étiquettes pour le script Google
-            payload.idAuteur = userSession.nom || "Inconnu";    // Pour l'onglet HISTORIQUE
-            payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
-            payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
-            
+            payload.idAuteur     = userSession.nom   || "Inconnu";
+            payload.auteur       = userSession.nom   || "Inconnu";
+            payload.roleAuteur   = userSession.role  || "N/A";
+            payload.emailAuteur  = userSession.email || "";
+            payload.sessionToken = userSession.sessionToken || "";
+
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(payload)
                 });
-                return await response.json();
+                const result = await response.json();
+                if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+                return result;
             } catch (e) {
                 console.error("Erreur API :", e);
                 return { success: false, message: "Erreur de connexion" };
@@ -105,6 +159,12 @@
         const partId = new URLSearchParams(window.location.search).get('id');
         let currentUser = null;
         let nomEntrepriseActuelle = "";
+        let contactsData = [];
+        let adresseData = { adresse: "", cp: "", ville: "" };
+        let allStudentsCacheDP = [];
+
+        const _dpUserSession = JSON.parse(localStorage.getItem('user') || '{}');
+        const dpCanDelete = ['Administrateur', 'Superviseur', 'RP'].includes(_dpUserSession.role || '');
 
         try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
         if(!currentUser) currentUser = { nom: "Utilisateur" };
@@ -121,15 +181,93 @@
                     
                     nomEntrepriseActuelle = d.info.entreprise;
                     document.getElementById('entNom').innerText = d.info.entreprise;
-                    document.getElementById('entContact').innerHTML = `👤 ${d.info.contact || 'Non renseigné'} &nbsp;|&nbsp; ✉️ <a href="mailto:${d.info.mail}" class="text-blue-500 hover:underline">${d.info.mail}</a> &nbsp;|&nbsp; 📞 ${d.info.tel || '-'}`;
-                    
-                    document.getElementById('listEtu').innerHTML = d.alternants.map(e => `<div class="bg-white/10 p-3 rounded-xl border border-white/20"><p class="font-bold text-lg leading-tight">${e.nom}</p><p class="text-[10px] text-blue-200 uppercase mt-1 font-black tracking-widest">${e.classe}</p></div>`).join('') || '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>';
-                    document.getElementById('listOffres').innerHTML = d.offres.map(o => `<div class="p-4 border border-gray-100 rounded-2xl bg-gray-50 hover:shadow-md transition"><div class="flex justify-between items-start mb-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase">${o.etat}</span></div><p class="font-black text-gray-800 text-sm mb-3">${o.poste}</p><a href="${o.url}" target="_blank" class="text-[#F26522] text-xs font-bold hover:underline inline-flex items-center gap-1">Voir l'annonce ↗</a></div>`).join('') || '<p class="col-span-2 text-gray-400 italic text-center py-6">Aucune offre associée.</p>';
-                    document.getElementById('suiviTimeline').innerHTML = d.suivi.map(s => `<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(s.date).toLocaleDateString('fr-FR')} — Par ${s.auteur}</p><p class="text-sm text-gray-700">${s.texte}</p></div>`).join('') || '<p class="text-gray-400 italic text-center">Aucun échange enregistré.</p>';
-                    document.getElementById('alertesList').innerHTML = d.alertes.filter(a => a.statut === 'Actif' || a.statut === 'À faire').map(a => `<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ${new Date(a.date).toLocaleDateString()} (${a.freq})</b><br><span class="text-orange-600 truncate block">${a.msg}</span></div>`).join('');
+                    adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
+                    const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
+                    document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
+
+                    // Bouton supprimer entreprise (RP uniquement)
+                    const btnDelEnt = document.getElementById('btnDeleteEntDP');
+                    if (btnDelEnt) btnDelEnt.innerHTML = dpCanDelete
+                        ? '<button onclick="deleteEnterprise()" class="text-xs text-red-400 hover:text-red-600 font-bold border border-red-200 px-3 py-1.5 rounded-xl hover:bg-red-50 transition">⚠️ Supprimer l\'entreprise</button>'
+                        : '';
+
+                    // Stockage global + rendu contacts
+                    contactsData = d.contacts || [];
+                    renderContacts();
+
+                    // Alternants
+                    const alt = d.alternants || [];
+                    document.getElementById('listEtu').innerHTML = alt.length === 0
+                        ? '<p class="text-blue-200 italic text-center py-4">Aucun alternant HECG actuellement.</p>'
+                        : alt.map(e => `
+                            <div class="bg-white/10 p-3 rounded-xl border border-white/20 flex justify-between items-center gap-2">
+                                <div>
+                                    <p class="font-bold text-sm leading-tight">${e.nom}</p>
+                                    <p class="text-[10px] text-blue-200 uppercase mt-0.5 font-black tracking-widest">${e.classe}</p>
+                                </div>
+                                <button onclick="signalFormerAlternant('${e.id}','${(e.prenom||'').replace(/'/g,"\\'")}','${(e.nomFamille||'').replace(/'/g,"\\'")}')"
+                                    class="shrink-0 text-[9px] font-black text-amber-300 hover:text-white hover:bg-amber-500/30 border border-amber-400/40 px-2 py-1 rounded-lg transition"
+                                    title="Signaler que cet alternant a quitté l'entreprise">
+                                    ↪ Départ
+                                </button>
+                            </div>`).join('');
+
+                    // Anciens étudiants
+                    const anc = d.anciensAlternants || [];
+                    const ancBlock = document.getElementById('anciensAlternantsBlock');
+                    if (anc.length > 0) {
+                        ancBlock.classList.remove('hidden');
+                        const cntEl = document.getElementById('anciensAlternantsCount');
+                        if (cntEl) cntEl.textContent = anc.length + ' étudiant' + (anc.length > 1 ? 's' : '');
+                        document.getElementById('anciensAlternantsListDP').innerHTML = anc.map(a => {
+                            const isPending = a.status === 'À_confirmer';
+                            const isConfirmed = a.status === 'Confirmé';
+                            const statusColor = isConfirmed ? 'bg-green-100 text-green-700' : isPending ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500';
+                            const statusLabel = isPending ? '⏳ À confirmer' : isConfirmed ? '✓ Confirmé' : a.status;
+                            return `<div class="bg-white p-4 rounded-xl border border-amber-200">
+                                <div class="flex justify-between items-start gap-2 mb-2">
+                                    <div>
+                                        <p class="font-bold text-gray-800 text-sm">${(a.prenom||'')} ${(a.nom||'')}</p>
+                                        <div class="flex gap-2 mt-0.5 flex-wrap">
+                                            ${a.classe?`<span class="text-[10px] font-black text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">${a.classe}</span>`:''}
+                                            ${a.campus?`<span class="text-[10px] font-black text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">${a.campus}</span>`:''}
+                                            ${a.date?`<span class="text-[10px] text-gray-300">Départ : ${a.date}</span>`:''}
+                                            ${a.motif?`<span class="text-[10px] text-gray-300 italic">${a.motif}</span>`:''}
+                                        </div>
+                                    </div>
+                                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black ${statusColor}">${statusLabel}</span>
+                                </div>
+                                ${(a.mail||a.tel)?`<div class="text-[11px] text-gray-400 mb-2">${a.mail?`<a href="mailto:${a.mail}" class="text-blue-400">${a.mail}</a> `:''} ${a.tel?`· ${a.tel}`:''}</div>`:''}
+                                <div class="flex gap-2 flex-wrap">
+                                    ${a.idEtu?`<a href="dossier.html?id=${a.idEtu}" class="text-[11px] font-bold text-[#1A4E8A] hover:underline">📋 Voir le dossier étudiant</a>`:''}
+                                    ${isPending?`<button onclick="confirmFormerAlternant('${a.id}')" class="text-xs bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg hover:bg-green-200 transition">✓ Confirmer</button>
+                                    <button onclick="removeFormerAlternant('${a.id}')" class="text-xs bg-red-100 text-red-600 font-bold px-3 py-1 rounded-lg hover:bg-red-200 transition">✗ Erreur</button>`:''}
+                                </div>
+                            </div>`;
+                        }).join('');
+                    } else {
+                        ancBlock.classList.add('hidden');
+                    }
+
+                    // Offres
+                    const offres = d.offres || [];
+                    document.getElementById('listOffres').innerHTML = offres.length === 0
+                        ? '<p class="col-span-2 text-gray-400 italic text-center py-6">Aucune offre associée.</p>'
+                        : offres.map(o => '<div class="p-4 border border-gray-100 rounded-2xl bg-gray-50 hover:shadow-md transition"><div class="flex justify-between items-start mb-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase">' + (o.etat||'-') + '</span></div><p class="font-black text-gray-800 text-sm mb-3">' + (o.poste||'-') + '</p><a href="' + (o.url||'#') + '" target="_blank" class="text-[#F26522] text-xs font-bold hover:underline">Voir l\'annonce ↗</a></div>').join('');
+
+                    // Suivi
+                    const suivi = d.suivi || [];
+                    document.getElementById('suiviTimeline').innerHTML = suivi.length === 0
+                        ? '<p class="text-gray-400 italic text-center">Aucun échange enregistré.</p>'
+                        : suivi.map(s => '<div class="bg-gray-50 p-4 rounded-xl border-l-4 border-[#1A4E8A]"><p class="text-[10px] text-gray-400 font-bold uppercase mb-1">' + new Date(s.date).toLocaleDateString('fr-FR') + ' — Par ' + (s.auteur||'') + '</p><p class="text-sm text-gray-700">' + (s.texte||'') + '</p></div>').join('');
+
+                    // Alertes programmées
+                    const alertes = (d.alertes || []).filter(a => a.statut === 'Actif' || a.statut === 'À faire');
+                    document.getElementById('alertesList').innerHTML = alertes.map(a => '<div class="bg-orange-50 p-2 rounded text-[10px] border border-orange-200"><b class="text-orange-800">Prévue le ' + new Date(a.date).toLocaleDateString() + ' (' + a.freq + ')</b><br><span class="text-orange-600 truncate block">' + a.msg + '</span></div>').join('');
                 }
             } catch(e) {
-                alert("Erreur de chargement.");
+                console.error("Erreur chargement dossier partenaire:", e);
+                document.getElementById('loader').innerText = "Erreur de chargement : " + e.message;
             }
         }
 
@@ -178,6 +316,183 @@
             loadDetails();
         }
 
+        function renderContacts() {
+            const el = document.getElementById('contactsList');
+            if (!contactsData || contactsData.length === 0) {
+                el.innerHTML = '<p class="text-sm text-gray-400 italic">Aucun contact enregistré.</p>';
+                return;
+            }
+            el.innerHTML = contactsData.map((c, idx) => {
+                const nom = c.nom || '';
+                const prenom = c.prenom || '';
+
+                const mails = [c.mail, c.mail2].filter(m => m && m.trim());
+                const tels  = [c.tel,  c.tel2 ].filter(t => t && t.trim());
+
+                const mailsHtml = mails.map(m => '<a href="mailto:' + m + '" class="text-blue-500 hover:underline">' + m + '</a>').join(' &nbsp;·&nbsp; ');
+                const telsHtml  = tels.map(t => '<span>' + t + '</span>').join(' &nbsp;·&nbsp; ');
+
+                const posteBadge = c.poste ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black rounded-full">' + c.poste + '</span>' : '';
+                const maBadge = c.is_ma === 'Oui' ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-black rounded-full">🎓 MA</span>' : '';
+
+                return '<div class="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
+                    + '<div class="text-sm space-y-0.5">'
+                    + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge + '</div>'
+                    + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
+                    + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
+                    + '</div>'
+                    + '<div class="flex gap-1 shrink-0">'
+                    + '<button data-idx="' + idx + '" data-action="edit" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>'
+                    + (dpCanDelete ? '<button data-idx="' + idx + '" data-action="delete" class="text-xs text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50" title="Supprimer">🗑️</button>' : '')
+                    + '</div></div>';
+            }).join('');
+        }
+
+        // Délégation d'événements — évite les problèmes d'echappement dans onclick
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.idx, 10);
+            const c = contactsData[idx];
+            if (!c) return;
+            if (btn.dataset.action === 'edit') {
+                const newNom    = prompt('Nom :',         c.nom    || ''); if (newNom    === null) return;
+                const newPrenom = prompt('Prénom :',      c.prenom || ''); if (newPrenom === null) return;
+                const newMail   = prompt('Email 1 :',     c.mail   || ''); if (newMail   === null) return;
+                const newMail2  = prompt('Email 2 :',     c.mail2  || ''); if (newMail2  === null) return;
+                const newTel    = prompt('Téléphone 1 :', c.tel    || ''); if (newTel    === null) return;
+                const newTel2   = prompt('Téléphone 2 :', c.tel2   || ''); if (newTel2   === null) return;
+                const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, mail2: newMail2, tel: newTel, tel2: newTel2 });
+                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+            } else if (btn.dataset.action === 'delete') {
+                if (!confirm('Supprimer ' + (c.prenom || '') + ' ' + (c.nom || '') + ' ?')) return;
+                const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact });
+                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+            }
+        });
+
+        function toggleAddContactForm() {
+            const f = document.getElementById('addContactForm');
+            f.classList.toggle('hidden');
+        }
+
+        async function toggleDPMASelector() {
+            const isMA = document.getElementById('newIsMA').checked;
+            const block = document.getElementById('dpMABlock');
+            if (isMA) {
+                block.classList.remove('hidden');
+                if (allStudentsCacheDP.length === 0) {
+                    const res = await apiPost({ action: 'getStudentsMinList' });
+                    if (res.success) allStudentsCacheDP = res.data;
+                }
+                const listEl = document.getElementById('dpMAStudentList');
+                listEl.innerHTML = allStudentsCacheDP.map(s =>
+                    '<label class="flex items-center gap-2 p-1 rounded hover:bg-amber-50 cursor-pointer">'
+                    + '<input type="checkbox" value="' + s.id + '" class="dp-ma-chk w-3 h-3 accent-amber-500">'
+                    + '<span class="font-bold text-gray-700">' + s.nom + ' ' + s.prenom + '</span>'
+                    + '<span class="text-gray-400 text-[10px]">' + (s.classe || '') + '</span></label>'
+                ).join('') || 'Aucun étudiant trouvé.';
+            } else {
+                block.classList.add('hidden');
+            }
+        }
+
+        async function deleteEnterprise() {
+            if (!confirm('⚠️ Supprimer l\'entreprise ' + nomEntrepriseActuelle + ' et TOUS ses contacts ?\n\nCette action est irréversible.')) return;
+            const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId });
+            if (res.success) {
+                alert('✅ Entreprise supprimée.');
+                window.close();
+            } else {
+                alert('Erreur : ' + res.message);
+            }
+        }
+
+        async function addContact() {
+            const nom = document.getElementById('newNom').value.trim();
+            const prenom = document.getElementById('newPrenom').value.trim();
+            const mail = document.getElementById('newMail').value.trim();
+            const tel = document.getElementById('newTel').value.trim();
+            if (!nom && !prenom) return alert("Veuillez saisir au moins un nom.");
+            const isMA = document.getElementById('newIsMA').checked;
+            if (isMA && !document.querySelector('.dp-ma-chk:checked')) {
+                return alert("⚠️ Un Maître d'apprentissage doit être rattaché à au moins un étudiant.");
+            }
+            const res = await apiPost({
+                action: 'addPartner',
+                id_entreprise: partId,
+                nom_entreprise: nomEntrepriseActuelle,
+                nom, prenom,
+                mail1: mail, mail2: document.getElementById('newMail2').value.trim(),
+                tel1: tel,   tel2:  document.getElementById('newTel2').value.trim(),
+                poste: document.getElementById('newPoste').value,
+                is_ma: isMA ? 'Oui' : 'Non'
+            });
+            if (res.success) {
+                if (isMA) {
+                    const ids_etudiants = [...document.querySelectorAll('.dp-ma-chk:checked')].map(c => c.value);
+                    await apiPost({
+                        action: 'linkMAToStudents',
+                        ids_etudiants,
+                        id_entreprise: partId,
+                        id_contact: res.id_contact || "",
+                        nom_entreprise: nomEntrepriseActuelle
+                    });
+                }
+                ['newNom','newPrenom','newMail','newMail2','newTel','newTel2'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('newPoste').value = '';
+                document.getElementById('newIsMA').checked = false;
+                document.getElementById('dpMABlock').classList.add('hidden');
+                document.getElementById('addContactForm').classList.add('hidden');
+                loadDetails();
+            } else {
+                alert("Erreur : " + res.message);
+            }
+        }
+
+        async function editEntrepriseName() {
+            const current = document.getElementById('entNom').innerText;
+            const newName = prompt("Nouveau nom de l'entreprise :", current);
+            if (!newName || newName === current) return;
+            const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, nouveauNom: newName });
+            if (res.success) { nomEntrepriseActuelle = newName; loadDetails(); }
+            else alert("Erreur : " + res.message);
+        }
+
+        async function editAdresse() {
+            const newAdresse = prompt("Adresse (rue, n°...) :", adresseData.adresse); if (newAdresse === null) return;
+            const newCp = prompt("Code postal :", adresseData.cp); if (newCp === null) return;
+            const newVille = prompt("Ville :", adresseData.ville); if (newVille === null) return;
+            const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: newAdresse, cp: newCp, ville: newVille });
+            if (res.success) loadDetails(); else alert("Erreur : " + res.message);
+        }
+
+        async function signalFormerAlternant(idEtudiant, prenom, nomFamille) {
+            if (!confirm(`Signaler que ${prenom} ${nomFamille} a quitté cette entreprise ?\nCela créera une entrée "À confirmer" dans la section ci-dessous.`)) return;
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "⏳";
+            const res = await apiPost({ action: 'signalFormerAlternant', idEntreprise: partId, idEtudiant, prenom, nom: nomFamille });
+            if (res.success) { loadDetails(); }
+            else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "↪ Départ"; }
+        }
+
+        async function confirmFormerAlternant(id) {
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "⏳";
+            const res = await apiPost({ action: 'confirmFormerAlternant', id });
+            if (res.success) loadDetails();
+            else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✓ Confirmer le départ"; }
+        }
+
+        async function removeFormerAlternant(id) {
+            if (!confirm("Marquer cet enregistrement comme erreur de saisie ?")) return;
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = "⏳";
+            const res = await apiPost({ action: 'removeFormerAlternant', id });
+            if (res.success) loadDetails();
+            else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✗ Erreur de saisie"; }
+        }
+
         async function ajouterOffreRapide() {
             const url = prompt("Lien de l'offre :");
             if(!url) return;
@@ -189,6 +504,7 @@
         
         loadDetails();
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </body>
 </html>

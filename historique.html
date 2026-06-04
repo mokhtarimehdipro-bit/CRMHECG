@@ -1,10 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historique & Audit - HECG</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -20,14 +21,18 @@
                 <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
                 <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
                 <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
                 <a href="historique.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Historique</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
-        
+
         <div class="flex justify-between items-center mb-6">
             <div>
                 <h1 class="text-3xl font-black text-[#1A4E8A]">Journal d'Audit</h1>
@@ -35,11 +40,15 @@
             </div>
             <div class="flex space-x-3">
                 <button onclick="loadHistory()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
+                <button onclick="showSuppCritiques()" class="bg-red-100 text-red-700 px-5 py-2 rounded-xl font-bold shadow-sm hover:bg-red-200 transition">⚠️ Suppressions</button>
+                <button id="btnRapport" onclick="toggleRapport()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition">📊 Rapport</button>
                 <button onclick="exportCSV()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
+                <button id="btnIndicateursJour" onclick="toggleIndicateursDuJour()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition">🗓️ Indicateurs du quotidien</button>
+                <button id="btnIndicateursMajeurs" onclick="toggleIndicateursMajeurs()" class="bg-violet-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-violet-700 transition">📈 Indicateurs majeurs</button>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions filtrées</p>
                 <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpi-total">0</p>
@@ -55,6 +64,51 @@
             <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100">
                 <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Suppressions</p>
                 <p class="text-3xl font-black text-red-700 mt-1" id="kpi-supp">0</p>
+            </div>
+            <div class="bg-orange-50 p-5 rounded-2xl shadow-sm border border-orange-100">
+                <p class="text-[10px] font-black text-orange-600 uppercase tracking-widest">Autres Actions</p>
+                <p class="text-3xl font-black text-orange-700 mt-1" id="kpi-action">0</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div class="bg-purple-50 p-5 rounded-2xl shadow-sm border border-purple-100">
+                <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">✅ Offres vérifiées</p>
+                <p class="text-3xl font-black text-purple-700 mt-1" id="kpi-offres-verifiees">0</p>
+            </div>
+            <div class="bg-cyan-50 p-5 rounded-2xl shadow-sm border border-cyan-100">
+                <p class="text-[10px] font-black text-cyan-600 uppercase tracking-widest">📤 Offres partagées</p>
+                <p class="text-3xl font-black text-cyan-700 mt-1" id="kpi-offres-partagees">0</p>
+            </div>
+            <div class="bg-indigo-50 p-5 rounded-2xl shadow-sm border border-indigo-100">
+                <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">🏢 Notes entreprise</p>
+                <p class="text-3xl font-black text-indigo-700 mt-1" id="kpi-notes-entreprise">0</p>
+            </div>
+            <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-100">
+                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">🎓 Notes étudiant</p>
+                <p class="text-3xl font-black text-amber-700 mt-1" id="kpi-notes-etudiant">0</p>
+            </div>
+            <div class="bg-teal-50 p-5 rounded-2xl shadow-sm border border-teal-100">
+                <p class="text-[10px] font-black text-teal-600 uppercase tracking-widest">📋 Notes offres</p>
+                <p class="text-3xl font-black text-teal-700 mt-1" id="kpi-notes-offres">0</p>
+            </div>
+        </div>
+
+        <!-- PANEL SUPPRESSIONS CRITIQUES -->
+        <div id="panelSuppCritiques" class="hidden mb-6 bg-red-50 border-2 border-red-200 rounded-3xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="font-black text-red-700 flex items-center gap-2">⚠️ Suppressions critiques récentes</h2>
+                <button onclick="document.getElementById('panelSuppCritiques').classList.add('hidden')" class="text-red-300 hover:text-red-600 font-bold text-xl">✕</button>
+            </div>
+            <div id="suppCritiquesBody" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-4">🏆 Encadrants les plus actifs</p>
+                <div id="rankingEncadrant"><p class="text-xs text-gray-400 italic">Chargement…</p></div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4">🎓 Étudiants les plus suivis</p>
+                <div id="rankingEtudiant"><p class="text-xs text-gray-400 italic">Chargement…</p></div>
             </div>
         </div>
 <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 space-y-4">
@@ -87,20 +141,126 @@
                         <option value="">Toutes</option>
                         <option value="Création">Création</option>
                         <option value="Modification">Modification</option>
-                        <option value="Suppression">Suppression</option>
+                        <option value="Suppression">⚠️ Suppression</option>
+                        <option value="Note">📋 Note</option>
+                        <option value="Liaison MA">🎓 Liaison MA</option>
                         <option value="Action">Autre</option>
                     </select>
                 </div>
             </div>
-            <div class="flex justify-between items-center pt-2 border-t border-gray-50">
-                <div class="w-48">
-                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Filtrer par Date</label>
-                    <input type="date" id="fDate" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+            <div class="pt-2 border-t border-gray-50">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Du</label>
+                        <input type="date" id="fDateDebut" class="px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+                    </div>
+                    <span class="text-gray-300 font-black text-lg pb-2">→</span>
+                    <div>
+                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Au</label>
+                        <input type="date" id="fDateFin" class="px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]" onchange="applyFilters()">
+                    </div>
+                    <div class="flex flex-wrap gap-2 pb-0.5">
+                        <button onclick="setPeriod('today')" class="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-black uppercase hover:bg-[#1A4E8A] hover:text-white transition">Aujourd'hui</button>
+                        <button onclick="setPeriod('week')" class="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-black uppercase hover:bg-[#1A4E8A] hover:text-white transition">7 jours</button>
+                        <button onclick="setPeriod('month')" class="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-black uppercase hover:bg-[#1A4E8A] hover:text-white transition">30 jours</button>
+                        <button onclick="setPeriod('thismonth')" class="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-black uppercase hover:bg-[#1A4E8A] hover:text-white transition">Ce mois</button>
+                        <button onclick="setPeriod('all')" class="px-3 py-2 bg-blue-50 text-[#1A4E8A] rounded-lg text-[10px] font-black uppercase hover:bg-[#1A4E8A] hover:text-white transition">Tout voir</button>
+                    </div>
+                    <button onclick="resetFilters()" class="ml-auto px-6 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Réinitialiser</button>
                 </div>
-                <button onclick="resetFilters()" class="px-6 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Réinitialiser les filtres</button>
             </div>
         </div>
         
+        <!-- RAPPORT -->
+        <div id="rapportPanel" class="hidden bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-base font-black text-gray-800">📊 Rapport d'activité — <span id="rapportPeriodLabel" class="text-[#1A4E8A] font-black">période filtrée</span></h2>
+                <button onclick="toggleRapport()" class="text-gray-400 hover:text-gray-700 font-bold text-xl leading-none">✕</button>
+            </div>
+            <div class="mb-8">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">📊 Évolution globale des actions</p>
+                <div style="height:200px"><canvas id="chartTimeline"></canvas></div>
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 mt-5">📉 Évolution par type d'action (jours ouvrés uniquement)</p>
+                <div style="height:230px"><canvas id="chartTimelineLine"></canvas></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">👤 Répartition par encadrant</p>
+                    <div style="height:260px"><canvas id="chartPersonnel"></canvas></div>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">🎓 Activité par étudiant</p>
+                    <div style="height:260px"><canvas id="chartEtudiant"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL INDICATEURS DU QUOTIDIEN -->
+        <div id="panelIndicateursDuJour" class="hidden bg-white rounded-3xl shadow-sm border border-indigo-100 p-6 mb-6">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h2 class="text-lg font-black text-indigo-700">🗓️ Indicateurs du quotidien</h2>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Cliquez sur un indicateur pour voir le détail</p>
+                </div>
+                <button onclick="toggleIndicateursDuJour()" class="text-gray-300 hover:text-gray-600 font-bold text-xl leading-none">✕</button>
+            </div>
+            <!-- Filtres -->
+            <div class="bg-indigo-50 rounded-2xl p-4 mb-5 flex flex-wrap items-end gap-3">
+                <div>
+                    <label class="block text-[10px] font-black text-indigo-600 uppercase mb-1">Du</label>
+                    <input type="date" id="ijDateDebut" class="px-3 py-2 border-2 border-indigo-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-indigo-400">
+                </div>
+                <span class="text-gray-300 font-black text-lg pb-2">→</span>
+                <div>
+                    <label class="block text-[10px] font-black text-indigo-600 uppercase mb-1">Au</label>
+                    <input type="date" id="ijDateFin" class="px-3 py-2 border-2 border-indigo-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-indigo-400">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="setIJPeriod('today')" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition">Aujourd'hui</button>
+                    <button onclick="setIJPeriod('yesterday')" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition">Hier</button>
+                    <button onclick="setIJPeriod('week')" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition">7 jours</button>
+                    <button onclick="setIJPeriod('thismonth')" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition">Ce mois</button>
+                </div>
+                <button onclick="reloadBilanJournalier()" class="ml-auto bg-indigo-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition">🔄 Actualiser</button>
+            </div>
+            <div id="ijBody">
+                <p class="text-center text-indigo-400 font-bold animate-pulse py-6">Chargement des indicateurs…</p>
+            </div>
+        </div>
+
+        <!-- PANEL INDICATEURS MAJEURS (HEBDO) -->
+        <div id="panelIndicateursMajeurs" class="hidden bg-white rounded-3xl shadow-sm border border-violet-100 p-6 mb-6">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h2 class="text-lg font-black text-violet-700">📈 Indicateurs majeurs — Rapport hebdomadaire</h2>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Cliquez sur un indicateur pour voir le détail</p>
+                </div>
+                <button onclick="toggleIndicateursMajeurs()" class="text-gray-300 hover:text-gray-600 font-bold text-xl leading-none">✕</button>
+            </div>
+            <!-- Filtres -->
+            <div class="bg-violet-50 rounded-2xl p-4 mb-5 flex flex-wrap items-end gap-3">
+                <div>
+                    <label class="block text-[10px] font-black text-violet-600 uppercase mb-1">Du</label>
+                    <input type="date" id="imDateDebut" class="px-3 py-2 border-2 border-violet-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-violet-400">
+                </div>
+                <span class="text-gray-300 font-black text-lg pb-2">→</span>
+                <div>
+                    <label class="block text-[10px] font-black text-violet-600 uppercase mb-1">Au</label>
+                    <input type="date" id="imDateFin" class="px-3 py-2 border-2 border-violet-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-violet-400">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="setIMPeriod('week')" class="px-3 py-2 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-black uppercase hover:bg-violet-600 hover:text-white transition">Cette semaine</button>
+                    <button onclick="setIMPeriod('lastweek')" class="px-3 py-2 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-black uppercase hover:bg-violet-600 hover:text-white transition">Semaine passée</button>
+                    <button onclick="setIMPeriod('month')" class="px-3 py-2 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-black uppercase hover:bg-violet-600 hover:text-white transition">30 jours</button>
+                    <button onclick="setIMPeriod('thismonth')" class="px-3 py-2 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-black uppercase hover:bg-violet-600 hover:text-white transition">Ce mois</button>
+                </div>
+                <button onclick="reloadRapportHebdo()" class="ml-auto bg-violet-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-violet-700 transition">🔄 Actualiser</button>
+            </div>
+            <div id="imBody">
+                <p class="text-center text-violet-400 font-bold animate-pulse py-6">Chargement des indicateurs…</p>
+            </div>
+        </div>
+
         <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
@@ -124,6 +284,8 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         let allLogs = [];
         let filteredLogs = [];
+        let studentsMap = {};
+        let personnelSet = new Set();
 
         // IDENTITÉ & SÉCURITÉ
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -157,8 +319,10 @@
                 const result = await response.json();
                 if (result.success) {
                     allLogs = result.logs;
+                    studentsMap = result.studentsMap || {};
+                    personnelSet = new Set((result.personnelNames || []).map(n => n.toLowerCase()));
                     populateFilters();
-                    applyFilters(); 
+                    applyFilters();
                 }
             } catch (e) { console.error(e); }
         }
@@ -177,53 +341,201 @@
             document.getElementById('fCible').innerHTML = '<option value="">Toutes les cibles</option>' + cibles.map(c => `<option value="${c}">${c}</option>`).join('');
         }
 
+        function setPeriod(period) {
+            const today = new Date();
+            const toStr = d => d.toISOString().split('T')[0];
+            if (period === 'today') {
+                document.getElementById('fDateDebut').value = toStr(today);
+                document.getElementById('fDateFin').value = toStr(today);
+            } else if (period === 'week') {
+                const d = new Date(today); d.setDate(d.getDate() - 6);
+                document.getElementById('fDateDebut').value = toStr(d);
+                document.getElementById('fDateFin').value = toStr(today);
+            } else if (period === 'month') {
+                const d = new Date(today); d.setDate(d.getDate() - 29);
+                document.getElementById('fDateDebut').value = toStr(d);
+                document.getElementById('fDateFin').value = toStr(today);
+            } else if (period === 'thismonth') {
+                const d = new Date(today.getFullYear(), today.getMonth(), 1);
+                document.getElementById('fDateDebut').value = toStr(d);
+                document.getElementById('fDateFin').value = toStr(today);
+            } else {
+                document.getElementById('fDateDebut').value = '';
+                document.getElementById('fDateFin').value = '';
+            }
+            applyFilters();
+        }
+
         function applyFilters() {
             const fSearch = document.getElementById('fSearch').value.toLowerCase();
             const fAuteur = document.getElementById('fAuteur').value.toLowerCase();
-            const fCategorie = document.getElementById('fCategorie').value.toLowerCase(); // NOUVEAU
+            const fCategorie = document.getElementById('fCategorie').value.toLowerCase();
             const fCible = document.getElementById('fCible').value.toLowerCase();
             const fAction = document.getElementById('fAction').value.toLowerCase();
-            const fDate = document.getElementById('fDate').value; 
+            const fDateDebut = document.getElementById('fDateDebut').value;
+            const fDateFin = document.getElementById('fDateFin').value;
 
             filteredLogs = allLogs.filter(log => {
                 const auteur = String(getSafeValue(log, ['auteur']) || "").toLowerCase();
                 const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
-                const categorie = String(getSafeValue(log, ['catégorie', 'categorie']) || "").toLowerCase(); // NOUVEAU
+                const categorie = String(getSafeValue(log, ['catégorie', 'categorie']) || "").toLowerCase();
                 const cible = String(getSafeValue(log, ['cible']) || "").toLowerCase();
                 const details = String(getSafeValue(log, ['détail', 'detail']) || "").toLowerCase();
                 const dateVal = getSafeValue(log, ['date']);
 
-                const matchSearch = fSearch === "" || details.includes(fSearch) || cible.includes(fSearch);
+                const matchSearch = fSearch === "" || details.includes(fSearch) || cible.includes(fSearch) || auteur.includes(fSearch);
                 const matchAuteur = fAuteur === "" || auteur === fAuteur;
-                const matchCategorie = fCategorie === "" || categorie === fCategorie; // NOUVEAU
+                const matchCategorie = fCategorie === "" || categorie === fCategorie;
                 const matchCible = fCible === "" || cible === fCible;
                 const matchAction = fAction === "" || type.includes(fAction);
-                
+
                 let matchDate = true;
-                if (fDate && dateVal) {
-                    const logDateISO = new Date(dateVal).toISOString().split('T')[0];
-                    matchDate = (logDateISO === fDate);
+                if ((fDateDebut || fDateFin) && dateVal) {
+                    const logDate = new Date(dateVal);
+                    if (fDateDebut && logDate < new Date(fDateDebut + 'T00:00:00')) matchDate = false;
+                    if (matchDate && fDateFin && logDate > new Date(fDateFin + 'T23:59:59')) matchDate = false;
                 }
 
                 return matchSearch && matchAuteur && matchCategorie && matchCible && matchAction && matchDate;
             });
 
             updateKPIs(filteredLogs);
+            updateLeaders(filteredLogs);
             renderLogs(filteredLogs);
+            updateRapportCharts();
+        }
+
+        function updateLeaders(logs) {
+            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant'];
+            const byPerson = {}, byStudent = {};
+            logs.forEach(log => {
+                const a = getSafeValue(log, ['auteur']) || 'Inconnu';
+                // Encadrants uniquement : filtrer sur le Personnel si la liste est chargée
+                if (personnelSet.size === 0 || personnelSet.has(a.toLowerCase())) {
+                    byPerson[a] = (byPerson[a] || 0) + 1;
+                }
+                const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
+                if (STU_CATS.some(c => cat.includes(c))) {
+                    const cible = getSafeValue(log, ['cible']) || '';
+                    if (cible) {
+                        const nom = studentsMap[cible] || cible;
+                        byStudent[nom] = (byStudent[nom] || 0) + 1;
+                    }
+                }
+            });
+            renderRanking('rankingEncadrant', byPerson, '#1A4E8A');
+            renderRanking('rankingEtudiant', byStudent, '#f59e0b');
+        }
+
+        function getMedal(i) {
+            const M = ['🥇','🥈','🥉'];
+            return i < 3 ? M[i] : `<span class="text-xs font-black text-gray-400">${i+1}</span>`;
+        }
+
+        function renderRankingRow(name, count, i, max, color) {
+            const pct = Math.round(count / max * 100);
+            return `<div class="flex items-center gap-3 mb-3">
+                <span class="text-lg shrink-0 w-7 text-center leading-none">${getMedal(i)}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-black text-gray-800 truncate">${name}</span>
+                        <span class="text-[10px] font-black ml-2 shrink-0" style="color:${color}">${count} action${count>1?'s':''}</span>
+                    </div>
+                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderRanking(containerId, countMap, color) {
+            const container = document.getElementById(containerId);
+            const allEntries = Object.entries(countMap).sort((a,b) => b[1]-a[1]);
+            if (!allEntries.length) { container.innerHTML = '<p class="text-xs text-gray-400 italic text-center py-4">Aucune donnée sur cette période</p>'; return; }
+            const max = allEntries[0][1];
+            const top5 = allEntries.slice(0, 5);
+            const rest = allEntries.slice(5);
+            const expandId = `expand_${containerId}`;
+            const btnId = `btn_${containerId}`;
+            let html = top5.map(([name, count], i) => renderRankingRow(name, count, i, max, color)).join('');
+            if (rest.length > 0) {
+                html += `<div id="${expandId}" class="hidden">${rest.map(([name, count], i) => renderRankingRow(name, count, i + 5, max, color)).join('')}</div>`;
+                html += `<button id="${btnId}" onclick="toggleExpand('${expandId}','${btnId}',${rest.length})" class="w-full text-center text-[10px] font-black uppercase text-gray-400 hover:text-gray-700 py-2 mt-1 border border-dashed border-gray-200 rounded-xl transition">▼ Voir les ${rest.length} autres</button>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function toggleExpand(expandId, btnId, restCount) {
+            const el = document.getElementById(expandId);
+            const btn = document.getElementById(btnId);
+            const isNowVisible = el.classList.toggle('hidden') === false;
+            btn.textContent = isNowVisible ? '▲ Réduire' : `▼ Voir les ${restCount} autres`;
         }
 
         function updateKPIs(logs) {
             document.getElementById('kpi-total').innerText = logs.length;
-            let crea = 0, modif = 0, supp = 0;
+            let crea = 0, modif = 0, supp = 0, action = 0;
+            let offresVerifiees = 0, offresPartagees = 0, notesEntreprise = 0, notesEtudiant = 0, notesOffres = 0;
             logs.forEach(log => {
                 const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
+                const categorie = String(getSafeValue(log, ['catégorie', 'categorie']) || "").toLowerCase();
+                const details = String(getSafeValue(log, ['détail', 'detail']) || "").toLowerCase();
+
                 if (type.includes("créat")) crea++;
-                if (type.includes("modif")) modif++;
-                if (type.includes("suppr")) supp++;
+                else if (type.includes("modif")) modif++;
+                else if (type.includes("suppr")) supp++;
+                else action++;
+
+                if (categorie === "offres" && details.includes("→ vérifiée")) offresVerifiees++;
+                if (categorie === "offres" && type === "action" && details.includes("partagé")) offresPartagees++;
+                if (categorie === "note partenaire" && type.includes("créat")) notesEntreprise++;
+                if (categorie === "carnet de route" && type.includes("créat")) notesEtudiant++;
+                if (categorie === "offres" && type === "note") notesOffres++;
             });
             document.getElementById('kpi-crea').innerText = crea;
             document.getElementById('kpi-modif').innerText = modif;
             document.getElementById('kpi-supp').innerText = supp;
+            document.getElementById('kpi-action').innerText = action;
+            document.getElementById('kpi-offres-verifiees').innerText = offresVerifiees;
+            document.getElementById('kpi-offres-partagees').innerText = offresPartagees;
+            document.getElementById('kpi-notes-entreprise').innerText = notesEntreprise;
+            document.getElementById('kpi-notes-etudiant').innerText = notesEtudiant;
+            document.getElementById('kpi-notes-offres').innerText = notesOffres;
+        }
+
+        function showSuppCritiques() {
+            const suppLogs = allLogs.filter(log => {
+                const type = String(getSafeValue(log, ['type', 'action']) || "").toLowerCase();
+                return type.includes("suppr");
+            }).slice(0, 20);
+            const panel = document.getElementById('panelSuppCritiques');
+            const body = document.getElementById('suppCritiquesBody');
+            if (suppLogs.length === 0) {
+                body.innerHTML = '<p class="text-sm text-red-400 italic text-center py-4">Aucune suppression enregistrée.</p>';
+            } else {
+                body.innerHTML = suppLogs.map(log => {
+                    const dateVal = getSafeValue(log, ['date']);
+                    const dateStr = dateVal ? new Date(dateVal).toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
+                    const auteur = getSafeValue(log, ['auteur']) || 'Inconnu';
+                    const role = getSafeValue(log, ['rôle', 'role']) || '';
+                    const categorie = getSafeValue(log, ['catégorie', 'categorie']) || '';
+                    const details = getSafeValue(log, ['détail', 'detail']) || '';
+                    return `<div class="flex items-start gap-3 p-3 bg-white border border-red-200 rounded-2xl shadow-sm">
+                        <span class="text-xl shrink-0 mt-0.5">🗑️</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <span class="font-black text-red-700 text-sm">${auteur}</span>
+                                <span class="text-[9px] text-gray-400 font-bold uppercase">${role}</span>
+                                <span class="ml-auto text-[10px] text-gray-400 font-bold">${dateStr}</span>
+                            </div>
+                            <span class="text-[10px] bg-red-100 text-red-700 font-black px-2 py-0.5 rounded-full">${categorie}</span>
+                            <p class="text-xs text-gray-600 mt-1 leading-snug">${details}</p>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function renderLogs(logs) {
@@ -245,12 +557,20 @@
 
                 let badge = "bg-gray-100 text-gray-600";
                 if (typeAction.includes("Créat")) badge = "bg-green-100 text-green-700 border border-green-200";
-                if (typeAction.includes("Modif")) badge = "bg-blue-100 text-blue-700 border border-blue-200";
-                if (typeAction.includes("Suppr")) badge = "bg-red-100 text-red-700 border border-red-200";
+                else if (typeAction.includes("Modif")) badge = "bg-blue-100 text-blue-700 border border-blue-200";
+                else if (typeAction.includes("Suppr")) badge = "bg-red-100 text-red-700 border border-red-200";
+                else badge = "bg-orange-100 text-orange-700 border border-orange-200";
+
+                const detailsHtml = formatDetails(details);
+
+                const isSuppr = typeAction.toLowerCase().includes('suppr');
+                const rowClass = isSuppr
+                    ? "border-b border-red-100 bg-red-50/40 hover:bg-red-50/70 transition"
+                    : "border-b border-gray-50 hover:bg-blue-50/20 transition";
 
                 return `
-                <tr class="border-b border-gray-50 hover:bg-blue-50/20 transition">
-                    <td class="p-5 text-[11px] font-bold text-gray-500">${dateStr}</td>
+                <tr class="${rowClass}">
+                    <td class="p-5 text-[11px] font-bold text-gray-500 whitespace-nowrap">${isSuppr ? '🗑️ ' : ''}${dateStr}</td>
                     <td class="p-5">
                         <div class="font-bold text-gray-800">${auteur}</div>
                         <div class="text-[9px] text-gray-400 uppercase font-black tracking-widest mt-1">${role}</div>
@@ -258,19 +578,602 @@
                     <td class="p-5"><span class="px-2 py-1 rounded-xl text-[10px] font-black uppercase shadow-sm ${badge}">${typeAction}</span></td>
                     <td class="p-5 font-bold text-[#1A4E8A] text-xs">${categorie}</td>
                     <td class="p-5 font-mono text-[10px] text-orange-600 font-bold">${cible}</td>
-                    <td class="p-5 text-xs text-gray-600 leading-relaxed">${details}</td>
+                    <td class="p-5 text-xs text-gray-600 leading-relaxed">${detailsHtml}</td>
                 </tr>`;
             }).join('');
+        }
+
+        function formatDetails(details) {
+            if (!details) return '-';
+            // Détecte le format "Avant: X → Après: Y" et le met en valeur
+            const arrowPattern = /([^:]+):\s*([^→]+)\s*→\s*(.+)/g;
+            let formatted = details.replace(arrowPattern, (match, field, before, after) => {
+                return `<span class="inline-flex items-center gap-1 mr-2 mb-1 flex-wrap"><span class="font-black text-gray-500 text-[9px] uppercase">${field.trim()}:</span><span class="bg-red-50 text-red-700 px-1.5 py-0.5 rounded text-[10px] line-through">${before.trim()}</span><span class="text-gray-400">→</span><span class="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold">${after.trim()}</span></span>`;
+            });
+            // Détecte le format "Modif: Champ1: val1 | Champ2: val2"
+            if (details.startsWith('Modif:')) {
+                const inner = details.replace(/^Modif:\s*/, '');
+                const parts = inner.split(' | ');
+                if (parts.length > 1) {
+                    formatted = parts.map(part => {
+                        const [k, ...v] = part.split(':');
+                        if (v.length) return `<span class="inline-flex items-center gap-1 mr-2 mb-1"><span class="font-black text-[#1A4E8A] text-[9px] uppercase">${k.trim()}:</span><span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold">${v.join(':').trim()}</span></span>`;
+                        return `<span class="text-gray-600 text-xs">${part}</span>`;
+                    }).join('');
+                }
+            }
+            return formatted;
         }
 
         function resetFilters() {
             document.getElementById('fSearch').value = "";
             document.getElementById('fAuteur').value = "";
-            document.getElementById('fCategorie').value = ""; // NOUVEAU
+            document.getElementById('fCategorie').value = "";
             document.getElementById('fCible').value = "";
             document.getElementById('fAction').value = "";
-            document.getElementById('fDate').value = "";
+            document.getElementById('fDateDebut').value = "";
+            document.getElementById('fDateFin').value = "";
             applyFilters();
+        }
+
+        // ===================== RAPPORT =====================
+        let rapportOpen = false;
+        let chartTimeline = null, chartTimelineLine = null, chartPersonnel = null, chartEtudiant = null;
+        const PIE_COLORS = ['#1A4E8A','#F26522','#22c55e','#f59e0b','#a855f7','#ef4444','#3b82f6','#14b8a6','#ec4899','#84cc16'];
+
+        function toggleRapport() {
+            rapportOpen = !rapportOpen;
+            document.getElementById('rapportPanel').classList.toggle('hidden', !rapportOpen);
+            document.getElementById('btnRapport').classList.toggle('bg-[#1A4E8A]', !rapportOpen);
+            document.getElementById('btnRapport').classList.toggle('bg-blue-800', rapportOpen);
+            if (rapportOpen) updateRapportCharts();
+        }
+
+        function updateRapportCharts() {
+            if (!rapportOpen) return;
+            const deb = document.getElementById('fDateDebut').value;
+            const fin = document.getElementById('fDateFin').value;
+            const lbl = (deb || fin) ? ((deb || '…') + ' → ' + (fin || '…')) : 'toute la période';
+            document.getElementById('rapportPeriodLabel').textContent = lbl + ' (' + filteredLogs.length + ' actions)';
+            buildTimelineChart();
+            buildTimelineLineChart();
+            buildPersonnelChart();
+            buildStudentChart();
+        }
+
+        function buildTimelineChart() {
+            const byDay = {};
+            filteredLogs.forEach(log => {
+                const dv = getSafeValue(log, ['date']);
+                if (!dv) return;
+                const d = new Date(dv);
+                if (isNaN(d)) return;
+                const key = d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+                byDay[key] = (byDay[key] || 0) + 1;
+            });
+            const parseKey = k => { const [d,m,y] = k.split('/'); return new Date(y, m-1, d); };
+            const labels = Object.keys(byDay).sort((a,b) => parseKey(a) - parseKey(b));
+            const ctx = document.getElementById('chartTimeline').getContext('2d');
+            if (chartTimeline) chartTimeline.destroy();
+            chartTimeline = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ label: 'Actions', data: labels.map(k => byDay[k]), backgroundColor: 'rgba(26,78,138,0.75)', borderColor: '#1A4E8A', borderWidth: 1, borderRadius: 4 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { font: { weight: 'bold', size: 9 }, maxRotation: 45 } },
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold', size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        function buildPersonnelChart() {
+            const byPerson = {};
+            filteredLogs.forEach(log => {
+                const a = getSafeValue(log, ['auteur']) || 'Inconnu';
+                if (personnelSet.size === 0 || personnelSet.has(a.toLowerCase())) {
+                    byPerson[a] = (byPerson[a] || 0) + 1;
+                }
+            });
+            const entries = Object.entries(byPerson).sort((a,b) => b[1]-a[1]).slice(0,10);
+            if (!entries.length) return;
+            const ctx = document.getElementById('chartPersonnel').getContext('2d');
+            if (chartPersonnel) chartPersonnel.destroy();
+            chartPersonnel = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: entries.map(e => e[0]),
+                    datasets: [{ data: entries.map(e => e[1]), backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#fff' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 10 } },
+                        tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ' : ' + ctx.raw + ' actions (' + Math.round(ctx.parsed / filteredLogs.length * 100) + '%)' } }
+                    }
+                }
+            });
+        }
+
+        function buildStudentChart() {
+            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant'];
+            const byStudent = {};
+            filteredLogs.forEach(log => {
+                const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
+                if (!STU_CATS.some(c => cat.includes(c))) return;
+                const cible = getSafeValue(log, ['cible']) || '-';
+                if (cible === '-' || !cible) return;
+                const nom = studentsMap[cible] || cible;
+                byStudent[nom] = (byStudent[nom] || 0) + 1;
+            });
+            const ctx = document.getElementById('chartEtudiant').getContext('2d');
+            if (chartEtudiant) chartEtudiant.destroy();
+            const allEntries = Object.entries(byStudent).sort((a,b) => b[1]-a[1]);
+            if (!allEntries.length) {
+                chartEtudiant = null;
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'center';
+                ctx.fillText('Aucune action étudiant sur cette période', ctx.canvas.width/2, 100);
+                return;
+            }
+            const total = allEntries.reduce((s, [,v]) => s + v, 0);
+            const chartEntries = allEntries.filter(([,v]) => v / total >= 0.01).slice(0, 15);
+            if (!chartEntries.length) {
+                chartEtudiant = null;
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'center';
+                ctx.fillText('Aucune action étudiant sur cette période', ctx.canvas.width/2, 100);
+                return;
+            }
+            const chartTotal = chartEntries.reduce((s, [,v]) => s + v, 0);
+            chartEtudiant = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: chartEntries.map(e => e[0]),
+                    datasets: [{ data: chartEntries.map(e => e[1]), backgroundColor: [...PIE_COLORS, '#6366f1','#ec4899','#0ea5e9','#10b981','#8b5cf6'].slice(0, chartEntries.length), borderWidth: 2, borderColor: '#fff' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 12, padding: 8 } },
+                        tooltip: { callbacks: { label: c => ` ${c.label} : ${c.raw} action${c.raw>1?'s':''} (${Math.round(c.raw/chartTotal*100)}%)` } }
+                    }
+                }
+            });
+        }
+        // ---- Jours fériés & jours ouvrés ----
+        function getEasterDate(y) {
+            const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+            return new Date(y, mo-1, day);
+        }
+        function getFeriesSet(y) {
+            const easterAdd = (n) => { const d=new Date(getEasterDate(y)); d.setDate(d.getDate()+n); return d; };
+            const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            return new Set([
+                new Date(y,0,1), easterAdd(1), new Date(y,4,1), new Date(y,4,8),
+                easterAdd(39), easterAdd(50), new Date(y,6,14), new Date(y,7,15),
+                new Date(y,10,1), new Date(y,10,11), new Date(y,11,25)
+            ].map(key));
+        }
+        const _feriesCache = {};
+        function isJourOuvre(d) {
+            const dow = d.getDay();
+            if (dow === 0 || dow === 6) return false;
+            const y = d.getFullYear();
+            if (!_feriesCache[y]) _feriesCache[y] = getFeriesSet(y);
+            const key = `${y}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            return !_feriesCache[y].has(key);
+        }
+
+        function buildTimelineLineChart() {
+            // Clé locale YYYY-MM-DD sans passage par UTC
+            const toKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+            const ctx = document.getElementById('chartTimelineLine').getContext('2d');
+            if (chartTimelineLine) { chartTimelineLine.destroy(); chartTimelineLine = null; }
+            if (!filteredLogs.length) return;
+
+            const rawDates = filteredLogs.map(l => { const dv=getSafeValue(l,['date']); return dv ? new Date(dv) : null; }).filter(Boolean);
+            if (!rawDates.length) return;
+
+            const minD = new Date(Math.min(...rawDates)); minD.setHours(0,0,0,0);
+            const maxD = new Date(Math.max(...rawDates)); maxD.setHours(0,0,0,0);
+
+            const workDays = [];
+            const cur = new Date(minD);
+            while (cur <= maxD) {
+                if (isJourOuvre(cur)) workDays.push(toKey(cur));
+                cur.setDate(cur.getDate()+1);
+            }
+            if (!workDays.length) return;
+
+            const dayCount = {};
+            filteredLogs.forEach(log => {
+                const dv = getSafeValue(log, ['date']);
+                if (!dv) return;
+                const d = new Date(dv);
+                if (isNaN(d) || !isJourOuvre(d)) return;
+                const key = toKey(d);
+                dayCount[key] = (dayCount[key] || 0) + 1;
+            });
+
+            const isSparse = workDays.length > 60;
+            // Labels depuis la clé string directement, sans re-parser en Date
+            const labels = workDays.map(k => k.slice(8,10) + '/' + k.slice(5,7));
+            const data = workDays.map(d => dayCount[d] || 0);
+
+            chartTimelineLine = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Actions (jours ouvrés)',
+                        data,
+                        borderColor: '#1A4E8A',
+                        backgroundColor: 'rgba(26,78,138,0.08)',
+                        borderWidth: 2.5,
+                        pointRadius: isSparse ? 0 : 3,
+                        pointHoverRadius: 5,
+                        tension: 0.35,
+                        fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { ticks: { font: { weight: 'bold', size: 9 }, maxRotation: 45, maxTicksLimit: 30 } },
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold', size: 9 } } }
+                    }
+                }
+            });
+        }
+        // ====================================================
+
+        // ========================================================
+        // INDICATEURS DU QUOTIDIEN
+        // ========================================================
+        let ijOpen = false;
+        let imOpen = false;
+        let ijData = null;
+        let imData = null;
+
+        function toStr(d) { return d.toISOString().split('T')[0]; }
+
+        function setIJPeriod(p) {
+            const t = new Date();
+            if (p === 'today') {
+                document.getElementById('ijDateDebut').value = toStr(t);
+                document.getElementById('ijDateFin').value   = toStr(t);
+            } else if (p === 'yesterday') {
+                const y = new Date(t); y.setDate(t.getDate()-1);
+                document.getElementById('ijDateDebut').value = toStr(y);
+                document.getElementById('ijDateFin').value   = toStr(y);
+            } else if (p === 'week') {
+                const d = new Date(t); d.setDate(t.getDate()-6);
+                document.getElementById('ijDateDebut').value = toStr(d);
+                document.getElementById('ijDateFin').value   = toStr(t);
+            } else if (p === 'thismonth') {
+                const d = new Date(t.getFullYear(), t.getMonth(), 1);
+                document.getElementById('ijDateDebut').value = toStr(d);
+                document.getElementById('ijDateFin').value   = toStr(t);
+            }
+        }
+
+        function setIMPeriod(p) {
+            const t = new Date();
+            const dow = t.getDay();
+            const diffL = (dow === 0) ? -6 : 1 - dow;
+            const lundi = new Date(t); lundi.setDate(t.getDate() + diffL);
+            const dim   = new Date(lundi); dim.setDate(lundi.getDate() + 6);
+            if (p === 'week') {
+                document.getElementById('imDateDebut').value = toStr(lundi);
+                document.getElementById('imDateFin').value   = toStr(dim);
+            } else if (p === 'lastweek') {
+                const lw = new Date(lundi); lw.setDate(lundi.getDate()-7);
+                const dw = new Date(lw); dw.setDate(lw.getDate()+6);
+                document.getElementById('imDateDebut').value = toStr(lw);
+                document.getElementById('imDateFin').value   = toStr(dw);
+            } else if (p === 'month') {
+                const d = new Date(t); d.setDate(t.getDate()-29);
+                document.getElementById('imDateDebut').value = toStr(d);
+                document.getElementById('imDateFin').value   = toStr(t);
+            } else if (p === 'thismonth') {
+                const d = new Date(t.getFullYear(), t.getMonth(), 1);
+                document.getElementById('imDateDebut').value = toStr(d);
+                document.getElementById('imDateFin').value   = toStr(t);
+            }
+        }
+
+        function toggleIndicateursDuJour() {
+            ijOpen = !ijOpen;
+            document.getElementById('panelIndicateursDuJour').classList.toggle('hidden', !ijOpen);
+            document.getElementById('btnIndicateursJour').classList.toggle('bg-indigo-800', ijOpen);
+            if (ijOpen) {
+                setIJPeriod('today');
+                reloadBilanJournalier();
+                document.getElementById('panelIndicateursDuJour').scrollIntoView({ behavior:'smooth', block:'start' });
+            }
+        }
+
+        function toggleIndicateursMajeurs() {
+            imOpen = !imOpen;
+            document.getElementById('panelIndicateursMajeurs').classList.toggle('hidden', !imOpen);
+            document.getElementById('btnIndicateursMajeurs').classList.toggle('bg-violet-800', imOpen);
+            if (imOpen) {
+                setIMPeriod('week');
+                reloadRapportHebdo();
+                document.getElementById('panelIndicateursMajeurs').scrollIntoView({ behavior:'smooth', block:'start' });
+            }
+        }
+
+        async function reloadBilanJournalier() {
+            const debut = document.getElementById('ijDateDebut').value;
+            const fin   = document.getElementById('ijDateFin').value;
+            document.getElementById('ijBody').innerHTML = '<p class="text-center text-indigo-400 font-bold animate-pulse py-6">Chargement…</p>';
+            try {
+                const res = await fetch(API_URL, {
+                    method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"},
+                    body: JSON.stringify({ action:'getBilanJournalier', roleAuteur: user.role, dateDebut: debut, dateFin: fin })
+                });
+                const r = await res.json();
+                if (r.success) { ijData = r.data; renderIndicateurs(r.data, 'ijBody', 'indigo'); }
+                else document.getElementById('ijBody').innerHTML = '<p class="text-red-500 text-center py-4 font-bold">Erreur : ' + r.message + '</p>';
+            } catch(e) { document.getElementById('ijBody').innerHTML = '<p class="text-red-500 text-center py-4 font-bold">Erreur réseau</p>'; }
+        }
+
+        async function reloadRapportHebdo() {
+            const debut = document.getElementById('imDateDebut').value;
+            const fin   = document.getElementById('imDateFin').value;
+            document.getElementById('imBody').innerHTML = '<p class="text-center text-violet-400 font-bold animate-pulse py-6">Chargement…</p>';
+            try {
+                const res = await fetch(API_URL, {
+                    method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"},
+                    body: JSON.stringify({ action:'getRapportHebdomadaire', roleAuteur: user.role, dateDebut: debut, dateFin: fin })
+                });
+                const r = await res.json();
+                if (r.success) { imData = r.data; renderIndicateursMajeurs(r.data, 'imBody', 'violet'); }
+                else document.getElementById('imBody').innerHTML = '<p class="text-red-500 text-center py-4 font-bold">Erreur : ' + r.message + '</p>';
+            } catch(e) { document.getElementById('imBody').innerHTML = '<p class="text-red-500 text-center py-4 font-bold">Erreur réseau</p>'; }
+        }
+
+        // ── Rendu commun des KPI cards ──────────────────────────────
+        let openKpiId = null;
+
+        function toggleKpiDetail(id) {
+            const el = document.getElementById('kpi-detail-' + id);
+            if (!el) return;
+            if (openKpiId && openKpiId !== id) {
+                const prev = document.getElementById('kpi-detail-' + openKpiId);
+                if (prev) prev.classList.add('hidden');
+            }
+            el.classList.toggle('hidden');
+            openKpiId = el.classList.contains('hidden') ? null : id;
+        }
+
+        function kpiCard(id, emoji, label, value, color, bg, detail) {
+            const hasDetail = detail && detail.length > 0;
+            const cursor = hasDetail ? 'cursor-pointer hover:shadow-md' : '';
+            const badge  = hasDetail ? `<span class="text-[9px] font-black text-gray-400 uppercase ml-2">▼ ${detail.length} élt${detail.length>1?'s':''}</span>` : '';
+            return `
+            <div class="rounded-2xl border p-4 ${cursor} transition" style="background:${bg};border-color:${color}20" onclick="${hasDetail ? `toggleKpiDetail('${id}')` : ''}">
+                <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">${emoji} ${label}</p>
+                <div class="flex items-baseline gap-1 mt-1">
+                    <span class="text-3xl font-black" style="color:${color}">${value}</span>${badge}
+                </div>
+                ${hasDetail ? renderKpiDetailTable(id, detail) : ''}
+            </div>`;
+        }
+
+        function renderKpiDetailTable(id, rows) {
+            if (!rows || !rows.length) return '';
+            // Detect type: log entries (have auteur/type/detail) or student entries (have nom/classe)
+            const isLog = rows[0].hasOwnProperty('auteur');
+            let html = `<div id="kpi-detail-${id}" class="hidden mt-3 overflow-x-auto max-h-72 overflow-y-auto custom-scrollbar">`;
+            if (isLog) {
+                html += `<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-100 text-[9px] font-black text-gray-500 uppercase">
+                    <th class="p-2 text-left">Date</th><th class="p-2 text-left">Auteur</th><th class="p-2 text-left">Action</th><th class="p-2 text-left">Détails</th></tr></thead><tbody>`;
+                rows.forEach(r => {
+                    html += `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-2 whitespace-nowrap text-gray-500">${r.date}</td>
+                        <td class="p-2 font-bold text-gray-800">${r.auteur}</td>
+                        <td class="p-2"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-700">${r.type}</span></td>
+                        <td class="p-2 text-gray-600 leading-snug">${(r.detail||'').substring(0,100)}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            } else if (rows[0].hasOwnProperty('poste')) {
+                // Offres
+                html += `<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-100 text-[9px] font-black text-gray-500 uppercase">
+                    <th class="p-2 text-left">ID</th><th class="p-2 text-left">Poste</th><th class="p-2 text-left">Entreprise</th><th class="p-2 text-left">Ville</th></tr></thead><tbody>`;
+                rows.forEach(r => {
+                    html += `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-2 font-mono text-orange-600 text-[9px]">${r.id}</td>
+                        <td class="p-2 font-bold text-gray-800">${r.poste||'-'}</td>
+                        <td class="p-2 text-gray-600">${r.entreprise||'-'}</td>
+                        <td class="p-2 text-gray-500">${r.ville||'-'}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                // Étudiants
+                const hasDC = rows[0].hasOwnProperty('dernierContact');
+                html += `<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-100 text-[9px] font-black text-gray-500 uppercase">
+                    <th class="p-2 text-left">Nom</th><th class="p-2 text-left">Classe</th><th class="p-2 text-left">Campus</th>
+                    ${hasDC ? '<th class="p-2 text-left">Dernier contact</th>' : ''}</tr></thead><tbody>`;
+                rows.forEach(r => {
+                    html += `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-2 font-bold text-gray-800">${r.nom||'-'}</td>
+                        <td class="p-2 text-gray-600">${r.classe||'-'}</td>
+                        <td class="p-2 text-gray-500">${r.campus||'-'}</td>
+                        ${hasDC ? `<td class="p-2 font-bold text-red-600">${r.dernierContact||'-'}</td>` : ''}
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function rankBlock(ranking, color, label) {
+            if (!ranking || !ranking.length) return `<p class="text-xs text-gray-400 italic text-center py-3">Aucune donnée</p>`;
+            const max = ranking[0].count;
+            const medals = ['🥇','🥈','🥉'];
+            return ranking.slice(0,8).map((e,i) => {
+                const pct = Math.round(e.count / max * 100);
+                return `<div class="flex items-center gap-2 mb-2">
+                    <span class="w-6 text-center text-base shrink-0">${i<3?medals[i]:'<span class="text-[10px] font-black text-gray-400">'+(i+1)+'</span>'}</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-center mb-0.5">
+                            <span class="text-xs font-black text-gray-800 truncate">${e.name}</span>
+                            <span class="text-[10px] font-black ml-2 shrink-0" style="color:${color}">${e.count}</span>
+                        </div>
+                        <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${color}"></div></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderIndicateurs(data, containerId, theme) {
+            const d = data.details || {};
+            const c = theme === 'indigo' ? '#4f46e5' : '#7c3aed';
+            let html = '';
+
+            // — Activité —
+            html += `<div class="mb-5">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">📈 Activité sur la période</p>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                ${kpiCard('total',    '📊','Total actions',             data.totalActions,       '#1A4E8A','#eff6ff', d.actions)}
+                ${kpiCard('ofverif',  '✅','Offres vérifiées',          data.offresVerifiees,    '#7c3aed','#f5f3ff', d.offresVerif)}
+                ${kpiCard('ofqualif', '⏳','Offres à qualifier',        data.offresAQualifier,   '#d97706','#fffbeb', d.offresAQualifier)}
+                ${kpiCard('notesetu', '📓','Notes carnet étudiants',   data.notesCarnetEtu,     '#f59e0b','#fffbeb', d.notesEtu)}
+                ${kpiCard('notesent', '🏢','Notes carnet entreprise',  data.notesCarnetEnt,     '#6366f1','#eef2ff', d.notesEnt)}
+                </div>
+            </div>`;
+
+            // — Contacts —
+            html += `<div class="mb-5">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🏢 Contacts Entreprises</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                ${kpiCard('contcrea', '➕','Contacts créés',           data.contactsEntCreated, '#16a34a','#f0fdf4', d.contactsCreated)}
+                ${kpiCard('contsupp', '🗑️','Contacts supprimés',       data.contactsEntDeleted, '#dc2626','#fef2f2', d.contactsDeleted)}
+                </div>
+            </div>`;
+
+            // — Étudiants —
+            html += `<div class="mb-5">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🎓 Étudiants</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                ${kpiCard('etucrea',  '➕','Étudiants créés',          data.etuCreated,         '#16a34a','#f0fdf4', d.etuCreated)}
+                ${kpiCard('etusupp',  '🗑️','Étudiants supprimés',      data.etuDeleted,         '#dc2626','#fef2f2', d.etuDeleted)}
+                ${kpiCard('etumodif', '✏️','Infos modifiées (coordonnées)', data.infosModifiees, '#2563eb','#eff6ff', d.infosModif)}
+                </div>
+            </div>`;
+
+            // — Classements —
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-3">🏆 Encadrants les plus actifs</p>
+                    <div>${rankBlock(data.encadrantsRanking,'#1A4E8A','enc')}</div>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">🎓 Étudiants les plus actifs</p>
+                    <div>${rankBlock(data.etudiantsRanking,'#f59e0b','etu')}</div>
+                </div>
+            </div>`;
+
+            // — Situation actuelle —
+            html += `<div>
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🔍 Situation actuelle — Recherche d'alternance</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                ${kpiCard('sansalt',   '🔴','En recherche sans alternance',      data.etuSansAlternance.count,        '#dc2626','#fef2f2', data.etuSansAlternance.detail)}
+                ${kpiCard('avecalt',   '🟢','En recherche avec alternance',      data.etuAvecAlternance.count,        '#16a34a','#f0fdf4', data.etuAvecAlternance.detail)}
+                ${kpiCard('cvnon',     '📄','En recherche — CV non fait',        data.etuCVNonFait.count,             '#d97706','#fffbeb', data.etuCVNonFait.detail)}
+                ${kpiCard('noncontact','⚠️','Préinscrits non contactés > 1 mois',data.etuPreinscritNonContacte.count,'#dc2626','#fef2f2', data.etuPreinscritNonContacte.detail)}
+                </div>
+            </div>`;
+
+            document.getElementById(containerId).innerHTML = html;
+        }
+
+        function renderIndicateursMajeurs(data, containerId, theme) {
+            const hb = data.hebdo || {};
+            let html = '';
+
+            // — Indicateurs Majeurs hebdo —
+            const tc = (hb.tauxObjectifs||0) >= 70 ? '#16a34a' : (hb.tauxObjectifs >= 50 ? '#d97706' : '#dc2626');
+            html += `<div class="mb-5">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🎯 Indicateurs Majeurs</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-purple-50 border border-purple-100 rounded-2xl p-4">
+                        <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">📊 Taux transformation total</p>
+                        <p class="text-3xl font-black text-purple-700 mt-1">${hb.tauxTransfoTotal||0}%</p>
+                        <p class="text-xs text-gray-500 mt-1">${hb.totalOffresVerif||0} vérifiées / ${hb.totalOffresRecu||0} reçues (total historique)</p>
+                    </div>
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+                        <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">📅 Taux transformation cette semaine</p>
+                        <p class="text-3xl font-black text-indigo-700 mt-1">${hb.tauxTransfoSemaine||0}%</p>
+                        <p class="text-xs text-gray-500 mt-1">${hb.semOffresVerif||0} vérifiées / ${hb.semOffresRecu||0} reçues cette semaine</p>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                        <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest">🎓 Offres vérifiées / Étudiants en recherche</p>
+                        <p class="text-3xl font-black text-blue-700 mt-1">${hb.ratioOffresEtu||'N/A'}</p>
+                        <p class="text-xs text-gray-500 mt-1">${hb.totalOffresVerif||0} offres / ${hb.totalActifsEnRecherche||0} étudiants actifs</p>
+                        ${Object.keys(hb.actifsByCampus||{}).length > 1 ? '<div class="mt-2 space-y-1">' + Object.entries(hb.actifsByCampus||{}).map(([c,n])=>`<div class="text-[10px] text-gray-600">• ${c} : <strong>${n}</strong> étu.</div>`).join('') + '</div>' : ''}
+                    </div>
+                    <div class="rounded-2xl p-4" style="background:${tc}15;border:1px solid ${tc}30">
+                        <p class="text-[10px] font-black uppercase tracking-widest" style="color:${tc}">🏆 Objectifs atteints cette semaine</p>
+                        <p class="text-3xl font-black mt-1" style="color:${tc}">${hb.tauxObjectifs||0}%</p>
+                        <p class="text-xs text-gray-500 mt-1">${hb.objAtteints||0} atteints / ${hb.objTotal||0} objectifs</p>
+                    </div>
+                </div>
+            </div>
+            <hr class="border-gray-100 my-4">`;
+
+            // — Tout le reste (indicateurs du quotidien filtrés sur la semaine) —
+            const d = data.details || {};
+            html += `<p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">📈 Activité de la semaine (tous les indicateurs du quotidien filtrés)</p>`;
+
+            html += `<div class="mb-5"><div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                ${kpiCard('im-total',    '📊','Total actions',             data.totalActions,       '#1A4E8A','#eff6ff', d.actions)}
+                ${kpiCard('im-ofverif',  '✅','Offres vérifiées',          data.offresVerifiees,    '#7c3aed','#f5f3ff', d.offresVerif)}
+                ${kpiCard('im-ofqualif', '⏳','Offres à qualifier',        data.offresAQualifier,   '#d97706','#fffbeb', d.offresAQualifier)}
+                ${kpiCard('im-notesetu', '📓','Notes carnet étudiants',   data.notesCarnetEtu,     '#f59e0b','#fffbeb', d.notesEtu)}
+                ${kpiCard('im-notesent', '🏢','Notes carnet entreprise',  data.notesCarnetEnt,     '#6366f1','#eef2ff', d.notesEnt)}
+            </div></div>`;
+
+            html += `<div class="mb-5"><div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                ${kpiCard('im-contcrea', '➕','Contacts entreprises créés',  data.contactsEntCreated, '#16a34a','#f0fdf4', d.contactsCreated)}
+                ${kpiCard('im-contsupp', '🗑️','Contacts entreprises supprimés', data.contactsEntDeleted, '#dc2626','#fef2f2', d.contactsDeleted)}
+                ${kpiCard('im-etucrea',  '➕','Nouveaux étudiants',          data.etuCreated,         '#16a34a','#f0fdf4', d.etuCreated)}
+                ${kpiCard('im-etusupp',  '🗑️','Étudiants supprimés',          data.etuDeleted,         '#dc2626','#fef2f2', d.etuDeleted)}
+                ${kpiCard('im-etumodif', '✏️','Infos modifiées',             data.infosModifiees,     '#2563eb','#eff6ff', d.infosModif)}
+            </div></div>`;
+
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest mb-3">🏆 Encadrants les plus actifs</p>
+                    ${rankBlock(data.encadrantsRanking,'#1A4E8A')}
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-4">
+                    <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">🎓 Étudiants les plus actifs</p>
+                    ${rankBlock(data.etudiantsRanking,'#f59e0b')}
+                </div>
+            </div>`;
+
+            html += `<p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🔍 Situation actuelle — Recherche d'alternance</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                ${kpiCard('im-sansalt',   '🔴','En recherche sans alternance',      data.etuSansAlternance.count,        '#dc2626','#fef2f2', data.etuSansAlternance.detail)}
+                ${kpiCard('im-avecalt',   '🟢','En recherche avec alternance',      data.etuAvecAlternance.count,        '#16a34a','#f0fdf4', data.etuAvecAlternance.detail)}
+                ${kpiCard('im-cvnon',     '📄','En recherche — CV non fait',        data.etuCVNonFait.count,             '#d97706','#fffbeb', data.etuCVNonFait.detail)}
+                ${kpiCard('im-noncontact','⚠️','Préinscrits non contactés > 1 mois',data.etuPreinscritNonContacte.count,'#dc2626','#fef2f2', data.etuPreinscritNonContacte.detail)}
+            </div>`;
+
+            document.getElementById(containerId).innerHTML = html;
         }
 
         function exportCSV() {
@@ -289,5 +1192,6 @@
             link.click();
         }
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>

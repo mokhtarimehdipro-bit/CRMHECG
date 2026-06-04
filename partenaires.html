@@ -1,9 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>HECG - CRM Partenaires</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -21,6 +26,9 @@
                 <a href="dashboard.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition">Étudiants</a>
                 <a href="partenaires.html" class="px-4 py-2 text-sm font-bold bg-white text-[#1A4E8A] rounded-lg shadow-sm">Entreprises</a>
                 <a href="campagnes.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Campagnes</a>
+                <a href="missions.html" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden px-4 py-2 text-sm font-bold text-amber-500 hover:text-amber-700">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -28,6 +36,7 @@
             <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-slate-400 font-bold text-xs hover:text-red-500">Déconnexion</button>
         </div>
     </nav>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
@@ -49,8 +58,12 @@
                     <option value="2+">🔥 2+ alternants (Grands Comptes)</option>
                 </select>
 
+                <input type="text" id="filterCP" onkeyup="filterPartners()" placeholder="📮 Code postal..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
+                <input type="text" id="filterVille" onkeyup="filterPartners()" placeholder="🏙️ Ville..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
+
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
                 <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
             </div>
         </div>
@@ -58,6 +71,11 @@
         <div id="loader" class="text-center py-24">
             <div class="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#1A4E8A] rounded-full animate-spin mb-4"></div>
             <p class="font-black text-slate-400 text-sm animate-pulse">SYNCHRONISATION GOOGLE SHEETS...</p>
+        </div>
+
+        <div id="mapContainer" class="hidden mb-8">
+            <div id="mapView" style="height:480px;border-radius:1.5rem;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(0,0,0,.08)"></div>
+            <div id="mapStatus" class="text-[10px] font-bold text-slate-400 mt-2 text-right h-4"></div>
         </div>
 
         <div id="partnersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
@@ -96,6 +114,12 @@
                             <h3 class="font-black text-green-700 uppercase text-[10px] tracking-widest mb-4">🎓 Alternants HECG en poste</h3>
                             <div id="dossierAlternants" class="flex flex-wrap gap-2"></div>
                         </div>
+
+                        <div id="dossierAnciensBlock" class="hidden bg-amber-50/60 p-6 rounded-3xl border border-amber-200">
+                            <h3 class="font-black text-amber-700 uppercase text-[10px] tracking-widest mb-1">⚠️ Anciens alternants détectés</h3>
+                            <p class="text-[9px] text-amber-600 italic mb-4">Ces étudiants ont quitté cette entreprise (changement d'entreprise détecté). Confirmez ou signalez une erreur de saisie.</p>
+                            <div id="dossierAnciensAlternants" class="space-y-2"></div>
+                        </div>
                     </div>
 
                     <div class="lg:col-span-8 space-y-8">
@@ -126,7 +150,7 @@
             </div>
 
             <div class="p-8 border-t flex justify-between items-center bg-slate-50/50">
-                <button onclick="deleteEnterprise()" class="text-slate-300 hover:text-red-600 font-bold text-xs transition">⚠️ SUPPRIMER L'ENTREPRISE</button>
+                <div id="btnDeleteEntWrapper">${canDelete ? '<button onclick="deleteEnterprise()" class="text-slate-300 hover:text-red-600 font-bold text-xs transition">⚠️ SUPPRIMER L\'ENTREPRISE</button>' : ''}</div>
                 <div class="flex space-x-4">
                     <button onclick="closeDossier()" class="px-8 py-3 text-slate-400 font-bold hover:bg-slate-100 rounded-2xl transition">Annuler</button>
                     <button onclick="saveEnterpriseChanges()" class="px-10 py-3 bg-[#1A4E8A] text-white rounded-2xl font-black shadow-xl hover:bg-blue-800 transition">SAUVEGARDER LE NOM</button>
@@ -167,6 +191,39 @@
                     </div>
                 </div>
 
+                <div class="space-y-2">
+                    <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Adresse de l'entreprise</label>
+                    <input type="text" id="addContAdresse" placeholder="Adresse (rue, n°...)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" id="addContCP" placeholder="Code postal" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="addContVille" placeholder="Ville" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Poste du contact</label>
+                    <select id="addContPoste" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                        <option value="">-- Sélectionner un poste --</option>
+                        <option value="RH">RH</option>
+                        <option value="Gérant">Gérant</option>
+                        <option value="Expert comptable">Expert comptable</option>
+                        <option value="Collaborateur comptable">Collaborateur comptable</option>
+                    </select>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="addContIsMA" onchange="toggleMAStudentSelector()" class="w-5 h-5 accent-amber-500 cursor-pointer">
+                        <label for="addContIsMA" class="text-sm font-black text-amber-700 cursor-pointer">🎓 Ce contact est Maître d'apprentissage (MA)</label>
+                    </div>
+                    <div id="maStudentBlock" class="hidden space-y-2">
+                        <p class="text-[10px] font-bold text-amber-600 italic">Sélectionnez le ou les étudiants à rattacher à ce MA :</p>
+                        <div id="maStudentList" class="max-h-40 overflow-y-auto space-y-1 bg-white border border-amber-200 rounded-xl p-2">
+                            <p class="text-xs text-slate-300 italic text-center py-2">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
+
                 <button type="button" onclick="submitNewContact()" class="w-full py-4 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg hover:scale-[1.02] transition duration-300 mt-6">
                     CRÉER ET VÉRIFIER DOUBLONS
                 </button>
@@ -194,25 +251,35 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Inconnu";
-    payload.roleAuteur = userSession.role || "N/A";
-    
+    payload.idAuteur     = userSession.nom   || "Inconnu";
+    payload.roleAuteur   = userSession.role  || "N/A";
+    payload.emailAuteur  = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+        const result = await response.json();
+        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        return result;
     } catch (e) {
         console.error("Erreur API :", e);
         return { success: false, message: "Erreur de connexion" };
     }
 }
         let allPartners = [];
+        let lastFilteredPartners = [];
         let filterOnlyAlt = false;
         let currentId = null;
         let currentContactId = null;
+        let allStudentsCache = [];
+
+        const _userSession = JSON.parse(localStorage.getItem('user') || '{}');
+        const userRole = _userSession.role || '';
+        const canDelete = ['Administrateur', 'Superviseur', 'RP'].includes(userRole);
 
         // Initialisation
         window.onload = () => {
@@ -232,7 +299,7 @@
                 
                 if(data.success) {
                     allPartners = data.data;
-                    renderPartners(allPartners);
+                    filterPartners(); // applique les filtres actifs et initialise lastFilteredPartners
                 } else {
                     alert("Erreur Serveur : " + data.message);
                 }
@@ -265,10 +332,11 @@
                             <h3 class="text-xl font-black text-slate-800 leading-tight group-hover:text-[#1A4E8A] transition-colors">${ent.nom || "Sans nom"}</h3>
                             <span class="text-[9px] font-black text-slate-300 uppercase">REF: ${ent.id}</span>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap">
                             <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1.5 rounded-xl font-black">${nbContacts} Contact${nbContacts > 1 ? 's' : ''}</span>
                             ${nbAlt > 0 ? `<span class="text-[10px] bg-green-50 text-green-700 px-3 py-1.5 rounded-xl font-black">${nbAlt} Alternant${nbAlt > 1 ? 's' : ''}</span>` : ''}
                         </div>
+                        ${(ent.ville || ent.cp) ? `<p class="text-[10px] text-slate-400 mt-2 font-medium">📍 ${[ent.adresse, ent.cp, ent.ville].filter(Boolean).join(' · ')}</p>` : ''}
                     </div>
                   <button onclick="window.location.href='dossier_partenaire.html?id=${ent.id}'" class="mt-6 w-full py-3 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg text-center">📂 DOSSIER COMPLET</button>
                 </div>
@@ -278,7 +346,7 @@
 
         // --- 2. GESTION DU DOSSIER ---
         async function openDossier(id) {
-            const ent = allPartners.find(p => String(ent.id) === String(id));
+            const ent = allPartners.find(p => String(p.id) === String(id));
             if(!ent) return;
             currentId = id;
             
@@ -288,28 +356,94 @@
             document.getElementById('dossierContacts').innerHTML = (ent.contacts || []).map(c => `
                 <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group/item transition-all hover:bg-white hover:shadow-md">
                     <div>
-                        <p class="font-black text-slate-800 text-sm">${c.prenom || ""} ${c.nom || ""}</p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <p class="font-black text-slate-800 text-sm">${c.prenom || ""} ${c.nom || ""}</p>
+                            ${c.poste ? `<span class="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black">${c.poste}</span>` : ''}
+                            ${c.is_ma === 'Oui' ? `<span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black">🎓 MA</span>` : ''}
+                        </div>
                         <p class="text-[10px] font-bold text-slate-400 mt-1">📞 ${c.tel || "N/C"} ${c.tel2 ? '| ' + c.tel2 : ''}</p>
                         <p class="text-[10px] text-blue-500 font-bold truncate">✉️ ${c.email || "N/C"}</p>
                     </div>
                     <div class="flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
                         <button onclick="editContact('${ent.id}','${c.id_contact}')" class="p-2 text-slate-300 hover:text-blue-500 transition-colors">✏️</button>
-                        <button onclick="deleteContact('${c.id_contact}')" class="p-2 text-slate-300 hover:text-red-500 transition-colors">🗑️</button>
+                        ${canDelete ? `<button onclick="deleteContact('${c.id_contact}')" class="p-2 text-slate-300 hover:text-red-500 transition-colors">🗑️</button>` : ''}
                     </div>
                 </div>
             `).join('') || "<p class='text-[10px] text-slate-300 italic font-bold'>Aucun contact enregistré.</p>";
 
             document.getElementById('dossierAlternants').innerHTML = (ent.alternants || []).map(a => `
-                <span class="px-4 py-2 bg-white border border-green-200 rounded-xl font-black text-green-700 text-xs shadow-sm">🎓 ${a.prenom} ${a.nom}</span>
+                <div class="flex items-center gap-2 px-3 py-2 bg-white border border-green-200 rounded-xl shadow-sm group/alt">
+                    <span class="font-black text-green-700 text-xs">🎓 ${a.prenom} ${a.nom}</span>
+                    <button onclick="retirerAlternant('${a.id}','${(a.prenom+' '+a.nom).replace(/'/g,"\\'")}')"
+                        class="opacity-0 group-hover/alt:opacity-100 text-[9px] text-red-400 hover:text-red-600 font-black transition-opacity" title="Retirer cet alternant">✕</button>
+                </div>
             `).join('') || "<p class='text-xs text-slate-300 italic'>Aucun alternant HECG en poste.</p>";
+
+            // Anciens alternants
+            const anciens = (ent.anciensAlternants || []);
+            const anciensBlock = document.getElementById('dossierAnciensBlock');
+            if (anciens.length > 0) {
+                anciensBlock.classList.remove('hidden');
+                document.getElementById('dossierAnciensAlternants').innerHTML = anciens.map(a => {
+                    const dateStr = a.date ? new Date(a.date).toLocaleDateString('fr-FR') : '—';
+                    const isConfirmed = a.status === 'Confirmé';
+                    return `
+                    <div class="flex items-center justify-between gap-3 p-3 rounded-2xl border ${isConfirmed ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-amber-200 shadow-sm'}">
+                        <div>
+                            <p class="font-black text-slate-800 text-sm">${a.prenom} ${a.nom}</p>
+                            <p class="text-[9px] text-slate-400 font-bold">Détecté le ${dateStr} · <span class="${isConfirmed ? 'text-slate-400' : 'text-amber-600 font-black'}">${a.status}</span></p>
+                        </div>
+                        ${isConfirmed ? `<span class="text-[9px] text-slate-400 font-bold italic">✓ Confirmé</span>` : `
+                        <div class="flex gap-2 shrink-0">
+                            <button onclick="confirmFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-green-100 text-green-700 rounded-xl text-[10px] font-black hover:bg-green-200 transition">✓ Confirmer départ</button>
+                            <button onclick="removeFormerAlternant('${a.id}')" class="px-3 py-1.5 bg-red-50 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-100 transition">✗ Erreur de saisie</button>
+                        </div>`}
+                    </div>`;
+                }).join('');
+            } else {
+                anciensBlock.classList.add('hidden');
+            }
 
             loadHistory(id);
             document.getElementById('dossierModal').classList.add('modal-active');
         }
 
-        function closeDossier() { 
-            document.getElementById('dossierModal').classList.remove('modal-active'); 
+        function closeDossier() {
+            document.getElementById('dossierModal').classList.remove('modal-active');
             currentId = null;
+        }
+
+        async function confirmFormerAlternant(id) {
+            await apiPost({ action: 'confirmFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) {
+                const a = (ent.anciensAlternants || []).find(x => x.id === id);
+                if (a) a.status = 'Confirmé';
+            }
+            openDossier(currentId);
+        }
+
+        async function removeFormerAlternant(id) {
+            if (!confirm("Marquer comme erreur de saisie ? L'entrée sera masquée définitivement.")) return;
+            await apiPost({ action: 'removeFormerAlternant', id });
+            const ent = allPartners.find(p => p.id === currentId);
+            if (ent) ent.anciensAlternants = (ent.anciensAlternants || []).filter(x => x.id !== id);
+            openDossier(currentId);
+        }
+
+        async function retirerAlternant(idEtu, nomEtu) {
+            const ent = allPartners.find(p => p.id === currentId);
+            const nomEnt = ent ? ent.nom : '';
+            if (!confirm('Retirer ' + nomEtu + ' des alternants de « ' + nomEnt + ' » ?\n\nCela effacera l\'entreprise dans le dossier étudiant et créera une entrée "Ancien alternant" en attente de confirmation.')) return;
+            const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: idEtu });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert(nomEtu + ' retiré(e) des alternants actifs. Un mouvement "À confirmer" a été enregistré.');
+            if (ent) {
+                ent.alternants = (ent.alternants || []).filter(a => a.id !== idEtu);
+                ent.anciensAlternants = ent.anciensAlternants || [];
+                ent.anciensAlternants.push({ id: 'ANC-' + Date.now(), nom: nomEtu.split(' ')[1] || '', prenom: nomEtu.split(' ')[0] || '', date: new Date().toISOString(), status: 'À_confirmer' });
+            }
+            openDossier(currentId);
         }
 
         // --- 3. HISTORIQUE & NOTES ---
@@ -353,7 +487,7 @@
 
         // --- 4. ÉDITION CONTACTS ---
         function editContact(entId, contId) {
-            const ent = allPartners.find(p => String(ent.id) === String(entId));
+            const ent = allPartners.find(p => String(p.id) === String(entId));
             const c = ent.contacts.find(con => String(con.id_contact) === String(contId));
             if(!c) return;
             
@@ -387,8 +521,10 @@
         // --- 5. AJOUT DE CONTACT & DOUBLONS ---
         function openAddContact(idEnt = null) {
             document.getElementById('addContactForm').reset();
+            document.getElementById('addContIsMA').checked = false;
+            document.getElementById('maStudentBlock').classList.add('hidden');
             if (idEnt) {
-                const ent = allPartners.find(p => String(ent.id) === String(idEnt));
+                const ent = allPartners.find(p => String(p.id) === String(idEnt));
                 document.getElementById('addContEntNom').value = ent.nom;
                 document.getElementById('addContEntNom').readOnly = true;
                 document.getElementById('addContEntId').value = ent.id;
@@ -399,9 +535,44 @@
             document.getElementById('addContactModal').classList.add('modal-active');
         }
 
-        function closeAddContact() { document.getElementById('addContactModal').classList.remove('modal-active'); }
+        function closeAddContact() {
+            document.getElementById('addContactModal').classList.remove('modal-active');
+            document.getElementById('addContIsMA').checked = false;
+            document.getElementById('maStudentBlock').classList.add('hidden');
+        }
+
+        async function toggleMAStudentSelector() {
+            const isMA = document.getElementById('addContIsMA').checked;
+            const block = document.getElementById('maStudentBlock');
+            if (isMA) {
+                block.classList.remove('hidden');
+                if (allStudentsCache.length === 0) {
+                    const res = await apiPost({ action: 'getStudentsMinList' });
+                    if (res.success) allStudentsCache = res.data;
+                }
+                const listEl = document.getElementById('maStudentList');
+                listEl.innerHTML = allStudentsCache.map(s => `
+                    <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-amber-50 cursor-pointer">
+                        <input type="checkbox" value="${s.id}" class="ma-student-chk w-4 h-4 accent-amber-500">
+                        <span class="text-xs font-bold text-slate-700">${s.nom} ${s.prenom}</span>
+                        <span class="text-[10px] text-slate-400">${s.classe || ''}</span>
+                    </label>
+                `).join('') || '<p class="text-xs text-slate-300 italic text-center py-2">Aucun étudiant trouvé.</p>';
+            } else {
+                block.classList.add('hidden');
+            }
+        }
 
         async function submitNewContact() {
+            const isMA = document.getElementById('addContIsMA').checked;
+
+            if (isMA) {
+                const checkedStudents = [...document.querySelectorAll('.ma-student-chk:checked')];
+                if (checkedStudents.length === 0) {
+                    return alert("⚠️ Un Maître d'apprentissage doit être rattaché à au moins un étudiant. Veuillez sélectionner un étudiant.");
+                }
+            }
+
             const payload = {
                 action: 'addPartner',
                 id_entreprise: document.getElementById('addContEntId').value,
@@ -411,7 +582,12 @@
                 mail1: document.getElementById('addContMail1').value,
                 mail2: document.getElementById('addContMail2').value,
                 tel1: document.getElementById('addContTel1').value,
-                tel2: document.getElementById('addContTel2').value
+                tel2: document.getElementById('addContTel2').value,
+                adresse: document.getElementById('addContAdresse').value,
+                cp: document.getElementById('addContCP').value,
+                ville: document.getElementById('addContVille').value,
+                poste: document.getElementById('addContPoste').value,
+                is_ma: isMA ? 'Oui' : 'Non'
             };
 
             if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
@@ -419,8 +595,21 @@
             }
 
             const result = await apiPost(payload);
-            
+
             if (result.success) {
+                // Si MA, on lie les étudiants sélectionnés
+                if (isMA) {
+                    const ids_etudiants = [...document.querySelectorAll('.ma-student-chk:checked')].map(c => c.value);
+                    // L'ID entreprise est dans result ou dans le payload
+                    const idEnt = payload.id_entreprise || result.id_entreprise || "";
+                    await apiPost({
+                        action: 'linkMAToStudents',
+                        ids_etudiants,
+                        id_entreprise: idEnt,
+                        id_contact: result.id_contact || "",
+                        nom_entreprise: payload.nom_entreprise
+                    });
+                }
                 alert("✅ " + result.message);
                 closeAddContact();
                 if(currentId) openDossier(currentId);
@@ -476,20 +665,23 @@
         function filterPartners() {
             const s = document.getElementById('searchInput').value.toLowerCase().trim();
             const nbAltFilter = document.getElementById('filterNbAlt').value;
+            const cpFilter = document.getElementById('filterCP').value.toLowerCase().trim();
+            const villeFilter = document.getElementById('filterVille').value.toLowerCase().trim();
 
             let data = allPartners.filter(p => {
-                // 1. On récupère les infos de l'entreprise
                 const nomEntreprise = (p.nom || "").toLowerCase();
                 const idEntreprise = (p.id || "").toLowerCase();
-                
-                // 2. On récupère les infos de TOUS les contacts de cette entreprise
-                const infosContacts = (p.contacts || []).map(c => 
+                const infosContacts = (p.contacts || []).map(c =>
                     `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`
                 ).join(" ").toLowerCase();
+                const cp = (p.cp || "").toLowerCase();
+                const ville = (p.ville || "").toLowerCase();
 
-                // 3. On fusionne tout dans une grande chaîne "invisible" et on cherche dedans
-                const zoneDeRecherche = `${nomEntreprise} ${idEntreprise} ${infosContacts}`;
-                return zoneDeRecherche.includes(s);
+                const zoneDeRecherche = `${nomEntreprise} ${idEntreprise} ${infosContacts} ${cp} ${ville}`;
+                const matchSearch = !s || zoneDeRecherche.includes(s);
+                const matchCp = !cpFilter || cp.startsWith(cpFilter);
+                const matchVille = !villeFilter || ville.includes(villeFilter);
+                return matchSearch && matchCp && matchVille;
             });
             
             // Filtre via le bouton "Alternants" (si on veut juste > 0)
@@ -506,46 +698,28 @@
                 });
             }
 
+            lastFilteredPartners = data;
             renderPartners(data);
+            refreshMapMarkers(true);
         }
 
         function exportFilteredView() {
-            const s = document.getElementById('searchInput').value.toLowerCase().trim();
-            const nbAltFilter = document.getElementById('filterNbAlt').value;
-
-            let data = allPartners.filter(p => {
-                const nomEntreprise = (p.nom || "").toLowerCase();
-                const idEntreprise = (p.id || "").toLowerCase();
-                const infosContacts = (p.contacts || []).map(c => `${c.prenom || ""} ${c.nom || ""} ${c.id_contact || ""}`).join(" ").toLowerCase();
-                return `${nomEntreprise} ${idEntreprise} ${infosContacts}`.includes(s);
-            });
-            
-            if(filterOnlyAlt) data = data.filter(p => (p.alternants || []).length > 0);
-
-            if (nbAltFilter !== "all") {
-                data = data.filter(p => {
-                    const count = (p.alternants || []).length;
-                    if (nbAltFilter === "0") return count === 0;
-                    if (nbAltFilter === "1") return count === 1;
-                    if (nbAltFilter === "2+") return count >= 2;
-                    return true;
-                });
-            }
-
-            downloadCSV(data, "HECG_Export_Filtre_Partenaires.csv");
+            downloadCSV(lastFilteredPartners, "HECG_Export_Filtre_Partenaires.csv");
         }
 
         function exportIndividualDossier() {
-            const ent = allPartners.find(p => ent.id === currentId);
+            const ent = allPartners.find(p => p.id === currentId);
             downloadCSV([ent], "Dossier_" + (ent.nom || "Entreprise") + ".csv");
         }
 
         function downloadCSV(data, filename) {
-            let csv = "ID;Entreprise;Contact Principal;Email;Tel;Email2;Tel2;Alternants\n";
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Date dernier échange;Contenu dernier échange\n";
             data.forEach(p => {
                 const c = p.contacts[0] || {};
                 const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
-                csv += `"${p.id}";"${p.nom}";"${c.prenom} ${c.nom}";"${c.email}";"${c.tel}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}"\n`;
+                const dateEchange = (p.dateEchange || '').replace(/"/g, '""');
+                const contenuEchange = (p.contenuEchange || '').replace(/"/g, '""');
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dateEchange}";"${contenuEchange}"\n`;
             });
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
@@ -579,6 +753,265 @@
             loadPartners();
         }
 
+        // --- CARTE INTERACTIVE ---
+        let _map = null, _markerGroup = null, _mapVisible = false;
+        let _geocodingToken = 0;
+
+        // Cache persistant adresse → coords dans localStorage
+        let _geocache = {};
+        try {
+            const raw = JSON.parse(localStorage.getItem('_hecg_geo') || '{}');
+            // Purge les anciennes clés basées sur l'ID (format "geo_p_*") invalides
+            for (const k of Object.keys(raw)) {
+                if (!k.startsWith('geo_p_')) _geocache[k] = raw[k];
+            }
+        } catch(e) {}
+        function _saveGeoCache() { try { localStorage.setItem('_hecg_geo', JSON.stringify(_geocache)); } catch(e) {} }
+
+        const GEO = {
+            "marseille": [43.2965, 5.3698],
+            "marseille 1": [43.2965, 5.3698], "marseille 2": [43.3047, 5.3660],
+            "marseille 3": [43.3107, 5.3714], "marseille 4": [43.3003, 5.3910],
+            "marseille 5": [43.2944, 5.3997], "marseille 6": [43.2904, 5.3772],
+            "marseille 7": [43.2762, 5.3570], "marseille 8": [43.2616, 5.3762],
+            "marseille 9": [43.2470, 5.3922], "marseille 10": [43.2757, 5.4135],
+            "marseille 11": [43.2949, 5.4318], "marseille 12": [43.3086, 5.4157],
+            "marseille 13": [43.3372, 5.4132], "marseille 14": [43.3396, 5.3701],
+            "marseille 15": [43.3487, 5.3587], "marseille 16": [43.3622, 5.3313],
+            "paris": [48.8566, 2.3522],
+            "paris 1": [48.8600, 2.3477], "paris 2": [48.8639, 2.3497],
+            "paris 3": [48.8627, 2.3577], "paris 4": [48.8534, 2.3543],
+            "paris 5": [48.8462, 2.3448], "paris 6": [48.8496, 2.3345],
+            "paris 7": [48.8558, 2.3134], "paris 8": [48.8742, 2.3070],
+            "paris 9": [48.8765, 2.3450], "paris 10": [48.8765, 2.3643],
+            "paris 11": [48.8590, 2.3776], "paris 12": [48.8448, 2.3878],
+            "paris 13": [48.8310, 2.3637], "paris 14": [48.8297, 2.3275],
+            "paris 15": [48.8418, 2.3001], "paris 16": [48.8638, 2.2756],
+            "paris 17": [48.8848, 2.3111], "paris 18": [48.8901, 2.3479],
+            "paris 19": [48.8817, 2.3787], "paris 20": [48.8642, 2.3968],
+            "lyon": [45.7640, 4.8357], "bordeaux": [44.8378, -0.5792],
+            "toulouse": [43.6047, 1.4442], "nice": [43.7102, 7.2620],
+            "nantes": [47.2184, -1.5536], "strasbourg": [48.5734, 7.7521],
+            "montpellier": [43.6108, 3.8767], "rennes": [48.1173, -1.6778],
+            "grenoble": [45.1885, 5.7245], "lille": [50.6292, 3.0573],
+            "toulon": [43.1242, 5.9280], "aix-en-provence": [43.5297, 5.4474],
+            "aix en provence": [43.5297, 5.4474], "avignon": [43.9493, 4.8055],
+            "nimes": [43.8367, 4.3601], "nimes": [43.8367, 4.3601],
+            "cannes": [43.5528, 7.0174], "antibes": [43.5804, 7.1283],
+            "vitrolles": [43.4615, 5.2456], "aubagne": [43.2930, 5.5710],
+            "istres": [43.5158, 4.9878], "martigues": [43.4061, 5.0486],
+            "la ciotat": [43.1727, 5.6082], "cassis": [43.2140, 5.5390],
+            "pertuis": [43.6918, 5.5031], "salon-de-provence": [43.6396, 5.0974],
+            "salon de provence": [43.6396, 5.0974], "arles": [43.6767, 4.6277],
+            "marignane": [43.4179, 5.2153], "gardanne": [43.4565, 5.4762],
+            "hyeres": [43.1204, 6.1283], "frejus": [43.4329, 6.7360],
+            "saint-raphael": [43.4252, 6.7688], "draguignan": [43.5378, 6.4660],
+            "brignoles": [43.4057, 6.0600], "gap": [44.5594, 6.0773],
+            "digne-les-bains": [44.0922, 6.2358], "metz": [49.1193, 6.1757],
+            "nancy": [48.6921, 6.1844], "reims": [49.2583, 4.0317],
+            "rouen": [49.4432, 1.0993], "amiens": [49.8941, 2.2958],
+            "caen": [49.1829, -0.3707], "dijon": [47.3220, 5.0415],
+            "clermont-ferrand": [45.7772, 3.0870], "clermont ferrand": [45.7772, 3.0870],
+            "limoges": [45.8336, 1.2611], "besancon": [47.2378, 6.0241],
+            "poitiers": [46.5802, 0.3404], "orleans": [47.9029, 1.9090],
+            "tours": [47.3941, 0.6848], "angers": [47.4784, -0.5632],
+            "le mans": [48.0027, 0.1984], "brest": [48.3904, -4.4861],
+            "le havre": [49.4944, 0.1079], "mulhouse": [47.7508, 7.3359],
+            "perpignan": [42.6976, 2.8954], "beziers": [43.3441, 3.2154],
+            "sete": [43.4025, 3.6975], "montauban": [44.0180, 1.3530],
+            "pau": [43.2951, -0.3708], "bayonne": [43.4929, -1.4748],
+            "la rochelle": [46.1603, -1.1511], "saint-etienne": [45.4347, 4.3922],
+            "saint etienne": [45.4347, 4.3922], "valence": [44.9334, 4.8924],
+            "annecy": [45.8992, 6.1294], "chambery": [45.5646, 5.9178],
+            "france": [46.2276, 2.2137]
+        };
+
+        function _normCity(s) {
+            return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        }
+
+        function getCoordsForLocation(ville, cp) {
+            const cpStr = String(cp || "").trim();
+            // Arrondissements Marseille via CP (130XX)
+            if (cpStr.match(/^130\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                return GEO["marseille " + arr] || GEO["marseille"];
+            }
+            // Arrondissements Paris via CP (750XX)
+            if (cpStr.match(/^750\d{2}$/)) {
+                const arr = parseInt(cpStr.slice(-2));
+                return GEO["paris " + arr] || GEO["paris"];
+            }
+            const v = _normCity(ville);
+            if (!v) return null;
+
+            // 1. Correspondance exacte
+            if (GEO[v]) return GEO[v];
+
+            // 2. Nettoyer suffixe département : "Marignane - 13", "Nice (06)"
+            const stripped = v.replace(/\s*[-–,]\s*\d+.*$/, '').replace(/\s*\(\d+\).*$/, '').trim();
+            if (stripped !== v && GEO[stripped]) return GEO[stripped];
+
+            // 3. Supprimer ordinaux d'arrondissement : "8ème" → "8", "3e" → "3"
+            const stripOrdinal = s => s.replace(/(\d+)\s*(i?eme|ieme|ière|iere|ère|ere|er|e)\b/g, '$1').trim();
+            const vNoOrd = stripOrdinal(v);
+            if (vNoOrd !== v && GEO[vNoOrd]) return GEO[vNoOrd];
+            const strippedNoOrd = stripOrdinal(stripped);
+            if (GEO[strippedNoOrd]) return GEO[strippedNoOrd];
+
+            // 4. Préfixe avec frontière de mot (clés longues en premier)
+            const candidates = [v, stripped, vNoOrd, strippedNoOrd].filter((s, i, a) => s && a.indexOf(s) === i);
+            const sortedKeys = Object.keys(GEO).sort((a, b) => b.length - a.length);
+            for (const c of candidates) {
+                for (const key of sortedKeys) {
+                    if (c === key) continue;
+                    if (c.length > key.length) {
+                        const ch = c[key.length];
+                        if (c.startsWith(key) && (ch === ' ' || ch === '-' || ch === ',' || ch === '(')) return GEO[key];
+                    } else if (key.length > c.length) {
+                        const ch = key[c.length];
+                        if (key.startsWith(c) && (ch === ' ' || ch === '-')) return GEO[key];
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Clé de cache basée sur l'adresse (invalidation automatique si l'adresse change)
+        function _geocacheKey(p) {
+            const addr = [p.adresse, p.cp, p.ville].filter(Boolean).join('|').toLowerCase().replace(/\s+/g, ' ').trim();
+            return 'geo_addr_' + addr.replace(/[^a-z0-9|]/g, '_').slice(0, 120);
+        }
+
+        function toggleMap() {
+            _mapVisible = !_mapVisible;
+            const container = document.getElementById('mapContainer');
+            const btn = document.getElementById('btnToggleMap');
+            if (_mapVisible) {
+                container.classList.remove('hidden');
+                btn.classList.add('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-200');
+                if (!_map) {
+                    _map = L.map('mapView').setView([43.3965, 5.2698], 9);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 18
+                    }).addTo(_map);
+                    _markerGroup = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false });
+                    _map.addLayer(_markerGroup);
+                }
+                refreshMapMarkers(true);
+                setTimeout(() => _map.invalidateSize(), 200);
+            } else {
+                container.classList.add('hidden');
+                btn.classList.remove('bg-[#1A4E8A]', 'text-white', 'border-[#1A4E8A]');
+                btn.classList.add('bg-white', 'text-slate-500', 'border-slate-200');
+            }
+        }
+
+        async function _nominatim(query) {
+            try {
+                const r = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=fr`,
+                    { headers: { 'Accept-Language': 'fr,fr-FR' } }
+                );
+                const d = await r.json();
+                if (d && d[0]) return [parseFloat(d[0].lat), parseFloat(d[0].lon)];
+            } catch(e) {}
+            return null;
+        }
+
+        function _buildMarker(p, coords, precise) {
+            const jitter = () => precise ? 0 : (Math.random() - 0.5) * 0.0015;
+            const ll = [coords[0] + jitter(), coords[1] + jitter()];
+            const nbAlt = (p.alternants || []).length;
+            const altEmoji = nbAlt >= 2 ? '🔥' : nbAlt === 1 ? '🟢' : '⚪';
+            const c = p.contacts[0] || {};
+            const cName = [c.prenom, c.nom].filter(Boolean).join(' ') || '—';
+            const label = p.nom.length > 22 ? p.nom.slice(0, 20) + '…' : p.nom;
+            const borderCol = precise ? '#F26522' : '#fff';
+            const marker = L.marker(ll, {
+                icon: L.divIcon({
+                    html: `<div style="background:#1A4E8A;color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;border:2px solid ${borderCol};box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer">${label}</div>`,
+                    className: '', iconAnchor: [0, 10]
+                })
+            });
+            marker.bindPopup(`
+                <div style="font-family:sans-serif;min-width:200px;padding:4px">
+                    <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
+                    <div style="font-size:11px;color:#666;margin-bottom:4px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
+                    ${precise ? '<div style="font-size:9px;color:#F26522;font-weight:700;margin-bottom:4px">📡 Position précise (géocodée)</div>' : ''}
+                    <div style="font-size:11px;color:#333">👤 ${cName}</div>
+                    ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
+                    ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
+                    <div style="font-size:12px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px solid #eee">${altEmoji} ${nbAlt} alternant${nbAlt !== 1 ? 's' : ''}</div>
+                </div>`);
+            return { marker, ll };
+        }
+
+        function _setMapStatus(msg) {
+            const el = document.getElementById('mapStatus');
+            if (el) el.textContent = msg;
+        }
+
+        function refreshMapMarkers(fitView = false) {
+            if (!_map || !_mapVisible) return;
+            _geocodingToken++;
+            const token = _geocodingToken;
+            _markerGroup.clearLayers();
+            _setMapStatus('');
+
+            const bounds = [];
+            const toGeocode = [];
+
+            lastFilteredPartners.forEach(p => {
+                const cacheKey = _geocacheKey(p);
+                const cachedCoords = _geocache[cacheKey];
+                const fallback = getCoordsForLocation(p.ville, p.cp);
+                const coords = cachedCoords || fallback;
+                if (!coords) return;
+
+                const { marker, ll } = _buildMarker(p, coords, !!cachedCoords);
+                bounds.push(ll);
+                _markerGroup.addLayer(marker);
+
+                if (!cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
+            });
+
+            if (bounds.length > 0 && fitView) {
+                try { _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch(e) {}
+            }
+            setTimeout(() => _map.invalidateSize(), 100);
+
+            if (toGeocode.length > 0) _geocodeBatch(toGeocode, token);
+        }
+
+        async function _geocodeBatch(partners, token) {
+            let done = 0;
+            for (const p of partners) {
+                if (_geocodingToken !== token) return;
+                const cacheKey = _geocacheKey(p);
+                if (_geocache[cacheKey]) { done++; continue; }
+
+                const q = p.adresse && p.cp && p.ville
+                    ? `${p.adresse}, ${p.cp} ${p.ville}, France`
+                    : p.cp && p.ville ? `${p.cp} ${p.ville}, France`
+                    : p.ville ? `${p.ville}, France` : null;
+
+                if (q) {
+                    _setMapStatus(`⟳ Géocodage ${done + 1}/${partners.length}…`);
+                    const coords = await _nominatim(q);
+                    if (coords) { _geocache[cacheKey] = coords; _saveGeoCache(); }
+                    await new Promise(r => setTimeout(r, 1100));
+                }
+                done++;
+            }
+            if (_geocodingToken !== token) return;
+            _setMapStatus('');
+            refreshMapMarkers();
+        }
+
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>

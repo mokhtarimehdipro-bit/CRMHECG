@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -60,9 +60,20 @@
                             <button id="btnSaveMdp" onclick="updateProfile()" class="hidden mt-2 w-full py-2 bg-[#F26522] text-white text-[10px] font-black uppercase rounded-lg hover:bg-orange-600 transition shadow-md">Modifier mon mot de passe</button>
                         </div>
 
-                        <div class="p-4 bg-orange-50 rounded-2xl mb-6">
-                            <h4 class="text-[10px] font-black text-orange-600 uppercase mb-1">Entreprise / Alternance</h4>
+                        <div class="p-4 bg-orange-50 rounded-2xl mb-3">
+                            <div class="flex justify-between items-center mb-1">
+                                <h4 class="text-[10px] font-black text-orange-600 uppercase">Entreprise actuelle / Alternance</h4>
+                                <button id="btnRetirerEnt" onclick="retirerEntreprise()" class="hidden text-[9px] font-black text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded-lg transition">✕ Retirer</button>
+                            </div>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
+                        </div>
+                        <!-- Historique entreprises -->
+                        <div id="alternanceHistoryBlock" class="hidden mb-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-[10px] font-black text-gray-500 uppercase">📚 Anciennes entreprises</h4>
+                                <span id="alternanceHistoryCount" class="text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full"></span>
+                            </div>
+                            <div id="alternanceHistoryList" class="space-y-2"></div>
                         </div>
 
                         <h4 class="text-[10px] font-black text-[#1A4E8A] uppercase mb-2">Curriculum Vitae</h4>
@@ -77,14 +88,58 @@
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <h3 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">📝 Carnet de route (Échanges)</h3>
                         
-                        <div id="zoneSaisieNote" class="flex space-x-2 mb-6 bg-gray-50 p-2 rounded-xl">
-                            <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
-                            <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
+                        <div id="zoneSaisieNote" class="flex flex-col space-y-1 mb-6 bg-gray-50 p-2 rounded-xl">
+                            <div class="flex space-x-2">
+                                <input type="text" id="noteTexte" placeholder="Compte-rendu d'appel, remarque..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
+                                <button onclick="addNote()" class="bg-[#1A4E8A] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-blue-800 transition">Noter</button>
+                            </div>
+                            <label class="flex items-center gap-2 text-[10px] font-bold text-gray-400 cursor-pointer px-2 pb-1 select-none">
+                                <input type="checkbox" id="noteVisible" checked class="rounded accent-[#1A4E8A]">
+                                Visible pour l'étudiant
+                            </label>
+                        </div>
+                        <div id="zoneSaisieNoteEtu" class="hidden mb-6">
+                            <p class="text-[10px] font-black uppercase text-[#F26522] mb-2">✏️ Ma mise à jour / message</p>
+                            <div class="flex space-x-2 bg-orange-50 border border-orange-100 p-2 rounded-xl">
+                                <input type="text" id="noteTexteEtu" placeholder="Ex: J'ai postulé chez X, entretien le 15..." class="flex-1 bg-transparent p-2 outline-none text-sm font-medium">
+                                <button onclick="addNoteEtu()" class="bg-[#F26522] text-white px-6 py-2 rounded-xl font-black text-sm hover:bg-orange-600 transition">Envoyer</button>
+                            </div>
                         </div>
                         
                         <div id="suiviTimeline" class="space-y-4 max-h-60 overflow-y-auto pr-4 custom-scrollbar"></div>
                     </div>
                     
+                    <div id="panneauAlertes" class="hidden bg-white p-6 rounded-[2rem] shadow-sm border border-orange-100">
+                        <h3 class="font-black text-orange-600 mb-4 flex items-center gap-2">🔔 Programmer une alerte étudiant</h3>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-[10px] uppercase font-bold text-gray-400">Date du rappel</label>
+                                    <input type="date" id="stuAlertDate" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] uppercase font-bold text-gray-400">Répétition</label>
+                                    <select id="stuAlertFreq" class="w-full border p-2 rounded-lg text-sm bg-gray-50">
+                                        <option value="Unique">Une seule fois</option>
+                                        <option value="Hebdomadaire">Hebdomadaire</option>
+                                        <option value="Mensuelle">Mensuelle</option>
+                                        <option value="Trimestrielle">Trimestrielle</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Email du destinataire</label>
+                                <input type="email" id="stuAlertDest" value="m.mokhtari@hecg.fr" class="w-full border p-2 rounded-lg text-sm bg-gray-50 font-bold text-[#1A4E8A]">
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-gray-400">Message / contexte</label>
+                                <textarea id="stuAlertMsg" rows="2" placeholder="Ex: Relancer pour point de situation alternance..." class="w-full border p-2 rounded-lg text-xs bg-gray-50"></textarea>
+                            </div>
+                            <button onclick="saveStudentAlert()" class="w-full bg-orange-500 text-white py-2 rounded-xl font-black text-sm hover:bg-orange-600 transition shadow-md">Activer l'alerte</button>
+                        </div>
+                        <div id="stuAlertesList" class="mt-4 space-y-2 border-t pt-4"></div>
+                    </div>
+
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <div class="flex justify-between items-center mb-6 border-b pb-2">
                             <h3 class="text-xl font-black text-gray-800">💼 Offres d'alternance ciblées</h3>
@@ -97,6 +152,61 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ═══ SECTION DOCUMENTS (GED étudiant) ═══ -->
+            <div id="gedEtuSection" class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-5 border-b pb-3">
+                    <h3 class="text-xl font-black text-gray-800">📁 Documents</h3>
+                    <div class="flex gap-2" id="gedEtuAdminActions">
+                        <button id="btnGedScan" onclick="gedAutoScan()" class="hidden text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl font-bold hover:bg-gray-200">🔍 Scanner les dossiers</button>
+                        <button id="btnGedLink" onclick="document.getElementById('gedLinkPanel').classList.toggle('hidden')" class="hidden text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl font-bold hover:bg-blue-100">🔗 Lier un dossier</button>
+                        <button id="btnGedUploadAdmin" onclick="document.getElementById('gedUploadPanel').classList.remove('hidden')" class="hidden text-xs bg-[#F26522] text-white px-3 py-1.5 rounded-xl font-bold hover:bg-orange-600">⬆ Déposer</button>
+                    </div>
+                </div>
+                <!-- Lier un dossier -->
+                <div id="gedLinkPanel" class="hidden mb-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                    <p class="text-[10px] font-black text-blue-700 uppercase mb-2">Lier le dossier Drive de l'étudiant (URL ou ID direct)</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="gedFolderInput" placeholder="URL ou ID du dossier Drive…" class="flex-1 border border-blue-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400">
+                        <button onclick="gedLinkFolder()" class="bg-blue-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-blue-700">Lier</button>
+                    </div>
+                </div>
+                <!-- Résultats du scan -->
+                <div id="gedScanPanel" class="hidden mb-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-[10px] font-black text-indigo-700 uppercase">🔍 Dossiers correspondants trouvés — Sélectionnez le bon</p>
+                        <button onclick="document.getElementById('gedScanPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 font-black text-lg leading-none">×</button>
+                    </div>
+                    <div id="gedScanList" class="space-y-2"></div>
+                    <p id="gedScanEmpty" class="hidden text-sm text-gray-400 italic text-center py-3">Aucun dossier correspondant trouvé dans l'arborescence Drive.</p>
+                    <div id="gedScanTruncated" class="hidden mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+                        ⚠️ L'arborescence est très large — le scan a été interrompu avant la fin (limite de temps). Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.
+                    </div>
+                </div>
+                <!-- Upload -->
+                <div id="gedUploadPanel" class="hidden mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                    <p class="text-[10px] font-black text-orange-600 uppercase mb-2">Déposer un document dans le dossier étudiant</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="file" id="gedFileInputEtu" class="flex-1 text-sm">
+                        <button onclick="gedUploadFile()" id="btnGedUploadConfirmEtu" class="bg-[#F26522] text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-orange-600 whitespace-nowrap">Envoyer</button>
+                        <button onclick="document.getElementById('gedUploadPanel').classList.add('hidden')" class="bg-gray-100 text-gray-500 px-3 py-2 rounded-xl font-bold text-sm">✕</button>
+                    </div>
+                </div>
+                <!-- Zone étudiant (dépôt pièces) -->
+                <div id="gedEtuUploadZone" class="hidden mb-4 p-4 bg-green-50 rounded-2xl border border-green-100">
+                    <p class="text-[10px] font-black text-green-700 uppercase mb-2">📎 Déposer une pièce justificative</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="file" id="gedFileInputEtuStu" class="flex-1 text-sm">
+                        <button onclick="gedUploadFileStudent()" id="btnGedUploadStu" class="bg-green-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-green-700 whitespace-nowrap">Envoyer</button>
+                    </div>
+                </div>
+                <!-- Fichiers -->
+                <div id="gedEtuFiles"><p class="text-center text-gray-400 text-sm italic py-4">Chargement…</p></div>
+                <!-- Bouton Drive -->
+                <div id="gedEtuFolderLink" class="hidden mt-4 text-center">
+                    <a id="gedEtuFolderUrl" href="#" target="_blank" class="text-xs text-blue-500 hover:underline font-semibold">📂 Ouvrir le dossier dans Google Drive</a>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -104,16 +214,21 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Inconnu";
-    payload.roleAuteur = userSession.role || "N/A";
-    
+    payload.idAuteur     = userSession.nom   || "Inconnu";
+    payload.roleAuteur   = userSession.role  || "N/A";
+    payload.vieScRole    = userSession.vieScRole || userSession.role || "";
+    payload.emailAuteur  = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+        const result = await response.json();
+        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        return result;
     } catch (e) {
         console.error("Erreur API :", e);
         return { success: false, message: "Erreur de connexion" };
@@ -134,15 +249,11 @@
             const btnSave = document.getElementById('btnSaveMdp');
 
             if (currentUser.role === 'Etudiant') {
-                // SÉCURITÉ : L'étudiant ne voit que son propre dossier
-                studentId = currentUser.ref; 
-                
-                // On cache les outils d'administration
+                studentId = currentUser.ref;
                 document.getElementById('admin-nav').classList.add('hidden');
                 document.getElementById('btnRetour').classList.add('hidden');
                 document.getElementById('zoneSaisieNote').classList.add('hidden');
-                
-                // On affiche l'en-tête étudiant simple
+                document.getElementById('zoneSaisieNoteEtu').classList.remove('hidden');
                 document.getElementById('student-header').classList.remove('hidden');
 
                 // --- LOGIQUE MODIFICATION MDP (ÉLÈVE UNIQUEMENT) ---
@@ -154,8 +265,11 @@
                 if(btnSave) btnSave.classList.remove('hidden'); // Affiche le bouton de sauvegarde
 
             } else {
-                // L'admin/staff charge le dossier demandé dans l'URL
                 studentId = new URLSearchParams(window.location.search).get('id');
+                // Panneau alertes visible pour admin/superviseur uniquement
+                if (currentUser.role === 'Administrateur' || currentUser.role === 'Superviseur') {
+                    document.getElementById('panneauAlertes').classList.remove('hidden');
+                }
 
                 // --- LOGIQUE CONSULTATION MDP (STAFF) ---
                 if(mdpInput) {
@@ -166,18 +280,19 @@
                 if(btnSave) btnSave.classList.add('hidden'); // Cache le bouton de sauvegarde
             }
 
-            if (!studentId) { 
-                alert("Accès refusé."); 
-                window.location.replace('dashboard.html'); 
-                return; 
+            if (!studentId) {
+                alert("Accès refusé.");
+                window.location.replace('dashboard.html');
+                return;
             }
-            
+
             loadDossier();
+            if (currentUser.role !== 'Etudiant') loadStudentAlerts();
         };
 
         async function loadDossier() {
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId }) });
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId, requesterRole: currentUser.role }) });
                 const data = await res.json();
                 
                 if (data.success) {
@@ -196,7 +311,14 @@
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
-                    document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
+                    const btnRet = document.getElementById('btnRetirerEnt');
+                    if (btnRet) btnRet.classList.toggle('hidden', !(p.id_ent && currentUser.role !== 'Etudiant'));
+                    if (p.referent && (p.referent.nom || p.referent.prenom)) {
+                        const refMail = p.referent.mail ? ` &nbsp;·&nbsp; <a href="mailto:${p.referent.mail}" class="text-[#1A4E8A] hover:underline">${p.referent.mail}</a>` : '';
+                        document.getElementById('etuRef').innerHTML = `<span class="font-bold">${p.referent.prenom} ${p.referent.nom}</span>${refMail}`;
+                    } else {
+                        document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
+                    }
 
                     if(p.cv && p.cv.startsWith('http')) {
                         document.getElementById('etuCV').href = p.cv;
@@ -209,8 +331,11 @@
                     document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI;
 
                     document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
-                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 border-[#F26522]">
-                            <p class="text-[10px] text-gray-400 font-bold uppercase mb-1">${new Date(n.date).toLocaleDateString('fr-FR')} — Par ${n.auteur}</p>
+                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${n.visible === false ? 'border-gray-300 opacity-60' : 'border-[#F26522]'}">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase mb-1">
+                                ${new Date(n.date).toLocaleDateString('fr-FR')} — Par ${n.auteur}
+                                ${n.visible === false ? '<span class="ml-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full text-[9px] normal-case">🙈 Masqué pour l\'étudiant</span>' : ''}
+                            </p>
                             <p class="text-sm text-gray-700 font-medium">${n.texte}</p>
                         </div>
                     `).join('') || '<p class="text-gray-400 italic text-center py-2">Aucun échange enregistré.</p>';
@@ -220,6 +345,9 @@
                     const postulees = offres.filter(o => o.etat === 'Postulée');
                     document.getElementById('countPartagees').innerText = `Partagées : ${offres.length}`;
                     document.getElementById('countPostulees').innerText = `Postulées : ${postulees.length}`;
+
+                    // Historique alternance
+                    renderAlternanceHistory(data.alternanceHistory || []);
 
                     document.getElementById('listOffresPartagees').innerHTML = offres.map(o => `
                         <div class="p-5 border border-slate-100 rounded-2xl bg-slate-50 flex justify-between items-center group">
@@ -233,6 +361,8 @@
                             }
                         </div>
                     `).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
+                    // GED - chargement documents
+                    loadGedEtu();
                 }
             } catch (err) { alert("Erreur réseau"); }
         }
@@ -241,10 +371,65 @@
             const txt = document.getElementById('noteTexte').value;
             if(!txt.trim()) return;
             const btn = event.target; btn.innerText = "..."; btn.disabled = true;
-            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt });
-            document.getElementById('noteTexte').value = ""; 
+            const visible = document.getElementById('noteVisible').checked;
+            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, visibleEtudiant: visible });
+            document.getElementById('noteTexte').value = "";
             btn.innerText = "Noter"; btn.disabled = false;
             loadDossier();
+        }
+
+        async function addNoteEtu() {
+            const txt = document.getElementById('noteTexteEtu').value;
+            if(!txt.trim()) return;
+            const btn = event.target; btn.innerText = "..."; btn.disabled = true;
+            await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, isStudentNote: true });
+            document.getElementById('noteTexteEtu').value = "";
+            btn.innerText = "Envoyer"; btn.disabled = false;
+            loadDossier();
+        }
+
+        async function saveStudentAlert() {
+            const date = document.getElementById('stuAlertDate').value;
+            const msg = document.getElementById('stuAlertMsg').value;
+            if(!date || !msg) return alert("Veuillez remplir la date et le message.");
+            const btn = event.target; btn.innerText = "..."; btn.disabled = true;
+            const res = await apiPost({
+                action: 'setStudentAlert',
+                targetId: studentId,
+                date: date,
+                freq: document.getElementById('stuAlertFreq').value,
+                message: msg,
+                destinataire: document.getElementById('stuAlertDest').value
+            });
+            alert(res.success ? "Alerte programmée !" : "Erreur : " + res.message);
+            btn.innerText = "Activer l'alerte"; btn.disabled = false;
+            loadStudentAlerts();
+        }
+
+        async function loadStudentAlerts() {
+            try {
+                const res = await apiPost({ action: 'getAllStudentAlerts' });
+                if (!res.success) return;
+                const alertes = (res.data || []).filter(a => a.etuId === studentId);
+                document.getElementById('stuAlertesList').innerHTML = alertes.length === 0
+                    ? '<p class="text-xs text-gray-400 italic text-center">Aucune alerte active.</p>'
+                    : alertes.map(a => {
+                        const isRetard = new Date(a.dateRaw) < new Date();
+                        return `<div class="bg-orange-50 p-3 rounded-xl border border-orange-200 flex justify-between items-start gap-2">
+                            <div>
+                                <p class="text-[10px] font-black text-orange-800 uppercase">${isRetard ? '⚠️ Retard — ' : '📅 '}${a.date} (${a.freq})</p>
+                                <p class="text-xs text-orange-700 mt-1">${a.msg}</p>
+                            </div>
+                            <button onclick="completeStudentAlert('${a.id}')" class="text-[10px] bg-orange-500 text-white px-2 py-1 rounded-lg font-black whitespace-nowrap hover:bg-orange-600">✔ Traitée</button>
+                        </div>`;
+                    }).join('');
+            } catch(e) {}
+        }
+
+        async function completeStudentAlert(id) {
+            if(!confirm("Marquer cette alerte comme traitée ?")) return;
+            await apiPost({ action: 'completeStudentAlert', id: id });
+            loadStudentAlerts();
         }
 
         async function postuler(idOffre, url) {
@@ -260,11 +445,9 @@
             btn.disabled = true;
 
             const payload = {
-                action: 'updateStudent',
+                action: 'changeStudentMdp',
                 id_etu: studentId,
-                mdp: document.getElementById('etuMdp').value,
-                nom: document.getElementById('etuNom').innerText.split(' ')[1], // Récupération simple
-                prenom: document.getElementById('etuNom').innerText.split(' ')[0]
+                mdp: document.getElementById('etuMdp').value
             };
 
             const res = await apiPost(payload);
@@ -276,6 +459,263 @@
             btn.innerText = originalText;
             btn.disabled = false;
         }
+        // ══ Historique entreprises ══
+        function renderAlternanceHistory(history) {
+            if (!history || !history.length) return;
+            document.getElementById('alternanceHistoryBlock').classList.remove('hidden');
+            const cntEl = document.getElementById('alternanceHistoryCount');
+            if (cntEl) cntEl.textContent = history.length + ' entreprise' + (history.length > 1 ? 's' : '');
+            document.getElementById('alternanceHistoryList').innerHTML = history.map(h => {
+                const isPending = h.status === 'À_confirmer';
+                const isConfirmed = h.status === 'Confirmé';
+                const statusColor = isConfirmed ? '#15803d' : isPending ? '#a16207' : '#6b7280';
+                const statusBg   = isConfirmed ? '#dcfce7' : isPending ? '#fef9c3' : '#f3f4f6';
+                const statusLabel = isPending ? '⏳ À confirmer' : isConfirmed ? '✓ Confirmé' : h.status;
+                const contactNom = h.contact ? h.contact.trim() : '';
+                return `<div style="padding:0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#fff;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.4rem">
+                        <div>
+                            <a href="dossier_partenaire.html?id=${h.idEntreprise}" style="font-weight:700;color:#1A4E8A;font-size:0.85rem;text-decoration:none">🏢 ${h.entreprise||'—'}</a>
+                            ${h.classe?`<span style="display:inline-block;font-size:0.68rem;font-weight:700;color:#6b7280;background:#f3f4f6;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.4rem">${h.classe}</span>`:''}
+                            ${h.campus?`<span style="display:inline-block;font-size:0.68rem;font-weight:700;color:#6b7280;background:#f3f4f6;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.25rem">${h.campus}</span>`:''}
+                        </div>
+                        <span style="flex-shrink:0;font-size:0.68rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;background:${statusBg};color:${statusColor}">${statusLabel}</span>
+                    </div>
+                    ${contactNom?`<div style="font-size:0.75rem;color:#4b5563;margin-bottom:0.25rem">
+                        👤 ${contactNom}${h.contactPoste?` — <em>${h.contactPoste}</em>`:''}
+                        ${h.contactTel?` · <a href="tel:${h.contactTel}" style="color:#1A4E8A">${h.contactTel}</a>`:''}
+                        ${h.contactMail?` · <a href="mailto:${h.contactMail}" style="color:#1A4E8A">${h.contactMail}</a>`:''}
+                    </div>`:''}
+                    <div style="display:flex;gap:1rem;font-size:0.72rem;color:#9ca3af">
+                        ${h.dateDepart?`<span>Départ : ${h.dateDepart}</span>`:''}
+                        ${h.motif?`<span style="font-style:italic">${h.motif}</span>`:''}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ══ GED Étudiant — remplacée par la version avec sous-dossiers (Update 5) ══
+
+        async function gedLinkFolder() {
+            const val = document.getElementById('gedFolderInput').value.trim();
+            if (!val) return alert('Entrez une URL ou un ID de dossier Drive.');
+            const r = await apiPost({ action: 'gedLinkStudentFolder', idEtu: studentId, nomPrenom: document.getElementById('etuNom')?.innerText || '', folderUrl: val, folderId: val });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert('Dossier lié ✓');
+            document.getElementById('gedLinkPanel').classList.add('hidden');
+            loadGedEtu();
+        }
+
+        async function gedAutoScan() {
+            const btn = document.getElementById('btnGedScan');
+            btn.textContent = '⏳ Recherche…'; btn.disabled = true;
+            document.getElementById('gedScanPanel').classList.add('hidden');
+
+            // Le backend récupère NOM et Prénom directement dans ETUDIANTS (format canonique)
+            const r = await apiPost({
+                action: 'gedScanForStudent',
+                idEtu: studentId
+            });
+
+            btn.textContent = '🔍 Scanner les dossiers'; btn.disabled = false;
+            if (!r.success) return alert('Erreur : ' + r.message);
+
+            const panel = document.getElementById('gedScanPanel');
+            const list  = document.getElementById('gedScanList');
+            const empty = document.getElementById('gedScanEmpty');
+
+            panel.classList.remove('hidden');
+            document.getElementById('gedLinkPanel').classList.add('hidden');
+
+            const candidates = r.candidates || [];
+
+            // Avertissement si scan interrompu avant la fin (arborescence très large)
+            const truncWarn = document.getElementById('gedScanTruncated');
+            if (truncWarn) truncWarn.classList.toggle('hidden', !r.truncated);
+
+            if (!candidates.length) {
+                list.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+            list.innerHTML = candidates.map(c => `
+                <div class="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
+                    <div class="min-w-0">
+                        <p class="font-black text-sm text-gray-800 truncate">📂 ${c.name}</p>
+                        <p class="text-[10px] text-gray-400 font-bold mt-0.5">Chemin : ${c.path}</p>
+                        <a href="${c.url}" target="_blank" class="text-[10px] text-blue-500 hover:underline font-bold">Voir dans Drive ↗</a>
+                    </div>
+                    <button onclick="gedConfirmScanLink('${c.id}', '${c.url}', '${c.name.replace(/'/g,"\\'")}')"
+                        class="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-indigo-700 transition">
+                        ✓ Lier
+                    </button>
+                </div>`).join('');
+        }
+
+        async function gedConfirmScanLink(folderId, folderUrl, folderName) {
+            if (!confirm(`Lier le dossier "${folderName}" à cet étudiant ?`)) return;
+            const r = await apiPost({
+                action: 'gedLinkStudentFolder',
+                idEtu: studentId,
+                nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                folderId: folderId,
+                folderUrl: folderUrl
+            });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            document.getElementById('gedScanPanel').classList.add('hidden');
+            loadGedEtu();
+        }
+
+        async function gedUploadFile() {
+            const file = document.getElementById('gedFileInputEtu').files[0];
+            if (!file) return alert('Sélectionnez un fichier.');
+            const btn = document.getElementById('btnGedUploadConfirmEtu');
+            btn.textContent = '⏳…'; btn.disabled = true;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                const r = await apiPost({ action: 'gedUploadStudentDoc', idEtu: studentId,
+                    nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                    base64Data: b64, fileName: file.name, mimeType: file.type });
+                btn.textContent = 'Envoyer'; btn.disabled = false;
+                if (!r.success) return alert('Erreur : ' + r.message);
+                alert('Document déposé ✓');
+                document.getElementById('gedUploadPanel').classList.add('hidden');
+                document.getElementById('gedFileInputEtu').value = '';
+                loadGedEtu();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function gedUploadFileStudent() {
+            const file = document.getElementById('gedFileInputEtuStu').files[0];
+            if (!file) return alert('Sélectionnez un fichier.');
+            const btn = document.getElementById('btnGedUploadStu');
+            btn.textContent = '⏳…'; btn.disabled = true;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                const r = await apiPost({ action: 'gedUploadStudentDoc', idEtu: studentId,
+                    nomPrenom: document.getElementById('etuNom')?.innerText || '',
+                    base64Data: b64, fileName: file.name, mimeType: file.type });
+                btn.textContent = 'Envoyer'; btn.disabled = false;
+                if (!r.success) return alert('Erreur : ' + r.message);
+                alert('Pièce envoyée ✓');
+                document.getElementById('gedFileInputEtuStu').value = '';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // ══ Retrait entreprise (Update 4) ══
+        async function retirerEntreprise() {
+            const nom = document.getElementById('etuEntreprise').innerText;
+            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nUne entrée "Ancien alternant" sera créée en attente de confirmation dans le dossier entreprise.')) return;
+            const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: studentId });
+            if (!r.success) return alert('Erreur : ' + r.message);
+            alert('Entreprise retirée. Un mouvement "Ancien alternant — À confirmer" a été créé dans le dossier entreprise.');
+            loadDossier();
+        }
+
+        // ══ GED sous-dossiers (Update 5) ══
+        let gedBreadcrumb = [];
+
+        async function loadGedEtu(folderId) {
+            if (!folderId) gedBreadcrumb = [];
+            const isAdmin = currentUser.role !== 'Etudiant';
+            if (isAdmin) {
+                document.getElementById('btnGedScan').classList.remove('hidden');
+                document.getElementById('btnGedLink').classList.remove('hidden');
+                document.getElementById('btnGedUploadAdmin').classList.remove('hidden');
+            } else {
+                document.getElementById('gedEtuUploadZone').classList.remove('hidden');
+            }
+
+            const container = document.getElementById('gedEtuFiles');
+            container.innerHTML = '<p class="text-center text-gray-400 text-sm italic py-4">Chargement…</p>';
+
+            let r;
+            if (folderId) {
+                r = await apiPost({ action: 'gedGetSubfolder', folderId: folderId });
+            } else {
+                r = await apiPost({ action: 'gedGetStudentDocs', idEtu: studentId });
+            }
+
+            if (!r.success) { container.innerHTML = `<p class="text-red-400 text-sm text-center py-4">${r.message}</p>`; return; }
+            if (!folderId && !r.linked) {
+                container.innerHTML = `<p class="text-gray-400 text-sm italic text-center py-4">Aucun dossier Drive lié à cet étudiant.${isAdmin ? ' Utilisez "Lier un dossier" ou "Scanner les dossiers".' : ''}</p>`;
+                return;
+            }
+
+            if (!folderId) {
+                document.getElementById('gedEtuFolderLink').classList.remove('hidden');
+                document.getElementById('gedEtuFolderUrl').href = r.folderUrl || '#';
+            }
+
+            const files = r.files || [];
+            const subfolders = r.subfolders || [];
+
+            // Breadcrumb
+            let breadcrumbHtml = '';
+            if (gedBreadcrumb.length > 0) {
+                const crumbs = [{ id: null, name: '📁 Racine' }, ...gedBreadcrumb];
+                breadcrumbHtml = `<div class="flex items-center gap-1 text-[10px] font-bold text-blue-500 mb-3 flex-wrap">` +
+                    crumbs.map((c, i) => {
+                        if (i < crumbs.length - 1) {
+                            return `<button onclick="gedNavTo(${i})" class="hover:underline">${c.name}</button><span class="text-gray-300">/</span>`;
+                        }
+                        return `<span class="text-gray-600">${c.name}</span>`;
+                    }).join('') +
+                `</div>`;
+            }
+
+            if (!subfolders.length && !files.length) {
+                container.innerHTML = breadcrumbHtml + '<p class="text-gray-400 text-sm italic text-center py-4">Dossier vide.</p>';
+                return;
+            }
+
+            const subHtml = subfolders.map(sf => `
+                <div onclick="gedOpenSubfolder('${sf.id}','${sf.name.replace(/'/g,"\\'")}')"
+                    style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #c7d2fe;background:#eef2ff;cursor:pointer"
+                    class="hover:bg-indigo-100 transition">
+                    <span style="font-size:1.3rem">📂</span>
+                    <div style="flex:1;min-width:0">
+                        <p style="font-weight:700;font-size:0.8rem;color:#3730a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sf.name}</p>
+                        <p style="font-size:0.7rem;color:#6366f1">Sous-dossier</p>
+                    </div>
+                    <span style="font-size:0.7rem;color:#6366f1;font-weight:700">Ouvrir ›</span>
+                </div>`).join('');
+
+            const filesHtml = files.map(f => {
+                const icon = f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : '📎';
+                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#f9fafb">
+                    <span style="font-size:1.3rem">${icon}</span>
+                    <div style="flex:1;min-width:0">
+                        <p style="font-weight:600;font-size:0.8rem;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</p>
+                        <p style="font-size:0.7rem;color:#9ca3af">${f.date} · ${(f.size/1024).toFixed(0)} KB</p>
+                    </div>
+                    <a href="${f.url}" target="_blank" style="font-size:0.75rem;font-weight:700;color:#1A4E8A;white-space:nowrap">Ouvrir</a>
+                </div>`;
+            }).join('');
+
+            container.innerHTML = `<div class="space-y-2">${breadcrumbHtml}${subHtml}${filesHtml}</div>`;
+        }
+
+        function gedOpenSubfolder(id, name) {
+            gedBreadcrumb.push({ id: id, name: name });
+            loadGedEtu(id);
+        }
+
+        function gedNavTo(crumbIndex) {
+            if (crumbIndex === 0) {
+                gedBreadcrumb = [];
+                loadGedEtu(null);
+            } else {
+                gedBreadcrumb = gedBreadcrumb.slice(0, crumbIndex);
+                loadGedEtu(gedBreadcrumb[gedBreadcrumb.length - 1].id);
+            }
+        }
     </script>
+<script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
