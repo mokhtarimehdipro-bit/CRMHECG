@@ -67,10 +67,13 @@
                             </div>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
                         </div>
-                        <!-- Historique alternance -->
+                        <!-- Historique entreprises -->
                         <div id="alternanceHistoryBlock" class="hidden mb-6">
-                            <h4 class="text-[10px] font-black text-gray-500 uppercase mb-2">🏢 Anciennes entreprises</h4>
-                            <div id="alternanceHistoryList" class="space-y-1"></div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-[10px] font-black text-gray-500 uppercase">📚 Anciennes entreprises</h4>
+                                <span id="alternanceHistoryCount" class="text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full"></span>
+                            </div>
+                            <div id="alternanceHistoryList" class="space-y-2"></div>
                         </div>
 
                         <h4 class="text-[10px] font-black text-[#1A4E8A] uppercase mb-2">Curriculum Vitae</h4>
@@ -453,17 +456,39 @@
             btn.innerText = originalText;
             btn.disabled = false;
         }
-        // ══ Historique alternance ══
+        // ══ Historique entreprises ══
         function renderAlternanceHistory(history) {
             if (!history || !history.length) return;
             document.getElementById('alternanceHistoryBlock').classList.remove('hidden');
-            document.getElementById('alternanceHistoryList').innerHTML = history.map(h =>
-                `<div style="padding:0.4rem 0.6rem;border-radius:0.6rem;border:1px solid #e5e7eb;background:#f9fafb;font-size:0.75rem">
-                    <span class="font-bold text-gray-700">${h.entreprise||'—'}</span>
-                    ${h.dateDepart?`<span class="text-gray-400 ml-2">Départ : ${h.dateDepart}</span>`:''}
-                    ${h.status?`<span style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:9999px;background:${h.status==='Confirmé'?'#dcfce7':'#f3f4f6'};color:${h.status==='Confirmé'?'#15803d':'#6b7280'};margin-left:0.4rem">${h.status}</span>`:''}
-                </div>`
-            ).join('');
+            const cntEl = document.getElementById('alternanceHistoryCount');
+            if (cntEl) cntEl.textContent = history.length + ' entreprise' + (history.length > 1 ? 's' : '');
+            document.getElementById('alternanceHistoryList').innerHTML = history.map(h => {
+                const isPending = h.status === 'À_confirmer';
+                const isConfirmed = h.status === 'Confirmé';
+                const statusColor = isConfirmed ? '#15803d' : isPending ? '#a16207' : '#6b7280';
+                const statusBg   = isConfirmed ? '#dcfce7' : isPending ? '#fef9c3' : '#f3f4f6';
+                const statusLabel = isPending ? '⏳ À confirmer' : isConfirmed ? '✓ Confirmé' : h.status;
+                const contactNom = h.contact ? h.contact.trim() : '';
+                return `<div style="padding:0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#fff;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.4rem">
+                        <div>
+                            <a href="dossier_partenaire.html?id=${h.idEntreprise}" style="font-weight:700;color:#1A4E8A;font-size:0.85rem;text-decoration:none">🏢 ${h.entreprise||'—'}</a>
+                            ${h.classe?`<span style="display:inline-block;font-size:0.68rem;font-weight:700;color:#6b7280;background:#f3f4f6;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.4rem">${h.classe}</span>`:''}
+                            ${h.campus?`<span style="display:inline-block;font-size:0.68rem;font-weight:700;color:#6b7280;background:#f3f4f6;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.25rem">${h.campus}</span>`:''}
+                        </div>
+                        <span style="flex-shrink:0;font-size:0.68rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;background:${statusBg};color:${statusColor}">${statusLabel}</span>
+                    </div>
+                    ${contactNom?`<div style="font-size:0.75rem;color:#4b5563;margin-bottom:0.25rem">
+                        👤 ${contactNom}${h.contactPoste?` — <em>${h.contactPoste}</em>`:''}
+                        ${h.contactTel?` · <a href="tel:${h.contactTel}" style="color:#1A4E8A">${h.contactTel}</a>`:''}
+                        ${h.contactMail?` · <a href="mailto:${h.contactMail}" style="color:#1A4E8A">${h.contactMail}</a>`:''}
+                    </div>`:''}
+                    <div style="display:flex;gap:1rem;font-size:0.72rem;color:#9ca3af">
+                        ${h.dateDepart?`<span>Départ : ${h.dateDepart}</span>`:''}
+                        ${h.motif?`<span style="font-style:italic">${h.motif}</span>`:''}
+                    </div>
+                </div>`;
+            }).join('');
         }
 
         // ══ GED Étudiant — remplacée par la version avec sous-dossiers (Update 5) ══
