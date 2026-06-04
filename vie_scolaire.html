@@ -474,15 +474,15 @@
         </div>
       </div>
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5">
-        <!-- Recherche rapide par REFEXB -->
-        <div class="mb-3 flex gap-2 items-center">
+        <!-- Recherche rapide par REFEXB (menu déroulant) -->
+        <div class="mb-3 flex gap-2 items-end">
           <div class="flex-1">
-            <label>Recherche directe par REF EXB</label>
-            <input type="text" id="exbSearchRef" placeholder="Ex : 2025-2026-2-T1" oninput="renderSuiviEXB()" style="margin-top:4px">
+            <label>Accès direct par REF EXB</label>
+            <select id="exbSearchRef" onchange="renderSuiviEXB()" style="margin-top:4px">
+              <option value="">— Toutes les sessions —</option>
+            </select>
           </div>
-          <div class="flex items-end" style="padding-bottom:0">
-            <button onclick="document.getElementById('exbSearchRef').value='';renderSuiviEXB()" class="btn-ghost text-xs mt-5">✕</button>
-          </div>
+          <button onclick="document.getElementById('exbSearchRef').value='';renderSuiviEXB()" class="btn-ghost text-xs" style="white-space:nowrap">✕ Tout</button>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div><label>Année scolaire</label>
@@ -1453,8 +1453,11 @@ function toast(msg, ok=true){
 function loading(tbodyId, cols){ document.getElementById(tbodyId).innerHTML=`<tr><td colspan="${cols}" class="text-center text-gray-400 py-10">Chargement…</td></tr>`; }
 async function api(action, extra={}){
   const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action, emailAuteur: user.email||user.ref, vieScRole, roleAuteur: vieScRole, ...extra}) });
-  return res.json();
+    body: JSON.stringify({action, emailAuteur: user.email||user.ref, vieScRole, roleAuteur: vieScRole,
+      sessionToken: user.sessionToken||'', ...extra}) });
+  const data = await res.json();
+  if (data.sessionExpired) { toast('Session expirée — reconnexion requise', false); setTimeout(()=>{localStorage.removeItem('user');window.location.href='index.html';},2000); return data; }
+  return data;
 }
 function fmtNote(n){
   if(n===null||n===undefined||n==='') return '—';
@@ -5309,10 +5312,15 @@ function getSimWeekDatesFromSim(sim){
 let allSuiviEXB=[];
 
 async function loadSuiviEXB(){
-  document.getElementById('suiviEXBTbody').innerHTML='<tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr>';
+  document.getElementById('suiviEXBAccordion').innerHTML='<div class="text-center text-gray-400 py-12 bg-white rounded-2xl border border-gray-100"><p>Chargement…</p></div>';
   const r=await api('getSuiviEXB');
   if(!r.success){toast('Erreur : '+r.message,false);return;}
   allSuiviEXB=r.data||[];
+  // Peupler le menu déroulant REFEXB
+  const allRefs=[...new Set(allSuiviEXB.map(e=>e.refexb).filter(Boolean))].sort().reverse();
+  const selRef=document.getElementById('exbSearchRef');
+  const curRef=selRef.value;
+  selRef.innerHTML='<option value="">— Toutes les sessions —</option>'+allRefs.map(r=>`<option value="${r}" ${r===curRef?'selected':''}>${r}</option>`).join('');
   buildRefEXBOptions();
   renderSuiviEXBRapport();
   renderSuiviEXB();
@@ -5387,19 +5395,18 @@ function exbStatusBadge(val, url){
 
 function renderSuiviEXB(){
   const{annee,session,ref}=getExbFilter();
-  const searchRef=(document.getElementById('exbSearchRef')?.value||'').trim().toLowerCase();
+  const searchRef=(document.getElementById('exbSearchRef')?.value||'').trim();
   const classe=document.getElementById('exbClasse').value;
   const filtForm=document.getElementById('exbFiltreFormateur').value;
   const noSujet=document.getElementById('exbFiltreNoSujet').checked;
   const noCorrige=document.getElementById('exbFiltreNoCorrige').checked;
   const noImpression=document.getElementById('exbFiltreNoImpression').checked;
-  let filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
-  if(searchRef){ // Recherche directe prioritaire
-    filtered=allSuiviEXB.filter(e=>String(e.refexb||'').toLowerCase().includes(searchRef));
-    // Ouvrir automatiquement les refs trouvées
-    const refs=[...new Set(filtered.map(e=>e.refexb))];
-    refs.forEach(r=>exbOpenRefs.add(r));
+  let filtered;
+  if(searchRef){ // Sélection directe par REFEXB (prioritaire)
+    filtered=allSuiviEXB.filter(e=>e.refexb===searchRef);
+    exbOpenRefs.add(searchRef);
   } else {
+    filtered=allSuiviEXB.filter(e=>String(e.refexb||'').startsWith(annee));
     if(session) filtered=filtered.filter(e=>e.refexb===ref);
   }
   if(classe) filtered=filtered.filter(e=>e.classe===classe);
@@ -5691,14 +5698,15 @@ async function createEXBBatch(){
   const annee=document.getElementById('exbModalAnnee').value;
   const session=document.getElementById('exbModalSession').value;
   const refexb=getBatchRefexb(annee,session,typo);
-  const allItems=getItemsForTypo(typo,refexb);
-  const toCreate=allItems.filter(r=>!r.exists).map(r=>({refexb,classe:r.classe,matiere:r.matiere,formateur:'',sujet:'',corrige:'',impression:'',commentaire:''}));
-  if(!toCreate.length){toast('Toutes les entrées existent déjà.',false);return;}
-  const btn=document.querySelector('#exbModal .btn-orange');btn.textContent='⏳ Création…';btn.disabled=true;
-  const r=await api('createEXBBatch',{items:toCreate});
+  const btn=document.querySelector('#exbModal .btn-orange');
+  btn.textContent='⏳ Génération…';btn.disabled=true;
+  // Le backend gère la génération (lit les classes depuis ETUDIANTS directement)
+  const r=await api('createEXBBatchByTypo',{typo,refexb,annee,session});
   btn.textContent='⚡ Créer toutes les entrées';btn.disabled=false;
   if(!r.success){toast('Erreur : '+r.message,false);return;}
-  toast(`${toCreate.length} entrée${toCreate.length>1?'s':''} créée${toCreate.length>1?'s':''} ✓`);
+  if(r.created===0){toast('Toutes les entrées existent déjà pour '+refexb,false);return;}
+  toast(`${r.created} entrée${r.created>1?'s':''} créée${r.created>1?'s':''} ✓ (${refexb})`);
+  exbOpenRefs.add(refexb);
   closeSuiviEXBModal();loadSuiviEXB();
 }
 
