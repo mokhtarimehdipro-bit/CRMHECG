@@ -96,8 +96,11 @@
                     </div>
 
                     <div id="anciensAlternantsBlock" class="hidden bg-amber-50 p-6 rounded-3xl border border-amber-200">
-                        <h3 class="font-black text-amber-700 mb-2 text-sm uppercase tracking-wider">⚠️ Anciens alternants — À confirmer</h3>
-                        <p class="text-xs text-amber-600 mb-4">Ces étudiants semblent avoir quitté cette entreprise. Confirmez leur départ ou signalez une erreur de saisie.</p>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-black text-amber-700 text-sm uppercase tracking-wider">📚 Anciens étudiants HECG</h3>
+                            <span id="anciensAlternantsCount" class="text-xs font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <p class="text-xs text-amber-600 mb-4">Étudiants ayant quitté cette entreprise. Confirmez les départs ou signalez les erreurs de saisie.</p>
                         <div id="anciensAlternantsListDP" class="space-y-3"></div>
                     </div>
                 </div>
@@ -205,25 +208,38 @@
                                 </button>
                             </div>`).join('');
 
-                    // Anciens alternants
+                    // Anciens étudiants
                     const anc = d.anciensAlternants || [];
                     const ancBlock = document.getElementById('anciensAlternantsBlock');
                     if (anc.length > 0) {
                         ancBlock.classList.remove('hidden');
+                        const cntEl = document.getElementById('anciensAlternantsCount');
+                        if (cntEl) cntEl.textContent = anc.length + ' étudiant' + (anc.length > 1 ? 's' : '');
                         document.getElementById('anciensAlternantsListDP').innerHTML = anc.map(a => {
-                            const dateStr = a.date ? new Date(a.date).toLocaleDateString('fr-FR') : '?';
                             const isPending = a.status === 'À_confirmer';
-                            return '<div class="bg-white p-3 rounded-xl border border-amber-200 space-y-2">'
-                                + '<div class="flex justify-between items-start gap-2">'
-                                + '<div><p class="font-bold text-gray-800 text-sm">' + (a.prenom||'') + ' ' + (a.nom||'') + '</p>'
-                                + '<p class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">Détecté le ' + dateStr + '</p></div>'
-                                + '<span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black ' + (isPending ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700') + '">' + (isPending ? 'À confirmer' : a.status) + '</span>'
-                                + '</div>'
-                                + (isPending ? '<div class="flex gap-2">'
-                                + '<button onclick="confirmFormerAlternant(\'' + a.id + '\')" class="flex-1 text-xs bg-green-100 text-green-700 font-bold py-1.5 rounded-lg hover:bg-green-200 transition">✓ Confirmer le départ</button>'
-                                + '<button onclick="removeFormerAlternant(\'' + a.id + '\')" class="flex-1 text-xs bg-red-100 text-red-600 font-bold py-1.5 rounded-lg hover:bg-red-200 transition">✗ Erreur de saisie</button>'
-                                + '</div>' : '')
-                                + '</div>';
+                            const isConfirmed = a.status === 'Confirmé';
+                            const statusColor = isConfirmed ? 'bg-green-100 text-green-700' : isPending ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500';
+                            const statusLabel = isPending ? '⏳ À confirmer' : isConfirmed ? '✓ Confirmé' : a.status;
+                            return `<div class="bg-white p-4 rounded-xl border border-amber-200">
+                                <div class="flex justify-between items-start gap-2 mb-2">
+                                    <div>
+                                        <p class="font-bold text-gray-800 text-sm">${(a.prenom||'')} ${(a.nom||'')}</p>
+                                        <div class="flex gap-2 mt-0.5 flex-wrap">
+                                            ${a.classe?`<span class="text-[10px] font-black text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">${a.classe}</span>`:''}
+                                            ${a.campus?`<span class="text-[10px] font-black text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">${a.campus}</span>`:''}
+                                            ${a.date?`<span class="text-[10px] text-gray-300">Départ : ${a.date}</span>`:''}
+                                            ${a.motif?`<span class="text-[10px] text-gray-300 italic">${a.motif}</span>`:''}
+                                        </div>
+                                    </div>
+                                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black ${statusColor}">${statusLabel}</span>
+                                </div>
+                                ${(a.mail||a.tel)?`<div class="text-[11px] text-gray-400 mb-2">${a.mail?`<a href="mailto:${a.mail}" class="text-blue-400">${a.mail}</a> `:''} ${a.tel?`· ${a.tel}`:''}</div>`:''}
+                                <div class="flex gap-2 flex-wrap">
+                                    ${a.idEtu?`<a href="dossier.html?id=${a.idEtu}" class="text-[11px] font-bold text-[#1A4E8A] hover:underline">📋 Voir le dossier étudiant</a>`:''}
+                                    ${isPending?`<button onclick="confirmFormerAlternant('${a.id}')" class="text-xs bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg hover:bg-green-200 transition">✓ Confirmer</button>
+                                    <button onclick="removeFormerAlternant('${a.id}')" class="text-xs bg-red-100 text-red-600 font-bold px-3 py-1 rounded-lg hover:bg-red-200 transition">✗ Erreur</button>`:''}
+                                </div>
+                            </div>`;
                         }).join('');
                     } else {
                         ancBlock.classList.add('hidden');
