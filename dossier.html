@@ -179,8 +179,9 @@
                     </div>
                     <div id="gedScanList" class="space-y-2"></div>
                     <p id="gedScanEmpty" class="hidden text-sm text-gray-400 italic text-center py-3">Aucun dossier correspondant trouvé dans l'arborescence Drive.</p>
+                    <p id="gedScanInfo" class="hidden mt-2 text-[10px] text-indigo-400 italic"></p>
                     <div id="gedScanTruncated" class="hidden mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
-                        ⚠️ L'arborescence est très large — le scan a été interrompu avant la fin (limite de temps). Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.
+                        ⚠️ Scan interrompu avant la fin (arborescence très large). Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.
                     </div>
                 </div>
                 <!-- Upload -->
@@ -526,9 +527,25 @@
 
             const candidates = r.candidates || [];
 
-            // Avertissement si scan interrompu avant la fin (arborescence très large)
+            // Affiche les dossiers racines ciblés par le scan
+            const scanRoots = r.scanRoots || [];
             const truncWarn = document.getElementById('gedScanTruncated');
-            if (truncWarn) truncWarn.classList.toggle('hidden', !r.truncated);
+            if (truncWarn) {
+                truncWarn.classList.toggle('hidden', !r.truncated);
+                if (r.truncated && scanRoots.length) {
+                    truncWarn.innerHTML = `⚠️ Scan interrompu (${r.inspected} dossiers parcourus). Racines ciblées : <em>${scanRoots.join(', ')}</em>. Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.`;
+                }
+            }
+            // Info sur les racines scannées
+            const scanInfo = document.getElementById('gedScanInfo');
+            if (scanInfo) {
+                if (scanRoots.length) {
+                    scanInfo.textContent = `Scan dans : ${scanRoots.join(', ')} (${r.inspected || 0} dossiers parcourus)`;
+                    scanInfo.classList.remove('hidden');
+                } else {
+                    scanInfo.classList.add('hidden');
+                }
+            }
 
             if (!candidates.length) {
                 list.innerHTML = '';
