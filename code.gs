@@ -790,7 +790,7 @@ function handleSignalFormerAlternant(p, ss) {
   try {
     const s = _getOrCreateAnciensSheet(ss);
     const idEnt = String(p.idEntreprise || "").trim().toUpperCase();
-    const idEtu = String(p.idEtudiant || "").trim();
+    const idEtu = String(p.idEtudiant || "").trim().toUpperCase();
 
     // Vérifier doublon
     const existing = s.getDataRange().getValues().slice(1);
@@ -8750,9 +8750,9 @@ function handleDetachStudentFromEnterprise(p, ss) {
     var auteur = p.emailAuteur || p.idAuteur || "?";
     var nomEtu = String(oldRow[3]||"") + " " + String(oldRow[2]||"");
     logAction(auteur, p.roleAuteur||"?", "Modification", "Dossier étudiant", idEtu,
-      auteur + " a retiré l'entreprise « " + oldNomEnt + " » du dossier de " + nomEtu + " — Mouvement enregistré dans Anciens alternants (À confirmer)");
+      auteur + " a retiré l'entreprise « " + oldNomEnt + " » du dossier de " + nomEtu + " — Mouvement enregistré dans Anciens alternants");
     logAction(auteur, p.roleAuteur||"?", "Création", "AncienAlternant", idEtu,
-      "Départ signalé depuis dossier étudiant : " + nomEtu + " quitte « " + oldNomEnt + " »");
+      nomEtu + " quitte « " + oldNomEnt + " » (retrait depuis dossier étudiant)");
 
     return createJsonResponse({ success: true, oldEntreprise: oldNomEnt, oldIdEnt: oldIdEnt, nomEtu: nomEtu });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
