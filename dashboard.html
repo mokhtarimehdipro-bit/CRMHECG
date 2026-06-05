@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -323,8 +323,10 @@
         // LA STATION D'EXPÉDITION CENTRALE
 async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
-    payload.roleAuteur = userSession.role || "Utilisateur";
+    payload.idAuteur     = userSession.nom   || "Utilisateur Inconnu";
+    payload.roleAuteur   = userSession.role  || "Utilisateur";
+    payload.emailAuteur  = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 35000);
@@ -340,6 +342,7 @@ async function apiPost(payload) {
         const text = await response.text();
         try {
             const result = JSON.parse(text);
+            if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
             if (!result.success) console.error("Erreur API:", result.message);
             return result;
         } catch(parseErr) {

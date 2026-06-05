@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -26,12 +26,13 @@
                 <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">Missions</a>
                 <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A] whitespace-nowrap">🏫 Vie Scolaire</a>
                 <a href="#" id="navHistorique" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium" onclick="showSection('historique')">Historique</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600 whitespace-nowrap">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
 
             </div>
         </div>
         <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
     </nav>
-    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}})();</script>
+    <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
     <main class="max-w-7xl mx-auto p-8">
         <h1 class="text-3xl font-black text-[#1A4E8A] mb-2">Centre de Pilotage 360°</h1>

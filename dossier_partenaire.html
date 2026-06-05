@@ -134,17 +134,21 @@
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
             
             // On prépare les étiquettes pour le script Google
-            payload.idAuteur = userSession.nom || "Inconnu";    // Pour l'onglet HISTORIQUE
-            payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
-            payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
-            
+            payload.idAuteur     = userSession.nom   || "Inconnu";
+            payload.auteur       = userSession.nom   || "Inconnu";
+            payload.roleAuteur   = userSession.role  || "N/A";
+            payload.emailAuteur  = userSession.email || "";
+            payload.sessionToken = userSession.sessionToken || "";
+
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(payload)
                 });
-                return await response.json();
+                const result = await response.json();
+                if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+                return result;
             } catch (e) {
                 console.error("Erreur API :", e);
                 return { success: false, message: "Erreur de connexion" };
@@ -464,7 +468,7 @@
         }
 
         async function signalFormerAlternant(idEtudiant, prenom, nomFamille) {
-            if (!confirm(`Signaler que ${prenom} ${nomFamille} a quitté cette entreprise ?\nCela créera une entrée "À confirmer" dans la section ci-dessous.`)) return;
+            if (!confirm(`Enregistrer le départ de ${prenom} ${nomFamille} ?\n\nLes deux dossiers (entreprise et étudiant) seront mis à jour automatiquement.`)) return;
             const btn = event.target;
             btn.disabled = true; btn.innerText = "⏳";
             const res = await apiPost({ action: 'signalFormerAlternant', idEntreprise: partId, idEtudiant, prenom, nom: nomFamille });

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -214,18 +214,21 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur = userSession.nom || "Inconnu";
-    payload.roleAuteur = userSession.role || "N/A";
-    payload.vieScRole = userSession.vieScRole || userSession.role || "";
-    payload.emailAuteur = userSession.email || "";
-    
+    payload.idAuteur     = userSession.nom   || "Inconnu";
+    payload.roleAuteur   = userSession.role  || "N/A";
+    payload.vieScRole    = userSession.vieScRole || userSession.role || "";
+    payload.emailAuteur  = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+        const result = await response.json();
+        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        return result;
     } catch (e) {
         console.error("Erreur API :", e);
         return { success: false, message: "Erreur de connexion" };
@@ -607,10 +610,10 @@
         // ══ Retrait entreprise (Update 4) ══
         async function retirerEntreprise() {
             const nom = document.getElementById('etuEntreprise').innerText;
-            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nUne entrée "Ancien alternant" sera créée en attente de confirmation dans le dossier entreprise.')) return;
+            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nLes deux dossiers (étudiant et entreprise) seront mis à jour automatiquement.')) return;
             const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: studentId });
             if (!r.success) return alert('Erreur : ' + r.message);
-            alert('Entreprise retirée. Un mouvement "Ancien alternant — À confirmer" a été créé dans le dossier entreprise.');
+            alert('Entreprise retirée. Les deux dossiers ont été mis à jour (ancienne entreprise / ancien alternant).');
             loadDossier();
         }
 
