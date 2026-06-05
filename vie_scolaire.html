@@ -5545,7 +5545,11 @@ function openSuiviEXBModal(id){
   document.getElementById('exbModalSession').value=e?.refexb?.slice(10)||'1';
   // Typo panel — visible seulement à la création
   const typoPan=document.getElementById('exbTypoPanel');
-  if(e){ typoPan.classList.add('hidden'); } else { typoPan.classList.remove('hidden'); onExbTypoChange(); }
+  if(e){
+    typoPan.classList.add('hidden');
+    document.getElementById('exbIndivForm').classList.remove('hidden');
+    document.getElementById('exbBatchPreview').classList.add('hidden');
+  } else { typoPan.classList.remove('hidden'); onExbTypoChange(); }
   const classes=[...new Set(allEtudiants.map(et=>et.classe).filter(Boolean))].sort();
   document.getElementById('exbModalClasse').innerHTML='<option value="">— Choisir —</option>'+classes.map(c=>`<option value="${c}" ${c===e?.classe?'selected':''}>${c}</option>`).join('');
   // Formateurs multi-select — exclure sortis (dateSortie vide)
@@ -5734,8 +5738,7 @@ async function uploadEXBFile(type){
   const bv=document.getElementById('exb'+cap.toLowerCase()+'ViewBtn')||document.getElementById('exb'+cap+'ViewBtn');
   if(bv){bv.href=r.url||'#';bv.classList.remove('hidden');}
   // Cocher automatiquement le statut correspondant
-  if(type==='sujet') document.getElementById('exbModalSujet').checked=true;
-  if(type==='corrige') document.getElementById('exbModalCorrige').checked=true;
+  setExbStatus(type,'x');
   document.getElementById('exb'+cap+'UploadZone').classList.add('hidden');
   toast('Fichier importé ✓');
 }
