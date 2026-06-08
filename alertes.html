@@ -19,11 +19,8 @@
                 <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com / Evénements</a>
                 <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes Auto</a>
                 <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
-<<<<<<< HEAD
-=======
                 <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
                 <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
->>>>>>> fix/logs-and-alerts
             </div>
         </div>
         <button onclick="window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
@@ -86,20 +83,12 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
 async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-<<<<<<< HEAD
-    payload.idAuteur    = userSession.nom   || "Inconnu";
-    payload.roleAuteur  = userSession.role  || "N/A";
-    payload.emailAuteur = userSession.email || "";
-    payload.ref         = userSession.ref   || "";
-    
-=======
     payload.idAuteur     = userSession.nom   || "Inconnu";
     payload.roleAuteur   = userSession.role  || "N/A";
     payload.emailAuteur  = userSession.email || "";
     payload.ref          = userSession.ref   || "";
     payload.sessionToken = userSession.sessionToken || "";
 
->>>>>>> fix/logs-and-alerts
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -188,20 +177,19 @@ async function apiPost(payload) {
 
         async function completeAlert(alertId) {
             if(!confirm("Avez-vous bien traité cette alerte ?")) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'completeAlert', id: alertId }) });
+            await apiPost({ action: 'completeAlert', id: alertId });
             loadAlerts();
         }
 
         async function testAlert(alertId) {
             if(!confirm("Envoyer un mail de test à m.mokhtari@hecg.fr ?")) return;
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testAlert', id: alertId }) });
-            const d = await res.json();
+            const d = await apiPost({ action: 'testAlert', id: alertId });
             alert(d.message);
         }
 
         async function cancelAlert(alertId) {
             if(!confirm("Voulez-vous vraiment annuler cette alerte de manière définitive ?")) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelAlert', id: alertId }) });
+            await apiPost({ action: 'cancelAlert', id: alertId });
             loadAlerts();
         }
 
