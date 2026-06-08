@@ -64,7 +64,8 @@
 
         async function deleteProspect(id) {
             if(confirm("Supprimer ce prospect définitivement ?")) {
-                await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id }) });
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id, idAuteur: u.nom || "Inconnu", emailAuteur: u.email || "", sessionToken: u.sessionToken || "" }) });
                 loadProspects();
             }
         }
