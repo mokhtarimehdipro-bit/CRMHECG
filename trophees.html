@@ -312,8 +312,13 @@ let allActionRows = [];
 let filteredActionRows = [];
 
 async function apiPost(payload) {
+    payload.idAuteur     = NOM_USER   || "Inconnu";
+    payload.emailAuteur  = EMAIL_USER || "";
+    payload.sessionToken = user.sessionToken || "";
     const r = await fetch(API_URL, {method:'POST', body: JSON.stringify(payload)});
-    return r.json();
+    const result = await r.json();
+    if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
+    return result;
 }
 
 async function loadData(force) {
