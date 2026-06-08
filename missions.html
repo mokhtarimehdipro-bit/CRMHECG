@@ -386,7 +386,9 @@ async function apiPost(payload) {
     payload.emailAuteur = user.email  || "";
     payload.sessionToken = user.sessionToken || "";
     const r = await fetch(API_URL, {method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
-    return r.json();
+    const result = await r.json();
+    if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
+    return result;
 }
 
 // ── ASPIRATION ────────────────────────────────────────────────────────────────
