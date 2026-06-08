@@ -219,6 +219,7 @@
     payload.roleAuteur = userSession.role || "N/A";
     payload.vieScRole = userSession.vieScRole || userSession.role || "";
     payload.emailAuteur = userSession.email || "";
+    payload.sessionToken = userSession.sessionToken || "";
     
     try {
         const response = await fetch(API_URL, {
