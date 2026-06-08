@@ -132,11 +132,12 @@
         
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            
+
             // On prépare les étiquettes pour le script Google
             payload.idAuteur = userSession.nom || "Inconnu";    // Pour l'onglet HISTORIQUE
             payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
             payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
+            payload.sessionToken = userSession.sessionToken || "";
             
             try {
                 const response = await fetch(API_URL, {
