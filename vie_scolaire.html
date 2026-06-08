@@ -1027,6 +1027,17 @@
         <label>Descriptif (optionnel)</label>
         <textarea id="objectifDescriptif" rows="2" placeholder="Contexte, méthode, cible…"></textarea>
       </div>
+      <div>
+        <label>Pôle</label>
+        <input type="text" id="objectifPole" list="polesObjectifsList" placeholder="ex: Alternance, Pédagogique…">
+        <datalist id="polesObjectifsList">
+          <option value="Pôle Alternance">
+          <option value="Pôle Pédagogique">
+          <option value="Pôle Communication">
+          <option value="Pôle Administratif">
+          <option value="Direction">
+        </datalist>
+      </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
       <button id="btnDeleteObjectif" onclick="deleteObjectif(document.getElementById('objectifId').value)" class="btn-danger hidden">Supprimer</button>
@@ -4195,6 +4206,7 @@ function renderObjectifs(){
           ${isSA?`<button onclick='openObjectifModal(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="flex-shrink:0;margin-top:0.1rem;padding:0.15rem 0.4rem;border-radius:0.4rem;border:1px solid #e5e7eb;background:#fff;font-size:0.7rem;cursor:pointer;color:#6b7280" title="Modifier">✏️</button>`:''}
           <div style="${valideStyle}">
             <div style="font-weight:700;color:#1f2937;font-size:0.85rem">${p>=4?'🚨 ':''}${obj.nom}</div>
+            ${obj.pole?`<div style="display:inline-block;margin-top:0.2rem;padding:0.1rem 0.5rem;background:#EEF2FF;color:#4338CA;border-radius:999px;font-size:0.68rem;font-weight:800">🏢 ${obj.pole}</div>`:''}
             ${obj.quantite?`<div style="font-size:0.75rem;color:#6b7280;margin-top:0.15rem">Cible : <strong>${obj.quantite}</strong></div>`:''}
             ${obj.descriptif?`<div style="font-size:0.72rem;color:#9ca3af;margin-top:0.15rem;font-style:italic">${obj.descriptif}</div>`:''}
           </div>
@@ -4246,6 +4258,7 @@ function openObjectifModal(obj){
   document.getElementById('objectifQuantite').value=obj?.quantite||'';
   document.getElementById('objectifPriorite').value=String(obj?.priorite||3);
   document.getElementById('objectifDescriptif').value=obj?.descriptif||'';
+  document.getElementById('objectifPole').value=obj?.pole||'';
   if (obj?.id) show('btnDeleteObjectif'); else hide('btnDeleteObjectif');
 }
 function closeObjectifModal(){ document.getElementById('objectifModal').classList.add('hidden'); }
@@ -4261,6 +4274,7 @@ async function saveObjectif(){
     quantite:    document.getElementById('objectifQuantite').value||'',
     priorite:    Number(document.getElementById('objectifPriorite').value),
     descriptif:  document.getElementById('objectifDescriptif').value,
+    pole:        document.getElementById('objectifPole').value.trim(),
     emailAuteur: user.email||user.ref,
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
