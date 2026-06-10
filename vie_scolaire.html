@@ -555,6 +555,9 @@
             <option value="month">Ce mois</option><option value="year">Cette année</option>
           </select>
         </div>
+        <div class="flex-1" style="min-width:160px"><label>Sujet</label>
+          <input type="text" id="mmokFilterSujet" placeholder="Rechercher un sujet…" oninput="renderMMOK()">
+        </div>
         <div class="flex-1" style="min-width:140px"><label>Thème</label>
           <select id="mmokFilterTheme" onchange="renderMMOK()">
             <option value="">Tous</option>
@@ -571,10 +574,10 @@
         <div class="overflow-x-auto">
           <table>
             <thead><tr>
-              <th>REFPOST</th><th>Plateforme</th><th>Thème</th>
+              <th>REFPOST</th><th>Plateforme</th><th>Sujet</th><th>Thème</th>
               <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th></th>
             </tr></thead>
-            <tbody id="mmokTbody"><tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+            <tbody id="mmokTbody"><tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1387,9 +1390,10 @@
           <option>TikTok</option><option>X / Twitter</option>
         </select>
       </div>
+      <div><label>Sujet</label><input type="text" id="mmokModalSujet" placeholder="Sujet du post…"></div>
       <div><label>Thème</label>
         <select id="mmokModalTheme">
-          <option value="">— Choisir un thème —</option>
+          <option value="">— Choisir —</option>
           <option value="SIG">SIG</option>
           <option value="MSI">MSI</option>
           <option value="Responsable de Campus">Responsable de Campus</option>
@@ -5932,6 +5936,7 @@ const THEME_COLORS={'SIG':'#1A4E8A','MSI':'#8b5cf6','Responsable de Campus':'#F2
 function renderMMOK(){
   const platform=document.getElementById('mmokFilterPlatform').value;
   const period=document.getElementById('mmokFilterPeriod').value;
+  const sujetQ=(document.getElementById('mmokFilterSujet').value||'').toLowerCase().trim();
   const theme=document.getElementById('mmokFilterTheme').value;
   const etat=document.getElementById('mmokFilterEtat').value;
   const now=new Date();
@@ -5939,6 +5944,7 @@ function renderMMOK(){
   const starts={week:startWeek,month:new Date(now.getFullYear(),now.getMonth(),1),year:new Date(now.getFullYear(),0,1)};
   let f=[...allMMOK];
   if(platform) f=f.filter(p=>p.plateforme===platform);
+  if(sujetQ) f=f.filter(p=>(p.sujet||'').toLowerCase().includes(sujetQ));
   if(theme) f=f.filter(p=>p.theme===theme);
   if(etat) f=f.filter(p=>p.etat===etat);
   if(period&&starts[period]){const st=starts[period];f=f.filter(p=>{const d=new Date(p.dateReelle||p.datePrevue||'');return !isNaN(d)&&d>=st;});}
@@ -5951,6 +5957,7 @@ function renderMMOK(){
     return `<tr>
       <td style="font-family:monospace;font-size:0.75rem;color:#9ca3af">${p.refpost||'—'}</td>
       <td><span class="plat-badge" style="background:${col}">${p.plateforme||'—'}</span></td>
+      <td style="font-size:0.85rem;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.sujet||'').replace(/"/g,'&quot;')}">${p.sujet||'—'}</td>
       <td>${themeBadge}</td>
       <td style="font-size:0.85rem">${p.datePrevue||'—'}</td>
       <td style="font-size:0.82rem;color:#4b5563;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.ideeContenu||'').replace(/"/g,'&quot;')}">${p.ideeContenu||'—'}</td>
@@ -5961,7 +5968,7 @@ function renderMMOK(){
         <button onclick="deleteMMOKById('${p.id}')" class="btn-danger py-1 text-xs">🗑</button>
       </td>
     </tr>`;
-  }).join(''):'<tr><td colspan="8" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+  }).join(''):'<tr><td colspan="9" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
 }
 
 function openMMOKModal(id){
@@ -5970,6 +5977,7 @@ function openMMOKModal(id){
   document.getElementById('mmokModalId').value=p?.id||'';
   document.getElementById('mmokModalRefpost').value=p?.refpost||'';
   document.getElementById('mmokModalPlateforme').value=p?.plateforme||'LinkedIn';
+  document.getElementById('mmokModalSujet').value=p?.sujet||'';
   document.getElementById('mmokModalTheme').value=p?.theme||'';
   document.getElementById('mmokModalDatePrevue').value=p?.datePrevue||'';
   document.getElementById('mmokModalIdeeContenu').value=p?.ideeContenu||'';
@@ -5990,6 +5998,7 @@ async function saveMMOK(){
     id:document.getElementById('mmokModalId').value||'',
     refpost:document.getElementById('mmokModalRefpost').value||'',
     plateforme,
+    sujet:document.getElementById('mmokModalSujet').value||'',
     theme:document.getElementById('mmokModalTheme').value||'',
     datePrevue:document.getElementById('mmokModalDatePrevue').value||'',
     ideeContenu:document.getElementById('mmokModalIdeeContenu').value||'',
