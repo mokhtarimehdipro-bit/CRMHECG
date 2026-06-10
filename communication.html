@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -90,10 +90,11 @@
                                 <th class="p-3 text-[10px] uppercase font-black text-slate-500">Date réelle</th>
                                 <th class="p-3 text-[10px] uppercase font-black text-slate-500">État</th>
                                 <th class="p-3 text-[10px] uppercase font-black text-slate-500">Thème</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Visuels</th>
                                 <th class="p-3"></th>
                             </tr>
                         </thead>
-                        <tbody id="spcTbody"><tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+                        <tbody id="spcTbody"><tr><td colspan="10" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1163,6 +1164,18 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Contenu (texte du post)</label>
         <textarea id="spcModalContenu" rows="4" placeholder="Tapez le texte du post ici…" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522] resize-none"></textarea>
       </div>
+      <div class="col-span-2 md:col-span-3">
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Visuels du post</label>
+        <div id="spcVisualsExisting" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+        <div id="spcNoVisualWarning" class="hidden mb-3 px-3 py-2 rounded-xl text-xs font-bold" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa">
+          Aucun visuel associe — pensez a documenter ce post avec ses visuels avant publication.
+        </div>
+        <div id="spcNewFilesList" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+        <label for="spcVisualInput" class="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border-2 border-dashed border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:border-[#F26522] hover:text-[#F26522] transition">
+          <span style="font-size:1.1rem">+</span> Ajouter des visuels (JPG, PNG, GIF — max 4 Mo/fichier)
+        </label>
+        <input type="file" id="spcVisualInput" multiple accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" onchange="spcOnFilesSelected(this)">
+      </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
       <button id="btnDeleteSPC" onclick="deleteSPCFromModal()" class="px-5 py-2 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition hidden">Supprimer</button>
@@ -1180,6 +1193,8 @@ async function executeFinalSend(cmpId, isTest, emailList) {
 
 <script>
 let allSPC = [];
+let spcCurrentVisuals = []; // [{fileId, filename}] - visuels déjà en Drive
+let spcNewFiles = [];        // File[] - nouveaux fichiers à uploader
 
 function spcToast(msg, ok=true) {
   const t = document.getElementById('spcToast');
@@ -1187,13 +1202,13 @@ function spcToast(msg, ok=true) {
   m.textContent = msg;
   m.style.background = ok ? '#22c55e' : '#ef4444';
   t.classList.remove('hidden'); t.style.display='flex';
-  setTimeout(() => { t.classList.add('hidden'); t.style.display='none'; }, 3000);
+  setTimeout(() => { t.classList.add('hidden'); t.style.display='none'; }, 3500);
 }
 
 async function loadSuiviPostCom() {
-  document.getElementById('spcTbody').innerHTML = '<tr><td colspan="9" class="text-center text-gray-400 py-8 animate-pulse">Chargement…</td></tr>';
+  document.getElementById('spcTbody').innerHTML = '<tr><td colspan="10" class="text-center text-gray-400 py-8 animate-pulse">Chargement…</td></tr>';
   const res = await apiPost({ action: 'getSuiviPostCom' });
-  if (!res.success) { document.getElementById('spcTbody').innerHTML = '<tr><td colspan="9" class="text-center text-red-400 py-8">' + (res.message||'Erreur') + '</td></tr>'; return; }
+  if (!res.success) { document.getElementById('spcTbody').innerHTML = '<tr><td colspan="10" class="text-center text-red-400 py-8">' + (res.message||'Erreur') + '</td></tr>'; return; }
   allSPC = res.data || [];
   renderSPC();
   renderSPCRapport();
@@ -1212,6 +1227,12 @@ function renderSPC() {
     const c = {Publié:'#22c55e',Planifié:'#3b82f6',Brouillon:'#f59e0b',Annulé:'#9ca3af'}[e]||'#9ca3af';
     return `<span style="background:${c}20;color:${c};padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900">${e||'—'}</span>`;
   };
+  const visualBadge = v => {
+    const ids = v ? v.split(',').filter(Boolean) : [];
+    if (ids.length > 0)
+      return `<span style="background:#dcfce720;color:#16a34a;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900;white-space:nowrap">${ids.length} visuel(s)</span>`;
+    return `<span style="background:#fff7ed;color:#ea580c;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900;white-space:nowrap">Aucun visuel</span>`;
+  };
   document.getElementById('spcTbody').innerHTML = filtered.length ? filtered.map(p => `
     <tr class="border-t border-gray-50 hover:bg-orange-50 transition">
       <td class="p-3 font-mono text-xs text-gray-500">${p.refpost||'—'}</td>
@@ -1222,22 +1243,23 @@ function renderSPC() {
       <td class="p-3 text-xs" style="white-space:nowrap">${p.dateReelle||'—'}</td>
       <td class="p-3">${etatBadge(p.etat)}</td>
       <td class="p-3 text-xs font-bold text-[#1A4E8A]">${p.themeProg||'—'}</td>
+      <td class="p-3">${visualBadge(p.visuals)}</td>
       <td class="p-3" style="white-space:nowrap">
         <button onclick="openSPCModal('${p.id}')" class="px-2 py-1 text-xs border border-gray-200 rounded-lg font-bold hover:bg-gray-100">✏</button>
       </td>
-    </tr>`).join('') : '<tr><td colspan="9" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="10" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
 }
 
 function renderSPCRapport() {
   const total = allSPC.length;
   const publie = allSPC.filter(p => p.etat === 'Publié').length;
   const planifie = allSPC.filter(p => p.etat === 'Planifié').length;
-  const platforms = [...new Set(allSPC.map(p => p.plateforme).filter(Boolean))].length;
+  const sansVisuel = allSPC.filter(p => !p.visuals).length;
   document.getElementById('spcRapport').innerHTML = [
     ['Total posts', total, '#1A4E8A'],
     ['Publiés', publie, '#22c55e'],
     ['Planifiés', planifie, '#3b82f6'],
-    ['Plateformes', platforms, '#F26522']
+    ['Sans visuels', sansVisuel, sansVisuel > 0 ? '#ea580c' : '#9ca3af']
   ].map(([label, val, color]) => `
     <div class="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
       <div style="font-size:1.5rem;font-weight:900;color:${color}">${val}</div>
@@ -1259,13 +1281,87 @@ function openSPCModal(id) {
   document.getElementById('spcModalEtat').value = p?.etat || 'Planifié';
   document.getElementById('spcModalThemeProg').value = p?.themeProg || '';
   document.getElementById('btnDeleteSPC').classList.toggle('hidden', !p);
+
+  // Visuels existants
+  spcNewFiles = [];
+  const existingRaw = p?.visuals || '';
+  spcCurrentVisuals = existingRaw ? existingRaw.split(',').filter(Boolean).map(id => ({ fileId: id.trim() })) : [];
+  document.getElementById('spcVisualInput').value = '';
+  document.getElementById('spcNewFilesList').innerHTML = '';
+  spcRenderExistingVisuals();
+  spcUpdateNoVisualWarning();
+
   document.getElementById('spcModal').classList.remove('hidden');
   document.getElementById('spcModal').style.display = 'flex';
+}
+
+function spcRenderExistingVisuals() {
+  const container = document.getElementById('spcVisualsExisting');
+  container.innerHTML = spcCurrentVisuals.map((v, i) =>
+    `<div style="position:relative;display:inline-block">
+      <a href="https://drive.google.com/file/d/${v.fileId}/view" target="_blank">
+        <img src="https://drive.google.com/thumbnail?id=${v.fileId}&sz=w120" alt="Visuel ${i+1}"
+          style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;cursor:pointer"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;width:80px;height:80px;border-radius:8px;border:2px solid #e5e7eb;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#6b7280;background:#f9fafb">Visuel ${i+1}</div>
+      </a>
+      <button onclick="spcRemoveExistingVisual(${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:0.65rem;font-weight:900;line-height:1;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>`
+  ).join('');
+}
+
+function spcRemoveExistingVisual(idx) {
+  spcCurrentVisuals.splice(idx, 1);
+  spcRenderExistingVisuals();
+  spcUpdateNoVisualWarning();
+}
+
+function spcUpdateNoVisualWarning() {
+  const warn = document.getElementById('spcNoVisualWarning');
+  const hasAny = spcCurrentVisuals.length > 0 || spcNewFiles.length > 0;
+  warn.classList.toggle('hidden', hasAny);
+}
+
+function spcOnFilesSelected(input) {
+  const MAX = 4 * 1024 * 1024;
+  Array.from(input.files).forEach(f => {
+    if (f.size > MAX) { spcToast(`"${f.name}" dépasse 4 Mo — ignoré.`, false); return; }
+    spcNewFiles.push(f);
+  });
+  input.value = '';
+  spcRenderNewFiles();
+  spcUpdateNoVisualWarning();
+}
+
+function spcRenderNewFiles() {
+  document.getElementById('spcNewFilesList').innerHTML = spcNewFiles.map((f, i) =>
+    `<div style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 8px;font-size:0.7rem;font-weight:700;color:#1d4ed8">
+      ${f.name}
+      <button onclick="spcRemoveNewFile(${i})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-weight:900;font-size:0.8rem">&times;</button>
+    </div>`
+  ).join('');
+}
+
+function spcRemoveNewFile(idx) {
+  spcNewFiles.splice(idx, 1);
+  spcRenderNewFiles();
+  spcUpdateNoVisualWarning();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function closeSPCModal() {
   document.getElementById('spcModal').classList.add('hidden');
   document.getElementById('spcModal').style.display = 'none';
+  spcNewFiles = [];
+  spcCurrentVisuals = [];
 }
 
 function deleteSPCFromModal() {
@@ -1283,10 +1379,32 @@ async function deleteSPCById(id) {
 async function saveSPC() {
   const plateforme = document.getElementById('spcModalPlateforme').value;
   if (!plateforme) { spcToast('Sélectionnez une plateforme.', false); return; }
+
+  const refpostInput = document.getElementById('spcModalRefpost').value.trim();
+  const refpost = refpostInput || ('SPC-' + new Date().toISOString().replace(/[-T:.Z]/g,'').slice(0,15));
+
+  const saveBtn = document.querySelector('#spcModal button[onclick="saveSPC()"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Enregistrement…'; }
+
+  // Upload des nouveaux fichiers
+  const uploadedIds = [...spcCurrentVisuals.map(v => v.fileId)];
+  for (let i = 0; i < spcNewFiles.length; i++) {
+    const f = spcNewFiles[i];
+    const ext = f.name.split('.').pop();
+    const filename = refpost + '-' + (uploadedIds.length + 1) + '.' + ext;
+    try {
+      spcToast(`Upload visuel ${i+1}/${spcNewFiles.length}…`, true);
+      const base64 = await fileToBase64(f);
+      const res = await apiPost({ action: 'uploadSPCVisual', base64, mimeType: f.type, filename });
+      if (res.success) uploadedIds.push(res.fileId);
+      else spcToast(`Erreur upload "${f.name}" : ${res.message}`, false);
+    } catch(e) { spcToast(`Erreur upload "${f.name}"`, false); }
+  }
+
   const payload = {
     action: 'saveSuiviPostCom',
     id:          document.getElementById('spcModalId').value || '',
-    refpost:     document.getElementById('spcModalRefpost').value || '',
+    refpost,
     plateforme,
     theme:       document.getElementById('spcModalTheme').value || '',
     datePrevue:  document.getElementById('spcModalDatePrevue').value || '',
@@ -1294,9 +1412,11 @@ async function saveSPC() {
     contenu:     document.getElementById('spcModalContenu').value || '',
     dateReelle:  document.getElementById('spcModalDateReelle').value || '',
     etat:        document.getElementById('spcModalEtat').value || 'Planifié',
-    themeProg:   document.getElementById('spcModalThemeProg').value || ''
+    themeProg:   document.getElementById('spcModalThemeProg').value || '',
+    visuals:     uploadedIds.join(',')
   };
   const res = await apiPost(payload);
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer'; }
   if (res.success) { closeSPCModal(); spcToast('Post enregistré !'); loadSuiviPostCom(); }
   else spcToast(res.message || 'Erreur enregistrement.', false);
 }
