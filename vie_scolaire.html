@@ -575,9 +575,9 @@
           <table>
             <thead><tr>
               <th>REFPOST</th><th>Plateforme</th><th>Sujet</th><th>Thème</th>
-              <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th></th>
+              <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th>Médias</th><th></th>
             </tr></thead>
-            <tbody id="mmokTbody"><tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+            <tbody id="mmokTbody"><tr><td colspan="10" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1409,6 +1409,17 @@
       </div>
       <div class="col-span-2 md:col-span-3"><label>Idée de contenu</label><input type="text" id="mmokModalIdeeContenu" placeholder="Résumé court de l'idée…"></div>
       <div class="col-span-2 md:col-span-3"><label>Contenu (texte du post)</label><textarea id="mmokModalContenu" rows="4" placeholder="Tapez le texte du post ici…"></textarea></div>
+      <div class="col-span-2 md:col-span-3"><label>Lien du post (URL)</label><input type="url" id="mmokModalLien" placeholder="https://…"></div>
+      <div class="col-span-2 md:col-span-3">
+        <label>Visuels du post</label>
+        <div id="mmokVisualsExisting" class="flex flex-wrap gap-2 mb-2"></div>
+        <div id="mmokNoVisualWarning" class="hidden mb-2 px-3 py-2 rounded-xl text-xs font-bold" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa">Aucun visuel associé — pensez à documenter ce post.</div>
+        <div id="mmokNewFilesList" class="flex flex-wrap gap-2 mb-2"></div>
+        <label for="mmokVisualInput" class="inline-flex items-center gap-2 cursor-pointer px-4 py-2" style="border:2px dashed #e5e7eb;border-radius:0.75rem;font-size:0.75rem;font-weight:700;color:#6b7280">
+          + Ajouter des visuels (JPG, PNG, GIF — max 4 Mo/fichier)
+        </label>
+        <input type="file" id="mmokVisualInput" multiple accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="mmokOnFilesSelected(this)">
+      </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
       <button id="btnDeleteMmok" onclick="deleteMMOKFromModal()" class="btn-danger hidden">Supprimer</button>
@@ -5933,6 +5944,14 @@ function renderMMOKRapport(){
 }
 
 const THEME_COLORS={'SIG':'#1A4E8A','MSI':'#8b5cf6','Responsable de Campus':'#F26522','Choix libre':'#6b7280'};
+let mmokCurrentVisuals=[], mmokNewFiles=[];
+
+function showMmokText(txt){
+  let d=document.getElementById('mmokTextPopup');
+  if(!d){d=document.createElement('div');d.id='mmokTextPopup';d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';d.onclick=()=>d.remove();document.body.appendChild(d);}
+  d.innerHTML=`<div style="background:#fff;border-radius:1rem;padding:1.5rem 2rem;max-width:560px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,.2);font-size:0.95rem;font-weight:600;color:#1e293b;white-space:pre-wrap;word-break:break-word">${txt.replace(/</g,'&lt;')}<br><br><button onclick="document.getElementById('mmokTextPopup').remove()" style="margin-top:4px;font-size:0.75rem;font-weight:700;color:#6b7280;border:none;background:none;cursor:pointer">Fermer</button></div>`;
+}
+
 function renderMMOK(){
   const platform=document.getElementById('mmokFilterPlatform').value;
   const period=document.getElementById('mmokFilterPeriod').value;
@@ -5949,27 +5968,75 @@ function renderMMOK(){
   if(etat) f=f.filter(p=>p.etat===etat);
   if(period&&starts[period]){const st=starts[period];f=f.filter(p=>{const d=new Date(p.dateReelle||p.datePrevue||'');return !isNaN(d)&&d>=st;});}
   f.sort((a,b)=>new Date(b.datePrevue||b.dateReelle||0)-new Date(a.datePrevue||a.dateReelle||0));
+  const mediasBadge=p=>{
+    const ids=(p.visuals||'').split(',').filter(Boolean);
+    const parts=[];
+    if(p.lien) parts.push(`<a href="${p.lien}" target="_blank" rel="noopener" style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap;text-decoration:none">Lien</a>`);
+    if(ids.length) parts.push(`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap">${ids.length} visuel(s)</span>`);
+    if(!parts.length) parts.push(`<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap">Aucun</span>`);
+    return parts.join(' ');
+  };
   document.getElementById('mmokTbody').innerHTML=f.length?f.map(p=>{
     const col=PLAT_COLORS[p.plateforme]||'#6b7280';
     const tc=THEME_COLORS[p.theme]||'#9ca3af';
     const themeBadge=p.theme?`<span style="background:${tc}18;color:${tc};padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900;white-space:nowrap">${p.theme}</span>`:'<span style="color:#d1d5db">—</span>';
     const eBadge=p.etat==='Publié'?'badge-admis':p.etat==='Planifié'?'badge-ratt':'bg-gray-100 text-gray-500';
+    const safeS=(p.sujet||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const sujetCell=p.sujet?`<span onclick="showMmokText('${safeS}')" style="cursor:pointer;font-weight:600;font-size:0.85rem;color:#1e293b" title="Cliquer pour voir en entier">${(p.sujet.length>40?p.sujet.slice(0,40)+'…':p.sujet)}</span>`:'<span style="color:#d1d5db">—</span>';
     return `<tr>
       <td style="font-family:monospace;font-size:0.75rem;color:#9ca3af">${p.refpost||'—'}</td>
       <td><span class="plat-badge" style="background:${col}">${p.plateforme||'—'}</span></td>
-      <td style="font-size:0.85rem;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.sujet||'').replace(/"/g,'&quot;')}">${p.sujet||'—'}</td>
+      <td>${sujetCell}</td>
       <td>${themeBadge}</td>
       <td style="font-size:0.85rem">${p.datePrevue||'—'}</td>
       <td style="font-size:0.82rem;color:#4b5563;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.ideeContenu||'').replace(/"/g,'&quot;')}">${p.ideeContenu||'—'}</td>
       <td style="font-size:0.85rem">${p.dateReelle||'—'}</td>
       <td><span class="badge ${eBadge}">${p.etat||'—'}</span></td>
+      <td style="white-space:nowrap">${mediasBadge(p)}</td>
       <td style="white-space:nowrap">
         <button onclick="openMMOKModal('${p.id}')" class="btn-ghost py-1 text-xs">✏</button>
         <button onclick="deleteMMOKById('${p.id}')" class="btn-danger py-1 text-xs">🗑</button>
       </td>
     </tr>`;
-  }).join(''):'<tr><td colspan="9" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+  }).join(''):'<tr><td colspan="10" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
 }
+
+function mmokRenderExistingVisuals(){
+  const c=document.getElementById('mmokVisualsExisting');
+  c.innerHTML=mmokCurrentVisuals.map((v,i)=>
+    `<div style="position:relative;display:inline-block">
+      <a href="https://drive.google.com/file/d/${v.fileId}/view" target="_blank">
+        <img src="https://drive.google.com/thumbnail?id=${v.fileId}&sz=w120" alt="Visuel ${i+1}"
+          style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;width:72px;height:72px;border-radius:8px;border:2px solid #e5e7eb;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#6b7280;background:#f9fafb">Visuel ${i+1}</div>
+      </a>
+      <button onclick="mmokRemoveExistingVisual(${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:0.65rem;font-weight:900;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>`
+  ).join('');
+}
+function mmokRemoveExistingVisual(idx){mmokCurrentVisuals.splice(idx,1);mmokRenderExistingVisuals();mmokUpdateNoVisualWarning();}
+function mmokUpdateNoVisualWarning(){
+  const w=document.getElementById('mmokNoVisualWarning');
+  w.classList.toggle('hidden',mmokCurrentVisuals.length>0||mmokNewFiles.length>0);
+}
+function mmokOnFilesSelected(input){
+  const MAX=4*1024*1024;
+  Array.from(input.files).forEach(f=>{
+    if(f.size>MAX){toast('"'+f.name+'" dépasse 4 Mo — ignoré.',false);return;}
+    mmokNewFiles.push(f);
+  });
+  input.value='';
+  mmokRenderNewFiles();mmokUpdateNoVisualWarning();
+}
+function mmokRenderNewFiles(){
+  document.getElementById('mmokNewFilesList').innerHTML=mmokNewFiles.map((f,i)=>
+    `<div style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:3px 8px;font-size:0.7rem;font-weight:700;color:#1d4ed8">
+      ${f.name}<button onclick="mmokRemoveNewFile(${i})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-weight:900">&times;</button>
+    </div>`
+  ).join('');
+}
+function mmokRemoveNewFile(idx){mmokNewFiles.splice(idx,1);mmokRenderNewFiles();mmokUpdateNoVisualWarning();}
 
 function openMMOKModal(id){
   const p=id?allMMOK.find(x=>x.id===id):null;
@@ -5984,19 +6051,45 @@ function openMMOKModal(id){
   document.getElementById('mmokModalContenu').value=p?.contenu||'';
   document.getElementById('mmokModalDateReelle').value=p?.dateReelle||'';
   document.getElementById('mmokModalEtat').value=p?.etat||'Planifié';
+  document.getElementById('mmokModalLien').value=p?.lien||'';
+  mmokNewFiles=[];
+  mmokCurrentVisuals=(p?.visuals||'').split(',').filter(Boolean).map(id=>({fileId:id.trim()}));
+  document.getElementById('mmokVisualInput').value='';
+  document.getElementById('mmokNewFilesList').innerHTML='';
+  mmokRenderExistingVisuals();mmokUpdateNoVisualWarning();
   document.getElementById('btnDeleteMmok').classList.toggle('hidden',!p);
   show('mmokModal');
 }
 
-function closeMMOKModal(){hide('mmokModal');}
+function closeMMOKModal(){
+  hide('mmokModal');
+  mmokNewFiles=[];mmokCurrentVisuals=[];
+}
 function deleteMMOKFromModal(){const id=document.getElementById('mmokModalId').value;if(id) deleteMMOKById(id);}
 
 async function saveMMOK(){
   const plateforme=document.getElementById('mmokModalPlateforme').value;
   if(!plateforme){toast('Sélectionnez une plateforme.',false);return;}
+  const refpost=document.getElementById('mmokModalRefpost').value.trim()||('MMOK-'+new Date().toISOString().replace(/[-T:.Z]/g,'').slice(0,15));
+  const saveBtn=document.querySelector('#mmokModal .btn-orange');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Enregistrement…';}
+  // Upload nouveaux visuels
+  const uploadedIds=[...mmokCurrentVisuals.map(v=>v.fileId)];
+  for(let i=0;i<mmokNewFiles.length;i++){
+    const f=mmokNewFiles[i];
+    const ext=f.name.split('.').pop();
+    const filename=refpost+'-'+(uploadedIds.length+1)+'.'+ext;
+    try{
+      toast('Upload visuel '+(i+1)+'/'+mmokNewFiles.length+'…',true);
+      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
+      const res=await api('uploadMMOKVisual',{base64,mimeType:f.type,filename});
+      if(res.success) uploadedIds.push(res.fileId);
+      else toast('Erreur upload "'+f.name+'" : '+(res.message||''),false);
+    }catch(e){toast('Erreur upload "'+f.name+'"',false);}
+  }
   const r=await api('saveMMOK',{
     id:document.getElementById('mmokModalId').value||'',
-    refpost:document.getElementById('mmokModalRefpost').value||'',
+    refpost,
     plateforme,
     sujet:document.getElementById('mmokModalSujet').value||'',
     theme:document.getElementById('mmokModalTheme').value||'',
@@ -6005,7 +6098,10 @@ async function saveMMOK(){
     contenu:document.getElementById('mmokModalContenu').value||'',
     dateReelle:document.getElementById('mmokModalDateReelle').value||'',
     etat:document.getElementById('mmokModalEtat').value||'Planifié',
+    lien:document.getElementById('mmokModalLien').value||'',
+    visuals:uploadedIds.join(','),
   });
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Enregistrer';}
   if(!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Post enregistré ✓');closeMMOKModal();loadMMOK();
 }
