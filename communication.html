@@ -41,6 +41,63 @@
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement de l'historique...</div>
         <div id="campaignsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
+
+        <!-- ===================== SUIVI DES POSTS ===================== -->
+        <div class="mt-14">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-black text-[#1A4E8A]">📱 Suivi des posts</h2>
+                    <p class="text-sm text-gray-400 mt-1">Planification et archivage des publications sur les réseaux sociaux</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="loadSuiviPostCom()" class="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition">↺ Actualiser</button>
+                    <button onclick="openSPCModal(null)" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black shadow hover:scale-105 transition text-sm">+ Nouveau post</button>
+                </div>
+            </div>
+            <div id="spcRapport" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 flex gap-3 flex-wrap">
+                <div class="flex-1" style="min-width:140px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Plateforme</label>
+                    <select id="spcFilterPlatform" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Toutes</option><option>LinkedIn</option><option>Instagram</option>
+                        <option>Facebook</option><option>TikTok</option><option>X / Twitter</option>
+                    </select>
+                </div>
+                <div class="flex-1" style="min-width:140px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Thème prog.</label>
+                    <select id="spcFilterTheme" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Tous</option>
+                        <option>SIG</option><option>MSI</option><option>Responsable de Campus</option><option>Choix libre</option>
+                    </select>
+                </div>
+                <div class="flex-1" style="min-width:140px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">État</label>
+                    <select id="spcFilterEtat" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Tous</option><option>Publié</option><option>Planifié</option><option>Brouillon</option><option>Annulé</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">REFPOST</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Plateforme</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Theme</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Date prév.</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Idée contenu</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Date réelle</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">État</th>
+                                <th class="p-3 text-[10px] uppercase font-black text-slate-500">Thème</th>
+                                <th class="p-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="spcTbody"><tr><td colspan="9" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
@@ -1050,6 +1107,204 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         </div>
     </div>
 </div>
+<!-- ================== MODAL SUIVI POST COM ================== -->
+<div id="spcModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4" onclick="if(event.target===this)closeSPCModal()">
+  <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h3 class="text-xl font-black text-[#1A4E8A]" id="spcModalTitle">Nouveau post</h3>
+      <button onclick="closeSPCModal()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+    </div>
+    <input type="hidden" id="spcModalId">
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">REFPOST</label>
+        <input type="text" id="spcModalRefpost" placeholder="auto-généré si vide" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Plateforme</label>
+        <select id="spcModalPlateforme" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+          <option>LinkedIn</option><option>Instagram</option><option>Facebook</option>
+          <option>TikTok</option><option>X / Twitter</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Theme (libre)</label>
+        <input type="text" id="spcModalTheme" placeholder="ex: JPO, Témoignage…" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Date prévisionnelle</label>
+        <input type="date" id="spcModalDatePrevue" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Date réelle de publication</label>
+        <input type="date" id="spcModalDateReelle" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">État</label>
+        <select id="spcModalEtat" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+          <option>Planifié</option><option>Publié</option><option>Brouillon</option><option>Annulé</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Thème programme</label>
+        <select id="spcModalThemeProg" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+          <option value="">— Choisir —</option>
+          <option value="SIG">SIG</option>
+          <option value="MSI">MSI</option>
+          <option value="Responsable de Campus">Responsable de Campus</option>
+          <option value="Choix libre">Choix libre</option>
+        </select>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Idée de contenu</label>
+        <input type="text" id="spcModalIdeeContenu" placeholder="Résumé court de l'idée…" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
+      </div>
+      <div class="col-span-2 md:col-span-3">
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Contenu (texte du post)</label>
+        <textarea id="spcModalContenu" rows="4" placeholder="Tapez le texte du post ici…" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522] resize-none"></textarea>
+      </div>
+    </div>
+    <div class="flex justify-between gap-3 mt-6">
+      <button id="btnDeleteSPC" onclick="deleteSPCFromModal()" class="px-5 py-2 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition hidden">Supprimer</button>
+      <div class="flex gap-3 ml-auto">
+        <button onclick="closeSPCModal()" class="px-5 py-2 border-2 border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition">Annuler</button>
+        <button onclick="saveSPC()" class="px-6 py-2 bg-[#F26522] text-white font-black rounded-xl hover:scale-105 transition">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="spcToast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99] hidden">
+  <div id="spcToastMsg" class="px-6 py-3 rounded-2xl shadow-lg text-sm font-bold text-white"></div>
+</div>
+
+<script>
+let allSPC = [];
+
+function spcToast(msg, ok=true) {
+  const t = document.getElementById('spcToast');
+  const m = document.getElementById('spcToastMsg');
+  m.textContent = msg;
+  m.style.background = ok ? '#22c55e' : '#ef4444';
+  t.classList.remove('hidden'); t.style.display='flex';
+  setTimeout(() => { t.classList.add('hidden'); t.style.display='none'; }, 3000);
+}
+
+async function loadSuiviPostCom() {
+  document.getElementById('spcTbody').innerHTML = '<tr><td colspan="9" class="text-center text-gray-400 py-8 animate-pulse">Chargement…</td></tr>';
+  const res = await apiPost({ action: 'getSuiviPostCom' });
+  if (!res.success) { document.getElementById('spcTbody').innerHTML = '<tr><td colspan="9" class="text-center text-red-400 py-8">' + (res.message||'Erreur') + '</td></tr>'; return; }
+  allSPC = res.data || [];
+  renderSPC();
+  renderSPCRapport();
+}
+
+function renderSPC() {
+  const fp = document.getElementById('spcFilterPlatform').value;
+  const ft = document.getElementById('spcFilterTheme').value;
+  const fe = document.getElementById('spcFilterEtat').value;
+  const filtered = allSPC.filter(p =>
+    (!fp || p.plateforme === fp) &&
+    (!ft || p.themeProg === ft) &&
+    (!fe || p.etat === fe)
+  );
+  const etatBadge = e => {
+    const c = {Publié:'#22c55e',Planifié:'#3b82f6',Brouillon:'#f59e0b',Annulé:'#9ca3af'}[e]||'#9ca3af';
+    return `<span style="background:${c}20;color:${c};padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900">${e||'—'}</span>`;
+  };
+  document.getElementById('spcTbody').innerHTML = filtered.length ? filtered.map(p => `
+    <tr class="border-t border-gray-50 hover:bg-orange-50 transition">
+      <td class="p-3 font-mono text-xs text-gray-500">${p.refpost||'—'}</td>
+      <td class="p-3 font-bold text-xs">${p.plateforme||'—'}</td>
+      <td class="p-3 text-xs text-gray-600">${p.theme||'—'}</td>
+      <td class="p-3 text-xs" style="white-space:nowrap">${p.datePrevue||'—'}</td>
+      <td class="p-3 text-xs text-gray-500 max-w-xs truncate">${p.ideeContenu||'—'}</td>
+      <td class="p-3 text-xs" style="white-space:nowrap">${p.dateReelle||'—'}</td>
+      <td class="p-3">${etatBadge(p.etat)}</td>
+      <td class="p-3 text-xs font-bold text-[#1A4E8A]">${p.themeProg||'—'}</td>
+      <td class="p-3" style="white-space:nowrap">
+        <button onclick="openSPCModal('${p.id}')" class="px-2 py-1 text-xs border border-gray-200 rounded-lg font-bold hover:bg-gray-100">✏</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="9" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+}
+
+function renderSPCRapport() {
+  const total = allSPC.length;
+  const publie = allSPC.filter(p => p.etat === 'Publié').length;
+  const planifie = allSPC.filter(p => p.etat === 'Planifié').length;
+  const platforms = [...new Set(allSPC.map(p => p.plateforme).filter(Boolean))].length;
+  document.getElementById('spcRapport').innerHTML = [
+    ['Total posts', total, '#1A4E8A'],
+    ['Publiés', publie, '#22c55e'],
+    ['Planifiés', planifie, '#3b82f6'],
+    ['Plateformes', platforms, '#F26522']
+  ].map(([label, val, color]) => `
+    <div class="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
+      <div style="font-size:1.5rem;font-weight:900;color:${color}">${val}</div>
+      <div style="font-size:0.65rem;font-weight:900;color:#9ca3af;text-transform:uppercase;margin-top:2px">${label}</div>
+    </div>`).join('');
+}
+
+function openSPCModal(id) {
+  const p = id ? allSPC.find(x => x.id === id) : null;
+  document.getElementById('spcModalTitle').textContent = p ? 'Modifier le post' : 'Nouveau post';
+  document.getElementById('spcModalId').value = p?.id || '';
+  document.getElementById('spcModalRefpost').value = p?.refpost || '';
+  document.getElementById('spcModalPlateforme').value = p?.plateforme || 'LinkedIn';
+  document.getElementById('spcModalTheme').value = p?.theme || '';
+  document.getElementById('spcModalDatePrevue').value = p?.datePrevue || '';
+  document.getElementById('spcModalIdeeContenu').value = p?.ideeContenu || '';
+  document.getElementById('spcModalContenu').value = p?.contenu || '';
+  document.getElementById('spcModalDateReelle').value = p?.dateReelle || '';
+  document.getElementById('spcModalEtat').value = p?.etat || 'Planifié';
+  document.getElementById('spcModalThemeProg').value = p?.themeProg || '';
+  document.getElementById('btnDeleteSPC').classList.toggle('hidden', !p);
+  document.getElementById('spcModal').classList.remove('hidden');
+  document.getElementById('spcModal').style.display = 'flex';
+}
+
+function closeSPCModal() {
+  document.getElementById('spcModal').classList.add('hidden');
+  document.getElementById('spcModal').style.display = 'none';
+}
+
+function deleteSPCFromModal() {
+  const id = document.getElementById('spcModalId').value;
+  if (id) deleteSPCById(id);
+}
+
+async function deleteSPCById(id) {
+  if (!confirm('Supprimer ce post ?')) return;
+  const res = await apiPost({ action: 'deleteSuiviPostCom', id });
+  if (res.success) { closeSPCModal(); spcToast('Post supprimé.'); loadSuiviPostCom(); }
+  else spcToast(res.message || 'Erreur suppression.', false);
+}
+
+async function saveSPC() {
+  const plateforme = document.getElementById('spcModalPlateforme').value;
+  if (!plateforme) { spcToast('Sélectionnez une plateforme.', false); return; }
+  const payload = {
+    action: 'saveSuiviPostCom',
+    id:          document.getElementById('spcModalId').value || '',
+    refpost:     document.getElementById('spcModalRefpost').value || '',
+    plateforme,
+    theme:       document.getElementById('spcModalTheme').value || '',
+    datePrevue:  document.getElementById('spcModalDatePrevue').value || '',
+    ideeContenu: document.getElementById('spcModalIdeeContenu').value || '',
+    contenu:     document.getElementById('spcModalContenu').value || '',
+    dateReelle:  document.getElementById('spcModalDateReelle').value || '',
+    etat:        document.getElementById('spcModalEtat').value || 'Planifié',
+    themeProg:   document.getElementById('spcModalThemeProg').value || ''
+  };
+  const res = await apiPost(payload);
+  if (res.success) { closeSPCModal(); spcToast('Post enregistré !'); loadSuiviPostCom(); }
+  else spcToast(res.message || 'Erreur enregistrement.', false);
+}
+
+// Chargement auto de la section Suivi posts
+window.addEventListener('load', () => { setTimeout(loadSuiviPostCom, 500); });
+</script>
+
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>
