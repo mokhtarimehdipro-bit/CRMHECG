@@ -304,8 +304,8 @@
                     alert("Erreur Serveur : " + data.message);
                 }
             } catch(e) {
-                console.error("Erreur réseau : ", e);
-                alert("Impossible de joindre le serveur.\n\nDétail : " + e.message + "\n\nVérifiez que le script Apps Script est bien déployé (Déployer > Gérer les déploiements).");
+                console.error("Erreur chargement partenaires : ", e);
+                alert("Erreur lors du chargement des entreprises.\n\nDétail : " + e.message);
             } finally {
                 document.getElementById('loader').classList.add('hidden');
                 document.getElementById('partnersGrid').classList.remove('hidden');
