@@ -303,9 +303,9 @@
                 } else {
                     alert("Erreur Serveur : " + data.message);
                 }
-            } catch(e) { 
+            } catch(e) {
                 console.error("Erreur réseau : ", e);
-                alert("Impossible de joindre le serveur. Vérifiez votre connexion.");
+                alert("Impossible de joindre le serveur.\n\nDétail : " + e.message + "\n\nVérifiez que le script Apps Script est bien déployé (Déployer > Gérer les déploiements).");
             } finally {
                 document.getElementById('loader').classList.add('hidden');
                 document.getElementById('partnersGrid').classList.remove('hidden');
