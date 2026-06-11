@@ -231,18 +231,72 @@
         </div>
     </div>
 
-    <div id="contactEditModal" class="fixed inset-0 bg-slate-900/40 hidden items-center justify-center z-[60] p-4">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-slate-100">
-            <h3 class="font-black text-slate-800 mb-6 text-lg">Modifier le contact</h3>
+    <div id="contactEditModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 border border-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-xl font-black text-slate-800 tracking-tight">Modifier le contact</h2>
+                <button onclick="closeContactEdit()" class="text-slate-300 hover:text-red-500 text-2xl">✕</button>
+            </div>
+            <input type="hidden" id="editContactId">
             <div class="space-y-4">
-                <input type="text" id="editContactPrenom" placeholder="Prénom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
-                <input type="text" id="editContactNom" placeholder="Nom" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
-                <input type="text" id="editContactTel" placeholder="Téléphone" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
-                <input type="email" id="editContactMail" placeholder="Email" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#1A4E8A]">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="editContactPrenom" placeholder="Prénom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <input type="text" id="editContactNom" placeholder="Nom" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-[#1A4E8A] ml-2 italic">Coordonnées Pro (1)</label>
+                        <input type="email" id="editContactMail" placeholder="Mail 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="editContactTel" placeholder="Tel 1" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                    <div class="space-y-3">
+                        <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Coordonnées Perso (2)</label>
+                        <input type="email" id="editContactMail2" placeholder="Mail 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                        <input type="text" id="editContactTel2" placeholder="Tel 2" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Poste</label>
+                    <select id="editContactPoste" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                        <option value="">-- Sélectionner un poste --</option>
+                        <option value="RH">RH</option>
+                        <option value="Gérant">Gérant</option>
+                        <option value="Expert comptable">Expert comptable</option>
+                        <option value="Collaborateur comptable">Collaborateur comptable</option>
+                    </select>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="editContIsMA" onchange="toggleEditMABlock()" class="w-5 h-5 accent-amber-500 cursor-pointer">
+                        <label for="editContIsMA" class="text-sm font-black text-amber-700 cursor-pointer">Ce contact est Maître d'apprentissage (MA)</label>
+                    </div>
+                    <div id="editMAStudentBlock" class="hidden space-y-2">
+                        <p class="text-[10px] font-bold text-amber-600 italic">Sélectionnez le ou les étudiants à rattacher à ce MA :</p>
+                        <div id="editMAStudentList" class="max-h-40 overflow-y-auto space-y-1 bg-white border border-amber-200 rounded-xl p-2">
+                            <p class="text-xs text-slate-300 italic text-center py-2">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="flex gap-4 mt-8">
                 <button onclick="closeContactEdit()" class="flex-1 py-2 text-slate-400 font-bold text-sm hover:underline transition">Annuler</button>
                 <button onclick="saveContactChanges()" class="flex-1 py-3 bg-[#1A4E8A] text-white rounded-xl font-black text-xs shadow-md hover:bg-blue-800 transition">ENREGISTRER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal motif de suppression -->
+    <div id="motifModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-[90] p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-xl font-black text-red-700 mb-2">Confirmer la suppression</h2>
+            <p id="motifModalDesc" class="text-sm text-slate-500 font-bold mb-5"></p>
+            <div class="space-y-3">
+                <label class="text-[10px] font-black uppercase text-slate-400">Motif de suppression <span class="text-red-500">*</span></label>
+                <textarea id="motifInput" rows="3" placeholder="Ex : doublon, départ de l'entreprise, erreur de saisie…" class="w-full border-2 border-slate-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-red-400 resize-none"></textarea>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button onclick="closeMotifModal()" class="flex-1 py-2 text-slate-400 font-bold hover:bg-slate-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="flex-1 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition shadow-md">Supprimer définitivement</button>
             </div>
         </div>
     </div>
@@ -488,16 +542,49 @@
         // --- 4. ÉDITION CONTACTS ---
         function editContact(entId, contId) {
             const ent = allPartners.find(p => String(p.id) === String(entId));
-            const c = ent.contacts.find(con => String(con.id_contact) === String(contId));
+            const c = ent ? ent.contacts.find(con => String(con.id_contact) === String(contId)) : null;
             if(!c) return;
-            
             currentContactId = contId;
+            document.getElementById('editContactId').value = contId;
             document.getElementById('editContactPrenom').value = c.prenom || "";
             document.getElementById('editContactNom').value = c.nom || "";
             document.getElementById('editContactTel').value = c.tel || "";
             document.getElementById('editContactMail').value = c.email || "";
-            
+            document.getElementById('editContactTel2').value = c.tel2 || "";
+            document.getElementById('editContactMail2').value = c.mail2 || "";
+            document.getElementById('editContactPoste').value = c.poste || "";
+            const isMA = c.is_ma === "Oui";
+            document.getElementById('editContIsMA').checked = isMA;
+            document.getElementById('editMAStudentBlock').classList.toggle('hidden', !isMA);
+            if (isMA) _loadStudentsForEditMA(ent.id);
             document.getElementById('contactEditModal').classList.add('modal-active');
+        }
+
+        function toggleEditMABlock() {
+            const checked = document.getElementById('editContIsMA').checked;
+            document.getElementById('editMAStudentBlock').classList.toggle('hidden', !checked);
+            if (checked) {
+                const ent = allPartners.find(p => String(p.id) === String(currentId));
+                if (ent) _loadStudentsForEditMA(ent.id);
+            }
+        }
+
+        async function _loadStudentsForEditMA(entId) {
+            const list = document.getElementById('editMAStudentList');
+            list.innerHTML = '<p class="text-xs text-slate-300 italic text-center py-2">Chargement...</p>';
+            if (allStudentsCache.length === 0) {
+                const d = await apiPost({ action: 'getStudentsMinList' });
+                if (d.success) allStudentsCache = d.data;
+            }
+            const ent = allPartners.find(p => String(p.id) === String(entId));
+            const alts = (ent ? ent.alternants : []).map(a => (a.prenom + " " + a.nom).trim().toLowerCase());
+            list.innerHTML = allStudentsCache.map(s => {
+                const nomFull = ((s.prenom || "") + " " + (s.nom || "")).trim();
+                const linked = alts.includes(nomFull.toLowerCase());
+                return `<label class="flex items-center gap-2 p-1 hover:bg-amber-50 rounded-lg cursor-pointer text-xs font-bold text-slate-700">
+                    <input type="checkbox" value="${s.id}" class="edit-ma-stu accent-amber-500" ${linked ? "checked" : ""}> ${nomFull}
+                </label>`;
+            }).join('');
         }
 
         async function saveContactChanges() {
@@ -507,16 +594,47 @@
                 prenom: document.getElementById('editContactPrenom').value,
                 nom: document.getElementById('editContactNom').value,
                 tel: document.getElementById('editContactTel').value,
-                email: document.getElementById('editContactMail').value
+                mail: document.getElementById('editContactMail').value,
+                tel2: document.getElementById('editContactTel2').value,
+                mail2: document.getElementById('editContactMail2').value,
+                poste: document.getElementById('editContactPoste').value
             };
-            
             await apiPost(payload);
+            // Liaison MA si cochée
+            if (document.getElementById('editContIsMA').checked) {
+                const ids = Array.from(document.querySelectorAll('.edit-ma-stu:checked')).map(cb => cb.value);
+                const ent = allPartners.find(p => String(p.id) === String(currentId));
+                if (ids.length > 0 && ent) {
+                    await apiPost({ action: 'linkMAToStudents', ids_etudiants: ids, id_entreprise: ent.id, id_contact: currentContactId, nom_entreprise: ent.nom });
+                }
+            }
             closeContactEdit();
             openDossier(currentId);
-            loadPartners(); 
+            loadPartners();
         }
 
         function closeContactEdit() { document.getElementById('contactEditModal').classList.remove('modal-active'); }
+
+        // --- DIALOGUE MOTIF SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').classList.add('modal-active');
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').classList.remove('modal-active');
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').classList.add('border-red-400'); document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').classList.remove('border-red-400');
+            closeMotifModal();
+            if (_motifCallback) _motifCallback(motif);
+        }
 
         // --- 5. AJOUT DE CONTACT & DOUBLONS ---
         function openAddContact(idEnt = null) {
@@ -739,18 +857,25 @@
             alert("✅ Nom de l'entreprise mis à jour.");
         }
 
-        async function deleteEnterprise() {
-            if(!confirm("⚠️ ATTENTION : La suppression de l'entreprise supprimera également TOUS ses contacts. Confirmer ?")) return;
-            await apiPost({ action: 'deleteEnterprise', id_entreprise: currentId });
-            closeDossier();
-            loadPartners();
+        function deleteEnterprise() {
+            const ent = allPartners.find(p => String(p.id) === String(currentId));
+            const nomEnt = ent ? ent.nom : currentId;
+            askMotif(`Supprimer définitivement l'entreprise "${nomEnt}" et TOUS ses contacts ?`, async (motif) => {
+                await apiPost({ action: 'deleteEnterprise', id_entreprise: currentId, motif });
+                closeDossier();
+                loadPartners();
+            });
         }
 
-        async function deleteContact(id_contact) {
-            if(!confirm("Supprimer ce contact ?")) return;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteContact', id_contact: id_contact }) });
-            openDossier(currentId);
-            loadPartners();
+        function deleteContact(id_contact) {
+            const ent = allPartners.find(p => String(p.id) === String(currentId));
+            const c = ent ? ent.contacts.find(con => String(con.id_contact) === String(id_contact)) : null;
+            const nomC = c ? ((c.prenom || "") + " " + (c.nom || "")).trim() : id_contact;
+            askMotif(`Supprimer le contact "${nomC}" ?`, async (motif) => {
+                await apiPost({ action: 'deleteContact', id_contact, motif });
+                openDossier(currentId);
+                loadPartners();
+            });
         }
 
         // --- CARTE INTERACTIVE ---
