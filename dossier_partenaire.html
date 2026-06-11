@@ -125,7 +125,19 @@
                 </div>
             </div>
         </div>
-    </main>
+    <!-- Modal motif de suppression -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[90] p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-xl font-black text-red-700 mb-2">Confirmer la suppression</h2>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Motif <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Ex : doublon, départ, erreur de saisie…" class="w-full border-2 border-gray-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-red-400 resize-none mb-6"></textarea>
+            <div class="flex gap-3">
+                <button onclick="closeMotifModal()" class="flex-1 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="flex-1 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition">Supprimer</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
@@ -364,9 +376,12 @@
                 const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, mail2: newMail2, tel: newTel, tel2: newTel2 });
                 if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
             } else if (btn.dataset.action === 'delete') {
-                if (!confirm('Supprimer ' + (c.prenom || '') + ' ' + (c.nom || '') + ' ?')) return;
-                const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact });
-                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                const nomC = ((c.prenom || '') + ' ' + (c.nom || '')).trim();
+                askMotif('Supprimer le contact "' + nomC + '" ?', async (motif) => {
+                    const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact, motif });
+                    if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                });
+                return;
             }
         });
 
@@ -396,15 +411,35 @@
             }
         }
 
-        async function deleteEnterprise() {
-            if (!confirm('⚠️ Supprimer l\'entreprise ' + nomEntrepriseActuelle + ' et TOUS ses contacts ?\n\nCette action est irréversible.')) return;
-            const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId });
-            if (res.success) {
-                alert('✅ Entreprise supprimée.');
-                window.close();
-            } else {
-                alert('Erreur : ' + res.message);
-            }
+        function deleteEnterprise() {
+            askMotif('Supprimer l\'entreprise "' + nomEntrepriseActuelle + '" et TOUS ses contacts ?', async (motif) => {
+                const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId, motif });
+                if (res.success) { alert('Entreprise supprimée.'); window.close(); }
+                else alert('Erreur : ' + res.message);
+            });
+        }
+
+        // --- MOTIF SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').classList.remove('hidden');
+            document.getElementById('motifModal').classList.add('flex');
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').classList.add('hidden');
+            document.getElementById('motifModal').classList.remove('flex');
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            closeMotifModal();
+            if (_motifCallback) _motifCallback(motif);
         }
 
         async function addContact() {
