@@ -36,12 +36,14 @@
             <div class="flex gap-2 bg-gray-100 p-1 rounded-2xl">
                 <button id="tabBtnEnt" onclick="switchTab('ent')" class="px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition">🏢 Entreprises</button>
                 <button id="tabBtnEtu" onclick="switchTab('etu')" class="px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition">🎓 Étudiants</button>
+                <button id="tabBtnHist" onclick="switchTab('hist')" class="hidden px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition">📋 Historique</button>
             </div>
         </div>
 
         <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A] animate-pulse">Chargement de vos alertes...</div>
         <div id="alertGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
         <div id="alertGridEtu" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+        <div id="alertGridHist" class="hidden overflow-x-auto"></div>
     </main>
 
     <div id="editAlertModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
@@ -237,13 +239,88 @@ async function apiPost(payload) {
             currentTab = tab;
             document.getElementById('alertGrid').classList.toggle('hidden', tab !== 'ent');
             document.getElementById('alertGridEtu').classList.toggle('hidden', tab !== 'etu');
-            document.getElementById('tabBtnEnt').className = tab === 'ent'
-                ? 'px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition'
-                : 'px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition';
-            document.getElementById('tabBtnEtu').className = tab === 'etu'
-                ? 'px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition'
-                : 'px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition';
+            document.getElementById('alertGridHist').classList.toggle('hidden', tab !== 'hist');
+            const activeClass = 'px-5 py-2 rounded-xl font-black text-sm bg-white shadow-sm text-[#1A4E8A] transition';
+            const inactiveClass = 'px-5 py-2 rounded-xl font-black text-sm text-gray-500 hover:bg-white transition';
+            document.getElementById('tabBtnEnt').className = tab === 'ent' ? activeClass : inactiveClass;
+            document.getElementById('tabBtnEtu').className = tab === 'etu' ? activeClass : inactiveClass;
+            const btnHist = document.getElementById('tabBtnHist');
+            if (btnHist && !btnHist.classList.contains('hidden')) {
+                btnHist.className = (tab === 'hist' ? activeClass : inactiveClass);
+            }
             if (tab === 'etu') loadStudentAlerts();
+            if (tab === 'hist') loadAlertsHistory();
+        }
+
+        // ==========================================
+        // HISTORIQUE COMPLET (m.mokhtari@hecg.fr)
+        // ==========================================
+        async function loadAlertsHistory() {
+            const grid = document.getElementById('alertGridHist');
+            grid.innerHTML = '<div class="text-center py-10 font-bold text-[#1A4E8A] animate-pulse">Chargement de l\'historique...</div>';
+            try {
+                const d = await apiPost({ action: 'getAlertsHistory' });
+                if (d.success) renderAlertsHistory(d.data);
+                else grid.innerHTML = '<p class="text-red-500 font-bold p-4">Erreur : ' + d.message + '</p>';
+            } catch(e) {
+                grid.innerHTML = '<p class="text-red-500 font-bold p-4">Erreur de connexion.</p>';
+            }
+        }
+
+        function renderAlertsHistory(data) {
+            const grid = document.getElementById('alertGridHist');
+            if (!data || data.length === 0) {
+                grid.innerHTML = '<div class="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm"><p class="text-2xl font-black text-gray-300 mb-2">Aucun historique</p></div>';
+                return;
+            }
+            const statutBadge = (s) => {
+                if (s === 'Terminé') return '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-black">Terminé</span>';
+                if (s === 'Annulé') return '<span class="px-2 py-1 bg-gray-200 text-gray-600 rounded-full text-[10px] font-black">Annulé</span>';
+                return '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-black">' + (s || 'À faire') + '</span>';
+            };
+            grid.innerHTML = `
+                <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                        <span class="font-black text-[#1A4E8A] text-lg">Historique complet — ${data.length} alerte(s)</span>
+                        <input type="text" id="histSearch" oninput="filterHistory()" placeholder="Rechercher entreprise / auteur…" class="border-2 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#1A4E8A] w-64">
+                    </div>
+                    <div class="overflow-x-auto">
+                    <table class="w-full text-sm" id="histTable">
+                        <thead class="bg-gray-50 text-xs uppercase text-gray-400 font-black">
+                            <tr>
+                                <th class="px-4 py-3 text-left">ID</th>
+                                <th class="px-4 py-3 text-left">Entreprise</th>
+                                <th class="px-4 py-3 text-left">Date</th>
+                                <th class="px-4 py-3 text-left">Fréquence</th>
+                                <th class="px-4 py-3 text-left">Statut</th>
+                                <th class="px-4 py-3 text-left">Auteur</th>
+                                <th class="px-4 py-3 text-left">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="histBody">
+                        ${data.map(a => `
+                            <tr class="border-t border-gray-50 hover:bg-gray-50 transition hist-row" data-search="${(a.nomPartenaire + ' ' + a.auteur + ' ' + a.msg).toLowerCase()}">
+                                <td class="px-4 py-3 text-[10px] font-black text-gray-400">${a.id}</td>
+                                <td class="px-4 py-3 font-bold text-[#1A4E8A]">
+                                    <a href="dossier_partenaire.html?id=${a.partId}" target="_blank" class="hover:underline">${a.nomPartenaire}</a>
+                                </td>
+                                <td class="px-4 py-3 font-bold text-gray-600 whitespace-nowrap">${a.date}</td>
+                                <td class="px-4 py-3 text-gray-500 font-bold">${a.freq}</td>
+                                <td class="px-4 py-3">${statutBadge(a.statut)}</td>
+                                <td class="px-4 py-3 text-gray-600 font-bold text-xs">${a.auteur || '<span class="text-gray-300">—</span>'}</td>
+                                <td class="px-4 py-3 text-gray-500 max-w-xs truncate" title="${a.msg.replace(/"/g,'&quot;')}">${a.msg}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                </div>`;
+        }
+
+        function filterHistory() {
+            const q = document.getElementById('histSearch').value.toLowerCase();
+            document.querySelectorAll('.hist-row').forEach(row => {
+                row.classList.toggle('hidden', q && !row.dataset.search.includes(q));
+            });
         }
 
         // ==========================================
@@ -337,6 +414,14 @@ async function apiPost(payload) {
             closeEditAlert();
             if (isStudentAlert) loadStudentAlerts(); else loadAlerts();
         };
+
+        // Afficher l'onglet Historique pour m.mokhtari@hecg.fr
+        (function() {
+            const u = JSON.parse(localStorage.getItem('user') || '{}');
+            if (u.email === 'm.mokhtari@hecg.fr') {
+                document.getElementById('tabBtnHist').classList.remove('hidden');
+            }
+        })();
 
         // Chargement initial
         loadAlerts();
