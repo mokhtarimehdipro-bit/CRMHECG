@@ -86,6 +86,20 @@
         <div id="offresGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
     </main>
 
+    <!-- Modal motif de suppression -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-xl font-black text-red-700 mb-2">Confirmer la suppression</h2>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Motif de suppression <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Ex : doublon, offre expirée, erreur de saisie…" class="w-full border-2 border-gray-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-red-400 resize-none mb-6"></textarea>
+            <div class="flex gap-3">
+                <button onclick="closeMotifModal()" class="flex-1 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="flex-1 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition">Supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
+
     <div id="offreModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[60] p-4">
         <div class="bg-white rounded-[2rem] p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl">
             <h2 id="modalTitle" class="text-2xl font-black text-[#1A4E8A] mb-6">Fiche de l'Offre</h2>
@@ -540,10 +554,34 @@
             closeModal(); loadOffres();
         }
 
-        async function deleteOffre(id) {
-            if(!confirm("Êtes-vous sûr de vouloir supprimer cette offre ?")) return;
-            await apiPost({ action: 'deleteOffre', id: id });
-            loadOffres();
+        // --- MOTIF DE SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').style.display = 'none';
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            closeMotifModal();
+            if (_motifCallback) _motifCallback(motif);
+        }
+
+        function deleteOffre(id) {
+            const offre = allOffres ? allOffres.find(o => o.id === id) : null;
+            const label = offre ? ((offre.poste || '') + ' chez ' + (offre.entreprise || id)) : id;
+            askMotif(`Supprimer l'offre "${label}" ?`, async (motif) => {
+                await apiPost({ action: 'deleteOffre', id, motif });
+                loadOffres();
+            });
         }
 
         // --- JOURNAL TRACÉ DES OFFRES ---
