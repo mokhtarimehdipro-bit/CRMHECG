@@ -40,7 +40,7 @@
     </main>
 
     <!-- MOTIF MODAL -->
-    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[90] p-4">
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
             <h3 class="text-lg font-black text-gray-800 mb-2">Confirmer la suppression</h3>
             <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
@@ -81,13 +81,11 @@
             document.getElementById('motifModalDesc').textContent = description;
             document.getElementById('motifInput').value = '';
             _motifCallback = callback;
-            document.getElementById('motifModal').classList.remove('hidden');
-            document.getElementById('motifModal').classList.add('flex');
+            document.getElementById('motifModal').style.display = 'flex';
             setTimeout(() => document.getElementById('motifInput').focus(), 100);
         }
         function closeMotifModal() {
-            document.getElementById('motifModal').classList.add('hidden');
-            document.getElementById('motifModal').classList.remove('flex');
+            document.getElementById('motifModal').style.display = 'none';
             _motifCallback = null;
         }
         function confirmMotifDelete() {
