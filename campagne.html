@@ -2,215 +2,303 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>HECG - Super Campagnes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HECG - Espace Étudiants</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        #toastMsg { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); z-index:9999; padding:1rem 2rem; border-radius:1rem; font-weight:800; font-size:.95rem; box-shadow:0 8px 32px rgba(0,0,0,.18); transition:opacity .4s; pointer-events:none; }
+    </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
     
     <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div class="flex items-center space-x-4">
             <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
-            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 text-sm overflow-x-auto">
-                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Étudiants</a>
                 <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
-                <a href="campagnes.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Campagnes</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="offres.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Offres</a>
+                <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
+                <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
+                <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="historique.html" id="navHistorique" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium">Historique</a>
+
             </div>
         </div>
-        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg">Déconnexion</button>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
     </nav>
 
     <main class="max-w-7xl mx-auto p-8">
-        <div class="flex justify-between items-center mb-10">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
-                <h1 class="text-3xl font-black text-gray-800">E-mailing Pro</h1>
-                <p class="text-gray-400 text-sm mt-1">Gérez vos envois groupés et ciblés.</p>
+                <h1 class="text-3xl font-black text-[#1A4E8A]">Base Étudiants</h1>
+                <p class="text-gray-400 text-sm font-bold" id="welcomeMsg">Chargement...</p>
             </div>
-            <button onclick="openModal()" class="bg-[#F26522] text-white px-8 py-3 rounded-2xl font-black shadow-xl hover:scale-105 transition">+ Créer une campagne</button>
-        </div>
-
-        <div id="loader" class="text-center py-20 font-bold text-[#1A4E8A] animate-pulse">Chargement de vos campagnes...</div>
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 w-full mb-8 hover:shadow-lg transition">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-                <div>
-                    <h2 class="text-2xl font-black text-[#1A4E8A]">🤖 Relance Hebdomadaire (Automatique)</h2>
-                    <p class="text-xs text-gray-400 font-bold mt-1">Variables : <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{PRENOM}}</span> <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{NB_OFFRES}}</span> <span class="text-[#FF7A00] bg-orange-50 px-2 py-1 rounded">{{INSERER_VOS_OFFRES_ICI}}</span></p>
-                </div>
-                <div class="flex gap-2 mt-4 md:mt-0">
-                    <button onclick="testTemplate()" class="px-5 py-2 bg-blue-50 text-[#1A4E8A] font-black rounded-xl hover:bg-blue-100 transition shadow-sm">⚡ Tester</button>
-                    <button onclick="saveTemplate()" id="btnSaveTemplate" class="px-5 py-2 bg-[#F26522] text-white font-black rounded-xl hover:bg-orange-600 transition shadow-sm">💾 Sauvegarder</button>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Code HTML de l'email :</label>
-                <textarea id="htmlEditor" class="w-full h-80 p-5 bg-slate-900 text-green-400 font-mono text-xs rounded-2xl shadow-inner focus:outline-none focus:ring-2 focus:ring-[#F26522] custom-scrollbar" spellcheck="false" placeholder="Chargement du code HTML..."></textarea>
+            <div class="flex gap-3">
+                <button onclick="exportEtudiantsCSV()" class="bg-green-600 text-white px-5 py-3 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
+                <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter un étudiant</button>
             </div>
         </div>
-        <div id="campGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+
+        <div class="grid grid-cols-2 md:grid-cols-7 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-gray-400 uppercase">Élèves Affichés</p><p class="text-3xl font-black text-[#1A4E8A]" id="kpi-tot">0</p></div>
+                <div class="text-3xl">🎓</div>
+            </div>
+            <div class="bg-green-50 p-4 rounded-2xl shadow-sm border border-green-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-green-600 uppercase">En Alternance</p><p class="text-3xl font-black text-green-700" id="kpi-alt">0</p></div>
+                <div class="text-3xl">🏢</div>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-2xl shadow-sm border border-purple-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-purple-600 uppercase">En Initial</p><p class="text-3xl font-black text-purple-700" id="kpi-init">0</p></div>
+                <div class="text-3xl">🎒</div>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-2xl shadow-sm border border-orange-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-orange-600 uppercase">En Recherche</p><p class="text-3xl font-black text-orange-700" id="kpi-rech">0</p></div>
+                <div class="text-3xl">🔍</div>
+            </div>
+            <div class="bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between">
+                <div><p class="text-[10px] font-black text-red-600 uppercase">Sorties / Refusés</p><p class="text-3xl font-black text-red-700" id="kpi-sorties">0</p></div>
+                <div class="text-3xl">❌</div>
+            </div>
+            
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Référent HECG</label>
+                <select id="filterReferent" onchange="renderTable()" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A] transition-colors text-xs">
+                    <option value="">Tous les référents</option>
+                </select>
+            </div>
+
+            <div class="flex items-end">
+                <button id="btnAlumni" onclick="toggleAlumni()" class="w-full py-3 px-4 border-2 border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                    🎓 Alumni
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-8 gap-4 items-center">
+            <div class="md:col-span-2 relative">
+                <input type="text" id="fSearch" onkeyup="renderTable()" placeholder="🔍 Chercher un nom ou prénom..." class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm bg-white outline-none focus:border-[#1A4E8A] font-bold">
+            </div>
+            
+            <select id="fTypo" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="actifs">✅ Actifs (Inscrits & Préinscrits)</option>
+                <option value="inscrit">🎓 Inscrits uniquement</option>
+                <option value="préinscrit">⏳ Préinscrits uniquement</option>
+                <option value="prospect">🎯 Prospects</option>
+                <option value="sortie">❌ Sorties (Archivés)</option>
+                <option value="tous">🌍 Tous</option>
+            </select>
+
+            <select id="fCampus" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="">🌍 Tous les campus</option>
+                <option value="HECG">📍 Marseille</option>
+                <option value="HECG_AIX">📍 Aix-en-Provence</option>
+            </select>
+
+            <select id="fClasse" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">🎓 Toutes les classes</option>
+            </select>
+
+            <select id="fStatut" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">🎯 Tous statuts</option>
+                <option value="recherche">🔍 En recherche</option>
+                <option value="alternance">🏢 En Alternance</option>
+                <option value="initial">🎒 En initial</option>
+            </select>
+
+            <select id="fAtelier" onchange="renderTable()" class="...">
+    <option value="">🛠️ Ateliers</option>
+    <option value="CV">✅ CV Fait</option>
+    <option value="CV_NON">❌ CV Non Fait</option>
+    <option value="LI">✅ LinkedIn Fait</option>
+    <option value="LI_NON">❌ LinkedIn Non Fait</option>
+    <option value="BOTH">⭐ Les deux Faits</option>
+</select>
+
+            <select id="fPeriode" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+                <option value="">📞 Dernier échange</option>
+                <option value="7">🟢 < 7 jours</option>
+                <option value="30">🔴 > 30 jours</option>
+                <option value="NEVER">⚪ Jamais</option>
+            </select>
+
+            <button onclick="resetFilters()" class="col-span-full md:col-span-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-black text-[10px] hover:bg-gray-200 transition uppercase tracking-widest">
+                🔄 Reset
+            </button>
+        </div>
+
+        <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement de la base HECG...</div>
+        
+        <div id="tableContainer" class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-400 text-[10px] uppercase tracking-widest font-black">
+                        <tr>
+                            <th class="p-5 border-b">Étudiant & Entreprise</th>
+                            <th class="p-5 border-b">Classe / Typo</th>
+                            <th class="p-5 border-b">Statut Actuel</th>
+                            <th class="p-5 border-b">Dernier Échange</th>
+                            <th class="p-5 border-b text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentList" class="divide-y divide-gray-50"></tbody>
+                </table>
+            </div>
+        </div>
     </main>
 
-    <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-4xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <h2 class="text-3xl font-black text-[#1A4E8A] mb-8">🚀 Configurer ma Campagne</h2>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div class="space-y-6">
-                    <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-                        <label class="block text-xs font-black uppercase text-blue-600 mb-4">🎯 Qui doit recevoir ce mail ?</label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-gray-700" id="audienceChecks">
-                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbRecherche" value="recherche" class="w-5 h-5 rounded border-blue-300 text-blue-600" checked> Étudiants en recherche</label>
-                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbPreinscrit" value="preinscrit" class="w-5 h-5 rounded border-blue-300 text-blue-600" checked> Étudiants Préinscrits</label>
-                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbProspect" value="prospect" class="w-5 h-5 rounded border-blue-300 text-blue-600"> Étudiants Prospects</label>
-                            <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cbInscrit" value="inscrit" class="w-5 h-5 rounded border-blue-300 text-blue-600"> Inscrits Définitivement</label>
-                            <label class="flex items-center gap-3 cursor-pointer bg-orange-50 p-2 rounded-lg"><input type="checkbox" id="cbEntAvec" value="ent_avec" class="w-5 h-5 rounded border-orange-300 text-orange-600"> Entreprises AVEC alternants</label>
-                            <label class="flex items-center gap-3 cursor-pointer bg-orange-50 p-2 rounded-lg"><input type="checkbox" id="cbEntSans" value="ent_sans" class="w-5 h-5 rounded border-orange-300 text-orange-600"> Entreprises SANS alternants</label>
-                            <div class="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl col-span-full">
-    <label class="flex items-center space-x-2 cursor-pointer">
-        <input type="checkbox" id="cbSortis" value="Sortis" class="w-5 h-5 rounded text-red-600 focus:ring-red-500" onchange="toggleMotifSortie()">
-        <span class="text-sm font-black text-red-800">❌ Anciens étudiants (Sortis)</span>
-    </label>
-    
-    <div id="divMotifSortie" class="hidden mt-3 ml-7">
-        <label class="block text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Motif de sortie spécifique :</label>
-       <select id="selectMotif" class="w-full text-xs p-2 border border-red-200 rounded-lg focus:ring-red-500 bg-white font-bold outline-none" onchange="updateLivePreview()">
-    <option value="Tous">Tous les motifs</option>
-    <option value="Autre">❓ Autre</option>
-    <option value="Démotivation">🏃 Démotivation</option>
-    <option value="Niveau du diplôme trop haut">📚 Niveau du diplôme trop haut</option>
-    <option value="Départ chez Concurrence">🏢 Départ chez Concurrence</option>
-    <option value="Fin de parcours / Diplôme Echoué">❌ Fin de parcours / Diplôme Echoué</option>
-    <option value="Fin de parcours / Diplôme obtenu">🎓 Fin de parcours / Diplôme obtenu</option>
-    <option value="Perte d'alternance / Pas trouvé d'alternance">🔍 Perte d'alternance / Pas trouvé d'alternance</option>
-    <option value="Raison financière">💰 Raison financière</option>
-    <option value="Réorientation">🔃 Réorientation</option>
-    <option value="Sanction Disciplinaire">⚠️ Sanction Disciplinaire</option>
-</select>
-    </div>
-</div>
-                        </div>
-                        
-                        <div class="mt-4 p-4 bg-blue-50/80 rounded-2xl border-2 border-dashed border-blue-200">
-                            <div class="flex justify-between items-center mb-3">
-                                <h4 class="text-[10px] font-black uppercase text-blue-600">👥 Aperçu des destinataires</h4>
-                                <span id="liveCountCmp" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">0</span>
-                            </div>
-                            <div id="livePreviewListCmp" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
-                                Cochez des critères pour voir la liste...
-                            </div>
-                        </div>
-                        
-                        <div class="mt-6 border-t border-blue-100 pt-4">
-                            <label class="block text-[10px] uppercase font-black text-blue-400 mb-2">➕ Ajouter des emails au cas par cas</label>
-                            <textarea id="manualEmails" placeholder="Coller ici vos emails séparés par une virgule..." class="w-full text-xs p-3 rounded-xl border-none bg-white outline-none h-20 shadow-inner"></textarea>
-                        </div>
-                    </div>
+    <div id="toastMsg" style="display:none"></div>
 
-                    <div class="bg-orange-50 p-6 rounded-2xl border border-orange-100">
-                        <label class="block text-xs font-black uppercase text-orange-600 mb-4">⏰ Fréquence d'envoi</label>
-                        <select id="cmpFreq" onchange="toggleCountdown()" class="w-full p-3 rounded-xl border-2 border-orange-200 font-bold bg-white mb-4 outline-none">
-                            <option value="Une fois">Une seule fois</option>
-                            <option value="Hebdomadaire">Toutes les semaines</option>
-                            <option value="Mensuelle">Tous les mois</option>
-                            <option value="Compte à rebours">Pendant plusieurs jours (Quotidien)</option>
-                        </select>
-                        <div id="countdownBox" class="hidden">
-                            <label class="block text-[10px] font-black text-orange-400 mb-1">DURÉE (Nombre de jours)</label>
-                            <input type="number" id="nbJours" value="5" class="w-full p-2 border border-orange-200 rounded-lg font-black text-orange-600 outline-none">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="space-y-6">
-                    <div>
-                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Nom interne de la campagne</label>
-                        <input type="text" id="cmpNom" placeholder="Ex: Relance Alternance Avril" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Objet du mail</label>
-                        <input type="text" id="cmpObjet" placeholder="Sujet accrocheur..." class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold bg-gray-50 outline-none focus:border-[#F26522]">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-black uppercase text-gray-400 mb-1">Message (HTML autorisé)</label>
-                        <textarea id="cmpCorps" rows="8" class="w-full border-2 border-gray-100 p-3 rounded-xl bg-gray-50 outline-none focus:border-[#F26522] text-sm custom-scrollbar" placeholder="Bonjour, ..."></textarea>
-                    </div>
-                    <div class="bg-gray-100 p-4 rounded-xl border border-gray-200">
-                        <label class="block text-[10px] font-black text-gray-500 mb-2 uppercase">📎 Pièce jointe</label>
-                        <input type="file" id="cmpPJ" class="text-xs w-full bg-white p-1 rounded-lg">
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-10 flex justify-end space-x-4 pt-6 border-t">
-                <button onclick="closeModal()" class="px-6 py-3 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
-                <button onclick="saveCampagne()" id="btnSaveCmp" class="px-10 py-4 bg-[#F26522] text-white font-black rounded-2xl shadow-xl hover:scale-105 transition">🚀 Créer la Campagne</button>
+    <!-- MOTIF MODAL -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+            <h3 class="text-lg font-black text-gray-800 mb-2">Confirmer la suppression</h3>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-xs font-black text-gray-600 uppercase mb-2">Motif de suppression <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Expliquez la raison de cette suppression..." class="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-[#1A4E8A] resize-none mb-6"></textarea>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeMotifModal()" class="px-6 py-2 text-gray-400 font-black hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="px-6 py-2 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition">Confirmer la suppression</button>
             </div>
         </div>
     </div>
 
-    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h2 class="text-2xl font-black text-[#1A4E8A] mb-6">✏️ Modifier la Campagne</h2>
-            <input type="hidden" id="editId">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Nom</label>
-                    <input type="text" id="editNom" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
+    <div id="etuModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 w-full max-w-4xl overflow-y-auto max-h-[95vh] custom-scrollbar">
+            
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 id="modalTitle" class="text-2xl font-black text-[#1A4E8A]">Fiche Étudiant</h2>
+                <button onclick="closeModal()" class="text-gray-300 hover:text-red-500 font-bold text-3xl transition">&times;</button>
+            </div>
+            
+            <input type="hidden" id="formId">
+            <input type="hidden" id="formIdEnt">
+            <input type="hidden" id="formIdCont">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Nom *</label><input type="text" id="formNom" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-gray-50 font-bold outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Prénom *</label><input type="text" id="formPrenom" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-gray-50 font-bold outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Email</label><input type="email" id="formMail" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Téléphone</label><input type="text" id="formTel" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
                 </div>
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Fréquence</label>
-                    <select id="editFreq" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
-                        <option value="Une fois">Une fois</option>
-                        <option value="Hebdomadaire">Hebdomadaire</option>
-                        <option value="Mensuelle">Mensuelle</option>
-                        <option value="Compte à rebours">Compte à rebours</option>
-                    </select>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-orange-50 p-5 rounded-3xl border-2 border-orange-100">
+                        <label class="block text-[10px] uppercase font-black text-orange-600 mb-2 ml-1">🏢 Entreprise B2B (Datalist)</label>
+                        <input list="tuteursList" id="formTuteurSelect" onchange="updateEnterpriseInfo()" placeholder="Tapez le nom..." class="w-full border-2 border-orange-200 p-3 rounded-2xl bg-white font-bold text-sm outline-none focus:border-orange-500 shadow-sm">
+                        <datalist id="tuteursList"></datalist>
+                        <p id="displayEntName" class="mt-2 text-[10px] font-black text-[#1A4E8A] hidden"></p>
+                    </div>
+                    <div class="bg-blue-50 p-5 rounded-3xl border-2 border-blue-100">
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-2 ml-1">👨‍🏫 Référent Pédagogique</label>
+                        <select id="formReferent" class="w-full border-2 border-blue-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A] shadow-sm">
+                            <option value="">-- Non assigné --</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Statut</label>
-                    <select id="editStatut" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
-                        <option value="À lancer">À lancer 🕒</option>
-                        <option value="Active">Active ✅</option>
-                        <option value="Suspendue">Suspendue ⏸️</option>
-                        <option value="Terminée">Terminée 🏁</option>
-                    </select>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-6 rounded-3xl">
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-1 ml-2">Campus</label>
+                        <select id="formCampus" class="w-full border-2 border-blue-100 p-2 rounded-xl text-sm font-bold bg-blue-50 outline-none mb-2 focus:border-[#1A4E8A]">
+                            <option value="">-- Sans Campus --</option>
+                            <option value="HECG">📍 Marseille</option>
+                            <option value="HECG_AIX">📍 Aix-en-Provence</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Classe</label>
+                        <select id="formClasse" class="w-full border-2 border-gray-200 p-2 rounded-xl text-sm font-bold bg-white outline-none mb-2"></select>
+                        <input type="text" id="formNewClasse" placeholder="Ou tapez une nouvelle classe..." class="w-full border-2 border-gray-100 p-2 rounded-xl text-xs font-bold outline-none focus:border-[#1A4E8A]">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-1 ml-2">Statut Employabilité</label>
+                        <select id="formStatut" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500">
+                            <option value="En recherche">🔍 En recherche</option>
+                            <option value="En Alternance">🏢 En Alternance</option>
+                            <option value="En Initial">🎒 En Initial</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-gray-500 mb-1 ml-2">Forcer Typologie</label>
+                        <select id="formForceTypo" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none">
+                            <option value="Auto">✨ Automatique</option>
+                            <option value="Prospect">🎯 Prospect</option>
+                            <option value="Préinscrit">⏳ Préinscrit</option>
+                            <option value="Attente">⏳ En Attente</option>
+                            <option value="Refusé">❌ Refusé</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-green-50 p-6 rounded-3xl border border-green-100">
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">Atelier CV</label>
+                        <select id="formFaitCV" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
+                            <option value="Non">Non fait</option>
+                            <option value="Oui">Fait ✅</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">Atelier LinkedIn</label>
+                        <select id="formFaitLI" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
+                            <option value="Non">Non fait</option>
+                            <option value="Oui">Fait ✅</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">CV (Upload PDF)</label>
+                        <input type="file" id="formCVFile" accept=".pdf" class="w-full text-[10px] font-bold bg-white p-2 rounded-xl shadow-sm cursor-pointer border border-green-200">
+                        <input type="hidden" id="formCVUrl">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+                    <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Entrée (Texte)</label><input type="text" id="formEntree" placeholder="ex: Rentrée 2026" class="w-full border p-3 rounded-xl bg-gray-50 text-xs font-bold outline-none"></div>
+                    <div><label class="block text-[10px] uppercase font-black text-red-400 mb-1">Date Sortie réelle</label><input type="date" id="formSortie" class="w-full border border-red-200 p-3 rounded-xl bg-red-50 text-xs font-bold outline-none"></div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-red-400 mb-1">Motif (Si sortie)</label>
+                        <select id="formMotif" class="w-full border border-red-200 p-3 rounded-xl text-xs font-bold bg-red-50 outline-none">
+                            <option value="">-- Aucun --</option>
+                            <option value="Démotivation">Démotivation</option>
+                            <option value="Niveau trop haut">Niveau trop haut</option>
+                            <option value="Départ Concurrence">Départ Concurrence</option>
+                            <option value="Diplôme Echoué">Diplôme Echoué</option>
+                            <option value="Fin de parcours / Diplôme obtenu">Fin de parcours / Diplôme obtenu</option>
+                            <option value="Perte/Pas d'alternance">Perte/Pas d'alternance</option>
+                            <option value="Raison financière">Raison financière</option>
+                            <option value="Réorientation">Réorientation</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-100">
-    <div class="flex justify-between items-center mb-2">
-        <h4 class="text-[10px] font-black uppercase text-blue-400">👥 Destinataires ciblés (Simulation)</h4>
-        <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
-    </div>
-    <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
-        Sélectionnez des cibles pour voir la liste...
-    </div>
-</div>
-            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-200">
-                <div class="flex justify-between items-center mb-2">
-                    <h4 class="text-[10px] font-black uppercase text-blue-500">👥 Destinataires détectés en temps réel</h4>
-                    <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
+            
+            <div class="mt-10 flex justify-between items-center pt-6 border-t">
+                <button id="btnDelete" onclick="deleteCurrentStudent()" class="hidden px-6 py-3 bg-red-50 text-red-500 font-black rounded-2xl hover:bg-red-100 transition">Supprimer l'étudiant</button>
+                <div class="flex space-x-3 ml-auto">
+                    <button onclick="closeModal()" class="px-8 py-3 text-gray-400 font-black hover:bg-gray-100 rounded-2xl transition">Annuler</button>
+                    <button onclick="saveStudent()" id="btnSave" class="px-10 py-3 bg-[#1A4E8A] text-white font-black rounded-2xl shadow-xl hover:bg-blue-800 transition">Enregistrer</button>
                 </div>
-                <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
-                    Sélectionnez des critères pour voir la liste...
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-8">
-                <button onclick="closeEditModal()" class="px-6 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
-                <button onclick="saveEdit()" class="bg-[#1A4E8A] text-white px-6 py-3 rounded-xl font-black hover:bg-blue-800 transition">Enregistrer</button>
             </div>
         </div>
     </div>
 
     <script>
-        // ⚠️ REMPLACE PAR TON VRAI LIEN API ⚠️
-        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec"; 
-        async function apiPost(payload) {
+        const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        // LA STATION D'EXPÉDITION CENTRALE
+async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur     = userSession.nom   || "Inconnu";
-    payload.roleAuteur   = userSession.role  || "N/A";
-    payload.emailAuteur  = userSession.email || "";
+    payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
+    payload.roleAuteur = userSession.role || "Utilisateur";
     payload.sessionToken = userSession.sessionToken || "";
 
+    // 3. On envoie le colis au script Google
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -218,325 +306,614 @@
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        
+        if (!result.success) {
+            console.error("Erreur API:", result.message);
+            if (result.sessionExpired) {
+                localStorage.removeItem('user');
+                alert("Session expirée. Veuillez vous reconnecter.");
+                window.location.href = 'index.html';
+                return result;
+            }
+        }
         return result;
     } catch (e) {
-        console.error("Erreur API :", e);
-        return { success: false, message: "Erreur de connexion" };
+        console.error("Erreur de connexion au serveur:", e);
+        return { success: false, message: "Erreur réseau" };
     }
 }
-        let listCampagnes = [];
-        
-        // 1. RÉCUPÉRATION DU RÔLE DE L'UTILISATEUR
+        let fullData = [];
+        let catalogueTuteurs = [];
+        let catalogueReferents = [];
         let user = null;
-        try { user = JSON.parse(localStorage.getItem('user')); } catch(e) {}
-        const userRole = user ? user.role : 'Utilisateur';
+        let showAlumniOnly = false; // Variable du bouton Alumni
 
-        // --- 2. CHARGEMENT ---
-        async function loadCampagnes() {
+        window.onload = () => {
             try {
-                document.getElementById('loader').classList.remove('hidden');
-                document.getElementById('campGrid').classList.add('hidden');
-                
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getCampagnes' }) });
-                const data = await res.json();
-                
-                if(data.success) {
-                    listCampagnes = data.data;
-                    renderCampagnes();
+                const stored = localStorage.getItem('user');
+                if (stored) {
+                    user = JSON.parse(stored);
+                    
+                    // Sécurité Redirection
+                    if (user.role === 'Etudiant') {
+                        window.location.href = 'dossier.html';
+                        return; 
+                    }
+                    
+                    // On vérifie si l'élément existe avant de le toucher
+                    const navHist = document.getElementById('navHistorique');
+                    if (user.role === 'Administrateur' && navHist) {
+                        navHist.classList.remove('hidden');
+                    }
+
+                    document.getElementById('welcomeMsg').innerText = "Ravi de vous voir, " + (user.nom || "Collaborateur");
+                    loadDashboardData();
+                } else { 
+                    window.location.href = 'index.html'; 
                 }
             } catch(e) { 
-                console.error("Erreur chargement:", e); 
-            } finally {
-                document.getElementById('loader').classList.add('hidden');
-                document.getElementById('campGrid').classList.remove('hidden');
+                console.error("Erreur Session:", e);
+                window.location.href = 'index.html'; 
+            }
+        };
+        // --- 1. CHARGEMENT DONNÉES ---
+        async function loadDashboardData() {
+            try {
+                const [resE, resP] = await Promise.all([
+    fetch(API_URL, { 
+        method: 'POST', 
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: 'getDashboardData', role: user.role, userId: user.ref }) 
+    }),
+    fetch(API_URL, { 
+        method: 'POST', 
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: 'getPartners' }) 
+    })
+]);
+
+                const dataE = await resE.json();
+                const dataP = await resP.json();
+                
+                if (dataE.success) {
+                    fullData = dataE.data;
+                    catalogueReferents = dataE.referents || [];
+                    catalogueTuteurs = dataP.success ? dataP.data : [];
+                    
+                    setupSelectors();
+                    renderTable();
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('tableContainer').classList.remove('hidden');
+                }
+            } catch (e) { 
+                console.error(e);
+                document.getElementById('loader').innerText = "Erreur de connexion serveur.";
             }
         }
 
-        // --- 3. AFFICHAGE DES CARTES (Avec filtre d'Archivage et correction du bouton) ---
-        function renderCampagnes() {
-            const grid = document.getElementById('campGrid');
-            if(!grid) return;
+        // --- 2. GESTION DES MENUS ---
+        function setupSelectors() {
+            const classes = [...new Set(fullData.map(e => e.classe).filter(Boolean))].sort();
+            
+            const fCl = document.getElementById('fClasse');
+            if(fCl) fCl.innerHTML = '<option value="">🎓 Toutes les classes</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+            
+            const formCl = document.getElementById('formClasse');
+            if(formCl) formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
 
-            // FILTRE D'ARCHIVAGE : On cache les "Terminées" si on n'est pas Administrateur
-            const campagnesVisibles = listCampagnes.filter(c => {
-                if (c.statut === "Terminée" && userRole !== "Administrateur") {
-                    return false; 
+            // Remplissage du select de Création/Modif étudiant
+            const refSelect = document.getElementById('formReferent');
+            if(refSelect) {
+                refSelect.innerHTML = '<option value="">-- Non assigné --</option>' + 
+                    catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+            }
+
+            // Remplissage du filtre rapide par Référent
+            const filterRef = document.getElementById('filterReferent');
+            if(filterRef) {
+                filterRef.innerHTML = '<option value="">Tous les référents</option>' + 
+                    catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+            }
+
+            let listHtml = '';
+            catalogueTuteurs.forEach(ent => {
+                const nom = ent.nom || ent.entreprise;
+                const idEnt = ent.id || ent.id_ent;
+                if(ent.contacts && ent.contacts.length > 0) {
+                    ent.contacts.forEach(c => { listHtml += `<option value="${idEnt}|${c.id_contact}|${nom}">${nom} - Contact: ${c.nom}</option>`; });
+                } else {
+                    listHtml += `<option value="${idEnt}||${nom}">${nom} (Aucun contact)</option>`;
                 }
-                return true; 
             });
+            document.getElementById('tuteursList').innerHTML = listHtml;
+        }
 
-            grid.innerHTML = campagnesVisibles.map(c => {
-                // CORRECTION DU BOUTON GRISÉ : On utilise l'égalité stricte (===)
-                const statut = c.statut || "À lancer";
-                const estDejaLancee = (statut === "Active" || statut === "Terminée");
+        function updateEnterpriseInfo() {
+            const val = document.getElementById('formTuteurSelect').value;
+            const display = document.getElementById('displayEntName');
+            if(val && val.includes('|')) {
+                const [idEnt, idCont, nomEnt] = val.split('|');
+                document.getElementById('formIdEnt').value = idEnt;
+                document.getElementById('formIdCont').value = idCont;
+                display.innerText = "Assigné chez : " + nomEnt;
+                display.classList.remove('hidden');
+            } else {
+                document.getElementById('formIdEnt').value = "";
+                document.getElementById('formIdCont').value = "";
+                display.classList.add('hidden');
+            }
+        }
+
+        // --- GESTION DU BOUTON ALUMNI ---
+        function toggleAlumni() {
+            showAlumniOnly = !showAlumniOnly;
+            const btn = document.getElementById('btnAlumni');
+            
+            if(showAlumniOnly) {
+                btn.classList.replace('border-slate-200', 'border-[#1A4E8A]');
+                btn.classList.replace('text-slate-500', 'text-[#1A4E8A]');
+                btn.classList.add('bg-blue-50');
+            } else {
+                btn.classList.replace('border-[#1A4E8A]', 'border-slate-200');
+                btn.classList.replace('text-[#1A4E8A]', 'text-slate-500');
+                btn.classList.remove('bg-blue-50');
+            }
+            renderTable();
+        }
+
+        // --- 3. FILTRES & TABLEAU & KPI ---
+        function getFilteredData() {
+            // On supprime les tirets et les espaces pour une recherche sans erreur
+            const fSe = document.getElementById('fSearch').value.toLowerCase().replace(/[_ \-]/g, '');
+            const fTy = document.getElementById('fTypo').value;
+            const fCl = document.getElementById('fClasse').value;
+            const fSt = document.getElementById('fStatut').value.toLowerCase();
+            const fAt = document.getElementById('fAtelier').value;
+            const fPe = document.getElementById('fPeriode').value;
+            const fCa = document.getElementById('fCampus') ? document.getElementById('fCampus').value : "";
+            const fRef = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
+            const now = new Date();
+
+            return fullData.filter(e => {
+                // Création d'une chaîne de recherche propre (sans tirets/espaces)
+                const stringRecherche = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().replace(/[_ \-]/g, '');
+                // 1. LOGIQUE ALUMNI (PRIORITAIRE)
+                // Si le bouton Alumni est activé, on court-circuite le filtre "Actifs"
+                if (showAlumniOnly) {
+                    let motifLow = String(e.motif || "").toLowerCase();
+                    // Tolérance maximale : on cherche juste "dipl" et "obtenu" pour ignorer les accents
+                    let isAlumni = motifLow.includes("dipl") && motifLow.includes("obtenu");
+                    
+                    // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
+                    const matchName = (e.id + " " + e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                    const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                    const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
+                    
+                    return isAlumni && matchName && matchCampus && matchReferent;
+                }
+
+                // 2. LOGIQUE CLASSIQUE (Quand le bouton Alumni est éteint)
+                let matchTypo = false;
+                const typoLow = (e.typo || "").toLowerCase();
                 
-                const btnStyle = estDejaLancee 
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" 
-                    : "bg-green-500 text-white hover:bg-green-600 shadow-md hover:scale-105";
+                if (fTy === "tous") matchTypo = true;
+                else if (fTy === "actifs") matchTypo = (typoLow === "inscrit" || typoLow === "préinscrit");
+                else if (fTy === "inscrit") matchTypo = (typoLow === "inscrit");
+                else if (fTy === "préinscrit") matchTypo = (typoLow === "préinscrit");
+                else if (fTy === "prospect") matchTypo = (typoLow === "prospect");
+                else if (fTy === "sortie") matchTypo = (typoLow === "sortie" || typoLow === "refusé");
 
-                // Design spécifique pour l'Admin si la campagne est archivée
-                const badgeStatut = statut === "Terminée" 
-                    ? `<span class="px-2 py-1 bg-gray-200 text-gray-600 text-[10px] font-black uppercase rounded">🗄️ ARCHIVÉE</span>`
-                    : `<span class="px-2 py-1 ${estDejaLancee ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} text-[10px] font-black uppercase rounded">${statut}</span>`;
+                // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
+                if (fSe.length > 2) matchTypo = true;
 
-                const opaciteCarte = statut === "Terminée" ? "opacity-75 grayscale-[30%]" : "";
+                const matchName = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().includes(fSe);
+                const matchClass = !fCl || (e.classe && e.classe === fCl);
+                const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
+                
+                let matchAt = true;
+                
+                // On nettoie le texte (minuscule, sans espace) pour être sûr à 100%
+                const cvFait = String(e.faitCV || "").trim().toLowerCase();
+                const liFait = String(e.faitLI || "").trim().toLowerCase();
+
+                if (fAt === "CV") matchAt = (cvFait === "oui");
+                else if (fAt === "CV_NON") matchAt = (cvFait !== "oui");
+                else if (fAt === "LI") matchAt = (liFait === "oui");
+                else if (fAt === "LI_NON") matchAt = (liFait !== "oui");
+                else if (fAt === "BOTH") matchAt = (cvFait === "oui" && liFait === "oui");
+
+                let matchPe = true;
+                if (fPe) {
+                    if (fPe === "NEVER") {
+                        matchPe = !e.dernierEchange;
+                    } else if (!e.dernierEchange) {
+                        // Si on cherche une période mais qu'il n'y a pas de date, on cache
+                        matchPe = false;
+                    } else {
+                        const diff = (now - new Date(e.dernierEchange)) / (1000 * 3600 * 24);
+                        if (fPe === "7") matchPe = diff <= 7;
+                        if (fPe === "30") matchPe = diff >= 30;
+                    }
+                }
+                
+                const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
+
+                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchPe && matchCampus && matchReferent;
+            });
+        }
+        function renderTable() {
+            const filtered = getFilteredData();
+
+            // MISE À JOUR DES 5 KPI DYNAMIQUES
+            let countAlt = 0, countInit = 0, countRech = 0, countSorties = 0;
+            filtered.forEach(e => {
+                const s = (e.statut || "").toLowerCase();
+                const t = (e.typo || "").toLowerCase();
+
+                if(s.includes('alternance') || s.includes('placé') || s.includes('poste')) countAlt++;
+                else if(s.includes('initial')) countInit++;
+                else countRech++;
+
+                if(t === 'sortie' || t === 'refusé') countSorties++;
+            });
+            
+            document.getElementById('kpi-tot').innerText = filtered.length;
+            document.getElementById('kpi-alt').innerText = countAlt;
+            document.getElementById('kpi-init').innerText = countInit;
+            document.getElementById('kpi-rech').innerText = countRech;
+            document.getElementById('kpi-sorties').innerText = countSorties;
+
+            const list = document.getElementById('studentList');
+            if(!list) return;
+
+            list.innerHTML = filtered.map(e => {
+                // BADGE STATUT DYNAMIQUE
+                let badgeStatut = '';
+                const stLow = (e.statut || "").toLowerCase();
+                if (stLow.includes('alternance') || stLow.includes('placé') || stLow.includes('poste')) {
+                    badgeStatut = `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-green-200 shadow-sm">🏢 En Alternance</span>`;
+                } else if (stLow.includes('initial')) {
+                    badgeStatut = `<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-purple-200 shadow-sm">🎒 En Initial</span>`;
+                } else {
+                    badgeStatut = `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-xl text-[10px] font-black uppercase border border-orange-200 shadow-sm">🔍 En recherche</span>`;
+                }
 
                 return `
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-lg transition duration-200 ${opaciteCarte}">
-                    <div>
-                        <div class="flex justify-between items-start mb-4">
-                            ${badgeStatut}
-                            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">${c.frequence}</span>
-                        </div>
-                        <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2">${c.nom || "Campagne sans nom"}</h3>
-                        <p class="text-[10px] text-gray-400 font-bold uppercase truncate">Cibles : ${c.cible || 'Manuelle'}</p>
-                    </div>
-                    
-                    <div class="mt-6 flex flex-wrap gap-2 border-t pt-4">
-                        <button onclick="${estDejaLancee ? '' : `runCampagne('${c.id}')`}" 
-                                class="flex-1 py-3 rounded-xl text-[10px] font-black transition ${btnStyle}"
-                                ${estDejaLancee ? 'disabled' : ''}>
-                            ${estDejaLancee ? '✓ DÉJÀ LANCÉE' : '🚀 LANCER MAINTENANT'}
-                        </button>
-                        
-                        <div class="flex w-full gap-2 mt-2">
-                            <button onclick="testCamp('${c.id}')" class="flex-1 bg-gray-50 text-gray-500 py-2 rounded-xl text-[10px] font-black hover:bg-orange-50 transition" title="Test vers votre mail">⚡ TEST</button>
-                            <button onclick="duplicateCampaign('${c.id}')" class="px-4 py-2 bg-gray-50 text-blue-500 rounded-xl hover:bg-blue-100 transition" title="Dupliquer">👯</button>
-                            <button onclick="openEditModal('${c.id}')" class="px-4 py-2 bg-gray-50 text-gray-400 rounded-xl hover:text-blue-500 transition" title="Éditer">✏️</button>
-                            <button onclick="deleteCampagne('${c.id}')" class="px-4 py-2 bg-gray-50 text-gray-300 rounded-xl hover:text-red-500 transition" title="Supprimer">🗑️</button>
-                        </div>
-                    </div>
-                </div>
+                <tr class="hover:bg-blue-50/30 transition group border-b">
+                    <td class="p-5">
+                        <div class="font-black text-slate-800 text-sm">${e.nom} ${e.prenom}</div>
+                        <div class="text-[10px] font-bold mt-1 text-orange-500">${e.entreprise || '<span class="text-slate-300 italic font-medium">Sans entreprise</span>'}</div>
+                        <div class="text-[9px] font-black mt-1 uppercase tracking-widest ${e.campus === 'HECG_AIX' ? 'text-purple-600' : 'text-[#1A4E8A]'}">${e.campus === 'HECG_AIX' ? '📍 Aix-en-Provence' : (e.campus === 'HECG' ? '📍 Marseille' : '')}</div>
+                    </td>
+                    <td class="p-5">
+                        <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' || e.typo === 'Refusé' ? 'text-red-500' : ''}">${e.typo || 'Prospect'}</div>
+                    </td>
+                    <td class="p-5">${badgeStatut}</td>
+                    <td class="p-5 text-[10px] font-bold text-slate-500">
+                        ${e.dernierEchange ? new Date(e.dernierEchange).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'}) : '<span class="text-gray-300">Jamais</span>'}
+                    </td>
+                    <td class="p-5 text-center flex justify-center space-x-2">
+                        <a href="dossier.html?id=${e.id}" target="_blank" class="bg-slate-100 text-[#1A4E8A] px-4 py-2 rounded-xl text-[10px] font-black hover:bg-[#1A4E8A] hover:text-white transition uppercase">Dossier</a>
+                        <button onclick="openModal('${e.id}')" class="text-slate-300 hover:text-orange-500 transition-colors text-lg">✏️</button>
+                    </td>
+                </tr>
                 `;
-            }).join('') || '<div class="col-span-full text-center py-20 text-gray-300 font-bold italic">Aucune campagne à afficher.</div>';
+            }).join('') || '<tr><td colspan="5" class="p-10 text-center text-slate-300 font-bold italic">Aucun résultat trouvé.</td></tr>';
         }
 
-        // --- 4. MODALES DE CRÉATION ---
-        function toggleCountdown() {
-            const isCountdown = document.getElementById('cmpFreq').value === "Compte à rebours";
-            document.getElementById('countdownBox').classList.toggle('hidden', !isCountdown);
-        }
-
-        function openModal() { document.getElementById('cmpModal').classList.replace('hidden', 'flex'); }
-        function closeModal() { document.getElementById('cmpModal').classList.replace('flex', 'hidden'); }
-
-        async function saveCampagne() {
-            const btn = document.getElementById('btnSaveCmp');
-            try {
-                btn.innerText = "Création en cours..."; 
-                btn.disabled = true;
-
-                const cibles = Array.from(document.querySelectorAll('#audienceChecks input:checked')).map(i => i.value);
-                const emailsManuels = document.getElementById('manualEmails')?.value || "";
-                
-                if (cibles.length === 0 && emailsManuels.trim() === "") {
-                    throw new Error("Veuillez choisir au moins une cible ou ajouter des emails manuels.");
-                }
-
-                let pjUrl = "";
-                const pjInput = document.getElementById('cmpPJ');
-                const file = pjInput ? pjInput.files[0] : null;
-                
-                if (file) {
-                    btn.innerText = "Upload de la pièce jointe...";
-                    const base64 = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
-                        reader.readAsDataURL(file);
-                    });
-
-                    const uploadRes = await fetch(API_URL, { 
-                        method: 'POST', body: JSON.stringify({ action: 'uploadCV', fileName: "PJ_" + file.name, mimeType: file.type, base64Data: base64 }) 
-                    });
-                    const uploadData = await uploadRes.json();
-                    if (uploadData.success) pjUrl = uploadData.url;
-                }
-
-                btn.innerText = "Enregistrement...";
-                const payload = {
-                    action: 'addCampagne',
-                    nom: document.getElementById('cmpNom')?.value || "Sans nom",
-                    cible: cibles, frequence: document.getElementById('cmpFreq')?.value || "Une fois",
-                    nbJours: document.getElementById('nbJours')?.value || 0, emailsManuels: emailsManuels,
-                    objet: document.getElementById('cmpObjet')?.value || "Sans objet", corps: document.getElementById('cmpCorps')?.value || "", pjUrl: pjUrl
-                };
-
-                const data = await apiPost(payload);
-                if (data.success) {
-                    closeModal(); loadCampagnes();
-                } else throw new Error("Erreur serveur");
-            } catch (error) {
-                alert("⚠️ Erreur : " + error.message);
-            } finally {
-                btn.innerText = "🚀 Créer la Campagne"; btn.disabled = false;
+        function resetFilters() {
+            document.getElementById('fSearch').value = "";
+            document.getElementById('fTypo').value = "actifs";
+            document.getElementById('fClasse').value = "";
+            document.getElementById('fStatut').value = "";
+            document.getElementById('fAtelier').value = "";
+            document.getElementById('fPeriode').value = "";
+            if(document.getElementById('fCampus')) document.getElementById('fCampus').value = "";
+            if(document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
+            
+            // Remise à zéro du bouton Alumni
+            if (showAlumniOnly) {
+                toggleAlumni(); // Cela va aussi déclencher renderTable()
+            } else {
+                renderTable();
             }
         }
 
-        // --- 5. ACTIONS SUR LES CARTES ---
-        async function runCampagne(id) {
-            if(!confirm("Confirmer le lancement immédiat ?")) return;
-            const data = await apiPost({ action: 'runCampagne', id: id });
-            alert(data.message); loadCampagnes();
-        }
+        // --- 4. MODALE & SAUVEGARDE ---
+        function openModal(id = null) {
+            document.getElementById('etuModal').classList.replace('hidden', 'flex');
+            document.getElementById('btnDelete').classList.toggle('hidden', !id);
 
-        async function testCamp(id) {
-            if(!confirm("Envoyer un test à votre adresse email ?")) return;
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testCampaign', campaignId: id }) });
-            const data = await res.json(); 
-            alert(data.message);
-        }
-
-        async function deleteCampagne(id) {
-            if(!confirm("Supprimer cette campagne définitivement ?")) return;
-            await apiPost({ action: 'deleteCampagne', campaignId: id });
-            loadCampagnes();
-        }
-
-        async function duplicateCampaign(id) {
-            if(!confirm("Dupliquer cette campagne ?")) return;
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'duplicateCampaign', campaignId: id }) });
-            const data = await res.json();
-            if(data.success) loadCampagnes();
-        }
-
-        // --- 6. ÉDITION ---
-        function openEditModal(id) {
-            const c = listCampagnes.find(x => x.id === id);
-            if(!c) return;
-            document.getElementById('editId').value = c.id;
-            document.getElementById('editNom').value = c.nom;
-            document.getElementById('editFreq').value = c.frequence;
-            document.getElementById('editStatut').value = c.statut;
-            document.getElementById('editModal').classList.replace('hidden', 'flex');
-        }
-
-        function closeEditModal() { document.getElementById('editModal').classList.replace('flex', 'hidden'); }
-
-        async function saveEdit() {
-            await apiPost({ 
-                action: 'updateCampaign', id: document.getElementById('editId').value, nom: document.getElementById('editNom').value, 
-                frequence: document.getElementById('editFreq').value, statut: document.getElementById('editStatut').value 
-            });
+            if(id) {
+                const e = fullData.find(x => x.id === id);
+                document.getElementById('modalTitle').innerText = "Modifier Étudiant";
+                document.getElementById('formId').value = e.id;
+                document.getElementById('formNom').value = e.nom;
+                document.getElementById('formPrenom').value = e.prenom;
+                document.getElementById('formMail').value = e.mail || "";
+                document.getElementById('formTel').value = e.tel || "";
                 
-            closeEditModal(); loadCampagnes();
+                document.getElementById('formReferent').value = e.refPerso || "";
+                if(e.entreprise) {
+                    document.getElementById('formTuteurSelect').value = `${e.id_ent || ''}|${e.id_cont || ''}|${e.entreprise}`;
+                    updateEnterpriseInfo();
+                } else { document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo(); }
+
+                document.getElementById('formClasse').value = e.classe || "";
+                if(document.getElementById('formCampus')) document.getElementById('formCampus').value = e.campus || "";
+                document.getElementById('formNewClasse').value = "";
+                
+                document.getElementById('formStatut').value = e.statut || "En recherche";
+                document.getElementById('formForceTypo').value = (["Refusé", "Attente", "Prospect", "Préinscrit", "Sortie"].includes(e.typo)) ? e.typo : "Auto";
+                
+                document.getElementById('formFaitCV').value = e.faitCV || "Non";
+                document.getElementById('formFaitLI').value = e.faitLI || "Non";
+                document.getElementById('formCVUrl').value = e.cv || ""; 
+                document.getElementById('formCVFile').value = ""; 
+                
+                // On nettoie la date pour enlever le format moche T22:00:00Z s'il existe
+                if (e.entree && String(e.entree).includes('T')) {
+                    document.getElementById('formEntree').value = String(e.entree).split('T')[0];
+                } else {
+                    document.getElementById('formEntree').value = e.entree || "";
+                }
+                if(e.sortie) {
+                    try { document.getElementById('formSortie').value = new Date(e.sortie).toISOString().split('T')[0]; } 
+                    catch(err) { document.getElementById('formSortie').value = ""; }
+                } else document.getElementById('formSortie').value = "";
+                document.getElementById('formMotif').value = e.motif || "";
+            } else {
+                document.getElementById('modalTitle').innerText = "Nouvel Étudiant";
+                document.getElementById('formId').value = "";
+                document.getElementById('formNom').value = "";
+                document.getElementById('formPrenom').value = "";
+                document.getElementById('formMail').value = "";
+                document.getElementById('formTel').value = "";
+                document.getElementById('formReferent').value = user.ref || ""; 
+                document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
+                document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
+                if(document.getElementById('formCampus')) document.getElementById('formCampus').value = "";
+                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Auto";
+                document.getElementById('formFaitCV').value = "Non"; document.getElementById('formFaitLI').value = "Non";
+                document.getElementById('formCVUrl').value = ""; document.getElementById('formCVFile').value = "";
+                document.getElementById('formEntree').value = ""; document.getElementById('formSortie').value = ""; document.getElementById('formMotif').value = "";
+            }
         }
 
-        loadCampagnes();
-       // ==========================================
-        // ⚙️ MOTEUR DU FILET DE SÉCURITÉ EN DIRECT
-        // ==========================================
-        async function updateLivePreview() {
-    // On détecte quelle modale est ouverte pour mettre à jour le bon compteur
-    const isEdit = !document.getElementById('editModal').classList.contains('hidden');
-    const listDiv = document.getElementById(isEdit ? 'livePreviewList' : 'livePreviewListCmp');
-    const countSpan = document.getElementById(isEdit ? 'liveCount' : 'liveCountCmp');
+        function closeModal() { document.getElementById('etuModal').classList.replace('flex', 'hidden'); }
 
-    if (!listDiv || !countSpan) return;
-
-    const ciblesSelectionnees = {
-        target_recherche: document.getElementById('cbRecherche')?.checked || false,
-        b2c_prospects: document.getElementById('cbProspect')?.checked || false,
-        b2c_preinscrits: document.getElementById('cbPreinscrit')?.checked || false,
-        b2c_inscrits: document.getElementById('cbInscrit')?.checked || false,
-        b2c_sortis: document.getElementById('cbSortis')?.checked || false,
-        motif_sortie: document.getElementById('selectMotif')?.value || "Tous",
-        b2b_avec: document.getElementById('cbEntAvec')?.checked || false,
-        b2b_sans: document.getElementById('cbEntSans')?.checked || false
-    };
-
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'previewComMail', cible: ciblesSelectionnees })
-        });
-        const d = await res.json();
-        if (d.success) {
-            countSpan.innerText = d.data.length;
-            listDiv.innerHTML = d.data.slice(0, 50).map(c => `
-                <div class="flex justify-between border-b border-blue-50 py-1 px-1">
-                    <span class="truncate pr-2 text-[10px]">${c.nom}</span>
-                    <span class="text-blue-400 font-mono text-[9px]">${c.email}</span>
-                </div>
-            `).join('') || "<div class='text-center text-gray-400 italic py-4 text-[10px]'>Aucun destinataire...</div>";
+        // --- MOTIF SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
         }
-    } catch(e) { console.error("Erreur prévisualisation"); }
+        function closeMotifModal() {
+            document.getElementById('motifModal').style.display = 'none';
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            closeMotifModal();
+            if (_motifCallback) _motifCallback(motif);
+        }
+        function showToast(msg, isError) {
+            const t = document.getElementById('toastMsg');
+            t.textContent = msg;
+            t.style.background = isError ? '#ef4444' : '#22c55e';
+            t.style.color = '#fff';
+            t.style.display = 'block';
+            t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.style.display = 'none', 400); }, 4000);
+        }
+
+        function deleteCurrentStudent() {
+            const id = document.getElementById('formId').value;
+            if (!id) return;
+            const etu = fullData.find(x => x.id === id);
+            const nom = etu ? ((etu.prenom || '') + ' ' + (etu.nom || '')).trim() : id;
+            closeModal();
+            askMotif('Supprimer l\'étudiant "' + nom + '" définitivement ?', async (motif) => {
+                const btnConf = document.querySelector('#motifModal button[onclick="confirmMotifDelete()"]');
+                if (btnConf) { btnConf.textContent = 'Suppression...'; btnConf.disabled = true; }
+                try {
+                    const res = await apiPost({ action: 'deleteStudent', id, motif });
+                    if (res.success) {
+                        showToast('Étudiant supprimé avec succès.', false);
+                        loadDashboardData();
+                    } else {
+                        showToast('Erreur : ' + (res.message || 'Échec inconnu'), true);
+                    }
+                } catch(e) {
+                    showToast('Erreur réseau : ' + e.message, true);
+                }
+            });
+        }
+
+       // ==============================================================
+// BLOC DE SAUVEGARDE ETUDIANT (CORRIGÉ POUR L'ENTREPRISE)
+// ==============================================================
+// ==============================================================
+// BLOC DE SAUVEGARDE ETUDIANT
+// ==============================================================
+async function saveStudent() {
+    const btn = document.getElementById('btnSave');
+    btn.innerText = "Enregistrement...";
+    btn.disabled = true;
+
+    let finalCvUrl = document.getElementById('formCVUrl').value;
+    const cvFile = document.getElementById('formCVFile').files[0];
+    
+    if (cvFile) {
+        const reader = new FileReader();
+        reader.onload = async function() {
+            const base64 = reader.result.split(',')[1];
+            const resCV = await apiPost({
+                action: 'uploadCV',
+                fileName: cvFile.name,
+                mimeType: cvFile.type,
+                base64Data: base64,
+                userId: document.getElementById('formId').value || 'NOUVEAU'
+            });
+            if (resCV.success) finalCvUrl = resCV.url;
+            await envoyerSaveEtu(finalCvUrl);
+        };
+        reader.readAsDataURL(cvFile);
+    } else {
+        await envoyerSaveEtu(finalCvUrl);
+    }
 }
 
+async function envoyerSaveEtu(finalCvUrl) {
+    // 1. DÉCOUPAGE PARFAIT DE L'ENTREPRISE
+    let rawEntValue = document.getElementById('formTuteurSelect').value.trim();
+    let finalNomEnt = "";
+    let finalIdEnt = document.getElementById('formIdEnt').value;
+    let finalIdCont = document.getElementById('formIdCont').value;
 
-        // Écouter les cases à cocher
-        document.addEventListener('change', (e) => {
-            if (e.target.type === 'checkbox' && e.target.id.startsWith('cb')) {
-                updateLivePreview();
+    if (rawEntValue.includes('|')) {
+        let parts = rawEntValue.split('|');
+        finalIdEnt = parts[0].trim();
+        finalIdCont = parts[1].trim();
+        finalNomEnt = parts.length >= 3 ? parts[2].trim() : "";
+    } else {
+        finalNomEnt = rawEntValue;
+        finalIdEnt = "";
+        finalIdCont = "";
+    }
+
+    const idValue = document.getElementById('formId').value;
+    
+    // 2. LE CERVEAU DU MOUCHARD (ACCUMULATEUR)
+    let logIntelligent = "Création du dossier étudiant.";
+    if (idValue) {
+        const ancienEtu = fullData.find(x => x.id === idValue);
+        const newStatut = document.getElementById('formStatut').value;
+        const newClasse = (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim();
+        const newEnt = finalNomEnt; 
+
+        if (ancienEtu) {
+            const newRefPerso = document.getElementById('formReferent').value;
+            const newCampus = document.getElementById('formCampus') ? document.getElementById('formCampus').value : "";
+            const newFaitCV = document.getElementById('formFaitCV').value;
+            const newFaitLI = document.getElementById('formFaitLI').value;
+            const newForceTypo = document.getElementById('formForceTypo').value;
+            const newMotif = document.getElementById('formMotif').value;
+
+            const oldStatut = ancienEtu.statut || "";
+            const oldClasse = ancienEtu.classe || "";
+            const oldEnt = ancienEtu.entreprise || "";
+            const oldRefPerso = ancienEtu.refPerso || "";
+            const oldCampus = ancienEtu.campus || "";
+            const oldFaitCV = ancienEtu.faitCV || "Non";
+            const oldFaitLI = ancienEtu.faitLI || "Non";
+            const oldMotif = ancienEtu.motif || "";
+
+            const listModifs = [];
+            if (oldStatut.trim().toLowerCase() !== newStatut.trim().toLowerCase()) {
+                listModifs.push(`Statut ➡️ ${newStatut}`);
             }
-        });
+            if (oldEnt.trim().toLowerCase() !== newEnt.trim().toLowerCase()) {
+                listModifs.push(`Entreprise ➡️ ${newEnt || 'Aucune'}`);
+            }
+            if (oldClasse.trim().toLowerCase() !== newClasse.trim().toLowerCase()) {
+                listModifs.push(`Classe ➡️ ${newClasse || 'Aucune'}`);
+            }
+            if (String(oldRefPerso).trim() !== String(newRefPerso).trim()) {
+                listModifs.push(`Référent ➡️ ${newRefPerso || 'Non assigné'}`);
+            }
+            if (oldCampus.trim() !== newCampus.trim()) {
+                listModifs.push(`Campus ➡️ ${newCampus || 'Non défini'}`);
+            }
+            if (oldFaitCV.trim().toLowerCase() !== newFaitCV.trim().toLowerCase()) {
+                listModifs.push(`Atelier CV ➡️ ${newFaitCV}`);
+            }
+            if (oldFaitLI.trim().toLowerCase() !== newFaitLI.trim().toLowerCase()) {
+                listModifs.push(`Atelier LinkedIn ➡️ ${newFaitLI}`);
+            }
+            if (oldMotif.trim() !== newMotif.trim()) {
+                listModifs.push(`Motif sortie ➡️ ${newMotif || 'Aucun'}`);
+            }
 
-        // Calculer automatiquement à l'ouverture de la modale
-        const originalOpenModal = openModal;
-        openModal = function() {
-            originalOpenModal(); // Ouvre la fenêtre normalement
-            setTimeout(updateLivePreview, 200); // Lance le calcul 0.2s plus tard
-        };
-
-   
-// ==========================================
-        // GESTION DU TEMPLATE RELANCE HEBDO
-        // ==========================================
-        async function loadTemplate() {
-            try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTemplateRelance' }) });
-                const data = await res.json();
-                if (data.success) {
-                    document.getElementById('htmlEditor').value = data.template;
-                }
-            } catch (err) {
-                console.error("Erreur chargement template :", err);
+            if (listModifs.length > 0) {
+                logIntelligent = "Mise à jour : " + listModifs.join(" | ");
+            } else {
+                logIntelligent = "Mise à jour des coordonnées.";
             }
         }
+    }
 
-        async function saveTemplate() {
-            const btn = document.getElementById('btnSaveTemplate');
-            const htmlCode = document.getElementById('htmlEditor').value;
+    // 3. LE COLIS
+    const payload = {
+        action: idValue ? 'updateStudent' : 'addStudent',
+        id_etu: idValue,
+        nom: document.getElementById('formNom').value,
+        prenom: document.getElementById('formPrenom').value,
+        mail: document.getElementById('formMail').value,
+        tel: document.getElementById('formTel').value,
+        refPerso: document.getElementById('formReferent').value,
+        id_ent: finalIdEnt,
+        id_cont: finalIdCont,
+        entreprise: finalNomEnt, // <-- LA FAMEUSE COLONNE V
+        statut: document.getElementById('formStatut').value,
+        classe: (document.getElementById('formNewClasse').value.trim() || document.getElementById('formClasse').value).trim(),
+        campus: document.getElementById('formCampus') ? document.getElementById('formCampus').value : "",
+        forceTypo: document.getElementById('formForceTypo').value,
+        faitCV: document.getElementById('formFaitCV').value,
+        faitLI: document.getElementById('formFaitLI').value,
+        cv: finalCvUrl,
+        entree: document.getElementById('formEntree').value,
+        sortie: document.getElementById('formSortie').value,
+        motifSortie: document.getElementById('formMotif').value,
+        detailsLog: logIntelligent // <-- L'HISTORIQUE EST LÀ
+    };
+
+    const res = await apiPost(payload);
+    
+    const btn = document.getElementById('btnSave');
+    btn.disabled = false; 
+    btn.innerText = "Enregistrer";
+    
+    if (res.success) {
+        closeModal();
+        setTimeout(() => { loadDashboardData(); }, 3000); 
+    } else {
+        alert("Erreur : " + res.message);
+    }
+}
+// ==============================================================
+// ==============================================================
+
+
+        // EXPORT COMPLET (Synchronisé avec les filtres affichés)
+        function exportEtudiantsCSV() {
+            let csv = "Nom;Prenom;Mail Etudiant;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Dernier Echange\n";
             
-            btn.innerText = "⏳ Sauvegarde..."; btn.disabled = true;
-            try {
-                const res = await apiPost({ action: 'saveTemplateRelance', template: htmlCode });
-                
-                alert(data.message);
-            } catch (err) {
-                alert("Erreur lors de la sauvegarde.");
-            } finally {
-                btn.innerText = "💾 Sauvegarder"; btn.disabled = false;
-            }
-        }
+            // On récupère les données exactes qui sont affichées (filtrées)
+            const filteredData = getFilteredData();
 
-        async function testTemplate() {
-            const emailTest = prompt("À quelle adresse email voulez-vous envoyer le test ?");
-            if (!emailTest || !emailTest.includes('@')) return; 
+            filteredData.forEach(e => {
+                let mail1 = "", tel1 = "", mail2 = "", tel2 = "";
+                if (e.id_ent && catalogueTuteurs) {
+                    const ent = catalogueTuteurs.find(t => String(t.id || t.id_ent) === String(e.id_ent));
+                    if (ent && ent.contacts) {
+                        const cont = ent.contacts.find(c => String(c.id_contact) === String(e.id_cont));
+                        if (cont) { mail1 = cont.email || ""; tel1 = cont.tel || ""; mail2 = cont.mail2 || ""; tel2 = cont.tel2 || ""; }
+                    }
+                }
+                const dateEch = e.dernierEchange ? new Date(e.dernierEchange).toLocaleDateString('fr-FR') : '';
+                csv += `"${e.nom}";"${e.prenom}";"${e.mail || ''}";"${e.tel || ''}";"${e.classe || ''}";"${e.statut || ''}";"${e.typo || ''}";"${e.entreprise || ''}";"${mail1}";"${tel1}";"${mail2}";"${tel2}";"${dateEch}"\n`;
+            });
 
-            try {
-                // On met une petite alerte car l'envoi peut prendre 1 ou 2 secondes
-                console.log("Envoi du test en cours...");
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testTemplateRelance', email: emailTest }) });
-                const data = await res.json();
-                alert(data.message);
-            } catch (err) {
-                alert("Erreur lors de l'envoi du test.");
-            }
-        }
-
-        // On charge le template automatiquement quand la page s'ouvre
-        document.addEventListener('DOMContentLoaded', loadTemplate);
-        function toggleMotifSortie() {
-            const isChecked = document.getElementById('cbSortis').checked;
-            document.getElementById('divMotifSortie').classList.toggle('hidden', !isChecked);
-            // On décoche les autres cases si on choisit "Sortis" (pour éviter les mélanges)
-            if (isChecked) {
-                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    if (cb.id !== 'cbSortis') cb.checked = false;
-                });
-            }
-            updateLivePreview(); 
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "Export_HECG_Etudiants_Filtres.csv"; link.click();
         }
     </script>
 </body>
