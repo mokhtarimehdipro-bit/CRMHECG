@@ -892,9 +892,9 @@ async function envoyerSaveEtu(finalCvUrl) {
     
     if (res.success) {
         closeModal();
-        setTimeout(() => { loadDashboardData(); }, 3000); 
+        loadDashboardData();
     } else {
-        alert("Erreur : " + res.message);
+        showToast('Erreur sauvegarde : ' + (res.message || 'Échec inconnu'), true);
     }
 }
 // ==============================================================
