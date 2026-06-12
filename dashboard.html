@@ -64,7 +64,7 @@
                 <div class="text-3xl">🔍</div>
             </div>
             <div class="bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between">
-                <div><p class="text-[10px] font-black text-red-600 uppercase">Sorties / Refusés</p><p class="text-3xl font-black text-red-700" id="kpi-sorties">0</p></div>
+                <div><p class="text-[10px] font-black text-red-600 uppercase">Sorties</p><p class="text-3xl font-black text-red-700" id="kpi-sorties">0</p></div>
                 <div class="text-3xl">❌</div>
             </div>
             
@@ -91,8 +91,10 @@
                 <option value="actifs">✅ Actifs (Inscrits & Préinscrits)</option>
                 <option value="inscrit">🎓 Inscrits uniquement</option>
                 <option value="préinscrit">⏳ Préinscrits uniquement</option>
+                <option value="en contrat">💼 En contrat</option>
                 <option value="prospect">🎯 Prospects</option>
-                <option value="sortie">❌ Sorties (Archivés)</option>
+                <option value="non su">❓ Non su</option>
+                <option value="sortie">❌ Sorties</option>
                 <option value="tous">🌍 Tous</option>
             </select>
 
@@ -109,8 +111,10 @@
             <select id="fStatut" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
                 <option value="">🎯 Tous statuts</option>
                 <option value="recherche">🔍 En recherche</option>
-                <option value="alternance">🏢 En Alternance</option>
                 <option value="initial">🎒 En initial</option>
+                <option value="alternance">🏢 En alternance</option>
+                <option value="contrat">💼 En contrat</option>
+                <option value="non su">❓ Non su</option>
             </select>
 
             <select id="fAtelier" onchange="renderTable()" class="...">
@@ -223,19 +227,19 @@
                         <label class="block text-[10px] uppercase font-black text-[#1A4E8A] mb-1 ml-2">Statut Employabilité</label>
                         <select id="formStatut" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500">
                             <option value="En recherche">🔍 En recherche</option>
-                            <option value="En Alternance">🏢 En Alternance</option>
-                            <option value="En Initial">🎒 En Initial</option>
+                            <option value="En Initial">🎒 En initial</option>
+                            <option value="En Alternance">🏢 En alternance</option>
+                            <option value="En contrat">💼 En contrat</option>
+                            <option value="Non su">❓ Non su</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase font-black text-gray-500 mb-1 ml-2">Typologie</label>
                         <select id="formForceTypo" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none">
-                            <option value="Prospect">Prospect</option>
-                            <option value="Préinscrit">Préinscrit</option>
-                            <option value="Inscrit">Inscrit</option>
-                            <option value="Sortie">Sortie</option>
-                            <option value="En contrat">En contrat</option>
-                            <option value="Non su">Non su</option>
+                            <option value="Prospect">🎯 Prospect</option>
+                            <option value="Préinscrit">⏳ Préinscrit</option>
+                            <option value="Inscrit">🎓 Inscrit</option>
+                            <option value="Sortie">❌ Sortie</option>
                         </select>
                     </div>
                 </div>
@@ -509,8 +513,10 @@ async function apiPost(payload) {
                 else if (fTy === "actifs") matchTypo = (typoLow === "inscrit" || typoLow === "préinscrit");
                 else if (fTy === "inscrit") matchTypo = (typoLow === "inscrit");
                 else if (fTy === "préinscrit") matchTypo = (typoLow === "préinscrit");
+                else if (fTy === "en contrat") matchTypo = (typoLow === "en contrat");
                 else if (fTy === "prospect") matchTypo = (typoLow === "prospect");
-                else if (fTy === "sortie") matchTypo = (typoLow === "sortie" || typoLow === "refusé");
+                else if (fTy === "non su") matchTypo = (typoLow === "non su");
+                else if (fTy === "sortie") matchTypo = (typoLow === "sortie");
 
                 // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
                 if (fSe.length > 2) matchTypo = true;
@@ -560,11 +566,11 @@ async function apiPost(payload) {
                 const s = (e.statut || "").toLowerCase();
                 const t = (e.typo || "").toLowerCase();
 
-                if(s.includes('alternance') || s.includes('placé') || s.includes('poste')) countAlt++;
+                if(s.includes('alternance')) countAlt++;
                 else if(s.includes('initial')) countInit++;
-                else countRech++;
+                else if(s.includes('recherche')) countRech++;
 
-                if(t === 'sortie' || t === 'refusé') countSorties++;
+                if(t === 'sortie') countSorties++;
             });
             
             document.getElementById('kpi-tot').innerText = filtered.length;
@@ -597,7 +603,7 @@ async function apiPost(payload) {
                     </td>
                     <td class="p-5">
                         <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
-                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' || e.typo === 'Refusé' ? 'text-red-500' : ''}">${e.typo || 'Prospect'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' ? 'text-red-500' : ''}">${e.typo || 'Non su'}</div>
                     </td>
                     <td class="p-5">${badgeStatut}</td>
                     <td class="p-5 text-[10px] font-bold text-slate-500">
@@ -655,7 +661,7 @@ async function apiPost(payload) {
                 document.getElementById('formNewClasse').value = "";
                 
                 document.getElementById('formStatut').value = e.statut || "En recherche";
-                document.getElementById('formForceTypo').value = (["Prospect", "Préinscrit", "Inscrit", "Sortie", "En contrat", "Non su"].includes(e.typo)) ? e.typo : "Non su";
+                document.getElementById('formForceTypo').value = (["Prospect", "Préinscrit", "Inscrit", "Sortie"].includes(e.typo)) ? e.typo : "Prospect";
                 
                 document.getElementById('formFaitCV').value = e.faitCV || "Non";
                 document.getElementById('formFaitLI').value = e.faitLI || "Non";
@@ -684,7 +690,7 @@ async function apiPost(payload) {
                 document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
                 document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
                 if(document.getElementById('formCampus')) document.getElementById('formCampus').value = "";
-                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Non su";
+                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Prospect";
                 document.getElementById('formFaitCV').value = "Non"; document.getElementById('formFaitLI').value = "Non";
                 document.getElementById('formCVUrl').value = ""; document.getElementById('formCVFile').value = "";
                 document.getElementById('formEntree').value = ""; document.getElementById('formSortie').value = ""; document.getElementById('formMotif').value = "";
