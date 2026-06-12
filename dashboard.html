@@ -230,7 +230,7 @@
                     <div>
                         <label class="block text-[10px] uppercase font-black text-gray-500 mb-1 ml-2">Forcer Typologie</label>
                         <select id="formForceTypo" class="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-bold bg-white outline-none">
-                            <option value="Auto">✨ Automatique</option>
+                            <option value="">— Calculé automatiquement —</option>
                             <option value="Prospect">🎯 Prospect</option>
                             <option value="Préinscrit">⏳ Préinscrit</option>
                             <option value="Attente">⏳ En Attente</option>
@@ -654,7 +654,7 @@ async function apiPost(payload) {
                 document.getElementById('formNewClasse').value = "";
                 
                 document.getElementById('formStatut').value = e.statut || "En recherche";
-                document.getElementById('formForceTypo').value = (["Refusé", "Attente", "Prospect", "Préinscrit", "Sortie"].includes(e.typo)) ? e.typo : "Auto";
+                document.getElementById('formForceTypo').value = (["Refusé", "Attente", "Prospect", "Préinscrit", "Sortie"].includes(e.typo)) ? e.typo : "";
                 
                 document.getElementById('formFaitCV').value = e.faitCV || "Non";
                 document.getElementById('formFaitLI').value = e.faitLI || "Non";
@@ -683,7 +683,7 @@ async function apiPost(payload) {
                 document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
                 document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
                 if(document.getElementById('formCampus')) document.getElementById('formCampus').value = "";
-                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "Auto";
+                document.getElementById('formStatut').value = "En recherche"; document.getElementById('formForceTypo').value = "";
                 document.getElementById('formFaitCV').value = "Non"; document.getElementById('formFaitLI').value = "Non";
                 document.getElementById('formCVUrl').value = ""; document.getElementById('formCVFile').value = "";
                 document.getElementById('formEntree').value = ""; document.getElementById('formSortie').value = ""; document.getElementById('formMotif').value = "";
