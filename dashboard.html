@@ -8,6 +8,7 @@
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        #toastMsg { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); z-index:9999; padding:1rem 2rem; border-radius:1rem; font-weight:800; font-size:.95rem; box-shadow:0 8px 32px rgba(0,0,0,.18); transition:opacity .4s; pointer-events:none; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -23,6 +24,9 @@
                 <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
                 <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
                 <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+                <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
                 <a href="historique.html" id="navHistorique" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium">Historique</a>
 
             </div>
@@ -149,6 +153,8 @@
             </div>
         </div>
     </main>
+
+    <div id="toastMsg" style="display:none"></div>
 
     <!-- MOTIF MODAL -->
     <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
@@ -341,6 +347,11 @@ async function apiPost(payload) {
                     const navHist = document.getElementById('navHistorique');
                     if (user.role === 'Administrateur' && navHist) {
                         navHist.classList.remove('hidden');
+                    }
+                    if (user.vieScRole) { const el = document.getElementById('navVieScolaire'); if (el) el.classList.remove('hidden'); }
+                    if (user.email) {
+                        const tEl = document.getElementById('navTrophees'); if (tEl) { tEl.classList.remove('hidden'); }
+                        if (localStorage.getItem('hecg_trophees_new')) { const b = document.getElementById('navTropheesBadge'); if (b) b.style.display = 'inline-block'; }
                     }
 
                     document.getElementById('welcomeMsg').innerText = "Ravi de vous voir, " + (user.nom || "Collaborateur");
@@ -698,19 +709,40 @@ async function apiPost(payload) {
             const motif = document.getElementById('motifInput').value.trim();
             if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
             document.getElementById('motifInput').style.borderColor = '';
+            const cb = _motifCallback;
             closeMotifModal();
-            if (_motifCallback) _motifCallback(motif);
+            if (cb) cb(motif);
         }
+        function showToast(msg, isError) {
+            const t = document.getElementById('toastMsg');
+            t.textContent = msg;
+            t.style.background = isError ? '#ef4444' : '#22c55e';
+            t.style.color = '#fff';
+            t.style.display = 'block';
+            t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.style.display = 'none', 400); }, 4000);
+        }
+
         function deleteCurrentStudent() {
             const id = document.getElementById('formId').value;
             if (!id) return;
             const etu = fullData.find(x => x.id === id);
             const nom = etu ? ((etu.prenom || '') + ' ' + (etu.nom || '')).trim() : id;
-            closeModal(); // ferme la fiche avant le dialog de confirmation
+            closeModal();
             askMotif('Supprimer l\'étudiant "' + nom + '" définitivement ?', async (motif) => {
-                const res = await apiPost({ action: 'deleteStudent', id, motif });
-                if (res.success) loadDashboardData();
-                else alert('Erreur : ' + res.message);
+                const btnConf = document.querySelector('#motifModal button[onclick="confirmMotifDelete()"]');
+                if (btnConf) { btnConf.textContent = 'Suppression...'; btnConf.disabled = true; }
+                try {
+                    const res = await apiPost({ action: 'deleteStudent', id, motif });
+                    if (res.success) {
+                        showToast('Étudiant supprimé avec succès.', false);
+                        loadDashboardData();
+                    } else {
+                        showToast('Erreur : ' + (res.message || 'Échec inconnu'), true);
+                    }
+                } catch(e) {
+                    showToast('Erreur réseau : ' + e.message, true);
+                }
             });
         }
 
