@@ -664,14 +664,10 @@ async function sendMail(cmpId, isTest) {
     btns.forEach(b => { b.innerText = "Calcul..."; b.disabled = true; });
 
     try {
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ 
-                action: 'previewComMail', 
-                type: cmp.type, campus: cmp.campus, cible: cmp.cible, emailsLibres: cmp.emailsLibres
-            }) 
+        const d = await apiPost({
+            action: 'previewComMail',
+            type: cmp.type, campus: cmp.campus, cible: cmp.cible, emailsLibres: cmp.emailsLibres
         });
-        const d = await res.json();
         
         btns.forEach(b => { b.innerText = "Envoi Réel 🚀"; b.disabled = false; });
 
