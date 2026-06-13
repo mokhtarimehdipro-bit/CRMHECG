@@ -278,18 +278,25 @@ async function apiPost(payload) {
                 if (s === 'Annulé') return '<span class="px-2 py-1 bg-gray-200 text-gray-600 rounded-full text-[10px] font-black">Annulé</span>';
                 return '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-black">' + (s || 'À faire') + '</span>';
             };
+            const typeBadge = (t) => t === 'Étudiant'
+                ? '<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black">🎓 Étudiant</span>'
+                : '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-black">🏢 Entreprise</span>';
+            const sujetLink = (a) => a.type === 'Partenaire'
+                ? `<a href="dossier_partenaire.html?id=${a.sujetId}" target="_blank" class="hover:underline font-bold text-[#1A4E8A]">${a.sujetNom}</a>`
+                : `<span class="font-bold text-blue-700">${a.sujetNom}</span>`;
             grid.innerHTML = `
                 <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
                     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                         <span class="font-black text-[#1A4E8A] text-lg">Historique complet — ${data.length} alerte(s)</span>
-                        <input type="text" id="histSearch" oninput="filterHistory()" placeholder="Rechercher entreprise / auteur…" class="border-2 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#1A4E8A] w-64">
+                        <input type="text" id="histSearch" oninput="filterHistory()" placeholder="Rechercher nom / auteur…" class="border-2 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#1A4E8A] w-64">
                     </div>
                     <div class="overflow-x-auto">
                     <table class="w-full text-sm" id="histTable">
                         <thead class="bg-gray-50 text-xs uppercase text-gray-400 font-black">
                             <tr>
                                 <th class="px-4 py-3 text-left">ID</th>
-                                <th class="px-4 py-3 text-left">Entreprise</th>
+                                <th class="px-4 py-3 text-left">Type</th>
+                                <th class="px-4 py-3 text-left">Nom</th>
                                 <th class="px-4 py-3 text-left">Date</th>
                                 <th class="px-4 py-3 text-left">Fréquence</th>
                                 <th class="px-4 py-3 text-left">Statut</th>
@@ -299,11 +306,10 @@ async function apiPost(payload) {
                         </thead>
                         <tbody id="histBody">
                         ${data.map(a => `
-                            <tr class="border-t border-gray-50 hover:bg-gray-50 transition hist-row" data-search="${(a.nomPartenaire + ' ' + a.auteur + ' ' + a.msg).toLowerCase()}">
+                            <tr class="border-t border-gray-50 hover:bg-gray-50 transition hist-row" data-search="${(a.sujetNom + ' ' + (a.auteur||'') + ' ' + a.msg).toLowerCase()}">
                                 <td class="px-4 py-3 text-[10px] font-black text-gray-400">${a.id}</td>
-                                <td class="px-4 py-3 font-bold text-[#1A4E8A]">
-                                    <a href="dossier_partenaire.html?id=${a.partId}" target="_blank" class="hover:underline">${a.nomPartenaire}</a>
-                                </td>
+                                <td class="px-4 py-3">${typeBadge(a.type)}</td>
+                                <td class="px-4 py-3">${sujetLink(a)}</td>
                                 <td class="px-4 py-3 font-bold text-gray-600 whitespace-nowrap">${a.date}</td>
                                 <td class="px-4 py-3 text-gray-500 font-bold">${a.freq}</td>
                                 <td class="px-4 py-3">${statutBadge(a.statut)}</td>
