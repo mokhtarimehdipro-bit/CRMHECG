@@ -9,6 +9,12 @@
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         #toastMsg { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); z-index:9999; padding:1rem 2rem; border-radius:1rem; font-weight:800; font-size:.95rem; box-shadow:0 8px 32px rgba(0,0,0,.18); transition:opacity .4s; pointer-events:none; }
+        .ms-btn { border:2px solid #f3f4f6; padding:10px 14px; border-radius:16px; font-size:13px; font-weight:700; background:white; white-space:nowrap; display:flex; align-items:center; gap:8px; cursor:pointer; justify-content:space-between; transition:border-color .15s; }
+        .ms-btn:hover { border-color:#1A4E8A; }
+        .ms-dropdown { position:absolute; top:calc(100% + 6px); left:0; min-width:max-content; background:white; border:1px solid #e5e7eb; border-radius:16px; padding:6px; z-index:200; box-shadow:0 8px 32px rgba(0,0,0,.12); }
+        .ms-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:12px; font-weight:700; user-select:none; }
+        .ms-item:hover { background:#f0f4f8; }
+        .ms-item input[type="checkbox"] { accent-color:#1A4E8A; width:14px; height:14px; cursor:pointer; flex-shrink:0; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -82,56 +88,78 @@
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 grid grid-cols-1 md:grid-cols-8 gap-4 items-center">
-            <div class="md:col-span-2 relative">
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-8 flex flex-wrap gap-3 items-center">
+            <div class="relative flex-1 min-w-[180px]">
                 <input type="text" id="fSearch" onkeyup="renderTable()" placeholder="🔍 Chercher un nom ou prénom..." class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm bg-white outline-none focus:border-[#1A4E8A] font-bold">
             </div>
-            
-            <select id="fTypo" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-                <option value="actifs">✅ Actifs (Inscrits & Préinscrits)</option>
-                <option value="inscrit">🎓 Inscrits uniquement</option>
-                <option value="préinscrit">⏳ Préinscrits uniquement</option>
-                <option value="prospect">🎯 Prospects</option>
-                <option value="sortie">❌ Sorties</option>
-                <option value="tous">🌍 Tous</option>
+
+            <!-- Filtre Typologie -->
+            <div class="relative" id="wrap-fTypo">
+                <button class="ms-btn" id="fTypo-btn" onclick="toggleMsDropdown('fTypo')">
+                    <span id="fTypo-label">✅ Actifs</span><span style="font-size:11px;color:#9ca3af">▾</span>
+                </button>
+                <div id="fTypo-dropdown" class="ms-dropdown hidden">
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="inscrit" checked onchange="onMsChange('fTypo')"> 🎓 Inscrits</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="préinscrit" checked onchange="onMsChange('fTypo')"> ⏳ Préinscrits</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="prospect" onchange="onMsChange('fTypo')"> 🎯 Prospects</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="sortie" onchange="onMsChange('fTypo')"> ❌ Sorties</label>
+                </div>
+            </div>
+
+            <!-- Filtre Campus -->
+            <div class="relative" id="wrap-fCampus">
+                <button class="ms-btn" id="fCampus-btn" onclick="toggleMsDropdown('fCampus')">
+                    <span id="fCampus-label">🌍 Tous les campus</span><span style="font-size:11px;color:#9ca3af">▾</span>
+                </button>
+                <div id="fCampus-dropdown" class="ms-dropdown hidden">
+                    <label class="ms-item"><input type="checkbox" data-filter="fCampus" value="HECG" onchange="onMsChange('fCampus')"> 📍 Marseille</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fCampus" value="HECG_AIX" onchange="onMsChange('fCampus')"> 📍 Aix-en-Provence</label>
+                </div>
+            </div>
+
+            <!-- Filtre Classe (peuplé dynamiquement) -->
+            <div class="relative" id="wrap-fClasse">
+                <button class="ms-btn" id="fClasse-btn" onclick="toggleMsDropdown('fClasse')">
+                    <span id="fClasse-label">🎓 Toutes les classes</span><span style="font-size:11px;color:#9ca3af">▾</span>
+                </button>
+                <div id="fClasse-dropdown" class="ms-dropdown hidden" style="max-height:260px;overflow-y:auto;">
+                    <!-- peuplé par setupSelectors() -->
+                </div>
+            </div>
+
+            <!-- Filtre Statut -->
+            <div class="relative" id="wrap-fStatut">
+                <button class="ms-btn" id="fStatut-btn" onclick="toggleMsDropdown('fStatut')">
+                    <span id="fStatut-label">🎯 Tous statuts</span><span style="font-size:11px;color:#9ca3af">▾</span>
+                </button>
+                <div id="fStatut-dropdown" class="ms-dropdown hidden">
+                    <label class="ms-item"><input type="checkbox" data-filter="fStatut" value="recherche" onchange="onMsChange('fStatut')"> 🔍 En recherche</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fStatut" value="initial" onchange="onMsChange('fStatut')"> 🎒 En initial</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fStatut" value="alternance" onchange="onMsChange('fStatut')"> 🏢 En alternance</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fStatut" value="contrat" onchange="onMsChange('fStatut')"> 💼 En contrat</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fStatut" value="non su" onchange="onMsChange('fStatut')"> ❓ Non su</label>
+                </div>
+            </div>
+
+            <!-- Atelier (reste single-select) -->
+            <select id="fAtelier" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="">🛠️ Ateliers</option>
+                <option value="CV">✅ CV Fait</option>
+                <option value="CV_NON">❌ CV Non Fait</option>
+                <option value="LI">✅ LinkedIn Fait</option>
+                <option value="LI_NON">❌ LinkedIn Non Fait</option>
+                <option value="BOTH">⭐ Les deux Faits</option>
             </select>
 
-            <select id="fCampus" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-                <option value="">🌍 Tous les campus</option>
-                <option value="HECG">📍 Marseille</option>
-                <option value="HECG_AIX">📍 Aix-en-Provence</option>
-            </select>
-
-            <select id="fClasse" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
-                <option value="">🎓 Toutes les classes</option>
-            </select>
-
-            <select id="fStatut" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
-                <option value="">🎯 Tous statuts</option>
-                <option value="recherche">🔍 En recherche</option>
-                <option value="initial">🎒 En initial</option>
-                <option value="alternance">🏢 En alternance</option>
-                <option value="contrat">💼 En contrat</option>
-                <option value="non su">❓ Non su</option>
-            </select>
-
-            <select id="fAtelier" onchange="renderTable()" class="...">
-    <option value="">🛠️ Ateliers</option>
-    <option value="CV">✅ CV Fait</option>
-    <option value="CV_NON">❌ CV Non Fait</option>
-    <option value="LI">✅ LinkedIn Fait</option>
-    <option value="LI_NON">❌ LinkedIn Non Fait</option>
-    <option value="BOTH">⭐ Les deux Faits</option>
-</select>
-
-            <select id="fPeriode" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
+            <!-- Période (reste single-select) -->
+            <select id="fPeriode" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
                 <option value="">📞 Dernier échange</option>
-                <option value="7">🟢 < 7 jours</option>
-                <option value="30">🔴 > 30 jours</option>
+                <option value="7">🟢 &lt; 7 jours</option>
+                <option value="30">🔴 &gt; 30 jours</option>
                 <option value="NEVER">⚪ Jamais</option>
             </select>
 
-            <button onclick="resetFilters()" class="col-span-full md:col-span-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-black text-[10px] hover:bg-gray-200 transition uppercase tracking-widest">
+            <button onclick="resetFilters()" class="bg-gray-100 text-gray-500 py-3 px-5 rounded-2xl font-black text-[10px] hover:bg-gray-200 transition uppercase tracking-widest">
                 🔄 Reset
             </button>
         </div>
@@ -405,9 +433,11 @@ async function apiPost(payload) {
         // --- 2. GESTION DES MENUS ---
         function setupSelectors() {
             const classes = [...new Set(fullData.map(e => e.classe).filter(Boolean))].sort();
-            
-            const fCl = document.getElementById('fClasse');
-            if(fCl) fCl.innerHTML = '<option value="">🎓 Toutes les classes</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+
+            const fClDropdown = document.getElementById('fClasse-dropdown');
+            if(fClDropdown) {
+                fClDropdown.innerHTML = classes.map(c => `<label class="ms-item"><input type="checkbox" data-filter="fClasse" value="${c}" onchange="onMsChange('fClasse')"> ${c}</label>`).join('');
+            }
             
             const formCl = document.getElementById('formClasse');
             if(formCl) formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -472,16 +502,61 @@ async function apiPost(payload) {
             renderTable();
         }
 
+        // --- HELPERS MULTI-SELECT DROPDOWNS ---
+        const MS_FILTER_IDS = ['fTypo', 'fCampus', 'fClasse', 'fStatut'];
+
+        function getCheckedValues(filterId) {
+            return [...document.querySelectorAll(`input[data-filter="${filterId}"]:checked`)].map(cb => cb.value);
+        }
+
+        function toggleMsDropdown(id) {
+            const dd = document.getElementById(id + '-dropdown');
+            const wasHidden = dd.classList.contains('hidden');
+            MS_FILTER_IDS.forEach(f => document.getElementById(f + '-dropdown').classList.add('hidden'));
+            if (wasHidden) dd.classList.remove('hidden');
+        }
+
+        function onMsChange(filterId) {
+            updateMsLabel(filterId);
+            renderTable();
+        }
+
+        function updateMsLabel(filterId) {
+            const checked = getCheckedValues(filterId);
+            const labelEl = document.getElementById(filterId + '-label');
+            if (!labelEl) return;
+            const defaults = { fTypo: '🌍 Tous', fCampus: '🌍 Tous les campus', fClasse: '🎓 Toutes les classes', fStatut: '🎯 Tous statuts' };
+            const singleLabels = {
+                fTypo: { inscrit: '🎓 Inscrits', 'préinscrit': '⏳ Préinscrits', prospect: '🎯 Prospects', sortie: '❌ Sorties' },
+                fCampus: { HECG: '📍 Marseille', HECG_AIX: '📍 Aix-en-Provence' },
+                fStatut: { recherche: '🔍 Recherche', initial: '🎒 Initial', alternance: '🏢 Alternance', contrat: '💼 Contrat', 'non su': '❓ Non su' }
+            };
+            if (checked.length === 0) { labelEl.textContent = defaults[filterId]; return; }
+            if (filterId === 'fTypo' && checked.length === 2 && checked.includes('inscrit') && checked.includes('préinscrit')) {
+                labelEl.textContent = '✅ Actifs'; return;
+            }
+            if (checked.length === 1) {
+                const lbl = (singleLabels[filterId] || {})[checked[0]];
+                labelEl.textContent = lbl || checked[0]; return;
+            }
+            labelEl.textContent = checked.length + ' sélectionnés';
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!MS_FILTER_IDS.some(f => e.target.closest('#wrap-' + f))) {
+                MS_FILTER_IDS.forEach(f => { const dd = document.getElementById(f + '-dropdown'); if(dd) dd.classList.add('hidden'); });
+            }
+        });
+
         // --- 3. FILTRES & TABLEAU & KPI ---
         function getFilteredData() {
-            // On supprime les tirets et les espaces pour une recherche sans erreur
             const fSe = document.getElementById('fSearch').value.toLowerCase().replace(/[_ \-]/g, '');
-            const fTy = document.getElementById('fTypo').value;
-            const fCl = document.getElementById('fClasse').value;
-            const fSt = document.getElementById('fStatut').value.toLowerCase();
+            const selTypos = getCheckedValues('fTypo');
+            const selClasses = getCheckedValues('fClasse');
+            const selStatuts = getCheckedValues('fStatut');
+            const selCampus = getCheckedValues('fCampus');
             const fAt = document.getElementById('fAtelier').value;
             const fPe = document.getElementById('fPeriode').value;
-            const fCa = document.getElementById('fCampus') ? document.getElementById('fCampus').value : "";
             const fRef = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
             const now = new Date();
 
@@ -497,29 +572,21 @@ async function apiPost(payload) {
                     
                     // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
                     const matchName = (e.id + " " + e.nom + " " + e.prenom).toLowerCase().includes(fSe);
-                    const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                    const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                     const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
                     
                     return isAlumni && matchName && matchCampus && matchReferent;
                 }
 
                 // 2. LOGIQUE CLASSIQUE (Quand le bouton Alumni est éteint)
-                let matchTypo = false;
                 const typoLow = (e.typo || "").toLowerCase();
-                
-                if (fTy === "tous") matchTypo = true;
-                else if (fTy === "actifs") matchTypo = (typoLow === "inscrit" || typoLow === "préinscrit");
-                else if (fTy === "inscrit") matchTypo = (typoLow === "inscrit");
-                else if (fTy === "préinscrit") matchTypo = (typoLow === "préinscrit");
-                else if (fTy === "prospect") matchTypo = (typoLow === "prospect");
-                else if (fTy === "sortie") matchTypo = (typoLow === "sortie");
-
+                let matchTypo = selTypos.length === 0 || selTypos.includes(typoLow);
                 // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
                 if (fSe.length > 2) matchTypo = true;
 
                 const matchName = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().includes(fSe);
-                const matchClass = !fCl || (e.classe && e.classe === fCl);
-                const matchStatut = !fSt || (e.statut && e.statut.toLowerCase().includes(fSt));
+                const matchClass = selClasses.length === 0 || selClasses.includes(e.classe || '');
+                const matchStatut = selStatuts.length === 0 || selStatuts.some(s => (e.statut || '').toLowerCase().includes(s));
                 
                 let matchAt = true;
                 
@@ -547,7 +614,7 @@ async function apiPost(payload) {
                     }
                 }
                 
-                const matchCampus = !fCa || (e.campus && e.campus === fCa);
+                const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                 const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
 
                 return matchTypo && matchName && matchClass && matchStatut && matchAt && matchPe && matchCampus && matchReferent;
@@ -620,17 +687,19 @@ async function apiPost(payload) {
 
         function resetFilters() {
             document.getElementById('fSearch').value = "";
-            document.getElementById('fTypo').value = "actifs";
-            document.getElementById('fClasse').value = "";
-            document.getElementById('fStatut').value = "";
+            // fTypo : recocher inscrit + préinscrit (= Actifs par défaut)
+            document.querySelectorAll('input[data-filter="fTypo"]').forEach(cb => {
+                cb.checked = (cb.value === 'inscrit' || cb.value === 'préinscrit');
+            });
+            // Décocher tous les autres filtres multi-select
+            document.querySelectorAll('input[data-filter="fClasse"], input[data-filter="fStatut"], input[data-filter="fCampus"]').forEach(cb => cb.checked = false);
+            MS_FILTER_IDS.forEach(f => updateMsLabel(f));
             document.getElementById('fAtelier').value = "";
             document.getElementById('fPeriode').value = "";
-            if(document.getElementById('fCampus')) document.getElementById('fCampus').value = "";
             if(document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
-            
-            // Remise à zéro du bouton Alumni
+
             if (showAlumniOnly) {
-                toggleAlumni(); // Cela va aussi déclencher renderTable()
+                toggleAlumni();
             } else {
                 renderTable();
             }
