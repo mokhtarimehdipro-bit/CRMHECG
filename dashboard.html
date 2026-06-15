@@ -603,7 +603,7 @@ async function apiPost(payload) {
                     </td>
                     <td class="p-5">
                         <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
-                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${e.typo === 'Sortie' ? 'text-red-500' : ''}">${e.typo || 'Non su'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${(e.typo||'').toLowerCase() === 'sortie' ? 'text-red-500' : ''}">${e.typo || 'Non su'}</div>
                     </td>
                     <td class="p-5">${badgeStatut}</td>
                     <td class="p-5 text-[10px] font-bold text-slate-500">
