@@ -660,8 +660,22 @@ async function apiPost(payload) {
                 if(document.getElementById('formCampus')) document.getElementById('formCampus').value = e.campus || "";
                 document.getElementById('formNewClasse').value = "";
                 
-                document.getElementById('formStatut').value = e.statut || "En recherche";
-                document.getElementById('formForceTypo').value = (["Prospect", "Préinscrit", "Inscrit", "Sortie"].includes(e.typo)) ? e.typo : "Prospect";
+                // Normalisation statut (insensible à la casse, valeurs legacy incluses)
+                const _st = (e.statut || "").toLowerCase();
+                const _statut = _st.includes('alternance') ? "En Alternance"
+                    : _st.includes('initial')    ? "En Initial"
+                    : _st.includes('contrat')    ? "En contrat"
+                    : _st.includes('non su')     ? "Non su"
+                    : "En recherche";
+                document.getElementById('formStatut').value = _statut;
+                // Normalisation typologie (insensible à la casse, valeurs legacy incluses)
+                const _ty = (e.typo || "").toLowerCase().trim();
+                const _typo = (_ty.includes('préin') || _ty.includes('prein')) ? "Préinscrit"
+                    : _ty.includes('sorti')     ? "Sortie"
+                    : _ty.includes('inscrit')   ? "Inscrit"
+                    : _ty.includes('prospect')  ? "Prospect"
+                    : "Prospect";
+                document.getElementById('formForceTypo').value = _typo;
                 
                 document.getElementById('formFaitCV').value = e.faitCV || "Non";
                 document.getElementById('formFaitLI').value = e.faitLI || "Non";
