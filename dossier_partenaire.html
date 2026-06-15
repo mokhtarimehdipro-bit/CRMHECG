@@ -472,10 +472,18 @@
         }
 
         function deleteEnterprise() {
+            const idASupprimer = partId;
             askMotif('Supprimer l\'entreprise "' + nomEntrepriseActuelle + '" et TOUS ses contacts ?', async (motif) => {
-                const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId, motif });
-                if (res.success) { alert('Entreprise supprimée.'); window.close(); }
-                else alert('Erreur : ' + res.message);
+                try {
+                    const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: idASupprimer, motif });
+                    if (res && res.success) {
+                        window.location.href = 'partenaires.html';
+                    } else {
+                        alert('Erreur lors de la suppression : ' + (res ? res.message : 'Réponse invalide du serveur'));
+                    }
+                } catch(e) {
+                    alert('Erreur inattendue : ' + e.message);
+                }
             });
         }
 
@@ -496,8 +504,9 @@
             const motif = document.getElementById('motifInput').value.trim();
             if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
             document.getElementById('motifInput').style.borderColor = '';
+            const cb = _motifCallback;
             closeMotifModal();
-            if (_motifCallback) _motifCallback(motif);
+            if (cb) cb(motif);
         }
 
         async function addContact() {
