@@ -591,7 +591,7 @@
           <p class="text-sm text-gray-400 mt-1">Récapitulatif de tous les e-mails sortants de l'application (campagnes, offres, relances automatiques)</p>
         </div>
         <div class="flex gap-2 items-center">
-          <button onclick="declencherRelanceHebdo()" id="btnRelanceHebdo" class="btn-orange flex items-center gap-2">
+          <button onclick="ouvrirPreviewRelance()" id="btnRelanceHebdo" class="btn-orange flex items-center gap-2">
             <span>Relance hebdo Préinscrits</span>
           </button>
           <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
@@ -665,6 +665,67 @@
       <button onclick="closeMailDetailModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none font-bold">×</button>
     </div>
     <div id="mailDetailContent" class="p-6"></div>
+  </div>
+</div>
+
+<!-- ================== MODAL RELANCE HEBDO PRÉVISUALISATION ================== -->
+<div id="relanceModal" class="modal-overlay hidden" onclick="if(event.target===this)closeRelanceModal()">
+  <div style="background:#fff;border-radius:1rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);width:100%;max-width:960px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 bg-slate-50 rounded-t-2xl flex justify-between items-start">
+      <div>
+        <h3 class="text-lg font-black text-[#1A4E8A]">Relance hebdomadaire — Préinscrits en recherche</h3>
+        <p id="relanceKpi" class="text-sm text-gray-400 mt-0.5"></p>
+      </div>
+      <div class="flex gap-2 items-center shrink-0 ml-4">
+        <button id="btnEnvoyerTous" onclick="envoyerTousRelance()" class="btn-orange text-sm px-4 py-2 hidden">Envoyer à tous</button>
+        <button onclick="closeRelanceModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none font-bold px-1">×</button>
+      </div>
+    </div>
+    <!-- Body -->
+    <div class="flex flex-1 overflow-hidden">
+
+      <!-- Colonne gauche : liste étudiants -->
+      <div class="w-64 shrink-0 border-r border-gray-100 overflow-y-auto p-3 bg-slate-50" id="relanceStudentList">
+        <p class="text-center text-[#1A4E8A] animate-pulse py-8 text-sm">Chargement…</p>
+      </div>
+
+      <!-- Colonne droite : preview + éditeur -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Placeholder -->
+        <div id="relancePreviewEmpty" class="flex-1 flex items-center justify-center text-gray-300 text-sm italic p-8 text-center">
+          Sélectionnez un étudiant dans la liste pour prévisualiser son mail personnalisé.
+        </div>
+
+        <!-- Panel preview -->
+        <div id="relancePreviewPanel" class="hidden flex-1 flex flex-col overflow-hidden">
+          <!-- Barre d'actions du mail sélectionné -->
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white shrink-0">
+            <div>
+              <span id="relanceStudentInfo" class="font-black text-[#1A4E8A] text-sm"></span>
+              <span id="relanceEditBadge" class="hidden ml-2 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">HTML modifié</span>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="resetRelanceHtml()" id="btnResetHtml" class="hidden btn-ghost text-xs py-1 px-3">Réinitialiser</button>
+              <button onclick="toggleRelanceEditor()" id="btnToggleEditor" class="btn-ghost text-xs py-1 px-3">Modifier HTML</button>
+              <button onclick="envoyerUnRelance()" id="btnEnvoyerUn" class="btn-orange text-xs py-1 px-3">Envoyer ce mail</button>
+            </div>
+          </div>
+
+          <!-- Zone preview / éditeur (permutable) -->
+          <div class="flex-1 overflow-hidden flex flex-col relative">
+            <iframe id="relanceIframe" class="flex-1 w-full border-0" srcdoc="" style="min-height:0;"></iframe>
+            <textarea id="relanceEditor" class="hidden flex-1 w-full border-0 p-4 font-mono text-xs resize-none outline-none bg-gray-50" style="min-height:0;" placeholder="HTML du mail…" oninput="onRelanceEditorInput()"></textarea>
+          </div>
+
+          <!-- Barre de validation de l'éditeur -->
+          <div id="relanceEditorBar" class="hidden border-t border-gray-100 bg-white px-4 py-2 flex justify-between items-center shrink-0">
+            <span class="text-xs text-gray-400">Modifiez le HTML puis cliquez sur Appliquer pour rafraîchir l'aperçu.</span>
+            <button onclick="appliquerEditionRelance()" class="btn-primary text-xs py-1.5 px-4">Appliquer l'aperçu</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3840,26 +3901,168 @@ function resetMailsFilters() {
   loadMails();
 }
 
-async function declencherRelanceHebdo() {
-  const btn = document.getElementById('btnRelanceHebdo');
-  if (!btn) return;
-  if (!confirm('Envoyer la relance hebdomadaire nominative a tous les Préinscrits en recherche ayant des offres partagées ?')) return;
-  btn.disabled = true;
-  btn.textContent = 'Envoi en cours…';
-  try {
-    const res = await api('sendRelanceHebdo', {});
-    if (res.success) {
-      toast(res.message || (res.nbMailsEnvoyes + ' mail(s) envoyé(s)'), true);
-      loadMails();
-    } else {
-      toast('Erreur : ' + (res.message || 'inconnue'), false);
-    }
-  } catch(e) {
-    toast('Erreur réseau : ' + e.toString(), false);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Relance hebdo Préinscrits';
+// ── RELANCE HEBDO — PRÉVISUALISATION & ENVOI ──────────────────────────────
+let relanceData    = [];  // [{id, nom, prenom, mail, nbOffres, sujet, html, htmlEdited}]
+let relanceSelIdx  = -1;  // index étudiant sélectionné
+
+async function ouvrirPreviewRelance() {
+  document.getElementById('relanceModal').classList.remove('hidden');
+  document.getElementById('relanceStudentList').innerHTML = '<p class="text-center text-[#1A4E8A] animate-pulse py-8 text-sm">Génération des aperçus…</p>';
+  document.getElementById('relanceKpi').textContent = '';
+  document.getElementById('btnEnvoyerTous').classList.add('hidden');
+  document.getElementById('relancePreviewEmpty').classList.remove('hidden');
+  document.getElementById('relancePreviewPanel').classList.add('hidden');
+  relanceData = [];
+  relanceSelIdx = -1;
+
+  const res = await api('previewRelanceHebdo', {});
+  if (!res.success) {
+    document.getElementById('relanceStudentList').innerHTML = '<p class="text-center text-red-400 py-8 text-sm">' + (res.message || 'Erreur') + '</p>';
+    return;
   }
+  relanceData = (res.data || []).map(d => ({ ...d, htmlEdited: null }));
+  const nbOffresTotal = relanceData.reduce((s, d) => s + d.nbOffres, 0);
+  document.getElementById('relanceKpi').textContent = relanceData.length + ' étudiant(s) · ' + nbOffresTotal + ' offre(s) partagées';
+  if (relanceData.length) document.getElementById('btnEnvoyerTous').classList.remove('hidden');
+  renderRelanceList();
+}
+
+function renderRelanceList() {
+  const el = document.getElementById('relanceStudentList');
+  if (!relanceData.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 py-8 text-sm italic">Aucun Préinscrit en recherche avec des offres actives partagées.</p>';
+    return;
+  }
+  el.innerHTML = relanceData.map((d, i) => {
+    const sel = relanceSelIdx === i;
+    const edited = !!d.htmlEdited;
+    return `<div onclick="selectRelanceEtu(${i})"
+      class="p-3 rounded-xl cursor-pointer mb-2 border transition-all ${sel ? 'bg-[#1A4E8A] border-[#1A4E8A]' : 'bg-white border-gray-100 hover:border-[#1A4E8A]'}"
+      id="relCard${i}">
+      <div class="font-bold text-sm ${sel ? 'text-white' : 'text-gray-800'}">${d.prenom} ${d.nom}</div>
+      <div class="text-xs mt-0.5 ${sel ? 'text-blue-200' : 'text-gray-400'} truncate">${d.mail}</div>
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-xs font-bold ${sel ? 'text-orange-300' : 'text-[#FF7A00]'}">${d.nbOffres} offre(s)</span>
+        ${edited ? '<span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">modifié</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectRelanceEtu(i) {
+  relanceSelIdx = i;
+  renderRelanceList();
+  const d = relanceData[i];
+  // Afficher le panel
+  document.getElementById('relancePreviewEmpty').classList.add('hidden');
+  const panel = document.getElementById('relancePreviewPanel');
+  panel.classList.remove('hidden');
+  panel.classList.add('flex');
+  // Info étudiant
+  document.getElementById('relanceStudentInfo').textContent = d.prenom + ' ' + d.nom + ' — ' + d.mail;
+  // Badge "modifié"
+  document.getElementById('relanceEditBadge').classList.toggle('hidden', !d.htmlEdited);
+  document.getElementById('btnResetHtml').classList.toggle('hidden', !d.htmlEdited);
+  // Fermer l'éditeur si ouvert
+  const editor = document.getElementById('relanceEditor');
+  const iframe  = document.getElementById('relanceIframe');
+  const editorBar = document.getElementById('relanceEditorBar');
+  editor.classList.add('hidden');
+  editorBar.classList.add('hidden');
+  iframe.classList.remove('hidden');
+  document.getElementById('btnToggleEditor').textContent = 'Modifier HTML';
+  // Charger le HTML dans l'iframe
+  const html = d.htmlEdited || d.html;
+  iframe.srcdoc = html;
+  editor.value  = html;
+}
+
+function toggleRelanceEditor() {
+  const editor    = document.getElementById('relanceEditor');
+  const iframe    = document.getElementById('relanceIframe');
+  const editorBar = document.getElementById('relanceEditorBar');
+  const btn       = document.getElementById('btnToggleEditor');
+  const isOpen    = !editor.classList.contains('hidden');
+  if (isOpen) {
+    // Fermer l'éditeur sans appliquer
+    editor.classList.add('hidden');
+    editorBar.classList.add('hidden');
+    iframe.classList.remove('hidden');
+    btn.textContent = 'Modifier HTML';
+  } else {
+    // Ouvrir l'éditeur
+    if (relanceSelIdx < 0) return;
+    editor.value = relanceData[relanceSelIdx].htmlEdited || relanceData[relanceSelIdx].html;
+    iframe.classList.add('hidden');
+    editor.classList.remove('hidden');
+    editorBar.classList.remove('hidden');
+    btn.textContent = 'Fermer éditeur';
+  }
+}
+
+function onRelanceEditorInput() { /* live typing — apply only on button click */ }
+
+function appliquerEditionRelance() {
+  if (relanceSelIdx < 0) return;
+  const html = document.getElementById('relanceEditor').value;
+  relanceData[relanceSelIdx].htmlEdited = html;
+  document.getElementById('relanceIframe').srcdoc = html;
+  document.getElementById('relanceEditor').classList.add('hidden');
+  document.getElementById('relanceEditorBar').classList.add('hidden');
+  document.getElementById('relanceIframe').classList.remove('hidden');
+  document.getElementById('btnToggleEditor').textContent = 'Modifier HTML';
+  document.getElementById('relanceEditBadge').classList.remove('hidden');
+  document.getElementById('btnResetHtml').classList.remove('hidden');
+  renderRelanceList();
+}
+
+function resetRelanceHtml() {
+  if (relanceSelIdx < 0) return;
+  relanceData[relanceSelIdx].htmlEdited = null;
+  const d = relanceData[relanceSelIdx];
+  document.getElementById('relanceIframe').srcdoc = d.html;
+  document.getElementById('relanceEditor').value  = d.html;
+  document.getElementById('relanceEditBadge').classList.add('hidden');
+  document.getElementById('btnResetHtml').classList.add('hidden');
+  renderRelanceList();
+}
+
+async function envoyerUnRelance() {
+  if (relanceSelIdx < 0) return;
+  const d    = relanceData[relanceSelIdx];
+  const html = d.htmlEdited || d.html;
+  if (!confirm('Envoyer le mail à ' + d.prenom + ' ' + d.nom + ' (' + d.mail + ') ?')) return;
+  const btn = document.getElementById('btnEnvoyerUn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  const res = await api('sendOneRelance', {
+    mailDest: d.mail,
+    sujet:    d.sujet || ('Relance hebdomadaire — ' + d.nbOffres + ' offre(s) en attente de candidature'),
+    htmlBody: html,
+    nomEtu:   d.prenom + ' ' + d.nom,
+    idEtu:    d.id
+  });
+  if (res.success) { toast('Mail envoyé à ' + d.mail, true); loadMails(); }
+  else             { toast('Erreur : ' + (res.message || 'inconnue'), false); }
+  btn.disabled = false; btn.textContent = 'Envoyer ce mail';
+}
+
+async function envoyerTousRelance() {
+  if (!relanceData.length) return;
+  const hasEdits = relanceData.some(d => d.htmlEdited);
+  const msg = hasEdits
+    ? 'Certains mails ont été modifiés. "Envoyer à tous" réenvoie les versions originales. Pour envoyer les versions modifiées, utilisez "Envoyer ce mail" sur chaque étudiant. Continuer quand même ?'
+    : 'Envoyer la relance à tous les ' + relanceData.length + ' étudiant(s) Préinscrits en recherche ?';
+  if (!confirm(msg)) return;
+  const btn = document.getElementById('btnEnvoyerTous');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  const res = await api('sendRelanceHebdo', {});
+  if (res.success) { toast(res.message || (res.nbMailsEnvoyes + ' mail(s) envoyé(s)'), true); loadMails(); }
+  else             { toast('Erreur : ' + (res.message || 'inconnue'), false); }
+  btn.disabled = false; btn.textContent = 'Envoyer à tous';
+}
+
+function closeRelanceModal() {
+  document.getElementById('relanceModal').classList.add('hidden');
 }
 
 // ══════════════════════════════════════════════════════════════════
