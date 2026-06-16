@@ -590,7 +590,12 @@
           <h1 class="text-2xl font-black text-[#1A4E8A]">📧 Mails — Historique des envois</h1>
           <p class="text-sm text-gray-400 mt-1">Récapitulatif de tous les e-mails sortants de l'application (campagnes, offres, relances automatiques)</p>
         </div>
-        <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
+        <div class="flex gap-2 items-center">
+          <button onclick="declencherRelanceHebdo()" id="btnRelanceHebdo" class="btn-orange flex items-center gap-2">
+            <span>Relance hebdo Préinscrits</span>
+          </button>
+          <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
+        </div>
       </div>
 
       <!-- Filtres -->
@@ -3833,6 +3838,28 @@ function resetMailsFilters() {
   ['mailsDateDebut','mailsDateFin','mailsRecherche'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cat = document.getElementById('mailsCategorie'); if (cat) cat.value = '';
   loadMails();
+}
+
+async function declencherRelanceHebdo() {
+  const btn = document.getElementById('btnRelanceHebdo');
+  if (!btn) return;
+  if (!confirm('Envoyer la relance hebdomadaire nominative a tous les Préinscrits en recherche ayant des offres partagées ?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours…';
+  try {
+    const res = await api('sendRelanceHebdo', {});
+    if (res.success) {
+      toast(res.message || (res.nbMailsEnvoyes + ' mail(s) envoyé(s)'), true);
+      loadMails();
+    } else {
+      toast('Erreur : ' + (res.message || 'inconnue'), false);
+    }
+  } catch(e) {
+    toast('Erreur réseau : ' + e.toString(), false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Relance hebdo Préinscrits';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
