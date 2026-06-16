@@ -65,10 +65,7 @@
                 </div>
                 <div class="flex-1" style="min-width:130px">
                     <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Thème prog.</label>
-                    <select id="spcFilterTheme" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#F26522]">
-                        <option value="">Tous</option>
-                        <option>SIG</option><option>MSI</option><option>Responsable de Campus</option><option>Choix libre</option>
-                    </select>
+                    <input type="text" id="spcFilterTheme" oninput="renderSPC()" placeholder="Filtrer par thème…" class="w-full border border-gray-200 rounded-xl p-2 text-sm font-bold outline-none focus:border-[#F26522]">
                 </div>
                 <div class="flex-1" style="min-width:130px">
                     <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">État publication</label>
@@ -1163,13 +1160,7 @@ async function executeFinalSend(cmpId, isTest, emailList) {
       </div>
       <div>
         <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Thème programme</label>
-        <select id="spcModalThemeProg" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
-          <option value="">— Choisir —</option>
-          <option value="SIG">SIG</option>
-          <option value="MSI">MSI</option>
-          <option value="Responsable de Campus">Responsable de Campus</option>
-          <option value="Choix libre">Choix libre</option>
-        </select>
+        <input type="text" id="spcModalThemeProg" placeholder="ex: JPO, Alumni, SIG…" class="w-full border-2 border-gray-100 p-2 rounded-xl font-bold outline-none focus:border-[#F26522]">
       </div>
       <div class="col-span-2">
         <label class="block text-[10px] font-black uppercase text-gray-400 mb-1">Idée de contenu</label>
@@ -1271,7 +1262,7 @@ function renderSPC() {
   const fv = document.getElementById('spcFilterValidation').value;
   const filtered = allSPC.filter(p =>
     (!fp || p.plateforme === fp) &&
-    (!ft || p.themeProg === ft) &&
+    (!ft || (p.themeProg||'').toLowerCase().includes(ft.toLowerCase())) &&
     (!fe || p.etat === fe) &&
     (!fv || p.validationEtat === fv)
   );
