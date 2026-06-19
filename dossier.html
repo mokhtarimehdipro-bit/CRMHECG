@@ -355,9 +355,10 @@
                         document.getElementById('etuNoCV').classList.add('hidden');
                     }
 
-                    const badgeCV = p.faitCV === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
-                    const badgeLI = p.faitLI === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
-                    document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI;
+                    const badgeCV  = p.faitCV  === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>'          : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
+                    const badgeLI  = p.faitLI  === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>'    : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
+                    const badgeCVT = p.cvTech  === "Oui" ? '<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV Tech</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV Tech</span>';
+                    document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI + " " + badgeCVT;
 
                     document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
                         <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${n.visible === false ? 'border-gray-300 opacity-60' : 'border-[#F26522]'}">
