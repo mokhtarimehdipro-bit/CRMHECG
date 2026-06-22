@@ -604,8 +604,10 @@
           <div class="flex items-center gap-3">
             <span class="text-[11px] font-black text-gray-400 uppercase tracking-wider">Relance hebdo CRON</span>
             <span id="relanceCronBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full">—</span>
+            <span id="relanceTriggerBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 hidden">⚠️ Trigger non installé</span>
           </div>
           <div class="flex gap-2 items-center">
+            <button onclick="installRelanceTrigger()" id="btnInstallTrigger" class="btn-primary text-xs py-1.5 px-4 hidden">⚙️ Installer le CRON</button>
             <button onclick="toggleRelanceCron()" id="btnToggleRelanceCron" class="btn-ghost text-xs py-1 px-3">—</button>
             <button onclick="declencherRelanceMaintenant()" class="btn-orange text-xs py-1.5 px-4">Déclencher maintenant</button>
           </div>
@@ -4234,6 +4236,17 @@ function _applyRelanceCronUI(res) {
   btn.textContent   = enabled ? 'Suspendre' : 'Activer';
   btn.className     = enabled ? 'btn-ghost text-xs py-1 px-3 text-red-600 border-red-200 hover:bg-red-50' : 'btn-primary text-xs py-1 px-3';
 
+  // Statut trigger Google Apps Script
+  const trigBadge = document.getElementById('relanceTriggerBadge');
+  const btnInstall = document.getElementById('btnInstallTrigger');
+  if (res.triggerInstalled) {
+    trigBadge.classList.add('hidden');
+    btnInstall.classList.add('hidden');
+  } else {
+    trigBadge.classList.remove('hidden');
+    btnInstall.classList.remove('hidden');
+  }
+
   const fmt = iso => {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -4242,6 +4255,20 @@ function _applyRelanceCronUI(res) {
   };
   document.getElementById('relanceCronLastRun').textContent = res.lastRun ? fmt(res.lastRun) : 'Jamais exécuté';
   document.getElementById('relanceCronNextRun').textContent = res.nextRun ? fmt(res.nextRun) : '—';
+}
+
+async function installRelanceTrigger() {
+  if (!confirm('Installer le déclencheur automatique Google Apps Script ?\n\nLa relance hebdo s\'exécutera automatiquement chaque lundi entre 8h et 9h.')) return;
+  const btn = document.getElementById('btnInstallTrigger');
+  btn.disabled = true; btn.textContent = 'Installation…';
+  const res = await api('installRelanceTrigger', {});
+  if (res && res.success) {
+    toast('✅ ' + (res.message || 'Trigger installé.'), true);
+    loadRelanceCronConfig();
+  } else {
+    toast('Erreur : ' + (res?.message || 'inconnue'), false);
+  }
+  btn.disabled = false; btn.textContent = '⚙️ Installer le CRON';
 }
 
 async function toggleRelanceCron() {
