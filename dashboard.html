@@ -149,8 +149,13 @@
                 <option value="LI">✅ LinkedIn Fait</option>
                 <option value="LI_NON">❌ LinkedIn Non Fait</option>
                 <option value="BOTH">⭐ Les deux Faits</option>
-                <option value="CVTECH">🖥️ CV Tech : Oui</option>
-                <option value="CVTECH_NON">🖥️ CV Tech : Non</option>
+            </select>
+
+            <!-- CV Tech (filtre indépendant) -->
+            <select id="fCvTech" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
+                <option value="">🖥️ CV Tech</option>
+                <option value="OUI">✅ CV Tech : Oui</option>
+                <option value="NON">❌ CV Tech : Non</option>
             </select>
 
             <!-- Période (reste single-select) -->
@@ -566,6 +571,7 @@ async function apiPost(payload) {
             const selStatuts = getCheckedValues('fStatut');
             const selCampus = getCheckedValues('fCampus');
             const fAt = document.getElementById('fAtelier').value;
+            const fCvTech = document.getElementById('fCvTech').value;
             const fPe = document.getElementById('fPeriode').value;
             const fRef = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
             const now = new Date();
@@ -604,14 +610,16 @@ async function apiPost(payload) {
                 const cvFait = String(e.faitCV || "").trim().toLowerCase();
                 const liFait = String(e.faitLI || "").trim().toLowerCase();
 
-                const cvTechFait = String(e.cvTech || "").trim().toLowerCase();
                 if (fAt === "CV") matchAt = (cvFait === "oui");
                 else if (fAt === "CV_NON") matchAt = (cvFait !== "oui");
                 else if (fAt === "LI") matchAt = (liFait === "oui");
                 else if (fAt === "LI_NON") matchAt = (liFait !== "oui");
                 else if (fAt === "BOTH") matchAt = (cvFait === "oui" && liFait === "oui");
-                else if (fAt === "CVTECH") matchAt = (cvTechFait === "oui");
-                else if (fAt === "CVTECH_NON") matchAt = (cvTechFait !== "oui");
+
+                const cvTechFait = String(e.cvTech || "").trim().toLowerCase();
+                let matchCvTech = true;
+                if (fCvTech === "OUI") matchCvTech = (cvTechFait === "oui");
+                else if (fCvTech === "NON") matchCvTech = (cvTechFait !== "oui");
 
                 let matchPe = true;
                 if (fPe) {
@@ -630,7 +638,7 @@ async function apiPost(payload) {
                 const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                 const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
 
-                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchPe && matchCampus && matchReferent;
+                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchCvTech && matchPe && matchCampus && matchReferent;
             });
         }
         function renderTable() {
@@ -716,6 +724,7 @@ async function apiPost(payload) {
             document.querySelectorAll('input[data-filter="fClasse"], input[data-filter="fStatut"], input[data-filter="fCampus"]').forEach(cb => cb.checked = false);
             MS_FILTER_IDS.forEach(f => updateMsLabel(f));
             document.getElementById('fAtelier').value = "";
+            document.getElementById('fCvTech').value = "";
             document.getElementById('fPeriode').value = "";
             if(document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
 
