@@ -162,6 +162,7 @@
             <select id="fPeriode" onchange="renderTable()" class="border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
                 <option value="">📞 Dernier échange</option>
                 <option value="7">🟢 &lt; 7 jours</option>
+                <option value="7-30">🟡 Entre 7 et 30 jours</option>
                 <option value="30">🔴 &gt; 30 jours</option>
                 <option value="NEVER">⚪ Jamais</option>
             </select>
@@ -631,6 +632,7 @@ async function apiPost(payload) {
                     } else {
                         const diff = (now - new Date(e.dernierEchange)) / (1000 * 3600 * 24);
                         if (fPe === "7") matchPe = diff <= 7;
+                        if (fPe === "7-30") matchPe = diff > 7 && diff < 30;
                         if (fPe === "30") matchPe = diff >= 30;
                     }
                 }
