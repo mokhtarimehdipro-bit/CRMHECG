@@ -149,6 +149,8 @@
                 <option value="LI">✅ LinkedIn Fait</option>
                 <option value="LI_NON">❌ LinkedIn Non Fait</option>
                 <option value="BOTH">⭐ Les deux Faits</option>
+                <option value="CVTECH">🖥️ CV Tech : Oui</option>
+                <option value="CVTECH_NON">🖥️ CV Tech : Non</option>
             </select>
 
             <!-- Période (reste single-select) -->
@@ -270,7 +272,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-green-50 p-6 rounded-3xl border border-green-100">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-green-50 p-6 rounded-3xl border border-green-100">
                     <div>
                         <label class="block text-[10px] uppercase font-black text-green-700 mb-2">Atelier CV</label>
                         <select id="formFaitCV" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
@@ -283,6 +285,13 @@
                         <select id="formFaitLI" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
                             <option value="Non">Non fait</option>
                             <option value="Oui">Fait ✅</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-black text-green-700 mb-2">CV Tech</label>
+                        <select id="formCvTech" class="w-full border-none p-3 rounded-xl font-bold text-xs bg-white shadow-sm">
+                            <option value="Non">Non ❌</option>
+                            <option value="Oui">Oui ✅</option>
                         </select>
                     </div>
                     <div>
@@ -595,11 +604,14 @@ async function apiPost(payload) {
                 const cvFait = String(e.faitCV || "").trim().toLowerCase();
                 const liFait = String(e.faitLI || "").trim().toLowerCase();
 
+                const cvTechFait = String(e.cvTech || "").trim().toLowerCase();
                 if (fAt === "CV") matchAt = (cvFait === "oui");
                 else if (fAt === "CV_NON") matchAt = (cvFait !== "oui");
                 else if (fAt === "LI") matchAt = (liFait === "oui");
                 else if (fAt === "LI_NON") matchAt = (liFait !== "oui");
                 else if (fAt === "BOTH") matchAt = (cvFait === "oui" && liFait === "oui");
+                else if (fAt === "CVTECH") matchAt = (cvTechFait === "oui");
+                else if (fAt === "CVTECH_NON") matchAt = (cvTechFait !== "oui");
 
                 let matchPe = true;
                 if (fPe) {
@@ -757,6 +769,7 @@ async function apiPost(payload) {
                 
                 document.getElementById('formFaitCV').value = e.faitCV || "Non";
                 document.getElementById('formFaitLI').value = e.faitLI || "Non";
+                document.getElementById('formCvTech').value = e.cvTech || "Non";
                 document.getElementById('formCVUrl').value = e.cv || ""; 
                 document.getElementById('formCVFile').value = ""; 
                 
@@ -976,6 +989,7 @@ async function envoyerSaveEtu(finalCvUrl) {
         forceTypo: document.getElementById('formForceTypo').value,
         faitCV: document.getElementById('formFaitCV').value,
         faitLI: document.getElementById('formFaitLI').value,
+        cvTech: document.getElementById('formCvTech').value,
         cv: finalCvUrl,
         entree: document.getElementById('formEntree').value,
         sortie: document.getElementById('formSortie').value,
