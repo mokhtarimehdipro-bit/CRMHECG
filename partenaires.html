@@ -60,13 +60,13 @@
 
                 <input type="text" id="filterCP" onkeyup="filterPartners()" placeholder="📮 Code postal..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
                 <input type="text" id="filterVille" onkeyup="filterPartners()" placeholder="🏙️ Ville..." class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm w-36">
-                <select id="filterScore" onchange="filterPartners()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm cursor-pointer">
-                    <option value="all">⭐ Tous les scores</option>
-                    <option value="50">⭐ &gt; 50 pts</option>
-                    <option value="100">⭐⭐ &gt; 100 pts</option>
-                    <option value="200">⭐⭐⭐ &gt; 200 pts</option>
-                    <option value="500">🏆 &gt; 500 pts</option>
-                </select>
+                <div class="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <span class="text-[11px] font-black text-slate-400">⭐</span>
+                    <input type="number" id="filterScoreMin" min="0" placeholder="Min" oninput="filterPartners()" class="w-16 text-xs font-black text-slate-600 outline-none bg-transparent placeholder:text-slate-300">
+                    <span class="text-[10px] font-bold text-slate-300">–</span>
+                    <input type="number" id="filterScoreMax" min="0" placeholder="Max" oninput="filterPartners()" class="w-16 text-xs font-black text-slate-600 outline-none bg-transparent placeholder:text-slate-300">
+                    <span class="text-[10px] font-bold text-slate-400">pts</span>
+                </div>
 
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
@@ -796,7 +796,10 @@
             const nbAltFilter = document.getElementById('filterNbAlt').value;
             const cpFilter = document.getElementById('filterCP').value.toLowerCase().trim();
             const villeFilter = document.getElementById('filterVille').value.toLowerCase().trim();
-            const scoreFilter = document.getElementById('filterScore').value;
+            const scoreMinVal = document.getElementById('filterScoreMin').value;
+            const scoreMaxVal = document.getElementById('filterScoreMax').value;
+            const scoreMin = scoreMinVal !== "" ? parseInt(scoreMinVal, 10) : null;
+            const scoreMax = scoreMaxVal !== "" ? parseInt(scoreMaxVal, 10) : null;
 
             let data = allPartners.filter(p => {
                 const nomEntreprise = (p.nom || "").toLowerCase();
@@ -828,11 +831,9 @@
                 });
             }
 
-            // Filtre par score
-            if (scoreFilter !== "all") {
-                const minScore = parseInt(scoreFilter, 10);
-                data = data.filter(p => (p.score || 0) > minScore);
-            }
+            // Filtre par intervalle de score
+            if (scoreMin !== null) data = data.filter(p => (p.score || 0) >= scoreMin);
+            if (scoreMax !== null) data = data.filter(p => (p.score || 0) <= scoreMax);
 
             lastFilteredPartners = data;
             renderPartners(data);
