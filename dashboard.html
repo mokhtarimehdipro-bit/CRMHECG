@@ -566,7 +566,8 @@ async function apiPost(payload) {
 
         // --- 3. FILTRES & TABLEAU & KPI ---
         function getFilteredData() {
-            const fSe = document.getElementById('fSearch').value.toLowerCase().replace(/[_ \-]/g, '');
+            const fSeRaw = document.getElementById('fSearch').value.toLowerCase().trim();
+            const fSeTerms = fSeRaw.split(/\s+/).filter(t => t.length > 0);
             const selTypos = getCheckedValues('fTypo');
             const selClasses = getCheckedValues('fClasse');
             const selStatuts = getCheckedValues('fStatut');
@@ -588,7 +589,8 @@ async function apiPost(payload) {
                     let isAlumni = motifLow.includes("dipl") && motifLow.includes("obtenu");
                     
                     // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
-                    const matchName = (e.id + " " + e.nom + " " + e.prenom).toLowerCase().includes(fSe);
+                    const alumniTarget = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase();
+                    const matchName = fSeTerms.length === 0 || fSeTerms.every(t => alumniTarget.includes(t));
                     const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                     const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
                     
@@ -599,9 +601,10 @@ async function apiPost(payload) {
                 const typoLow = (e.typo || "").toLowerCase();
                 let matchTypo = selTypos.length === 0 || selTypos.includes(typoLow);
                 // Si on tape un nom, on annule le filtre de typologie pour chercher dans toute la base
-                if (fSe.length > 2) matchTypo = true;
+                if (fSeRaw.length > 2) matchTypo = true;
 
-                const matchName = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase().includes(fSe);
+                const nameTarget = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase();
+                const matchName = fSeTerms.length === 0 || fSeTerms.every(t => nameTarget.includes(t));
                 const matchClass = selClasses.length === 0 || selClasses.includes(e.classe || '');
                 const matchStatut = selStatuts.length === 0 || selStatuts.some(s => (e.statut || '').toLowerCase().includes(s));
                 
