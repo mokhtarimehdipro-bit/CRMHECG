@@ -1641,8 +1641,55 @@ function fmtNote(n){
   const f=parseFloat(n); return isNaN(f)?'—':`${f.toFixed(2)}/20`;
 }
 function badgeRes(r){
-  const map={'Admis':'badge-admis','Rattrapage':'badge-ratt','Recalé':'badge-recale','Non admis':'badge-recale','En cours':'badge-cours'};
+  const map={'Admis':'badge-admis','Obtenu':'badge-admis','Rattrapage':'badge-ratt','Recalé':'badge-recale','Non admis':'badge-recale','En cours':'badge-cours'};
   return `<span class="badge ${map[r]||'bg-gray-100 text-gray-500'}">${r||'—'}</span>`;
+}
+
+// Calcule le résultat définitif BTS en remplaçant les notes des matières rattrapées par la note de rattrapage
+function calcBTSResultatPostRatt(group) {
+  const rattMap = {};
+  (group.notes || []).forEach(n => {
+    if ((n.matiere||'').startsWith('Ratt. ')) {
+      const num = parseFloat(n.note);
+      if (!isNaN(num)) rattMap[(n.matiere).slice(6)] = num;
+    }
+  });
+  if (Object.keys(rattMap).length === 0) return null;
+  const btsRef = refMatieres['BTS CG'] || [];
+  let totalWtd = 0, totalC = 0;
+  (group.notes || []).filter(n => !(n.matiere||'').startsWith('Ratt. ')).forEach(n => {
+    if (String(n.note).toUpperCase() === 'NE') return;
+    const noteNum = parseFloat(n.note);
+    if (isNaN(noteNum)) return;
+    const c = parseFloat(n.coeff ?? 0);
+    if (c === 0) return;
+    const ref = btsRef.find(r => r.matiere === n.matiere);
+    if (ref && ref.type === 'autre') return;
+    const rattKey = btsMatiereRattName(n.matiere);
+    const noteToUse = (rattKey !== null && rattMap[rattKey] !== undefined) ? rattMap[rattKey] : noteNum;
+    totalWtd += noteToUse * c;
+    totalC += c;
+  });
+  if (totalC === 0) return null;
+  return (totalWtd / totalC) >= 10 ? 'Obtenu' : 'Recalé';
+}
+
+// Auto-sauvegarde le résultat définitif BTS post-rattrapage
+async function _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe) {
+  try {
+    const fresh = await api('getNotes', { diplome: 'BTS CG', annee: annee || '', classe: classe || '' });
+    if (!fresh.success) return;
+    const stuNotes = (fresh.data || []).filter(n => n.idEtu === idEtu);
+    if (!stuNotes.length) return;
+    const groups = getStudentGroups(stuNotes);
+    if (!groups.length) return;
+    const g = groups[0];
+    const { moy, moyPro } = calcGroupStats(g);
+    if (calcBTSResultatAuto(moy, moyPro) !== 'Rattrapage') return;
+    const postRatt = calcBTSResultatPostRatt(g);
+    if (!postRatt) return;
+    await api('updateResultatNote', { idEtu, nomPrenom, annee, diplome: 'BTS CG', resultat: postRatt, emailAuteur: user?.email || '', vieScRole });
+  } catch(e) { console.warn('_autoSaveBTSPostRatt:', e); }
 }
 
 const JOURS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
@@ -1880,7 +1927,13 @@ function renderNotesGrouped(){
     const gid  = CSS.escape(gkey);
     const isBTSrow = g.diplome==='BTS CG';
     const autoRes  = isBTSrow ? calcBTSResultatAuto(moy, moyPro) : '';
-    const dispRes  = isBTSrow ? (autoRes === 'Rattrapage' ? (g.resultat || 'Rattrapage') : autoRes) : g.resultat;
+    const btsProvDisplay = isBTSrow ? (autoRes === 'Admis' ? 'Obtenu' : autoRes) : '';
+    const btsDefDisplay  = isBTSrow
+      ? (autoRes === 'Rattrapage'
+          ? (g.resultat ? (g.resultat === 'Admis' ? 'Obtenu' : g.resultat) : (calcBTSResultatPostRatt(g) || null))
+          : (autoRes === 'Admis' ? 'Obtenu' : autoRes))
+      : '';
+    const dispRes  = isBTSrow ? (btsDefDisplay || btsProvDisplay || '') : g.resultat;
     html+=`<tr style="cursor:pointer" onclick="toggleGroup('${gkey}')">
       <td><span id="icon_${gid}" style="font-size:0.7rem;color:#9ca3af">▶</span></td>
       <td style="font-weight:600">${g.nomPrenom}</td>
@@ -1891,7 +1944,12 @@ function renderNotesGrouped(){
       <td style="font-weight:700;color:#1A4E8A">${moy!==null?moy.toFixed(2)+'/20':'—'}</td>
       <td>${isBTSrow?(moyPro!==null?`<span style="color:#7c3aed;font-weight:700">${moyPro.toFixed(2)}/20</span>`:'<span style="color:#9ca3af;font-size:0.75rem">—</span>'):''}  </td>
       <td>${diffHtml}</td>
-      <td>${badgeRes(dispRes)}</td>
+      <td>${isBTSrow
+        ? `<div style="display:flex;flex-direction:column;gap:2px">
+             <div style="display:flex;align-items:center;gap:3px"><span style="font-size:0.58rem;color:#9ca3af;font-weight:700;text-transform:uppercase;white-space:nowrap">Prov.</span>${badgeRes(btsProvDisplay)}</div>
+             <div style="display:flex;align-items:center;gap:3px"><span style="font-size:0.58rem;color:#9ca3af;font-weight:700;text-transform:uppercase;white-space:nowrap">Déf.</span>${btsDefDisplay ? badgeRes(btsDefDisplay) : '<span style="color:#9ca3af;font-size:0.7rem;font-style:italic">—</span>'}</div>
+           </div>`
+        : badgeRes(dispRes)}</td>
       <td>
         ${canWrite('notes')?`<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
         <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}','${g.diplome==='BTS CG'?calcBTSResultatAuto(moy,moyPro):''}','${(g.classe||'').replace(/'/g,"\\'")}');" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>`:''}
@@ -1964,7 +2022,8 @@ async function saveRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, btn) 
   if (btn && typeof btn === 'object') { btn.textContent = '…'; btn.disabled = true; }
   const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: parseFloat(val) }] });
   if (!r.success) { toast('Erreur : ' + r.message, false); if(btn&&typeof btn==='object'){btn.textContent='💾';btn.disabled=false;} return; }
-  toast('Note rattrapage enregistrée ✓');
+  await _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe);
+  toast('Note rattrapage enregistrée — résultat définitif calculé ✓');
   loadNotes();
 }
 
@@ -1976,7 +2035,8 @@ async function editRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, curre
   if (isNaN(num) || num < 0 || num > 20) { toast('Note invalide (0-20).', false); return; }
   const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: num }] });
   if (!r.success) { toast('Erreur : ' + r.message, false); return; }
-  toast('Note rattrapage mise à jour ✓');
+  await _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe);
+  toast('Note rattrapage mise à jour — résultat définitif recalculé ✓');
   loadNotes();
 }
 
@@ -2002,6 +2062,7 @@ function computeAndShowStats(groups){
     let resultatAuto = g.resultat||'En cours';
     let resultatManuel = '';
     let noteUE = null;
+    let postRattResult = null;
 
     if (isUEfilter){
       const noteObj = g.notes.find(n=>matKey(n.matiere)===qMat);
@@ -2020,6 +2081,11 @@ function computeAndShowStats(groups){
     } else if (isBTSstats){
       resultatAuto   = calcBTSResultatAuto(moy, moyPro);
       resultatManuel = g.resultat||'';
+      if (resultatAuto === 'Rattrapage') {
+        const prComp = calcBTSResultatPostRatt(g);
+        if (prComp) postRattResult = prComp;
+        else if (resultatManuel && resultatManuel !== 'Rattrapage') postRattResult = resultatManuel === 'Admis' ? 'Obtenu' : resultatManuel;
+      }
     } else if (isDCGstats){
       // DCG auto : Admis si moy ≥ 10 ET aucune UE éliminatoire (note < 6), sinon Recalé
       if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
@@ -2035,7 +2101,7 @@ function computeAndShowStats(groups){
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
             lastAnnee:g.lastAnnee||'',
             totalPts,moy,moyPro,diff,ueOk,ueElim,ueRecu,ueTotal,
-            resultat,resultatAuto,resultatManuel,noteUE};
+            resultat,resultatAuto,resultatManuel,noteUE,postRattResult};
   }).sort((a,b)=>{
     if (isUEfilter){
       const va = a.noteUE==='NE'?10:(a.noteUE??-1);
@@ -2055,13 +2121,13 @@ function computeAndShowStats(groups){
   // BTS : rattrapage = statut AUTO (tous ceux qui sont passés en ratt, indep. du résultat final)
   //       admis/recalé = statut DÉFINITIF (auto ou post-ratt)
   const admis  = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Admis' || s.resultatManuel==='Admis').length
-    : statsStudents.filter(s=>s.resultat==='Admis').length;
+    ? statsStudents.filter(s=>s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)).length
+    : statsStudents.filter(s=>s.resultat==='Admis'||s.resultat==='Obtenu').length;
   const ratt   = isBTSstats
     ? statsStudents.filter(s=>s.resultatAuto==='Rattrapage').length
     : statsStudents.filter(s=>s.resultat==='Rattrapage').length;
   const recale = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé').length
+    ? statsStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé').length
     : statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
   const enCours= statsStudents.filter(s=>s.resultatAuto==='En cours').length;
 
@@ -2120,16 +2186,19 @@ function computeAndShowStats(groups){
         <td>${badgeRes(x.resultatAuto)}</td><td>${editBtn}</td></tr>`;
     }
     if (isBTSstats){
-      // Colonne Définitif : auto pour Admis/Recalé ; valeur saisie pour Rattrapage
-      const defCell = x.resultatAuto==='Rattrapage'
-        ? (x.resultatManuel ? badgeRes(x.resultatManuel) : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>')
-        : badgeRes(x.resultatAuto);
+      const provDisplay = x.resultatAuto === 'Admis' ? 'Obtenu' : x.resultatAuto;
+      const defDisplay  = x.resultatAuto === 'Rattrapage'
+        ? (x.postRattResult || (x.resultatManuel && x.resultatManuel !== 'Rattrapage' ? (x.resultatManuel === 'Admis' ? 'Obtenu' : x.resultatManuel) : null))
+        : (x.resultatAuto === 'Admis' ? 'Obtenu' : x.resultatAuto);
+      const defCell = defDisplay
+        ? badgeRes(defDisplay)
+        : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>';
       return `<tr>
         <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
         <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
         <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
         ${hasProCol?`<td style="color:#7c3aed;font-weight:700">${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`:''}
-        <td>${badgeRes(x.resultatAuto)}</td>
+        <td>${badgeRes(provDisplay)}</td>
         <td>${defCell}</td>
         <td>${editBtn}</td></tr>`;
     }
