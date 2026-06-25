@@ -1633,6 +1633,26 @@ let qualiopiPreuves = [];
 // ── Helpers ─────────────────────────────────────────────────────────
 function show(id){ document.getElementById(id)?.classList.remove('hidden'); }
 function hide(id){ document.getElementById(id)?.classList.add('hidden'); }
+
+// Ordre d'affichage des matières BTS CG dans la grille de saisie
+// Groupe 0 (0-4): CGE / Anglais / Math / CEJM
+// Groupe 1 (5-9): E5 / E6 / E7 / E8
+// Groupe 2 (10+): EF1 / EF2 / EF3 / autres
+function btsMatiereOrder(matiere) {
+  const m = (matiere || '').trim();
+  if (/\bcge\b/i.test(m) || /^comptabilit/i.test(m))                    return 0;
+  if (/anglais/i.test(m) || /langue\s+vivante/i.test(m))                return 1;
+  if (/math/i.test(m) || /statistique/i.test(m))                        return 2;
+  if (/\bcejm\b/i.test(m) || /culture\s+.*(économique|juridique)/i.test(m)) return 3;
+  if (/^E5(\s|$|-)/i.test(m.trim()) || /^e5$/i.test(m.trim()))         return 5;
+  if (/^E6(\s|$|-)/i.test(m.trim()) || /^e6$/i.test(m.trim()))         return 6;
+  if (/^E7(\s|$|-)/i.test(m.trim()) || /^e7$/i.test(m.trim()))         return 7;
+  if (/^E8(\s|$|-)/i.test(m.trim()) || /^e8$/i.test(m.trim()))         return 8;
+  if (/^EF1(\s|$|-)/i.test(m.trim()) || /^ef1$/i.test(m.trim()))       return 10;
+  if (/^EF2(\s|$|-)/i.test(m.trim()) || /^ef2$/i.test(m.trim()))       return 11;
+  if (/^EF3(\s|$|-)/i.test(m.trim()) || /^ef3$/i.test(m.trim()))       return 12;
+  return 99;
+}
 function toast(msg, ok=true){
   const t=document.getElementById('toast'), m=document.getElementById('toastMsg');
   m.textContent=msg; m.className='px-5 py-3 rounded-2xl shadow-lg text-sm font-bold text-white '+(ok?'bg-green-600':'bg-red-500');
@@ -1734,7 +1754,16 @@ async function init(){
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
   // Référentiel
-  try { const r = await api('getReferentielMatieres'); if (r.success) refMatieres = r.data; } catch(e){}
+  try {
+    const r = await api('getReferentielMatieres');
+    if (r.success) {
+      refMatieres = r.data;
+      // Trier les matières BTS CG selon l'ordre de saisie défini
+      if (refMatieres['BTS CG']) {
+        refMatieres['BTS CG'].sort((a, b) => btsMatiereOrder(a.matiere) - btsMatiereOrder(b.matiere));
+      }
+    }
+  } catch(e){}
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
   // Formateurs (onglet Adultes — enseignants)
@@ -2607,7 +2636,19 @@ async function chargerUEs(){
   });
 
   const tbody = document.getElementById('bulkUETbody');
+  const isBTSgrid = diplome === 'BTS CG';
+  let _lastBTSGroup = -1;
   tbody.innerHTML = mats.map((m,idx)=>{
+    // Séparateur visuel entre groupes BTS (CGE…CEJM / E5…E8 / EF1…EF3)
+    let groupSep = '';
+    if (isBTSgrid) {
+      const order = btsMatiereOrder(m.matiere);
+      const curGroup = Math.floor(order / 5);
+      if (_lastBTSGroup >= 0 && curGroup !== _lastBTSGroup) {
+        groupSep = '<tr><td colspan="4" style="height:8px;background:#f1f5f9;border-top:2px solid #e5e7eb"></td></tr>';
+      }
+      _lastBTSGroup = curGroup;
+    }
     const k=matKey(m.matiere);
     const latest = latestMap[k];   // Note la plus récente (pré-remplissage)
     const best   = bestMap[k];
@@ -2635,7 +2676,7 @@ async function chargerUEs(){
         }).join(' · ')
       : '';
 
-    return `<tr>
+    return groupSep + `<tr>
       <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
       <td>
