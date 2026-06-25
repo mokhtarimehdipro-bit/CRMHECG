@@ -2459,6 +2459,7 @@ function filterEtuSuggestions(){
 function diplomeFromClasse(classe){
   const c=(classe||'').toUpperCase();
   if (c.startsWith('BTS CG')) return 'BTS CG';
+  if (c.startsWith('BTS'))    return 'BTS CG'; // BTS 1, BTS 2, BTS ALT... → BTS CG
   if (c.startsWith('DSCG'))   return 'DSCG';
   if (c.startsWith('DCG'))    return 'DCG';
   return (classe||'').split(' ')[0]||'';
