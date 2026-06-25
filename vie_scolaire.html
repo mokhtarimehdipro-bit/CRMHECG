@@ -1612,6 +1612,7 @@ const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
 let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
+let allReleves   = []; // relevés de notes uploadés
 let planningPersonFilter = new Set();
 let draggedTaskId = null;
 let inscriptionPreviews = [];
@@ -1791,6 +1792,8 @@ async function loadNotes(){
     const r = await api('getNotes', params);
     if (!r.success){ toast('Erreur : '+r.message,false); return; }
     allNotes = r.data;
+    // Charger les relevés en parallèle
+    try { const rr = await api('getReleveNotes', {diplome}); allReleves = rr.success ? rr.data : []; } catch(e){ allReleves=[]; }
     const classes = [...new Set(allNotes.map(n=>n.classe).filter(Boolean))].sort();
     const selC = document.getElementById('filterClasse');
     const prevC = selC.value;
@@ -1951,8 +1954,16 @@ function renderNotesGrouped(){
            </div>`
         : badgeRes(dispRes)}</td>
       <td>
-        ${canWrite('notes')?`<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
-        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}','${g.diplome==='BTS CG'?calcBTSResultatAuto(moy,moyPro):''}','${(g.classe||'').replace(/'/g,"\\'")}');" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>`:''}
+        ${(()=>{
+          const relev = allReleves.filter(r=>r.idEtu===g.idEtu);
+          const lastRelev = relev.sort((a,b)=>b.dateUpload.localeCompare(a.dateUpload))[0];
+          const relevBtn = lastRelev
+            ? `<a href="${lastRelev.fileUrl}" target="_blank" onclick="event.stopPropagation()" class="btn-ghost py-1 text-xs" title="Voir relevé (${lastRelev.annee||'—'}) : ${lastRelev.fileName}">📎</a>`
+            : '';
+          const writeBtn = canWrite('notes') ? `<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
+        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}','${g.diplome==='BTS CG'?calcBTSResultatAuto(moy,moyPro):''}','${(g.classe||'').replace(/'/g,"\\'")}');" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>` : '';
+          return relevBtn + writeBtn;
+        })()}
       </td>
     </tr>
     <tr id="detail_${gid}" style="display:none">
@@ -2664,6 +2675,7 @@ function unlockNote(btn, idx, setNE=false){
   const label = orig.toUpperCase()==='NE' ? 'NE' : (orig ? orig+'/20' : '—');
   if (!confirm(`Modifier la note existante ${label} (${yr}) ?\n\nLa valeur sera écrasée à l'enregistrement.`)) return;
   inp.removeAttribute('readonly');
+  inp.dataset.forceSave = '1'; // forcer la sauvegarde quelle que soit la valeur
   inp.style.cursor = '';
   if (setNE){ inp.value='NE'; onNoteInput(inp, idx); }
   else { onNoteInput(inp, idx); inp.focus(); inp.select(); }
@@ -2688,6 +2700,7 @@ async function saveNotesBulk(){
     // Vérifier si la note a été modifiée (comparaison avec l'original stocké)
     const original = inp.dataset.original??'';
     const originalYear = inp.dataset.originalYear||'';
+    const forceSave = inp.dataset.forceSave === '1'; // note déverrouillée manuellement
     const valChanged = val.toUpperCase() !== String(original).toUpperCase();
 
     // Note pour l'année cible déjà en base ?
@@ -2695,7 +2708,8 @@ async function saveNotesBulk(){
     const existCurrNote = existCurr ? String(existCurr.note??'') : '';
 
     // Si la note n'a pas changé ET qu'elle est déjà enregistrée pour cette année → ignorer
-    if (!valChanged && existCurrNote.toUpperCase()===val.toUpperCase()) return;
+    // (sauf si l'utilisateur a explicitement déverrouillé la note)
+    if (!forceSave && !valChanged && existCurrNote.toUpperCase()===val.toUpperCase()) return;
 
     // Écrasement : note pour l'année cible existe ET nouvelle valeur ≠ existante
     if (existCurrNote!=='' && existCurrNote.toUpperCase()!==val.toUpperCase()) {
@@ -2745,6 +2759,7 @@ async function uploadReleve(){
     const b64=e.target.result.split(',')[1];
     const r=await api('uploadReleveNote',{
       base64Data:b64, mimeType:file.type, fileName:file.name,
+      idEtu:bulkCurrentEtu?.idEtu||'',
       nomPrenom:bulkCurrentEtu?.nomPrenom||'',
       nom:bulkCurrentEtu?.nom||'', prenom:bulkCurrentEtu?.prenom||'',
       classe:bulkCurrentEtu?.classe||'',
