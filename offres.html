@@ -781,18 +781,50 @@
             if (recipientsList.length === 0) return alert("Aucun destinataire sélectionné.");
             const idOffre = document.getElementById('shareOffreId').value;
             const btn = document.getElementById('btnConfirmShare');
+            const nbDest = recipientsList.length;
             btn.disabled = true;
-            btn.innerText = "Diffusion en cours... ⏳";
+            btn.innerText = `Diffusion en cours (${nbDest} destinataire${nbDest > 1 ? 's' : ''})... ⏳`;
+
+            const tStart = Date.now();
+
+            // Avertissement progressif si l'envoi prend du temps (normal pour beaucoup de destinataires)
+            const timerMsg = setTimeout(() => {
+                btn.innerText = "Envoi en cours, merci de patienter... ⏳";
+            }, 20000);
+
+            const _traiterErreur = (err) => {
+                const elapsed = Date.now() - tStart;
+                clearTimeout(timerMsg);
+                if (elapsed > 18000) {
+                    // Délai long → probable timeout GAS, les emails sont très probablement partis
+                    alert(`⚠️ La connexion a expiré après ${Math.round(elapsed/1000)}s.\n\nLes ${nbDest} emails ont très probablement été envoyés. L'offre sera mise à jour dans quelques instants.`);
+                    closeShareModal();
+                    setTimeout(() => loadOffres(), 4000);
+                } else {
+                    // Erreur rapide → vraie erreur réseau
+                    alert("❌ Erreur de connexion. Vérifiez votre connexion internet et réessayez.");
+                }
+            };
+
             try {
                 const d = await apiPost({
                     action: 'partagerOffre',
                     id_offre: idOffre,
                     emailsCibles: recipientsList.map(r => r.email)
                 });
-                alert(d.message);
-                if (d.success) { closeShareModal(); loadOffres(); }
+                clearTimeout(timerMsg);
+                if (d.success) {
+                    alert(`✅ ${d.message}`);
+                    closeShareModal();
+                    loadOffres();
+                } else if (!d.success && (d.message || '').toLowerCase().includes('réseau')) {
+                    // apiPost a capté une erreur réseau/timeout et l'a renvoyée comme objet
+                    _traiterErreur(new Error(d.message));
+                } else {
+                    alert(d.message || "Erreur inconnue.");
+                }
             } catch (err) {
-                alert("Erreur de connexion lors du partage.");
+                _traiterErreur(err);
             } finally {
                 btn.disabled = false;
                 btn.innerText = "🚀 DIFFUSER L'OFFRE";
