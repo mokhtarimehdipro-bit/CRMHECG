@@ -196,9 +196,15 @@
             </div>
 
             <!-- 3. Ajout manuel -->
-            <div class="flex gap-2 mb-6">
+            <div class="flex gap-2 mb-4">
                 <input type="email" id="inputAddEmail" placeholder="Ajouter un email manuellement..." class="flex-1 border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:border-[#1A4E8A]" onkeydown="if(event.key==='Enter') addManualEmail()">
                 <button onclick="addManualEmail()" class="px-4 py-2 bg-gray-100 rounded-xl text-sm font-black text-gray-600 hover:bg-gray-200 transition whitespace-nowrap">+ Ajouter</button>
+            </div>
+
+            <!-- 3b. Message personnalisé -->
+            <div class="mb-6">
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Message personnalisé <span class="text-gray-300 font-normal normal-case">(optionnel)</span></label>
+                <textarea id="shareMessagePerso" rows="3" placeholder="Tu peux postuler directement depuis ton dossier étudiant HECG." class="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:border-[#1A4E8A] resize-none text-gray-700 placeholder-gray-300"></textarea>
             </div>
 
             <!-- 4. Actions -->
@@ -663,6 +669,7 @@
             const offre = currentOffres.find(x => x.id === id);
             document.getElementById('shareOffreId').value = id;
             document.getElementById('shareOffreTitle').innerText = offre ? (offre.poste || '') : '';
+            document.getElementById('shareMessagePerso').value = '';
             document.getElementById('shareModal').classList.replace('hidden', 'flex');
 
             selectedClassesSet = new Set();
@@ -807,10 +814,12 @@
             };
 
             try {
+                const messagePerso = (document.getElementById('shareMessagePerso').value || '').trim();
                 const d = await apiPost({
                     action: 'partagerOffre',
                     id_offre: idOffre,
-                    emailsCibles: recipientsList.map(r => r.email)
+                    emailsCibles: recipientsList.map(r => r.email),
+                    messagePersonnalise: messagePerso || null
                 });
                 clearTimeout(timerMsg);
                 if (d.success) {
