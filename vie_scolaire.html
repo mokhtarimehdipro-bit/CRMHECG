@@ -401,7 +401,58 @@
           <p class="text-xs text-gray-400">indicateurs documentés</p>
         </div>
       </div>
+      <div id="qualiopiSurveyBlock" class="qualiopi-card hidden" style="border-left:4px solid #F26522"></div>
       <div id="qualiopiContent"></div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : liens d'envoi -->
+    <div id="qLinksModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">🔗 Liens individuels — Enquête formateurs</h3>
+        <p class="text-xs text-gray-400 mb-4">Chaque lien contient le code anonyme du formateur. Copiez-collez le lien correspondant dans votre mail d'envoi manuel.</p>
+        <div style="max-height:50vh;overflow-y:auto">
+          <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+            <thead><tr style="text-align:left;color:#9ca3af;font-size:0.7rem;text-transform:uppercase">
+              <th style="padding:6px">Formateur</th><th style="padding:6px">Email</th><th style="padding:6px">Lien</th><th></th>
+            </tr></thead>
+            <tbody id="qLinksTbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:0.6rem;margin-top:1.25rem">
+          <button onclick="closeQLinksModal()" class="btn-ghost">Fermer</button>
+          <button onclick="copyAllQLinks()" class="btn-orange">📋 Copier tout (nom, email, lien)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : suivi nominatif -->
+    <div id="qSuiviModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">👥 Suivi des réponses (usage interne)</h3>
+        <p class="text-xs text-gray-400 mb-4">Vue nominative réservée à la direction — sert uniquement à relancer les formateurs qui n'ont pas encore répondu.</p>
+        <div style="max-height:50vh;overflow-y:auto">
+          <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+            <thead><tr style="text-align:left;color:#9ca3af;font-size:0.7rem;text-transform:uppercase">
+              <th style="padding:6px">Formateur</th><th style="padding:6px">Statut</th><th style="padding:6px">Date réponse</th>
+            </tr></thead>
+            <tbody id="qSuiviTbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:1.25rem">
+          <button onclick="closeQSuiviModal()" class="btn-ghost">Fermer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : résultats détaillés -->
+    <div id="qDetailModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">📈 Résultats détaillés (anonymisés)</h3>
+        <div id="qDetailContent" style="max-height:60vh;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:1.25rem">
+          <button onclick="closeQDetailModal()" class="btn-ghost">Fermer</button>
+        </div>
+      </div>
     </div>
 
     <!-- ===================== SALLES & SIMULATIONS ===================== -->
@@ -3861,7 +3912,110 @@ async function loadQualiopi(){
   const r=await api('getQualiopiPreuves');
   qualiopiPreuves = r.success ? r.data : [];
   renderQualiopi();
+  if (canWrite('qualiopi')) loadQuestionnaireSurvey();
 }
+
+// ── Enquête de satisfaction formateurs (Indicateurs 14 & 17) ────────
+const QUESTIONNAIRE_LABELS = {
+  q14_1:"Soutien au développement des compétences pédagogiques",
+  q14_2:"Suffisance des échanges avec l'équipe pédagogique",
+  q14_3:"Accès aux informations nécessaires à la mission",
+  q17_1:"Efficacité du dispositif de suivi des apprenants",
+  q17_2:"Information en temps utile sur les difficultés des apprenants",
+  q17_3:"Coordination avec l'équipe pédagogique pour les apprenants en difficulté",
+};
+let qSurveyStats = null;
+
+async function loadQuestionnaireSurvey(){
+  const r = await api('getQuestionnaireQualiopiStats');
+  qSurveyStats = r.success ? r.data : { nbReponses:0, stats:{}, comments:{} };
+  renderQuestionnaireSurveyBlock();
+}
+
+function renderQuestionnaireSurveyBlock(){
+  const block = document.getElementById('qualiopiSurveyBlock');
+  if (!qSurveyStats) { block.classList.add('hidden'); return; }
+  const avg14 = ['q14_1','q14_2','q14_3'].map(k=>qSurveyStats.stats[k]?.avg).filter(v=>v!=null);
+  const avg17 = ['q17_1','q17_2','q17_3'].map(k=>qSurveyStats.stats[k]?.avg).filter(v=>v!=null);
+  const m14 = avg14.length ? (avg14.reduce((a,b)=>a+b,0)/avg14.length).toFixed(1) : '—';
+  const m17 = avg17.length ? (avg17.reduce((a,b)=>a+b,0)/avg17.length).toFixed(1) : '—';
+  block.classList.remove('hidden');
+  block.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+      <div>
+        <h2 style="font-size:1.05rem;font-weight:900;color:#1f2937">📋 Enquête qualité — Formateurs (Indicateurs 14 & 17)</h2>
+        <p style="font-size:0.8rem;color:#6b7280;margin-top:0.2rem">${qSurveyStats.nbReponses} réponse(s) reçue(s) · Score moyen Ind.14 : <strong>${m14}/5</strong> · Score moyen Ind.17 : <strong>${m17}/5</strong></p>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button onclick="openQLinksModal()" style="background:#1A4E8A;color:#fff;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">🔗 Générer les liens</button>
+        <button onclick="openQSuiviModal()" style="background:#f3f4f6;color:#4b5563;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">👥 Suivi des réponses</button>
+        <button onclick="openQDetailModal()" style="background:#f3f4f6;color:#4b5563;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">📈 Résultats détaillés</button>
+      </div>
+    </div>`;
+}
+
+async function openQLinksModal(){
+  document.getElementById('qLinksModal').classList.remove('hidden');
+  document.getElementById('qLinksTbody').innerHTML = '<tr><td colspan="4" style="padding:10px;color:#9ca3af">Chargement…</td></tr>';
+  const r = await api('getQuestionnaireLinks');
+  const list = r.success ? r.data : [];
+  document.getElementById('qLinksTbody').innerHTML = list.length ? list.map(f=>`
+    <tr style="border-top:1px solid #f3f4f6">
+      <td style="padding:6px">${f.nom} ${f.prenom}</td>
+      <td style="padding:6px;color:#6b7280">${f.email||'—'}</td>
+      <td style="padding:6px"><a href="${f.lien}" target="_blank" style="color:#1A4E8A;word-break:break-all">${f.lien}</a></td>
+      <td style="padding:6px"><button onclick="navigator.clipboard.writeText('${f.lien}');toast('Lien copié ✓')" class="btn-ghost py-1 text-xs">Copier</button></td>
+    </tr>`).join('') : '<tr><td colspan="4" style="padding:10px;color:#9ca3af">Aucun formateur en poste avec un code actif.</td></tr>';
+  window._qLinksList = list;
+}
+function closeQLinksModal(){ document.getElementById('qLinksModal').classList.add('hidden'); }
+function copyAllQLinks(){
+  const list = window._qLinksList || [];
+  const text = list.map(f=>`${f.nom} ${f.prenom}\t${f.email||''}\t${f.lien}`).join('\n');
+  navigator.clipboard.writeText(text);
+  toast('Liste copiée ✓');
+}
+
+async function openQSuiviModal(){
+  document.getElementById('qSuiviModal').classList.remove('hidden');
+  document.getElementById('qSuiviTbody').innerHTML = '<tr><td colspan="3" style="padding:10px;color:#9ca3af">Chargement…</td></tr>';
+  const r = await api('getQuestionnaireQualiopiSuivi');
+  const list = r.success ? r.data : [];
+  document.getElementById('qSuiviTbody').innerHTML = list.length ? list.map(f=>`
+    <tr style="border-top:1px solid #f3f4f6">
+      <td style="padding:6px">${f.nom} ${f.prenom}</td>
+      <td style="padding:6px">${f.aRepondu?'<span style="color:#15803d;font-weight:700">✓ A répondu</span>':'<span style="color:#dc2626;font-weight:700">En attente</span>'}</td>
+      <td style="padding:6px;color:#6b7280">${f.dateReponse||'—'}</td>
+    </tr>`).join('') : '<tr><td colspan="3" style="padding:10px;color:#9ca3af">Aucun formateur en poste.</td></tr>';
+}
+function closeQSuiviModal(){ document.getElementById('qSuiviModal').classList.add('hidden'); }
+
+async function openQDetailModal(){
+  document.getElementById('qDetailModal').classList.remove('hidden');
+  document.getElementById('qDetailContent').innerHTML = '<p style="color:#9ca3af;padding:10px">Chargement…</p>';
+  const r = await api('getQuestionnaireQualiopiStats');
+  const d = r.success ? r.data : { nbReponses:0, stats:{}, comments:{} };
+  let html = `<p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">${d.nbReponses} réponse(s) au total.</p>`;
+  [['Indicateur 14',['q14_1','q14_2','q14_3'],'comment14'], ['Indicateur 17',['q17_1','q17_2','q17_3'],'comment17']].forEach(([titre,keys,commentKey])=>{
+    html += `<h4 style="font-weight:900;color:#1A4E8A;margin:1rem 0 0.5rem">${titre}</h4>`;
+    keys.forEach(k=>{
+      const s = d.stats[k];
+      const pct = s ? Math.round((s.avg/5)*100) : 0;
+      html += `<div style="margin-bottom:0.75rem">
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#374151"><span>${QUESTIONNAIRE_LABELS[k]||k}</span><strong>${s?s.avg+'/5 ('+s.n+')':'—'}</strong></div>
+        <div style="background:#f3f4f6;border-radius:9999px;height:8px;margin-top:4px"><div style="background:#F26522;width:${pct}%;height:8px;border-radius:9999px"></div></div>
+      </div>`;
+    });
+    const comments = d.comments[commentKey]||[];
+    if (comments.length) {
+      html += `<div style="margin-top:0.5rem"><p style="font-size:0.7rem;font-weight:900;color:#9ca3af;text-transform:uppercase;margin-bottom:0.3rem">Commentaires libres (anonymes)</p>`
+            + comments.map(c=>`<p style="background:#f9fafb;border-radius:0.6rem;padding:0.5rem 0.75rem;font-size:0.8rem;color:#4b5563;margin-bottom:0.3rem">“${c}”</p>`).join('')
+            + `</div>`;
+    }
+  });
+  document.getElementById('qDetailContent').innerHTML = html;
+}
+function closeQDetailModal(){ document.getElementById('qDetailModal').classList.add('hidden'); }
 
 // ── Couleurs des critères (CSS inline, pas @apply) ──────────────────
 const CRITERE_COLORS={1:'#2563eb',2:'#4338ca',3:'#7c3aed',4:'#9333ea',5:'#db2777',6:'#e11d48'};
