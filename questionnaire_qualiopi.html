@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Questionnaire Qualiopi HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .likert { display:flex; gap:0.4rem; justify-content:space-between; margin-top:0.6rem; }
+      .likert-opt { flex:1; text-align:center; }
+      .likert-opt label { display:block; font-size:0.65rem; color:#6b7280; cursor:pointer; line-height:1.1; }
+      .likert-opt input { display:block; margin:0 auto 4px auto; width:20px; height:20px; cursor:pointer; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white p-8 md:p-10 rounded-[35px] shadow-2xl w-full max-w-2xl border-t-8 border-[#F26522]">
+    <div class="text-center mb-8">
+      <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" class="h-16 mx-auto mb-4">
+      <h1 class="text-2xl font-black text-[#1A4E8A]">Questionnaire qualité — Formateurs</h1>
+      <p class="text-gray-400 text-sm font-medium mt-1">Démarche Qualiopi — vos réponses sont traitées de manière anonyme et servent à améliorer nos pratiques.</p>
+    </div>
+
+    <? if (!valid) { ?>
+      <div class="text-center text-red-500 font-black text-lg py-10">⚠ Lien invalide ou expiré.<br>Merci de contacter la direction pédagogique.</div>
+    <? } else { ?>
+      <form id="qForm" class="space-y-8">
+        <input type="hidden" id="code" value="<?= code ?>">
+        <div id="qSections"></div>
+
+        <button type="submit" id="btn" class="w-full bg-[#F26522] text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:scale-105 transition-transform">Envoyer mes réponses 🚀</button>
+      </form>
+      <div id="msg" class="hidden text-center text-green-600 font-black text-xl py-10">Merci pour votre retour ! Vos réponses ont bien été enregistrées.</div>
+    <? } ?>
+  </div>
+
+  <script>
+    // Configuration des questions — modifiable ici sans toucher au reste du formulaire.
+    var QUESTIONS = [
+      {
+        indicateur: 14,
+        titre: "1. Compétences & accompagnement des personnels",
+        sousTitre: "Indicateur Qualiopi 14",
+        items: [
+          { key:'q14_1', label:"Vous sentez-vous soutenu(e) dans le développement de vos compétences pédagogiques ?" },
+          { key:'q14_2', label:"Les échanges avec l'équipe pédagogique sur votre pratique sont-ils suffisants ?" },
+          { key:'q14_3', label:"Disposez-vous des informations nécessaires pour exercer votre mission (référentiels, plannings, supports) ?" }
+        ],
+        commentKey: 'comment14'
+      },
+      {
+        indicateur: 17,
+        titre: "2. Suivi et accompagnement des apprenants",
+        sousTitre: "Indicateur Qualiopi 17",
+        items: [
+          { key:'q17_1', label:"Le dispositif de suivi des apprenants (carnet de suivi, bilans) vous semble-t-il efficace ?" },
+          { key:'q17_2', label:"Êtes-vous informé(e) des difficultés rencontrées par vos apprenants en temps utile ?" },
+          { key:'q17_3', label:"La coordination avec l'équipe pédagogique pour accompagner les apprenants en difficulté est-elle satisfaisante ?" }
+        ],
+        commentKey: 'comment17'
+      }
+    ];
+    var LIKERT_LABELS = ["Pas du tout d'accord","Plutôt pas d'accord","Neutre","Plutôt d'accord","Tout à fait d'accord"];
+
+    function renderLikert(key) {
+      var html = '<div class="likert">';
+      for (var v = 1; v <= 5; v++) {
+        html += '<div class="likert-opt">'
+              + '<input type="radio" name="'+key+'" value="'+v+'" required>'
+              + '<label>'+v+'</label>'
+              + '</div>';
+      }
+      html += '</div><div class="flex justify-between text-[0.6rem] text-gray-400 mt-1"><span>'+LIKERT_LABELS[0]+'</span><span>'+LIKERT_LABELS[4]+'</span></div>';
+      return html;
+    }
+
+    (function renderForm() {
+      var container = document.getElementById('qSections');
+      if (!container) return; // lien invalide : pas de formulaire à construire
+      var html = '';
+      QUESTIONS.forEach(function(section) {
+        html += '<div><h2 class="text-lg font-black text-[#1A4E8A] mb-1">'+section.titre+'</h2>'
+              + '<p class="text-xs text-gray-400 mb-4">'+section.sousTitre+'</p>';
+        section.items.forEach(function(q) {
+          html += '<div class="mb-6"><p class="font-semibold text-sm text-gray-700">'+q.label+'</p>'+renderLikert(q.key)+'</div>';
+        });
+        html += '<div><label class="block text-xs font-black uppercase text-gray-400 mb-1">Commentaire libre (facultatif)</label>'
+              + '<textarea id="'+section.commentKey+'" rows="3" class="w-full bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl outline-none focus:ring-4 focus:ring-orange-100 transition"></textarea></div>'
+              + '</div><hr class="my-6 border-gray-100">';
+      });
+      container.innerHTML = html;
+    })();
+
+    var formEl = document.getElementById('qForm');
+    if (formEl) {
+      formEl.onsubmit = function(e) {
+        e.preventDefault();
+        var btn = document.getElementById('btn');
+        btn.disabled = true; btn.innerText = "Envoi...";
+
+        var reponses = {};
+        QUESTIONS.forEach(function(section) {
+          section.items.forEach(function(q) {
+            var checked = document.querySelector('input[name="'+q.key+'"]:checked');
+            reponses[q.key] = checked ? checked.value : '';
+          });
+          var commentEl = document.getElementById(section.commentKey);
+          reponses[section.commentKey] = commentEl ? commentEl.value.trim() : '';
+        });
+
+        var payload = { code: document.getElementById('code').value, reponses: reponses };
+
+        google.script.run
+          .withSuccessHandler(function() {
+            document.getElementById('qForm').classList.add('hidden');
+            document.getElementById('msg').classList.remove('hidden');
+          })
+          .withFailureHandler(function(err) {
+            alert("Erreur : " + err.message);
+            btn.disabled = false; btn.innerText = "Envoyer mes réponses 🚀";
+          })
+          .submitQuestionnaireQualiopi(JSON.stringify(payload));
+      };
+    }
+  </script>
+</body>
+</html>
