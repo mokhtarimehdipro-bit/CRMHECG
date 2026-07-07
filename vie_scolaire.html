@@ -1981,7 +1981,7 @@ function calcGroupStats(g){
   const moyPro = proCoeff>0 ? Math.round(proPts/proCoeff*100)/100 : null;
   let diff = null;
   if (isBTS && moy!==null) diff = Math.round((moy-10)*100)/100;
-  else if (isDCG && ueTotal>0) diff = Math.round((totalPts - ueTotal*10)*100)/100;
+  else if (isDCG && totalCoeff>0) diff = Math.round((totalPts - totalCoeff*10)*100)/100;
   return { totalPts, totalCoeff, moy, moyPro, diff, ueOk, ueElim, ueRecu, ueTotal };
 }
 
