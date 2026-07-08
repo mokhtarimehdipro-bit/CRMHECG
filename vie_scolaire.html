@@ -188,8 +188,8 @@
           <table>
             <thead><tr>
               <th style="width:32px"></th>
-              <th>Étudiant</th><th>Diplôme</th><th>Classe</th><th>Année</th>
-              <th>UE saisies</th><th>Points</th><th>Moyenne</th><th style="color:#7c3aed">Moy. Pro</th><th>Différentiel</th>
+              <th onclick="sortNotesBy('nom')" style="cursor:pointer;user-select:none">Étudiant <span id="sortIcon_nom"></span></th><th>Diplôme</th><th>Classe</th><th>Année</th>
+              <th>UE saisies</th><th>Points</th><th>Moyenne</th><th style="color:#7c3aed">Moy. Pro</th><th onclick="sortNotesBy('diff')" style="cursor:pointer;user-select:none">Différentiel <span id="sortIcon_diff"></span></th>
               <th>Résultat</th><th></th>
             </tr></thead>
             <tbody id="notesTbody"><tr><td colspan="12" class="text-center text-gray-400 py-8">Sélectionnez des filtres et cliquez Afficher.</td></tr></tbody>
@@ -1675,6 +1675,7 @@ let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
 let allReleves   = []; // relevés de notes uploadés
+let notesSortBy = 'nom', notesSortDir = 1; // tri du tableau groupé Notes ('nom' | 'diff')
 let planningPersonFilter = new Set();
 let draggedTaskId = null;
 let inscriptionPreviews = [];
@@ -1933,25 +1934,31 @@ function getStudentGroups(notes){
   return result;
 }
 
+// Regroupe une liste de notes par UE (numéro seul, quel que soit l'intitulé/l'année) et
+// ne garde que la meilleure note par UE : une note numérique bat toujours NE, sinon la plus
+// haute l'emporte. Utilisé pour le calcul de moyenne (DCG/DSCG) ET pour l'affichage groupé.
+function bestNotesByUE(notes){
+  const bestByUE = {};
+  notes.forEach(n=>{
+    const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
+    const isNE = String(n.note).toUpperCase()==='NE';
+    const existing = bestByUE[k];
+    if (!existing) { bestByUE[k]=n; }
+    else {
+      const exNE = String(existing.note).toUpperCase()==='NE';
+      if (!isNE && (exNE || parseFloat(n.note)>parseFloat(existing.note))) bestByUE[k]=n;
+    }
+  });
+  return bestByUE;
+}
+
 function calcGroupStats(g){
   const diplome = g.diplome;
   const isDCG = diplome==='DCG'||diplome==='DSCG';
   const isBTS = diplome==='BTS CG';
   let notesWithVal = g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='');
   if (isDCG) {
-    const bestByUE = {};
-    notesWithVal.forEach(n=>{
-      const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
-      const isNE = String(n.note).toUpperCase()==='NE';
-      const existing = bestByUE[k];
-      if (!existing) { bestByUE[k]=n; }
-      else {
-        // Une note numérique bat toujours NE ; sinon garder la meilleure
-        const exNE = String(existing.note).toUpperCase()==='NE';
-        if (!isNE && (exNE || parseFloat(n.note)>parseFloat(existing.note))) bestByUE[k]=n;
-      }
-    });
-    notesWithVal = Object.values(bestByUE);
+    notesWithVal = Object.values(bestNotesByUE(notesWithVal));
   }
   let totalPts=0, totalCoeff=0, proPts=0, proCoeff=0;
   let ueOk=0, ueElim=0, ueRecu=0, ueTotal=0;
@@ -2007,9 +2014,25 @@ function renderNotesGrouped(){
   if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
   const tbody = document.getElementById('notesTbody');
   if (!groups.length){ tbody.innerHTML='<tr><td colspan="12" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
+  ['nom','diff'].forEach(c=>{
+    const el = document.getElementById('sortIcon_'+c);
+    if (el) el.textContent = notesSortBy===c ? (notesSortDir>0?'▲':'▼') : '';
+  });
   let html='';
-  groups.sort((a,b)=>(a.nomPrenom||'').localeCompare(b.nomPrenom||'')).forEach(g=>{
-    const {totalPts, moy, moyPro, diff, ueOk, ueElim, ueRecu, ueTotal} = calcGroupStats(g);
+  // Pré-calcul des stats (évite de recalculer bestNotesByUE deux fois) + tri configurable
+  const groupsWithStats = groups.map(g=>({ g, stats: calcGroupStats(g) }));
+  groupsWithStats.sort((a,b)=>{
+    if (notesSortBy==='diff') {
+      const da=a.stats.diff, db=b.stats.diff;
+      if (da===null && db===null) return 0;
+      if (da===null) return 1;   // valeurs manquantes toujours en fin de liste
+      if (db===null) return -1;
+      return notesSortDir*(da-db);
+    }
+    return notesSortDir*((a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
+  });
+  groupsWithStats.forEach(({g, stats})=>{
+    const {totalPts, moy, moyPro, diff, ueOk, ueElim, ueRecu, ueTotal} = stats;
     const nbUE = ueTotal || g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='').length;
     const isDCGrow = g.diplome==='DCG'||g.diplome==='DSCG';
     const diffHtml = diff===null?'—': diff>=0
@@ -2069,6 +2092,51 @@ function renderNotesGrouped(){
             const safeId=(g.idEtu||'').replace(/'/g,"\\'");
             const safeNom=(g.nomPrenom||'').replace(/'/g,"\\'");
             const safeCls=(g.classe||'').replace(/'/g,"\\'");
+
+            // DCG/DSCG : une même UE peut avoir été saisie sur plusieurs années (retake, ou
+            // ré-import avec un intitulé différent — "UE 1" vs "UE 1 - Fondamentaux du droit").
+            // On regroupe par UE, on n'affiche que la note retenue (celle qui compte dans la
+            // moyenne, via bestNotesByUE — même logique que calcGroupStats) et l'historique
+            // complet (toutes les saisies, aucune n'est supprimée) reste consultable en dépliant.
+            if (isDCGrow) {
+              const byUE={};
+              mainNotes.forEach(n=>{ const k=matKey(n.matiere); (byUE[k]=byUE[k]||[]).push(n); });
+              const withVal = mainNotes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='');
+              const bestMap = bestNotesByUE(withVal);
+              const ueKeys = Object.keys(byUE).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0));
+              return ueKeys.map(k=>{
+                const entries = byUE[k].slice().sort((a,b)=>(b.annee||'').localeCompare(a.annee||''));
+                // L'intitulé le plus complet (le plus long, ex: "UE 1 - Fondamentaux du droit") sert de libellé affiché
+                const label = entries.reduce((best,e)=>((e.matiere||'').length>(best||'').length?e.matiere:best), entries[0].matiere);
+                const retenue = bestMap[k] || entries[0];
+                const nc = retenue.note===null||retenue.note===undefined?'':'color:'+(String(retenue.note).toUpperCase()==='NE'?'#4338ca':(parseFloat(retenue.note)>=10?'#15803d':parseFloat(retenue.note)>=6?'#d97706':'#dc2626'));
+                const hasMulti = entries.length>1;
+                const hid = 'ueh_'+gid+'_'+k;
+                let row=`<tr style="background:transparent">
+                  <td>${hasMulti?`<span onclick="event.stopPropagation();toggleUEHistory('${hid}')" id="icon_${hid}" style="cursor:pointer;color:#9ca3af;font-size:0.7rem">▸</span>`:''}</td>
+                  <td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${retenue.annee||'—'}${hasMulti?` <span title="Nombre de saisies pour cette UE">(${entries.length})</span>`:''}</td>
+                  <td>${label}</td>
+                  <td style="font-weight:700;${nc}">${fmtNote(retenue.note)}</td>
+                  <td>${retenue.coeff??'—'}</td>
+                  <td>${retenue.points!==null?retenue.points.toFixed(2):'—'}</td>
+                  <td>${badgeRes(retenue.resultat)}</td>
+                  <td>${canWrite('notes')?`<button onclick="event.stopPropagation();deleteNote('${retenue.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td>
+                </tr>`;
+                if (hasMulti) {
+                  row += `<tr id="${hid}" style="display:none"><td colspan="8" style="padding:0;background:#fff7ed">
+                    <table style="width:100%;background:transparent">
+                      <tbody>${entries.map(e=>{
+                        const isRet = e.id===retenue.id;
+                        const ncE='color:'+(String(e.note).toUpperCase()==='NE'?'#4338ca':(parseFloat(e.note)>=10?'#15803d':parseFloat(e.note)>=6?'#d97706':'#dc2626'));
+                        return `<tr style="background:transparent"><td style="width:32px"></td><td style="font-size:0.7rem;color:#9ca3af;padding-left:0.5rem">${e.annee||'—'}${isRet?' <span style="color:#15803d;font-weight:700">✓ retenue</span>':''}</td><td style="font-size:0.78rem;color:#6b7280">${e.matiere}</td><td style="font-weight:600;${ncE}">${fmtNote(e.note)}</td><td>${e.coeff??'—'}</td><td>${e.points!==null?e.points.toFixed(2):'—'}</td><td></td><td>${canWrite('notes')?`<button onclick="event.stopPropagation();deleteNote('${e.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td></tr>`;
+                      }).join('')}</tbody>
+                    </table>
+                  </td></tr>`;
+                }
+                return row;
+              }).join('');
+            }
+
             return mainNotes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>{
               const nc=n.note===null||n.note===undefined?'':'color:'+(String(n.note).toUpperCase()==='NE'?'#4338ca':((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A'));
               let row=`<tr style="background:transparent"><td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td><td>${n.matiere}</td><td style="font-weight:700;${nc}">${fmtNote(n.note)}</td><td>${n.coeff??'—'}</td><td>${n.points!==null?n.points.toFixed(2):'—'}</td><td>${badgeRes(n.resultat)}</td><td>${canWrite('notes')?`<button onclick="deleteNote('${n.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td></tr>`;
@@ -2378,6 +2446,24 @@ function toggleGroup(key){
   if (ico) ico.textContent = open?'▶':'▼';
 }
 
+// Historique des saisies multi-années pour une même UE (DCG/DSCG), repliée par défaut
+function toggleUEHistory(id){
+  const esc = CSS.escape(id);
+  const row = document.getElementById(esc);
+  const ico = document.getElementById('icon_'+esc);
+  if (!row) return;
+  const open = row.style.display!=='none';
+  row.style.display = open?'none':'table-row';
+  if (ico) ico.textContent = open?'▸':'▾';
+}
+
+// Tri du tableau groupé Notes : 'nom' (alpha) ou 'diff' (différentiel de points)
+function sortNotesBy(col){
+  if (notesSortBy===col) notesSortDir = -notesSortDir;
+  else { notesSortBy = col; notesSortDir = col==='diff' ? -1 : 1; } // diff : plus grand d'abord par défaut
+  renderNotesGrouped();
+}
+
 function exportNotesCSV(){
   const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
   const qMat     = matKey(document.getElementById('filterMatiere').value);
@@ -2430,6 +2516,7 @@ function exportNotesCSV(){
   const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL'];
   const rows = [header];
 
+  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par matière"
   groupStats.sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||'')).forEach(({g, totalPts, moy, moyPro, diff, autoRes, defRes})=>{
     // Meilleure/dernière note par UE (DCG = cumulatif, BTS = année filtrée)
     const noteByUE = {};
@@ -2449,7 +2536,14 @@ function exportNotesCSV(){
       ...dataUEs.map(ue=>{
         const n = noteByUE[matKey(ue)];
         if (!n || n.note===null || n.note===undefined || n.note==='') return '—';
-        return String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+        const raw = String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+        const num = parseFloat(raw);
+        if (raw!=='NE' && !isNaN(num)) {
+          const k = matKey(ue);
+          if (!matiereAgg[k]) matiereAgg[k] = {sum:0, n:0};
+          matiereAgg[k].sum += num; matiereAgg[k].n++;
+        }
+        return raw;
       }),
       totalPts!==null ? totalPts.toFixed(2) : '—',
       moy!==null ? moy.toFixed(2) : '—',
@@ -2457,6 +2551,15 @@ function exportNotesCSV(){
       diffLabel,
     ]);
   });
+
+  // Ligne de synthèse : moyenne de la promotion pour chaque matière/UE
+  rows.push([
+    'MOYENNE PAR MATIÈRE', '', '',
+    ...dataUEs.map(ue=>{ const agg = matiereAgg[matKey(ue)]; return agg && agg.n ? (agg.sum/agg.n).toFixed(2) : '—'; }),
+    '', '',
+    ...btsExtraCols.map(()=>''),
+    '',
+  ]);
 
   // Stats en bas — basées sur statut définitif
   rows.push([]); rows.push(['=== STATISTIQUES ===']);
