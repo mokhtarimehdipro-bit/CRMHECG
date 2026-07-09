@@ -851,6 +851,26 @@
 
 <!-- ================== MODALS ================== -->
 
+<!-- Correction de la classe sur des notes déjà saisies (après coup) -->
+<div id="classeEditModal" class="modal-overlay hidden">
+  <div class="modal-box p-8" style="max-width:26rem">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">✏ Corriger la classe</h3>
+    <p class="text-xs text-gray-400 mb-4" id="classeEditNom"></p>
+    <input type="hidden" id="classeEditIdEtu">
+    <div class="mb-3"><label>Année concernée</label>
+      <select id="classeEditAnnee"></select>
+    </div>
+    <div class="mb-1"><label>Nouvelle classe</label>
+      <input type="text" id="classeEditValue" placeholder="ex: AIX_DCG1">
+    </div>
+    <p class="text-xs text-gray-400 mb-4">S'applique à toutes les notes de cet étudiant pour l'année choisie.</p>
+    <div class="flex justify-end gap-3">
+      <button onclick="closeClasseEditModal()" class="btn-ghost">Annuler</button>
+      <button onclick="saveClasseEdit()" class="btn-orange">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Relevés de notes : consultation de l'historique complet (aucun écrasement à l'upload) -->
 <div id="relevesModal" class="modal-overlay hidden">
   <div class="modal-box p-8" style="max-width:32rem">
@@ -890,8 +910,8 @@
         </div>
       </div>
       <div class="flex gap-3 mb-5 items-end">
-        <div class="flex-1"><label>Classe (auto)</label>
-          <input type="text" id="noteClasse" readonly style="background:#f9fafb">
+        <div class="flex-1"><label>Classe <span style="text-transform:none;font-weight:400;color:#d1d5db">(pré-remplie, modifiable)</span></label>
+          <input type="text" id="noteClasse" placeholder="ex: AIX_DCG1">
         </div>
         <button onclick="chargerUEs()" class="btn-primary" style="white-space:nowrap">📋 Charger les UE</button>
       </div>
@@ -2048,6 +2068,7 @@ function renderNotesGrouped(){
   let html='';
   // Pré-calcul des stats (évite de recalculer bestNotesByUE deux fois) + tri configurable
   const groupsWithStats = groups.map(g=>({ g, stats: calcGroupStats(g) }));
+  const groupsByKey = {}; // pour openClasseEditModal (évite d'échapper les données dans l'attribut onclick)
   groupsWithStats.sort((a,b)=>{
     if (notesSortBy==='diff' || notesSortBy==='diffAdj') {
       const da=a.stats[notesSortBy], db=b.stats[notesSortBy];
@@ -2072,6 +2093,7 @@ function renderNotesGrouped(){
     const latestAnnee = g.annees[g.annees.length-1]||'';
     const gkey = g.idEtu+'_'+g.diplome;
     const gid  = CSS.escape(gkey);
+    groupsByKey[gkey] = g;
     const isBTSrow = g.diplome==='BTS CG';
     const autoRes  = isBTSrow ? calcBTSResultatAuto(moy, moyPro) : '';
     const btsProvDisplay = isBTSrow ? (autoRes === 'Admis' ? 'Obtenu' : autoRes) : '';
@@ -2084,7 +2106,8 @@ function renderNotesGrouped(){
     html+=`<tr style="cursor:pointer" onclick="toggleGroup('${gkey}')">
       <td><span id="icon_${gid}" style="font-size:0.7rem;color:#9ca3af">▶</span></td>
       <td style="font-weight:600">${g.nomPrenom}</td>
-      <td>${g.diplome||'—'}</td><td>${g.classe||'—'}</td>
+      <td>${g.diplome||'—'}</td>
+      <td>${g.classe||'—'} ${canWrite('notes')?`<button onclick="event.stopPropagation();openClasseEditModal('${gkey}')" class="btn-ghost py-1 text-xs" title="Corriger la classe">✏</button>`:''}</td>
       <td style="font-size:0.75rem;color:#6b7280">${anneeLabel}</td>
       <td>${isDCGrow ? `<span title="saisies" style="color:#6b7280;font-size:0.8rem">${ueTotal} saisies</span> <span title="validées">${ueOk}✔</span> <span title="reçues" style="color:#d97706">${ueRecu}≈</span> <span title="éliminées" style="color:#dc2626">${ueElim}✘</span>` : nbUE}</td>
       <td>${totalPts?totalPts.toFixed(2):'—'}</td>
@@ -2192,6 +2215,7 @@ function renderNotesGrouped(){
       </td>
     </tr>`;
   });
+  window._notesGroupsByKey = groupsByKey;
   tbody.innerHTML = html;
   renderMatiereStats();
   computeAndShowStats(groups);
@@ -2491,6 +2515,38 @@ function toggleUEHistory(id){
   const open = row.style.display!=='none';
   row.style.display = open?'none':'table-row';
   if (ico) ico.textContent = open?'▸':'▾';
+}
+
+// Correction "après la saisie" : la classe est utilisée pour reconnaître le diplôme (DCG/BTS/DSCG)
+// et calculer moyenne/différentiel — une classe mal renseignée (ex: import ancien, faute de frappe)
+// peut donc fausser silencieusement les stats. Ce flux permet de la rectifier sans ressaisir les notes.
+function openClasseEditModal(gkey){
+  const g = (window._notesGroupsByKey||{})[gkey];
+  if (!g) return;
+  document.getElementById('classeEditIdEtu').value = g.idEtu;
+  document.getElementById('classeEditNom').textContent = g.nomPrenom + ' — ' + (g.diplome||'');
+  const classeByAnnee = {};
+  g.notes.forEach(n=>{ if (n.annee) classeByAnnee[n.annee] = n.classe; });
+  const anneesTri = g.annees.slice().sort().reverse();
+  const selA = document.getElementById('classeEditAnnee');
+  selA.innerHTML = anneesTri.map(a=>`<option value="${a}">${a}</option>`).join('');
+  const valInp = document.getElementById('classeEditValue');
+  selA.onchange = ()=>{ valInp.value = classeByAnnee[selA.value] || g.classe || ''; };
+  selA.value = anneesTri[0]||'';
+  valInp.value = classeByAnnee[selA.value] || g.classe || '';
+  document.getElementById('classeEditModal').classList.remove('hidden');
+}
+function closeClasseEditModal(){ document.getElementById('classeEditModal').classList.add('hidden'); }
+async function saveClasseEdit(){
+  const idEtu = document.getElementById('classeEditIdEtu').value;
+  const annee = document.getElementById('classeEditAnnee').value;
+  const classe = document.getElementById('classeEditValue').value.trim();
+  if (!classe){ toast('Classe requise.',false); return; }
+  const r = await api('updateNotesClasse', { idEtu, annee, classe });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  toast(`Classe mise à jour sur ${r.nb} note(s) ✓`);
+  closeClasseEditModal();
+  loadNotes();
 }
 
 // Consultation de tous les relevés uploadés pour un étudiant (aucun n'est jamais écrasé à l'upload,
@@ -3008,9 +3064,12 @@ async function saveNotesBulk(){
     if (!ok) return;
   }
   const nomPrenom = bulkCurrentEtu.nomPrenom || document.getElementById('noteEtuSearch').value || '';
+  // On relit la classe dans le champ (modifiable) au moment de l'enregistrement, pas celle
+  // capturée à l'ouverture — permet de la corriger juste avant de sauvegarder.
+  const classeToSave = document.getElementById('noteClasse').value.trim() || bulkCurrentEtu.classe;
   const r = await api('saveNotesBulk',{
     idEtu: bulkCurrentEtu.idEtu, nomPrenom,
-    classe: bulkCurrentEtu.classe, diplome: bulkCurrentEtu.diplome, annee: bulkCurrentEtu.annee,
+    classe: classeToSave, diplome: bulkCurrentEtu.diplome, annee: bulkCurrentEtu.annee,
     notes, toDelete
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
