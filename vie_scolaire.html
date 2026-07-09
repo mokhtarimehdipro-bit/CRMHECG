@@ -179,7 +179,10 @@
             <select id="filterMatiere" onchange="if(allNotes.length) renderNotesGrouped()"><option value="">Toutes</option></select>
           </div>
         </div>
-        <button onclick="loadNotes()" class="mt-4 btn-primary">🔍 Afficher</button>
+        <div class="flex items-center gap-4 mt-4">
+          <button onclick="loadNotes()" class="btn-primary">🔍 Afficher</button>
+          <p id="saisieCounter" class="hidden text-sm font-bold text-gray-500"></p>
+        </div>
       </div>
 
       <!-- Table groupée par étudiant -->
@@ -1707,6 +1710,7 @@ const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
 let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
+let allEtudiantsRoster = []; // effectif complet (getStudentsMinList, non filtré par rôle commercial)
 let allReleves   = []; // relevés de notes uploadés
 let notesSortBy = 'nom', notesSortDir = 1; // tri du tableau groupé Notes ('nom' | 'diff')
 let planningPersonFilter = new Set();
@@ -1851,6 +1855,8 @@ async function init(){
   } catch(e){}
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
+  // Effectif complet des étudiants (indépendant du rôle commercial) — pour le compteur de saisie Vie scolaire
+  try { const r = await api('getStudentsMinList'); if (r.success) allEtudiantsRoster = r.data; } catch(e){}
   // Formateurs (onglet Adultes — enseignants)
   try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; renderFormateurs(); } } catch(e){}
   // Personnel staff (onglet Personnel — staff admin, pour les surveillants de simulation)
@@ -2059,6 +2065,7 @@ function renderNotesGrouped(){
   // (DCG reste cumulatif pour le CALCUL de la moyenne, mais la LISTE se restreint à la promo/année choisie)
   if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
   if (qClasses.length) groups = groups.filter(g=>qClasses.includes(g.classe));
+  updateSaisieCounter(groups, qDiplome, qClasses, qAnnee);
   const tbody = document.getElementById('notesTbody');
   if (!groups.length){ tbody.innerHTML='<tr><td colspan="13" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
   ['nom','diff','diffAdj'].forEach(c=>{
@@ -2798,6 +2805,26 @@ function getSelectedClasses(){
 // facultative) ont été saisies avec une note, pas seulement qu'il y a "assez" d'UE saisies au
 // total. Sans ça, un étudiant ayant passé UE1-12 + UE14 (13 saisies) mais PAS l'UE13 (obligatoire)
 // serait compté à tort comme complet, puisque ueTotal>=13 devient vrai par coïncidence.
+// Compteur "X étudiants saisis / Y inscrits" pour la promo/année/classe(s) actuellement filtrée(s).
+// Le numérateur vient des groupes déjà affichés (au moins une note pour l'année choisie) ; le
+// dénominateur vient de la liste globale des étudiants (allEtudiants), en excluant les sortis.
+function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
+  const el = document.getElementById('saisieCounter');
+  if (!el) return;
+  if (!qDiplome || !qAnnee) { el.classList.add('hidden'); return; }
+  const inscrits = (allEtudiantsRoster||[]).filter(e=>{
+    if (String(e.sortie||'').trim()) return false; // exclut les étudiants sortis
+    if (diplomeFromClasse(e.classe) !== qDiplome) return false;
+    if (qClasses.length && !qClasses.includes(e.classe)) return false;
+    return true;
+  });
+  const nbSaisis = groups.length;
+  const nbInscrits = inscrits.length;
+  const pct = nbInscrits ? Math.round(nbSaisis/nbInscrits*100) : 0;
+  el.textContent = `📊 ${nbSaisis} / ${nbInscrits||'—'} étudiant(s) saisi(s) pour ${qAnnee}` + (nbInscrits?` (${pct}%)`:'');
+  el.classList.remove('hidden');
+}
+
 function hasAllMandatoryUE(g){
   const isDCG = g.diplome==='DCG', isDSCG = g.diplome==='DSCG';
   if (!isDCG && !isDSCG) return true;
