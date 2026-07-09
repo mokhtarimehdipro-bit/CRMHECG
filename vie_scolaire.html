@@ -182,6 +182,7 @@
         <div class="flex items-center gap-4 mt-4">
           <button onclick="loadNotes()" class="btn-primary">🔍 Afficher</button>
           <p id="saisieCounter" class="hidden text-sm font-bold text-gray-500"></p>
+          <button id="btnExportSaisie" onclick="exportSaisieXLSX()" class="hidden btn-ghost text-xs">📥 Export quantitatif</button>
         </div>
       </div>
 
@@ -2810,8 +2811,14 @@ function getSelectedClasses(){
 // dénominateur vient de la liste globale des étudiants (allEtudiants), en excluant les sortis.
 function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
   const el = document.getElementById('saisieCounter');
+  const btnExport = document.getElementById('btnExportSaisie');
   if (!el) return;
-  if (!qDiplome || !qAnnee) { el.classList.add('hidden'); return; }
+  if (!qDiplome || !qAnnee) {
+    el.classList.add('hidden');
+    if (btnExport) btnExport.classList.add('hidden');
+    window._lastSaisieContext = null;
+    return;
+  }
   const inscrits = (allEtudiantsRoster||[]).filter(e=>{
     if (String(e.sortie||'').trim()) return false; // exclut les étudiants sortis
     if (diplomeFromClasse(e.classe) !== qDiplome) return false;
@@ -2823,6 +2830,44 @@ function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
   const pct = nbInscrits ? Math.round(nbSaisis/nbInscrits*100) : 0;
   el.textContent = `📊 ${nbSaisis} / ${nbInscrits||'—'} étudiant(s) saisi(s) pour ${qAnnee}` + (nbInscrits?` (${pct}%)`:'');
   el.classList.remove('hidden');
+  if (btnExport) btnExport.classList.remove('hidden');
+  window._lastSaisieContext = { groups, qDiplome, qClasses, qAnnee, inscrits };
+}
+
+// Export .xls (table HTML colorée, ouvrable directement dans Excel) : vert = étudiant déjà saisi
+// pour l'année sélectionnée, blanc = manquant. Reprend exactement le périmètre du compteur ci-dessus.
+function exportSaisieXLSX(){
+  const ctx = window._lastSaisieContext;
+  if (!ctx || !ctx.inscrits.length){ toast('Aucun étudiant à exporter pour ces filtres.',false); return; }
+  const { groups, qDiplome, qClasses, qAnnee, inscrits } = ctx;
+  const saisisIds  = new Set(groups.map(g=>String(g.idEtu||'').trim()).filter(Boolean));
+  const saisisNoms = new Set(groups.map(g=>(g.nomPrenom||'').trim().toLowerCase()).filter(Boolean));
+  const rows = inscrits.map(e=>{
+    const isSaisi = saisisIds.has(String(e.id||'').trim())
+      || saisisNoms.has((e.nom+' '+e.prenom).trim().toLowerCase())
+      || saisisNoms.has((e.prenom+' '+e.nom).trim().toLowerCase());
+    return { nom:e.nom||'', prenom:e.prenom||'', classe:e.classe||'', saisi:isSaisi };
+  }).sort((a,b)=> a.classe.localeCompare(b.classe) || a.nom.localeCompare(b.nom));
+
+  let html = '<table border="1"><thead><tr style="background:#1A4E8A;color:#ffffff;font-weight:bold">'
+    + '<th>Nom</th><th>Prénom</th><th>Classe</th><th>Statut</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const bg = r.saisi ? '#C6EFCE' : '#FFFFFF';
+    const statut = r.saisi ? 'Saisi' : 'Manquant';
+    html += `<tr style="background:${bg}"><td>${r.nom}</td><td>${r.prenom}</td><td>${r.classe}</td><td>${statut}</td></tr>`;
+  });
+  html += '</tbody></table>';
+
+  const nbSaisi = rows.filter(r=>r.saisi).length;
+  const parts = [qDiplome, qAnnee, ...qClasses].filter(Boolean);
+  const filename = 'saisie_' + parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xls';
+
+  const blob = new Blob(['﻿', html], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  toast(`Export généré : ${nbSaisi}/${rows.length} saisis ✓`);
 }
 
 function hasAllMandatoryUE(g){
