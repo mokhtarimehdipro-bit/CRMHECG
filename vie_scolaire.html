@@ -1778,7 +1778,7 @@ async function _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe) {
     if (!fresh.success) return;
     const stuNotes = (fresh.data || []).filter(n => n.idEtu === idEtu);
     if (!stuNotes.length) return;
-    const groups = getStudentGroups(stuNotes);
+    const groups = getStudentGroups(stuNotes, 'BTS CG');
     if (!groups.length) return;
     const g = groups[0];
     const { moy, moyPro } = calcGroupStats(g);
@@ -1909,10 +1909,17 @@ async function loadNotes(){
   }
 }
 
-function getStudentGroups(notes){
+// fallbackDiplome : diplôme du filtre actif (qDiplome). Les notes affichées sont déjà filtrées
+// côté serveur pour ce diplôme — si la classe d'un étudiant est mal renseignée/atypique et que
+// diplomeFromClasse() n'arrive pas à la reconnaître, on retombe sur ce diplôme connu plutôt que
+// de laisser l'étudiant dans un groupe "diplôme inconnu" (moyenne calculée mais différentiel
+// silencieusement absent, car les calculs DCG/BTS sont conditionnés par le diplôme du groupe).
+function getStudentGroups(notes, fallbackDiplome){
   const groups = {};
+  const KNOWN_DIPLOMES = ['DCG','DSCG','BTS CG'];
   notes.forEach(n => {
-    const diplome = diplomeFromClasse(n.classe);
+    let diplome = diplomeFromClasse(n.classe);
+    if (fallbackDiplome && !KNOWN_DIPLOMES.includes(diplome)) diplome = fallbackDiplome;
     const key = (n.idEtu || n.nomPrenom || '?') + '|' + diplome;
     if (!groups[key]) groups[key] = { _key:key, idEtu:n.idEtu||'', nomPrenom:n.nomPrenom, classe:n.classe, diplome, notes:[], resultat:n.resultat, annees:[], lastAnnee:'' };
     groups[key].notes.push(n);
@@ -2027,7 +2034,7 @@ function renderNotesGrouped(){
   if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   // Pour DCG/DSCG : filtre cumulatif (notes jusqu'à l'année sélectionnée)
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
-  let groups = getStudentGroups(notes);
+  let groups = getStudentGroups(notes, qDiplome);
   // N'afficher que les étudiants ayant au moins une note pour l'année sélectionnée
   // (DCG reste cumulatif pour le CALCUL de la moyenne, mais la LISTE se restreint à la promo/année choisie)
   if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
@@ -2521,7 +2528,7 @@ function exportNotesCSV(){
   if (qMat)  notes = notes.filter(n=>matKey(n.matiere)===qMat);
   if (qEtu)  notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
-  let groups = getStudentGroups(notes);
+  let groups = getStudentGroups(notes, qDiplome);
   // Ne garder que les étudiants ayant une note pour l'année sélectionnée (DCG comme BTS)
   if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
   if (qClasses.length) groups = groups.filter(g=>qClasses.includes(g.classe));
@@ -2712,10 +2719,10 @@ function filterEtuSuggestions(){
 }
 function diplomeFromClasse(classe){
   const c=(classe||'').toUpperCase();
-  if (c.startsWith('BTS CG')) return 'BTS CG';
-  if (c.startsWith('BTS'))    return 'BTS CG'; // BTS 1, BTS 2, BTS ALT... → BTS CG
-  if (c.startsWith('DSCG'))   return 'DSCG';
-  if (c.startsWith('DCG'))    return 'DCG';
+  // .includes() plutôt que .startsWith() : tolère "1DCG A", "Groupe DCG1", "DCG - Promo 2025/2026"...
+  if (c.includes('BTS'))  return 'BTS CG';
+  if (c.includes('DSCG')) return 'DSCG'; // vérifié avant DCG : "DSCG" ne contient pas "DCG" comme sous-chaîne, mais on garde l'ordre par sécurité
+  if (c.includes('DCG'))  return 'DCG';
   return (classe||'').split(' ')[0]||'';
 }
 // Normalise un nom de matière pour la comparaison : "UE 2 - Droit des sociétés" et "UE 2" → "ue2"
