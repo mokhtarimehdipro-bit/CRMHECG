@@ -2328,6 +2328,7 @@ function computeAndShowStats(groups){
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
             lastAnnee:g.lastAnnee||'',
             totalPts,moy,moyPro,diff,diffAdj,ueOk,ueElim,ueRecu,ueTotal,
+            allMandatoryUE: hasAllMandatoryUE(g),
             resultat,resultatAuto,resultatManuel,noteUE,postRattResult};
   }).sort((a,b)=>{
     if (isUEfilter){
@@ -2341,7 +2342,7 @@ function computeAndShowStats(groups){
   // Pour DCG sans filtre UE + avec année : ne garder que les étudiants ayant toutes leurs UE
   // ET dont la dernière saisie correspond à l'année sélectionnée (= promo)
   const statsStudents = (isDCGstats && qAnnee && !isUEfilter)
-    ? students.filter(s => s.ueTotal >= nbUEObl && s.lastAnnee === qAnnee)
+    ? students.filter(s => s.allMandatoryUE && s.lastAnnee === qAnnee)
     : students;
 
   const total  = statsStudents.length;
@@ -2598,7 +2599,6 @@ function exportNotesCSV(){
 
   const isBTSexport = diplome==='BTS CG';
   const isDCGexport = diplome==='DCG'||diplome==='DSCG';
-  const nbUEOblExp  = diplome==='DCG'?13:6;
 
   // Pré-calcul des statuts pour chaque étudiant
   const groupStats = groups.map(g=>{
@@ -2613,12 +2613,10 @@ function exportNotesCSV(){
     return {g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes, lastAnnee: g.lastAnnee||''};
   });
 
-  // Pour DCG sans filtre UE + avec année : restreindre aux étudiants avec toutes les UE + promo correspondante
+  // Pour DCG sans filtre UE + avec année : restreindre aux étudiants ayant TOUTES les UE
+  // obligatoires (1 à 13, l'UE 14 facultative ne compte pas) + promo correspondante
   const statsRows = (isDCGexport && qAnnee && !qMat)
-    ? groupStats.filter(s=>{
-        const {ueTotal} = calcGroupStats(s.g);
-        return ueTotal >= nbUEOblExp && s.lastAnnee === qAnnee;
-      })
+    ? groupStats.filter(s=> hasAllMandatoryUE(s.g) && s.lastAnnee === qAnnee)
     : groupStats;
 
   // En-têtes
@@ -2794,6 +2792,19 @@ function compareMatiereUE(a,b){ return ueNum(matKey(a)) - ueNum(matKey(b)); }
 
 function getSelectedClasses(){
   return Array.from(document.getElementById('filterClasse').selectedOptions).map(o=>o.value).filter(Boolean);
+}
+
+// Vérifie que TOUTES les UE obligatoires (1 à 13 pour DCG, 1 à 6 pour DSCG — l'UE 14/7 est
+// facultative) ont été saisies avec une note, pas seulement qu'il y a "assez" d'UE saisies au
+// total. Sans ça, un étudiant ayant passé UE1-12 + UE14 (13 saisies) mais PAS l'UE13 (obligatoire)
+// serait compté à tort comme complet, puisque ueTotal>=13 devient vrai par coïncidence.
+function hasAllMandatoryUE(g){
+  const isDCG = g.diplome==='DCG', isDSCG = g.diplome==='DSCG';
+  if (!isDCG && !isDSCG) return true;
+  const nbObl = isDCG ? 13 : 6;
+  const keys = new Set(g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='').map(n=>matKey(n.matiere)));
+  for (let i=1;i<=nbObl;i++){ if (!keys.has('ue'+i)) return false; }
+  return true;
 }
 
 function selectEtu(id, nom, classe){
