@@ -2009,7 +2009,10 @@ function calcGroupStats(g){
   }
   let totalPts=0, totalCoeff=0, proPts=0, proCoeff=0;
   let ueOk=0, ueElim=0, ueRecu=0, ueTotal=0;
-  let adjPts=0, adjCoeff=0; // Différentiel ajusté (DCG/DSCG) : exclut les UE éliminatoires (<6), elles seront repassées
+  // Différentiel (diff) et différentiel ajusté (diffAdj) : accumulateurs séparés de la moyenne
+  // générale (totalPts/totalCoeff), qui elle reste inchangée par tout ce qui suit.
+  let diffPts=0, diffCoeff=0; // diff : exclut l'UE 14 (facultative) quand sa note est < 10
+  let adjPts=0, adjCoeff=0;   // diffAdj : en plus, exclut toute UE éliminatoire (<6)
   const btsRef = isBTS ? (refMatieres['BTS CG']||[]) : null;
   notesWithVal.forEach(n=>{
     const isNE = String(n.note).toUpperCase()==='NE';
@@ -2027,17 +2030,24 @@ function calcGroupStats(g){
       if (/^E[5-8]\b/i.test(n.matiere.trim())) { proPts += noteNum * c; proCoeff += c; }
     } else {
       totalPts += p; totalCoeff += c; ueTotal++;
-      if(noteNum>=10) { ueOk++; adjPts += p; adjCoeff += c; }
-      else if(noteNum>=6) { ueRecu++; adjPts += p; adjCoeff += c; }
-      else ueElim++; // <6 : éliminatoire, exclue du différentiel ajusté (sera repassée de toute façon)
+      if(noteNum>=10) ueOk++;
+      else if(noteNum>=6) ueRecu++;
+      else ueElim++;
+      // UE 14 (facultative, ex-"Espagnol des affaires"/LV2) : ne compte dans AUCUN différentiel
+      // quand la note est < 10 — bonus uniquement, jamais de pénalité pour cette UE optionnelle.
+      const isUE14Faible = matKey(n.matiere)==='ue14' && noteNum<10;
+      if (!isUE14Faible) {
+        diffPts += p; diffCoeff += c;
+        if (noteNum>=6) { adjPts += p; adjCoeff += c; } // + règle générale : <6 = éliminatoire, exclue de l'ajusté
+      }
     }
   });
   const moy = totalCoeff>0 ? Math.round(totalPts/totalCoeff*100)/100 : null;
   const moyPro = proCoeff>0 ? Math.round(proPts/proCoeff*100)/100 : null;
   let diff = null, diffAdj = null;
   if (isBTS && moy!==null) diff = Math.round((moy-10)*100)/100;
-  else if (isDCG && totalCoeff>0) {
-    diff = Math.round((totalPts - totalCoeff*10)*100)/100;
+  else if (isDCG && diffCoeff>0) {
+    diff = Math.round((diffPts - diffCoeff*10)*100)/100;
     if (adjCoeff>0) diffAdj = Math.round((adjPts - adjCoeff*10)*100)/100;
   }
   return { totalPts, totalCoeff, moy, moyPro, diff, diffAdj, ueOk, ueElim, ueRecu, ueTotal };
