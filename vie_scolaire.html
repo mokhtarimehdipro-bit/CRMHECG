@@ -219,8 +219,17 @@
 
       <!-- Stats Panel -->
       <div id="statsPanel" class="hidden mt-6">
-        <div class="flex justify-between items-center mb-4">
+        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
           <h2 class="text-xl font-black text-[#1A4E8A]" id="statsPanelTitle">Statistiques promotion</h2>
+          <div id="statsStatutFilterWrap" class="hidden" style="min-width:180px">
+            <select id="statsStatutFilter" onchange="computeAndShowStats(window._lastStatsGroups||[])">
+              <option value="">Tous les statuts</option>
+              <option value="Admis">Admis</option>
+              <option value="Rattrapage">Rattrapage</option>
+              <option value="Recalé">Recalé</option>
+              <option value="En cours">En cours</option>
+            </select>
+          </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis"></div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis2"></div>
@@ -2288,6 +2297,7 @@ async function editRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, curre
 function computeAndShowStats(groups){
   const panel = document.getElementById('statsPanel');
   if (!groups || !groups.length){ panel.classList.add('hidden'); return; }
+  window._lastStatsGroups = groups; // pour re-filtrer par statut sans tout recharger
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qClasses = getSelectedClasses();
@@ -2332,13 +2342,16 @@ function computeAndShowStats(groups){
         else if (resultatManuel && resultatManuel !== 'Rattrapage') postRattResult = resultatManuel === 'Admis' ? 'Obtenu' : resultatManuel;
       }
     } else if (isDCGstats){
-      // DCG auto : Admis si moy ≥ 10 ET aucune UE éliminatoire (note < 6), sinon Recalé
-      if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
+      // DCG : un résultat fixé manuellement (ex: décision de jury sur un dossier pas encore
+      // complet) prévaut toujours sur le calcul auto — sinon Admis si moy ≥ 10 et aucune UE
+      // éliminatoire (note < 6), sinon Recalé.
+      if (g.resultat) { resultatAuto = g.resultat; resultatManuel = g.resultat; }
+      else if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
       else              resultatAuto = 'En cours';
     }
 
     // BTS: Admis/Recalé → statut_final = statut_auto (identiques) ; Rattrapage → statut_final vide (en attente des rattrapages)
-    // Pour DCG : résultat = auto (100 % calculé depuis les notes)
+    // Pour DCG : résultat = manuel si fixé, sinon calculé depuis les notes
     const resultat = isBTSstats
       ? (resultatAuto === 'Rattrapage' ? (resultatManuel || '') : resultatAuto)
       : resultatAuto;
@@ -2358,9 +2371,10 @@ function computeAndShowStats(groups){
   });
 
   // Pour DCG sans filtre UE + avec année : ne garder que les étudiants ayant toutes leurs UE
-  // ET dont la dernière saisie correspond à l'année sélectionnée (= promo)
+  // (ou dont le résultat a été fixé manuellement — décision de jury) ET dont la dernière saisie
+  // correspond à l'année sélectionnée (= promo)
   const statsStudents = (isDCGstats && qAnnee && !isUEfilter)
-    ? students.filter(s => s.allMandatoryUE && s.lastAnnee === qAnnee)
+    ? students.filter(s => (s.allMandatoryUE || s.resultatManuel) && s.lastAnnee === qAnnee)
     : students;
 
   const total  = statsStudents.length;
@@ -2399,6 +2413,20 @@ function computeAndShowStats(groups){
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
 
+  // Filtre "Statut" (Admis/Rattrapage/Recalé/En cours) appliqué au tableau — les KPI ci-dessus
+  // restent calculés sur l'ensemble de statsStudents, non affectés par ce filtre d'affichage.
+  document.getElementById('statsStatutFilterWrap').classList.toggle('hidden', isUEfilter);
+  const qStatut = isUEfilter ? '' : (document.getElementById('statsStatutFilter').value||'');
+  function matchesStatutFilter(s){
+    if (!qStatut) return true;
+    if (qStatut==='Admis')      return isBTSstats ? (s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)) : (s.resultat==='Admis'||s.resultat==='Obtenu');
+    if (qStatut==='Rattrapage') return isBTSstats ? s.resultatAuto==='Rattrapage' : s.resultat==='Rattrapage';
+    if (qStatut==='Recalé')     return isBTSstats ? (s.resultatAuto==='Recalé'||s.resultatManuel==='Recalé'||s.postRattResult==='Recalé') : ['Recalé','Non admis','Éliminé'].includes(s.resultat);
+    if (qStatut==='En cours')   return s.resultatAuto==='En cours';
+    return true;
+  }
+  const displayStudents = qStatut ? statsStudents.filter(matchesStatutFilter) : statsStudents;
+
   const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
   if (isUEfilter){
     document.querySelector('#statsPanel table thead tr').innerHTML=
@@ -2415,7 +2443,7 @@ function computeAndShowStats(groups){
   }
 
   const latestAnnee=qAnnee||'';
-  document.getElementById('statsTbody').innerHTML=statsStudents.map((x,i)=>{
+  document.getElementById('statsTbody').innerHTML=displayStudents.map((x,i)=>{
     const diffHtml=x.diff===null?'—':x.diff>=0?`<span style="color:#15803d;font-weight:700">+${x.diff}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diff}</span>`;
     const diffAdjHtml=x.diffAdj===null?'—':x.diffAdj>=0?`<span style="color:#15803d;font-weight:700">+${x.diffAdj}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diffAdj}</span>`;
     const safeNom=(x.nomPrenom||'').replace(/'/g,"\\'");
@@ -2831,9 +2859,14 @@ function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
     return;
   }
   const inscrits = (allEtudiantsRoster||[]).filter(e=>{
-    // Liste blanche stricte : uniquement les "INSCRIT" (exclut préinscrits, prospects, sorties...)
-    if (String(e.typo||'').trim() !== 'inscrit') return false;
-    if (String(e.sortie||'').trim()) return false; // garde-fou si le champ typo n'a pas été recalculé récemment
+    // Le champ "typo" n'est pas toujours renseigné/à jour pour tout le monde (calculerTypoEtu()
+    // n'est jamais appelé côté serveur pour le recalculer) — une liste blanche stricte sur
+    // typo==='inscrit' faisait donc disparaître des étudiants réellement inscrits. On exclut donc
+    // explicitement les 3 catégories à écarter, plutôt que d'exiger une valeur précise pour tous.
+    const typo = String(e.typo||'').trim();
+    if (typo==='préinscrit' || typo==='prospect' || typo==='sortie') return false;
+    if (String(e.sortie||'').trim()) return false; // date de sortie renseignée = plus inscrit
+    if (!String(e.classe||'').trim()) return false; // pas de classe = pas rattaché à une promo
     if (diplomeFromClasse(e.classe) !== qDiplome) return false;
     if (qClasses.length && !qClasses.includes(e.classe)) return false;
     return true;
