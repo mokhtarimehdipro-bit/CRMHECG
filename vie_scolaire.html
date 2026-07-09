@@ -2408,7 +2408,7 @@ function computeAndShowStats(groups){
       '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th><th></th>';
   } else if (isDCGstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moyenne ↑</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th><th></th>';
   } else {
     document.querySelector('#statsPanel table thead tr').innerHTML=
       '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th><th></th>';
@@ -2452,6 +2452,7 @@ function computeAndShowStats(groups){
     if (isDCGstats) return `<tr>
       <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${nbUEObl}</td>
       <td style="color:#d97706;font-weight:700">${x.ueRecu||0}≈</td>
       <td style="color:#dc2626;font-weight:700">${x.ueElim||0}✘</td>
