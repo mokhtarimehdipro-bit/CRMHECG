@@ -2820,8 +2820,9 @@ function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
     return;
   }
   const inscrits = (allEtudiantsRoster||[]).filter(e=>{
-    if (String(e.sortie||'').trim()) return false; // exclut les étudiants sortis
-    if (String(e.typo||'').trim() === 'préinscrit') return false; // exclut les préinscrits (pas encore réellement inscrits)
+    // Liste blanche stricte : uniquement les "INSCRIT" (exclut préinscrits, prospects, sorties...)
+    if (String(e.typo||'').trim() !== 'inscrit') return false;
+    if (String(e.sortie||'').trim()) return false; // garde-fou si le champ typo n'a pas été recalculé récemment
     if (diplomeFromClasse(e.classe) !== qDiplome) return false;
     if (qClasses.length && !qClasses.includes(e.classe)) return false;
     return true;
