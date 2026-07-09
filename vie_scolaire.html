@@ -223,11 +223,12 @@
           <h2 class="text-xl font-black text-[#1A4E8A]" id="statsPanelTitle">Statistiques promotion</h2>
           <div id="statsStatutFilterWrap" class="hidden" style="min-width:180px">
             <select id="statsStatutFilter" onchange="computeAndShowStats(window._lastStatsGroups||[])">
-              <option value="">Tous les statuts</option>
+              <option value="">Classement (hors Recalé)</option>
               <option value="Admis">Admis</option>
               <option value="Rattrapage">Rattrapage</option>
               <option value="Recalé">Recalé</option>
               <option value="En cours">En cours</option>
+              <option value="__all__">Tous (avec Recalé)</option>
             </select>
           </div>
         </div>
@@ -2413,19 +2414,30 @@ function computeAndShowStats(groups){
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
 
-  // Filtre "Statut" (Admis/Rattrapage/Recalé/En cours) appliqué au tableau — les KPI ci-dessus
-  // restent calculés sur l'ensemble de statsStudents, non affectés par ce filtre d'affichage.
+  // Filtre "Statut" appliqué au tableau (classement) — les KPI ci-dessus restent calculés sur
+  // l'ensemble de statsStudents, non affectés par ce filtre d'affichage.
+  // Par défaut (qStatut==='') : le classement exclut les Recalés — un étudiant recalé n'a pas
+  // vocation à figurer dans le classement de promotion, mais reste consultable via le filtre
+  // dédié "Recalé" (ou "Tous") sans devoir être mélangé aux autres par défaut.
   document.getElementById('statsStatutFilterWrap').classList.toggle('hidden', isUEfilter);
   const qStatut = isUEfilter ? '' : (document.getElementById('statsStatutFilter').value||'');
-  function matchesStatutFilter(s){
-    if (!qStatut) return true;
-    if (qStatut==='Admis')      return isBTSstats ? (s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)) : (s.resultat==='Admis'||s.resultat==='Obtenu');
-    if (qStatut==='Rattrapage') return isBTSstats ? s.resultatAuto==='Rattrapage' : s.resultat==='Rattrapage';
-    if (qStatut==='Recalé')     return isBTSstats ? (s.resultatAuto==='Recalé'||s.resultatManuel==='Recalé'||s.postRattResult==='Recalé') : ['Recalé','Non admis','Éliminé'].includes(s.resultat);
-    if (qStatut==='En cours')   return s.resultatAuto==='En cours';
-    return true;
+  function statutOf(s){
+    if (isBTSstats) {
+      if (s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)) return 'Admis';
+      if (s.resultatAuto==='Rattrapage') return 'Rattrapage';
+      if (s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé') return 'Recalé';
+      return 'En cours';
+    }
+    if (s.resultat==='Admis'||s.resultat==='Obtenu') return 'Admis';
+    if (s.resultat==='Rattrapage') return 'Rattrapage';
+    if (['Recalé','Non admis','Éliminé'].includes(s.resultat)) return 'Recalé';
+    return 'En cours';
   }
-  const displayStudents = qStatut ? statsStudents.filter(matchesStatutFilter) : statsStudents;
+  const displayStudents = statsStudents.filter(s=>{
+    if (qStatut==='__all__') return true;
+    if (qStatut) return statutOf(s)===qStatut;
+    return statutOf(s)!=='Recalé';
+  });
 
   const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
   if (isUEfilter){
