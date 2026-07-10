@@ -2967,9 +2967,14 @@ function _buildSheetRecap(d){
 
 // Feuille 2 — uniquement les notes réellement saisies pour l'année sélectionnée (doublons exclus,
 // cf. _notesReellesPourAnnee ci-dessus).
+// Feuille 2 — même présentation que la feuille 1 (une ligne par étudiant, UE en colonnes), mais
+// chaque colonne UE n'affiche QUE la note effectivement datée de l'année sélectionnée — et jamais
+// un doublon (même note, année antérieure) : dans ce cas la cellule reste vide, la vraie note
+// ayant déjà été comptée sur sa propre année. Total pts/Moyenne/Différentiel sont recalculés sur
+// ce seul sous-ensemble (pas de report de l'historique cumulatif de la feuille 1).
 function _buildSheetAnneeCourante(d){
-  const { qAnnee, groupStats } = d;
-  const header = ['Nom', 'Classe', 'UE', 'Note', 'Coefficient', 'Points'];
+  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols } = d;
+  const header = ['Nom', 'Diplôme', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
   const colCount = header.length;
   let rows = '';
   rows += _XL.row(_XL.s('sTitle','HECG — Notes saisies '+(qAnnee||'(sélectionnez une année)'), colCount-1));
@@ -2977,24 +2982,35 @@ function _buildSheetAnneeCourante(d){
     rows += _XL.row(_XL.s('sInfo','Sélectionnez une année dans les filtres avant d\'exporter pour remplir cette feuille.', colCount-1));
     return `<Worksheet ss:Name="Notes annee en cours"><Table>${rows}</Table></Worksheet>`;
   }
-  rows += _XL.row(_XL.s('sSubtitle','Notes datées de '+qAnnee+' — doublons (même note, année antérieure) exclus — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
+  const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ');
+  rows += _XL.row(_XL.s('sSubtitle',titreParts+' — doublons (même note, année antérieure) exclus des colonnes UE — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
   rows += _XL.row('<Cell/>');
   rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
 
   let idx = 0;
   groupStats.forEach(({g})=>{
-    const notes = _notesReellesPourAnnee(g, qAnnee).slice().sort((a,b)=>compareMatiereUE(a.matiere,b.matiere));
-    notes.forEach(n=>{
-      const zA = idx%2===0?'sNameA':'sNameB', zC = idx%2===0?'sCenterA':'sCenterB';
-      const isNE = String(n.note).toUpperCase()==='NE';
-      const num = isNE?null:parseFloat(n.note);
-      let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, n.classe||'—') + _XL.s(zC, n.matiere||'');
-      cells += _XL.s(isNE?'sGray':_XL.noteStyle(num), isNE?'NE':(isNaN(num)?'—':num.toFixed(2)));
-      cells += _XL.s(zC, n.coeff!==null&&n.coeff!==undefined&&n.coeff!==''?String(n.coeff):'—');
-      cells += _XL.s(zC, n.points!==null&&n.points!==undefined&&n.points!==''?String(n.points):'—');
-      rows += _XL.row(cells);
-      idx++;
+    const notesAnnee = _notesReellesPourAnnee(g, qAnnee);
+    if (!notesAnnee.length) return; // rien de réel pour cette année (tout doublon, ou pas concerné)
+    // Réutilise calcGroupStats sur ce seul sous-ensemble : mêmes règles (meilleure note par UE,
+    // UE14 bonus, différentiel ajusté...) qu'ailleurs dans l'application, appliquées à l'année seule.
+    const { totalPts, moy, diff, diffAdj } = calcGroupStats({ diplome: g.diplome, notes: notesAnnee });
+    const noteByUE = {};
+    notesAnnee.forEach(n=>{ noteByUE[matKey(n.matiere)] = n; });
+    const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.diplome||'') + _XL.s(zC, qAnnee);
+    dataUEs.forEach(ue=>{
+      const n = noteByUE[matKey(ue)];
+      if (!n){ cells += _XL.s(zC,'—'); return; }
+      if (String(n.note).toUpperCase()==='NE'){ cells += _XL.s(zC,'NE'); return; }
+      const num = parseFloat(n.note);
+      cells += _XL.s(_XL.noteStyle(num), isNaN(num)?'—':num.toFixed(2));
     });
+    cells += _XL.s(zC, totalPts!==null?totalPts.toFixed(2):'—');
+    cells += _XL.s(moy===null?'sGray':_XL.noteStyle(moy), moy===null?'—':moy.toFixed(2));
+    btsExtraCols.forEach(()=>{ cells += _XL.s(zC,'—'); }); // statut non pertinent sur un sous-ensemble partiel
+    [diff, diffAdj].forEach(v=>{ cells += _XL.s(v===null?'sGray':(v>=0?'sGreen':'sRed'), v===null?'—':(v>=0?'+'+v:String(v))); });
+    rows += _XL.row(cells);
+    idx++;
   });
   if (!idx) rows += _XL.row(_XL.s('sInfo','Aucune note (hors doublons) trouvée pour '+qAnnee+'.', colCount-1));
 
