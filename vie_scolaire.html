@@ -2550,38 +2550,52 @@ function renderMatiereStats(){
   const panel    = document.getElementById('matiereStatsPanel');
   if (!panel) return;
   if (!qMat || !allNotes.length){ panel.classList.add('hidden'); return; }
-  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
+  // IMPORTANT : on ne filtre PAS par année ici, avant la détection des doublons — un étudiant
+  // qui a la même note à la même UE en 2023-2024 ET en 2025-2026 (classe différente : "DCG" vs
+  // "DCG3A") doit être détecté comme doublon AVANT de savoir sur quelle année on l'affichera.
+  // Filtrer par année trop tôt masquerait le doublon (une seule année visible à la fois) et le
+  // ferait apparaître à tort comme une saisie normale sur l'année la plus récente.
   let notes = allNotes.filter(n=>matKey(n.matiere)===qMat);
-  if (qAnnee) notes = notes.filter(n=>n.annee===qAnnee);
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
-  if (qClasses.length) notes = notes.filter(n=>qClasses.includes(n.classe));
   if (!notes.length){ panel.classList.add('hidden'); return; }
 
-  // Regroupe TOUTES les saisies de chaque étudiant pour cette UE (toutes périodes confondues),
-  // puis : exclut les dispensés (NE), exclut les doublons suspects (même note à des périodes
-  // différentes — à corriger via auditDoublonsNotesDCG()/nettoyerDoublonsNotesDCG()), et retient
-  // sinon la saisie la plus récente.
+  // Regroupe TOUTES les saisies de chaque étudiant pour cette UE (toutes périodes confondues) :
+  // exclut les dispensés (NE) ; en cas de doublon (même note à des années différentes), ne retient
+  // QUE l'année la plus ancienne (cf. auditDoublonsNotesDCG()/nettoyerDoublonsNotesDCG() pour
+  // nettoyer la donnée en base) ; sinon retient la saisie la plus récente (cas normal/retake).
   const byEtuAll = {};
   notes.forEach(n=>{
     const k = n.idEtu||n.nomPrenom;
     (byEtuAll[k]=byEtuAll[k]||[]).push(n);
   });
-  const etuNotes = [];
-  let neCount = 0, doublonCount = 0;
+  const canoniques = []; // une entrée "représentative" par étudiant pour cette UE
+  let neCount = 0;
   Object.keys(byEtuAll).forEach(k=>{
     const list = byEtuAll[k];
     const numeriques = list.filter(n=>n.note!==null && n.note!==undefined && n.note!=='' && String(n.note).toUpperCase()!=='NE' && !isNaN(parseFloat(n.note)));
     if (!numeriques.length) { if (list.some(n=>String(n.note).toUpperCase()==='NE')) neCount++; return; }
     const valeurs = {};
     numeriques.forEach(n=>{ const v=parseFloat(n.note).toFixed(2); (valeurs[v]=valeurs[v]||[]).push(n); });
-    const suspect = Object.values(valeurs).some(arr=>{
+    // Groupe de doublon = même valeur exacte sur au moins 2 années différentes
+    const groupeDoublon = Object.values(valeurs).find(arr=>{
       const annees = arr.map(n=>n.annee||'').filter((a,i,self)=>self.indexOf(a)===i);
       return arr.length>1 && annees.length>1;
     });
-    if (suspect) { doublonCount++; return; }
+    if (groupeDoublon) {
+      const oldest = groupeDoublon.reduce((best,n)=> (n.annee||'')<(best.annee||'') ? n : best, groupeDoublon[0]);
+      canoniques.push(Object.assign({}, oldest, { estDoublonNettoye:true }));
+      return;
+    }
     const latest = numeriques.reduce((best,n)=> (n.annee||'')>(best.annee||'') ? n : best, numeriques[0]);
-    etuNotes.push(latest);
+    canoniques.push(latest);
   });
+
+  // Filtres appliqués APRÈS détermination de l'entrée représentative : l'année (si sélectionnée)
+  // et la classe se jugent sur cette entrée canonique, pas sur les lignes brutes.
+  let etuNotes = canoniques;
+  if (qAnnee)          etuNotes = etuNotes.filter(n=>n.annee===qAnnee);
+  if (qClasses.length) etuNotes = etuNotes.filter(n=>qClasses.includes(n.classe));
+  const doublonCount = canoniques.filter(n=>n.estDoublonNettoye && (!qAnnee || n.annee===qAnnee) && (!qClasses.length || qClasses.includes(n.classe))).length;
 
   if (!etuNotes.length){ panel.classList.add('hidden'); return; }
   const numNotes = etuNotes.map(n=>parseFloat(n.note)).filter(v=>!isNaN(v));
@@ -2600,13 +2614,14 @@ function renderMatiereStats(){
     [moyenne+'/20','Moyenne','#374151'],
     [noteMax+' / '+noteMin,'Max / Min','#6b7280'],
     ...(neCount?[[neCount,'Dispensés NE (exclus)','#4338ca']]:[]),
-    ...(doublonCount?[[doublonCount,'Doublons suspects (exclus)','#dc2626']]:[]),
+    ...(doublonCount?[[doublonCount,'Doublons (année la + ancienne retenue)','#d97706']]:[]),
   ].map(([v,l,c])=>`<div class="kpi-card"><p class="text-xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   const sorted = etuNotes.slice().sort((a,b)=>(parseFloat(b.note)||0)-(parseFloat(a.note)||0));
   document.getElementById('matiereStatsTbody').innerHTML = sorted.map((n,i)=>{
     const num=parseFloat(n.note);
     const c=isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626');
-    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
+    const dupBadge = n.estDoublonNettoye ? ' <span title="Doublon détecté : note identique sur une année plus récente, ignorée" style="font-size:0.6rem;background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:9999px;font-weight:700">DOUBLON</span>' : '';
+    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}${dupBadge}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
   }).join('');
   panel.classList.remove('hidden');
 }
@@ -2825,105 +2840,187 @@ function exportNotesCSV(){
 
 // Export "Excel mis en forme" : table HTML stylée (ouvrable directement dans Excel avec ses
 // couleurs), aux tons bleu/orange de l'application — pas un simple tableau brut.
-function exportNotesExcel(){
-  const d = _prepareNotesExportData();
-  if (!d){ toast('Aucune donnée à exporter.',false); return; }
-  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
+// Notes réellement "de cette année" pour un étudiant : exclut celles qui ne sont qu'un doublon
+// (même UE, même note exacte) d'une année STRICTEMENT antérieure — cf. audit doublons DCG.
+function _notesReellesPourAnnee(g, annee){
+  if (!annee) return [];
+  return g.notes.filter(n=>{
+    if (n.annee!==annee || n.note===null || n.note===undefined || n.note==='') return false;
+    if (String(n.note).toUpperCase()==='NE') return true; // rien à comparer, on garde
+    const num = parseFloat(n.note);
+    if (isNaN(num)) return false;
+    const k = matKey(n.matiere);
+    const estDoublonAncien = g.notes.some(o=> o!==n && matKey(o.matiere)===k && (o.annee||'')<annee &&
+      String(o.note).toUpperCase()!=='NE' && !isNaN(parseFloat(o.note)) && parseFloat(o.note).toFixed(2)===num.toFixed(2));
+    return !estDoublonAncien;
+  });
+}
 
-  const BLUE='#1A4E8A', BLUE_LIGHT='#EAF1FA', BLUE_ZEBRA='#F5F9FD', ORANGE='#F26522', ORANGE_LIGHT='#FFF1E6';
-  const badgeStyle = statut=>{
+const _XL = {
+  esc: s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
+  s: (id, val, merge) => `<Cell ss:StyleID="${id}"${merge?` ss:MergeAcross="${merge}"`:''}><Data ss:Type="String">${_XL.esc(val)}</Data></Cell>`,
+  n: (id, val, merge) => `<Cell ss:StyleID="${id}"${merge?` ss:MergeAcross="${merge}"`:''}><Data ss:Type="Number">${val}</Data></Cell>`,
+  row: cells => `<Row>${cells}</Row>`,
+  noteStyle: num => isNaN(num) ? 'sGray' : (num>=10 ? 'sGreen' : (num>=6 ? 'sOrange' : 'sRed')),
+  badgeStyle: statut => {
     const s = String(statut||'').toLowerCase();
-    if (s.includes('admis')||s.includes('obtenu'))              return 'background:#dcfce7;color:#15803d';
-    if (s.includes('rattrapage')||s.includes('attente'))        return 'background:#fef9c3;color:#a16207';
-    if (s.includes('recalé')||s.includes('non admis')||s.includes('éliminé')) return 'background:#fee2e2;color:#dc2626';
-    return 'background:#dbeafe;color:#1d4ed8';
-  };
-  const badgeCell = statut => `<td style="${badgeStyle(statut)};font-weight:bold;text-align:center;border-radius:0;padding:4px 8px">${statut||'En cours'}</td>`;
-  const numCell = (val, decimals=2) => val===null||val===undefined||isNaN(val) ? '<td style="text-align:center;color:#9ca3af">—</td>'
-    : `<td style="text-align:center;font-weight:bold;color:${val>=10?'#15803d':'#dc2626'}">${val.toFixed(decimals)}</td>`;
-  const diffCell = val => val===null||val===undefined ? '<td style="text-align:center;color:#9ca3af">—</td>'
-    : `<td style="text-align:center;font-weight:bold;color:${val>=0?'#15803d':'#dc2626'}">${val>=0?'+':''}${val}</td>`;
+    if (s.includes('admis')||s.includes('obtenu')) return 'sBadgeAdmis';
+    if (s.includes('rattrapage')||s.includes('attente')) return 'sBadgeRatt';
+    if (s.includes('recalé')||s.includes('non admis')||s.includes('éliminé')) return 'sBadgeRecale';
+    return 'sBadgeCours';
+  },
+};
 
+const _XL_STYLES = `<Styles>
+ <Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="16" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>
+ <Style ss:ID="sSubtitle"><Font ss:Bold="1" ss:Size="11" ss:Color="#1A4E8A"/><Interior ss:Color="#EAF1FA" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sInfo"><Font ss:Italic="1" ss:Color="#6B7280"/></Style>
+ <Style ss:ID="sHeader"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:WrapText="1"/></Style>
+ <Style ss:ID="sRowA"><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sRowB"><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sNameA"><Font ss:Bold="1" ss:Color="#1A4E8A"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sNameB"><Font ss:Bold="1" ss:Color="#1A4E8A"/><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sCenterA"><Alignment ss:Horizontal="Center"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sCenterB"><Alignment ss:Horizontal="Center"/><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sGreen"><Font ss:Bold="1" ss:Color="#15803D"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sOrange"><Font ss:Bold="1" ss:Color="#A16207"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sRed"><Font ss:Bold="1" ss:Color="#DC2626"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sGray"><Font ss:Color="#9CA3AF"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeAdmis"><Font ss:Bold="1" ss:Color="#15803D"/><Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeRatt"><Font ss:Bold="1" ss:Color="#A16207"/><Interior ss:Color="#FEF9C3" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeRecale"><Font ss:Bold="1" ss:Color="#DC2626"/><Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeCours"><Font ss:Bold="1" ss:Color="#1D4ED8"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sMoyLabel"><Font ss:Bold="1" ss:Color="#F26522"/><Interior ss:Color="#FFF1E6" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sMoyVal"><Font ss:Bold="1" ss:Color="#F26522"/><Interior ss:Color="#FFF1E6" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatsBand"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sStatLabel"><Font ss:Bold="1" ss:Size="9" ss:Color="#1A4E8A"/><Interior ss:Color="#EAF1FA" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValBlue"><Font ss:Bold="1" ss:Size="14" ss:Color="#1A4E8A"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValGreen"><Font ss:Bold="1" ss:Size="14" ss:Color="#15803D"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValOrange"><Font ss:Bold="1" ss:Size="14" ss:Color="#F26522"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValRed"><Font ss:Bold="1" ss:Size="14" ss:Color="#DC2626"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValIndigo"><Font ss:Bold="1" ss:Size="14" ss:Color="#1D4ED8"/><Alignment ss:Horizontal="Center"/></Style>
+</Styles>`;
+
+// Feuille 1 — récapitulatif cumulatif (mêmes données que l'export précédent : un étudiant compte
+// dès qu'il a au moins une note sur l'année sélectionnée, mais ses totaux/moyenne/différentiel
+// portent sur tout son historique DCG, meilleure note retenue par UE).
+function _buildSheetRecap(d){
+  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
   const header = ['Nom', 'Diplôme', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
   const colCount = header.length;
-
-  let html = '<table border="1" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:12px">';
-
-  // Bandeau titre
   const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ') || 'Toutes promotions';
-  html += `<tr><td colspan="${colCount}" style="background:${BLUE};color:#ffffff;font-size:18px;font-weight:bold;padding:14px 16px;border-bottom:4px solid ${ORANGE}">HECG — Relevé de notes</td></tr>`;
-  html += `<tr><td colspan="${colCount}" style="background:${BLUE_LIGHT};color:${BLUE};font-size:12px;font-weight:bold;padding:8px 16px">${titreParts} — Export du ${new Date().toLocaleDateString('fr-FR')}</td></tr>`;
-  html += `<tr><td colspan="${colCount}" style="padding:4px;border:none"></td></tr>`;
+  let rows = '';
+  rows += _XL.row(_XL.s('sTitle','HECG — Relevé de notes (cumulatif)', colCount-1));
+  rows += _XL.row(_XL.s('sSubtitle', titreParts+' — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
+  rows += _XL.row('<Cell/>');
+  rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
 
-  // En-têtes de colonnes
-  html += '<tr>' + header.map(h=>`<th style="background:${BLUE};color:#ffffff;font-weight:bold;padding:8px 10px;text-align:center;border:1px solid #ffffff">${h}</th>`).join('') + '</tr>';
-
-  // Lignes étudiants (zébrées)
   const matiereAgg = {};
   groupStats.forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes}, idx)=>{
     const noteByUE = noteByUEForGroup(g);
     const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
-    const rowBg = idx%2===0 ? '#ffffff' : BLUE_ZEBRA;
-    html += `<tr style="background:${rowBg}">`;
-    html += `<td style="font-weight:bold;color:${BLUE};padding:5px 10px">${g.nomPrenom}</td>`;
-    html += `<td style="text-align:center">${g.diplome||''}</td><td style="text-align:center">${anneeLabel}</td>`;
+    const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.diplome||'') + _XL.s(zC, anneeLabel);
     dataUEs.forEach(ue=>{
       const n = noteByUE[matKey(ue)];
-      if (!n || n.note===null || n.note===undefined || n.note===''){ html += '<td style="text-align:center;color:#d1d5db">—</td>'; return; }
-      const raw = String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
-      if (raw==='NE'){ html += '<td style="text-align:center;color:#4338ca;font-weight:bold">NE</td>'; return; }
-      const num = parseFloat(raw);
+      if (!n || n.note===null || n.note===undefined || n.note===''){ cells += _XL.s(zC,'—'); return; }
+      if (String(n.note).toUpperCase()==='NE'){ cells += _XL.s(zC,'NE'); return; }
+      const num = parseFloat(n.note);
       if (!isNaN(num)) { const k=matKey(ue); if(!matiereAgg[k]) matiereAgg[k]={sum:0,n:0}; matiereAgg[k].sum+=num; matiereAgg[k].n++; }
-      html += `<td style="text-align:center;color:${num>=10?'#15803d':num>=6?'#a16207':'#dc2626'}">${num.toFixed(2)}</td>`;
+      cells += _XL.s(_XL.noteStyle(num), isNaN(num)?'—':num.toFixed(2));
     });
-    html += `<td style="text-align:center">${totalPts!==null?totalPts.toFixed(2):'—'}</td>`;
-    html += numCell(moy);
+    cells += _XL.s(zC, totalPts!==null?totalPts.toFixed(2):'—');
+    cells += _XL.s(moy===null?'sGray':_XL.noteStyle(moy), moy===null?'—':moy.toFixed(2));
     if (isBTSexport) {
-      html += numCell(moyPro);
-      html += badgeCell(autoRes);
-      html += badgeCell(defRes);
+      cells += _XL.s(moyPro===null?'sGray':_XL.noteStyle(moyPro), moyPro===null?'—':moyPro.toFixed(2));
+      cells += _XL.s(_XL.badgeStyle(autoRes), autoRes||'En cours');
+      cells += _XL.s(_XL.badgeStyle(defRes), defRes||'En cours');
     } else {
-      html += badgeCell(defRes);
+      cells += _XL.s(_XL.badgeStyle(defRes), defRes||'En cours');
     }
-    html += diffCell(diff);
-    html += diffCell(diffAdj);
-    html += '</tr>';
+    [diff, diffAdj].forEach(v=>{ cells += _XL.s(v===null?'sGray':(v>=0?'sGreen':'sRed'), v===null?'—':(v>=0?'+'+v:String(v))); });
+    rows += _XL.row(cells);
   });
 
-  // Ligne de synthèse : moyenne par matière
-  html += `<tr style="background:${ORANGE_LIGHT};border-top:2px solid ${ORANGE}">`;
-  html += `<td colspan="3" style="font-weight:bold;color:${ORANGE};padding:6px 10px">MOYENNE PAR MATIÈRE</td>`;
-  dataUEs.forEach(ue=>{
-    const agg = matiereAgg[matKey(ue)];
-    html += `<td style="text-align:center;font-weight:bold;color:${ORANGE}">${agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'}</td>`;
-  });
-  const trailingCols = 2 + btsExtraCols.length + 2; // total pts, moyenne, [extras], diff, diffAdj
-  html += `<td colspan="${trailingCols}" style="background:${ORANGE_LIGHT}"></td></tr>`;
+  // Moyenne par matière
+  let moyCells = _XL.s('sMoyLabel','MOYENNE PAR MATIÈRE', 2);
+  dataUEs.forEach(ue=>{ const agg=matiereAgg[matKey(ue)]; moyCells += _XL.s('sMoyVal', agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'); });
+  const trailing = 2 + btsExtraCols.length + 2;
+  moyCells += `<Cell ss:StyleID="sMoyVal" ss:MergeAcross="${trailing-1}"/>`;
+  rows += _XL.row(moyCells);
+  rows += _XL.row('<Cell/>');
 
-  html += `<tr><td colspan="${colCount}" style="padding:6px;border:none"></td></tr>`;
-
-  // Bloc statistiques
-  html += `<tr><td colspan="${colCount}" style="background:${BLUE};color:#ffffff;font-weight:bold;padding:8px 16px">Statistiques</td></tr>`;
+  // Bloc stats
+  rows += _XL.row(_XL.s('sStatsBand','Statistiques', colCount-1));
   const kpis = [
-    ['Total', stats.total, BLUE],
-    ['Admis', stats.admis, '#15803d'],
-    ['Rattrapage', stats.ratt, '#a16207'],
-    ['Non admis / Éliminés', stats.recale, '#dc2626'],
-    ['En cours', stats.enCours, '#1d4ed8'],
-    ['Moyenne', stats.moyGlobal, BLUE],
-    ['Taux réussite', stats.tauxReussite!==null?stats.tauxReussite+'%':'—', ORANGE],
+    ['Total', stats.total, 'sStatValBlue'], ['Admis', stats.admis, 'sStatValGreen'],
+    ['Rattrapage', stats.ratt, 'sStatValOrange'], ['Non admis / Éliminés', stats.recale, 'sStatValRed'],
+    ['En cours', stats.enCours, 'sStatValIndigo'], ['Moyenne', stats.moyGlobal, 'sStatValBlue'],
+    ['Taux réussite', stats.tauxReussite!==null?stats.tauxReussite+'%':'—', 'sStatValOrange'],
   ];
-  html += '<tr style="background:'+BLUE_LIGHT+'">' + kpis.map(([l])=>`<td style="font-weight:bold;color:${BLUE};text-align:center;padding:4px 8px;font-size:10px;text-transform:uppercase">${l}</td>`).join('') + (colCount>kpis.length?`<td colspan="${colCount-kpis.length}" style="background:${BLUE_LIGHT}"></td>`:'') + '</tr>';
-  html += '<tr>' + kpis.map(([,v,c])=>`<td style="font-weight:bold;color:${c};text-align:center;padding:6px 8px;font-size:14px">${v}</td>`).join('') + (colCount>kpis.length?`<td colspan="${colCount-kpis.length}"></td>`:'') + '</tr>';
+  const filler = colCount>kpis.length ? colCount-kpis.length : 0;
+  rows += _XL.row(kpis.map(([l])=>_XL.s('sStatLabel',l)).join('') + (filler?`<Cell ss:MergeAcross="${filler-1}"/>`:''));
+  rows += _XL.row(kpis.map(([,v,st])=>_XL.s(st,v)).join('') + (filler?`<Cell ss:MergeAcross="${filler-1}"/>`:''));
 
-  html += '</table>';
+  return `<Worksheet ss:Name="Récap (cumulatif)"><Table>${rows}</Table></Worksheet>`;
+}
 
-  const blob = new Blob(['﻿', html], { type: 'application/vnd.ms-excel' });
+// Feuille 2 — uniquement les notes réellement saisies pour l'année sélectionnée (doublons exclus,
+// cf. _notesReellesPourAnnee ci-dessus).
+function _buildSheetAnneeCourante(d){
+  const { qAnnee, groupStats } = d;
+  const header = ['Nom', 'Classe', 'UE', 'Note', 'Coefficient', 'Points'];
+  const colCount = header.length;
+  let rows = '';
+  rows += _XL.row(_XL.s('sTitle','HECG — Notes saisies '+(qAnnee||'(sélectionnez une année)'), colCount-1));
+  if (!qAnnee) {
+    rows += _XL.row(_XL.s('sInfo','Sélectionnez une année dans les filtres avant d\'exporter pour remplir cette feuille.', colCount-1));
+    return `<Worksheet ss:Name="Notes annee en cours"><Table>${rows}</Table></Worksheet>`;
+  }
+  rows += _XL.row(_XL.s('sSubtitle','Notes datées de '+qAnnee+' — doublons (même note, année antérieure) exclus — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
+  rows += _XL.row('<Cell/>');
+  rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
+
+  let idx = 0;
+  groupStats.forEach(({g})=>{
+    const notes = _notesReellesPourAnnee(g, qAnnee).slice().sort((a,b)=>compareMatiereUE(a.matiere,b.matiere));
+    notes.forEach(n=>{
+      const zA = idx%2===0?'sNameA':'sNameB', zC = idx%2===0?'sCenterA':'sCenterB';
+      const isNE = String(n.note).toUpperCase()==='NE';
+      const num = isNE?null:parseFloat(n.note);
+      let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, n.classe||'—') + _XL.s(zC, n.matiere||'');
+      cells += _XL.s(isNE?'sGray':_XL.noteStyle(num), isNE?'NE':(isNaN(num)?'—':num.toFixed(2)));
+      cells += _XL.s(zC, n.coeff!==null&&n.coeff!==undefined&&n.coeff!==''?String(n.coeff):'—');
+      cells += _XL.s(zC, n.points!==null&&n.points!==undefined&&n.points!==''?String(n.points):'—');
+      rows += _XL.row(cells);
+      idx++;
+    });
+  });
+  if (!idx) rows += _XL.row(_XL.s('sInfo','Aucune note (hors doublons) trouvée pour '+qAnnee+'.', colCount-1));
+
+  return `<Worksheet ss:Name="Notes ${_XL.esc(qAnnee).replace(/[^0-9A-Za-z_-]/g,'_')}"><Table>${rows}</Table></Worksheet>`;
+}
+
+// Export "Excel mis en forme" : classeur SpreadsheetML (2 onglets réels, avec mise en forme
+// native Excel — couleurs, gras, badges) aux tons bleu/orange de l'application.
+function exportNotesExcel(){
+  const d = _prepareNotesExportData();
+  if (!d){ toast('Aucune donnée à exporter.',false); return; }
+
+  const xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n'
+    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" '
+    + 'xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n'
+    + _XL_STYLES
+    + _buildSheetRecap(d)
+    + _buildSheetAnneeCourante(d)
+    + '</Workbook>';
+
+  const blob = new Blob(['﻿', xml], { type: 'application/vnd.ms-excel' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = _notesExportFilename(d,'xls');
   a.click();
-  toast('Export Excel généré ✓');
+  toast('Export Excel généré (2 onglets) ✓');
 }
 
 async function showStats(){
