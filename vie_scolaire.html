@@ -1863,6 +1863,10 @@ async function init(){
       if (refMatieres['BTS CG']) {
         refMatieres['BTS CG'].sort((a, b) => btsMatiereOrder(a.matiere) - btsMatiereOrder(b.matiere));
       }
+      // Le menu "Matière" a pu se construire vide si l'utilisateur a sélectionné un diplôme
+      // avant la fin de ce chargement (showModule(first) plus haut ne l'attend pas) — on le
+      // reconstruit donc une fois le référentiel disponible, si l'onglet Notes est actif.
+      if (document.getElementById('section-notes')?.classList.contains('active')) filterMatieresUpdate();
     }
   } catch(e){}
   // Étudiants (pour selects)
