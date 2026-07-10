@@ -193,8 +193,9 @@
           <table>
             <thead><tr>
               <th style="width:32px"></th>
-              <th onclick="sortNotesBy('nom')" style="cursor:pointer;user-select:none">Étudiant <span id="sortIcon_nom"></span></th><th>Diplôme</th><th>Classe</th><th>Année</th>
-              <th>UE saisies</th><th>Points</th><th>Moyenne</th><th style="color:#7c3aed">Moy. Pro</th><th onclick="sortNotesBy('diff')" style="cursor:pointer;user-select:none">Différentiel <span id="sortIcon_diff"></span></th>
+              <th onclick="sortNotesBy('nom')" style="cursor:pointer;user-select:none">Étudiant <span id="sortIcon_nom"></span></th><th>Diplôme</th>
+              <th onclick="sortNotesBy('classe')" style="cursor:pointer;user-select:none">Classe <span id="sortIcon_classe"></span></th><th>Année</th>
+              <th>UE saisies</th><th>Points</th><th onclick="sortNotesBy('moy')" style="cursor:pointer;user-select:none">Moyenne <span id="sortIcon_moy"></span></th><th style="color:#7c3aed">Moy. Pro</th><th onclick="sortNotesBy('diff')" style="cursor:pointer;user-select:none">Différentiel <span id="sortIcon_diff"></span></th>
               <th onclick="sortNotesBy('diffAdj')" style="cursor:pointer;user-select:none" title="DCG : exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté <span id="sortIcon_diffAdj"></span></th>
               <th>Résultat</th><th></th>
             </tr></thead>
@@ -1727,6 +1728,7 @@ let statsExclusions = {}; // idEtu|diplome|annee -> {exclu, commentaire} — exc
 function statsExclusionKey(idEtu, diplome, annee){ return String(idEtu||'')+'|'+String(diplome||'')+'|'+String(annee||''); }
 let allReleves   = []; // relevés de notes uploadés
 let notesSortBy = 'nom', notesSortDir = 1; // tri du tableau groupé Notes ('nom' | 'diff')
+let statsSortBy = 'moy', statsSortDir = -1; // tri du panneau Statistiques promotion ('moy' | 'classe' | 'nom')
 let planningPersonFilter = new Set();
 let draggedTaskId = null;
 let inscriptionPreviews = [];
@@ -2130,7 +2132,7 @@ function renderNotesGrouped(){
   updateSaisieCounter(groups, qDiplome, qClasses, qAnnee);
   const tbody = document.getElementById('notesTbody');
   if (!groups.length){ tbody.innerHTML='<tr><td colspan="13" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
-  ['nom','diff','diffAdj'].forEach(c=>{
+  ['nom','classe','moy','diff','diffAdj'].forEach(c=>{
     const el = document.getElementById('sortIcon_'+c);
     if (el) el.textContent = notesSortBy===c ? (notesSortDir>0?'▲':'▼') : '';
   });
@@ -2139,13 +2141,14 @@ function renderNotesGrouped(){
   const groupsWithStats = groups.map(g=>({ g, stats: calcGroupStats(g) }));
   const groupsByKey = {}; // pour openClasseEditModal (évite d'échapper les données dans l'attribut onclick)
   groupsWithStats.sort((a,b)=>{
-    if (notesSortBy==='diff' || notesSortBy==='diffAdj') {
+    if (notesSortBy==='diff' || notesSortBy==='diffAdj' || notesSortBy==='moy') {
       const da=a.stats[notesSortBy], db=b.stats[notesSortBy];
       if (da===null && db===null) return 0;
       if (da===null) return 1;   // valeurs manquantes toujours en fin de liste
       if (db===null) return -1;
       return notesSortDir*(da-db);
     }
+    if (notesSortBy==='classe') return notesSortDir*((a.g.classe||'').localeCompare(b.g.classe||''));
     return notesSortDir*((a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
   });
   groupsWithStats.forEach(({g, stats})=>{
@@ -2409,7 +2412,9 @@ function computeAndShowStats(groups){
       const vb = b.noteUE==='NE'?10:(b.noteUE??-1);
       return vb-va;
     }
-    return (b.moy??-1)-(a.moy??-1);
+    if (statsSortBy==='classe') return statsSortDir*((a.classe||'').localeCompare(b.classe||''));
+    if (statsSortBy==='nom')    return statsSortDir*((a.nomPrenom||'').localeCompare(b.nomPrenom||''));
+    return statsSortDir*((a.moy??-1)-(b.moy??-1)); // 'moy' : statsSortDir=-1 par défaut => plus grand d'abord
   });
 
   // Pour DCG sans filtre UE + avec année : ne garder que les étudiants ayant toutes leurs UE
@@ -2506,18 +2511,21 @@ function computeAndShowStats(groups){
 
   const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
   const exclHead = '<th title="Exclut cet étudiant du taux de réussite/échec, sans toucher à ses notes">Exclure</th><th>Commentaire</th>';
+  const sortIcon = c => statsSortBy===c ? (statsSortDir>0?'▲':'▼') : '';
+  const thClasse = `<th onclick="sortStatsBy('classe')" style="cursor:pointer;user-select:none">Classe <span>${sortIcon('classe')}</span></th>`;
+  const thMoy = label => `<th onclick="sortStatsBy('moy')" style="cursor:pointer;user-select:none" title="Classement basé sur cette moyenne">${label} <span>${sortIcon('moy')}</span></th>`;
   if (isUEfilter){
     document.querySelector('#statsPanel table thead tr').innerHTML=
       `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th>${exclHead}<th></th>`;
   } else if (isBTSstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th>'+exclHead+'<th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moy. Générale')+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th>'+exclHead+'<th></th>';
   } else if (isDCGstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moyenne ↑</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th>'+exclHead+'<th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moyenne')+'<th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th>'+exclHead+'<th></th>';
   } else {
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th>'+exclHead+'<th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moy. Générale')+'<th>Résultat</th>'+exclHead+'<th></th>';
   }
 
   const latestAnnee=qAnnee||'';
@@ -2740,26 +2748,48 @@ async function saveClasseEdit(){
 
 // Consultation de tous les relevés uploadés pour un étudiant (aucun n'est jamais écrasé à l'upload,
 // cf. handleUploadReleveNote côté serveur qui ajoute toujours une nouvelle ligne/fichier)
+let _relevesModalIdEtu = null, _relevesModalNom = '';
 function openRelevesModal(idEtu, nomPrenom){
-  const relev = allReleves.filter(r=>r.idEtu===idEtu).sort((a,b)=>b.dateUpload.localeCompare(a.dateUpload));
-  document.getElementById('relevesModalSub').textContent = nomPrenom + ' — ' + relev.length + ' relevé(s)';
+  _relevesModalIdEtu = idEtu; _relevesModalNom = nomPrenom;
+  renderRelevesModalList();
+  document.getElementById('relevesModal').classList.remove('hidden');
+}
+function renderRelevesModalList(){
+  const relev = allReleves.filter(r=>r.idEtu===_relevesModalIdEtu).sort((a,b)=>b.dateUpload.localeCompare(a.dateUpload));
+  document.getElementById('relevesModalSub').textContent = _relevesModalNom + ' — ' + relev.length + ' relevé(s)';
   document.getElementById('relevesModalList').innerHTML = relev.map(r=>`
-    <a href="${r.fileUrl}" target="_blank" style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #f1f5f9;border-radius:0.75rem;padding:0.6rem 0.9rem;text-decoration:none">
-      <span>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #f1f5f9;border-radius:0.75rem;padding:0.6rem 0.9rem">
+      <a href="${r.fileUrl}" target="_blank" style="text-decoration:none;flex:1;min-width:0">
         <span style="font-weight:700;color:#1A4E8A;font-size:0.85rem">${r.annee||'—'}</span>
         <span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem">${r.fileName}</span>
-      </span>
+      </a>
       <span style="font-size:0.7rem;color:#9ca3af;white-space:nowrap;margin-left:0.75rem">${r.dateUpload}</span>
-    </a>`).join('');
-  document.getElementById('relevesModal').classList.remove('hidden');
+      ${canWrite('notes')?`<button onclick="deleteReleve('${r.id}')" class="btn-danger" style="margin-left:0.5rem" title="Supprimer (fichier Drive inclus)">🗑</button>`:''}
+    </div>`).join('');
+}
+async function deleteReleve(id){
+  if (!confirm('Supprimer ce relevé ? Le fichier sera aussi supprimé du Drive (corbeille).')) return;
+  const r = await api('deleteReleveNote', { id });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  allReleves = allReleves.filter(x=>x.id!==id);
+  toast('Relevé supprimé ✓');
+  renderRelevesModalList();
+  renderNotesGrouped();
 }
 function closeRelevesModal(){ document.getElementById('relevesModal').classList.add('hidden'); }
 
-// Tri du tableau groupé Notes : 'nom' (alpha) ou 'diff' (différentiel de points)
+// Tri du tableau groupé Notes : 'nom'/'classe' (alpha), 'moy'/'diff'/'diffAdj' (numérique)
 function sortNotesBy(col){
   if (notesSortBy===col) notesSortDir = -notesSortDir;
-  else { notesSortBy = col; notesSortDir = (col==='diff'||col==='diffAdj') ? -1 : 1; } // différentiel : plus grand d'abord par défaut
+  else { notesSortBy = col; notesSortDir = (col==='diff'||col==='diffAdj'||col==='moy') ? -1 : 1; } // valeurs numériques : plus grand d'abord par défaut
   renderNotesGrouped();
+}
+
+// Tri du panneau Statistiques promotion (DCG, BTS, générique) : 'moy' (numérique) ou 'classe'/'nom' (alpha)
+function sortStatsBy(col){
+  if (statsSortBy===col) statsSortDir = -statsSortDir;
+  else { statsSortBy = col; statsSortDir = col==='moy' ? -1 : 1; }
+  computeAndShowStats(window._lastStatsGroups||[]);
 }
 
 // Prépare les données communes aux deux exports (CSV et Excel mis en forme) : mêmes filtres,
@@ -2792,13 +2822,17 @@ function _prepareNotesExportData(){
 
   // Pré-calcul des statuts pour chaque étudiant
   const groupStats = groups.map(g=>{
-    const {totalPts, moy, moyPro, diff, diffAdj} = calcGroupStats(g);
+    const {totalPts, moy, moyPro, diff, diffAdj, ueElim} = calcGroupStats(g);
     let autoRes = '', defRes = '';
     if (isBTSexport){
       autoRes = calcBTSResultatAuto(moy, moyPro);
       defRes  = autoRes === 'Rattrapage' ? (g.resultat || '—') : autoRes;
     } else {
-      defRes  = g.resultat || '—';
+      // DCG : résultat manuel prioritaire (décision de jury), sinon calcul auto — mêmes règles
+      // que le panneau Statistiques promotion (computeAndShowStats), pour rester cohérent.
+      if (g.resultat) { defRes = g.resultat; autoRes = g.resultat; }
+      else if (moy !== null) { defRes = (ueElim===0 && moy>=10) ? 'Admis' : 'Recalé'; autoRes = defRes; }
+      else { defRes = 'En cours'; autoRes = 'En cours'; }
     }
     return {g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes, lastAnnee: g.lastAnnee||''};
   }).sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
@@ -2965,7 +2999,7 @@ const _XL_STYLES = `<Styles>
 // portent sur tout son historique DCG, meilleure note retenue par UE).
 function _buildSheetRecap(d){
   const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
-  const header = ['Nom', 'Diplôme', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
+  const header = ['Nom', 'Classe', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
   const colCount = header.length;
   const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ') || 'Toutes promotions';
   let rows = '';
@@ -2979,7 +3013,7 @@ function _buildSheetRecap(d){
     const noteByUE = noteByUEForGroup(g);
     const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
     const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
-    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.diplome||'') + _XL.s(zC, anneeLabel);
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.classe||'') + _XL.s(zC, anneeLabel);
     dataUEs.forEach(ue=>{
       const n = noteByUE[matKey(ue)];
       if (!n || n.note===null || n.note===undefined || n.note===''){ cells += _XL.s(zC,'—'); return; }
@@ -3033,7 +3067,7 @@ function _buildSheetRecap(d){
 // ce seul sous-ensemble (pas de report de l'historique cumulatif de la feuille 1).
 function _buildSheetAnneeCourante(d){
   const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols } = d;
-  const header = ['Nom', 'Diplôme', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
+  const header = ['Nom', 'Classe', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
   const colCount = header.length;
   let rows = '';
   rows += _XL.row(_XL.s('sTitle','HECG — Notes saisies '+(qAnnee||'(sélectionnez une année)'), colCount-1));
@@ -3047,6 +3081,7 @@ function _buildSheetAnneeCourante(d){
   rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
 
   let idx = 0;
+  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par UE" en bas
   groupStats.forEach(({g})=>{
     const notesAnnee = _notesReellesPourAnnee(g, qAnnee);
     if (!notesAnnee.length) return; // rien de réel pour cette année (tout doublon, ou pas concerné)
@@ -3056,12 +3091,13 @@ function _buildSheetAnneeCourante(d){
     const noteByUE = {};
     notesAnnee.forEach(n=>{ noteByUE[matKey(n.matiere)] = n; });
     const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
-    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.diplome||'') + _XL.s(zC, qAnnee);
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.classe||'') + _XL.s(zC, qAnnee);
     dataUEs.forEach(ue=>{
       const n = noteByUE[matKey(ue)];
       if (!n){ cells += _XL.s(zC,'—'); return; }
       if (String(n.note).toUpperCase()==='NE'){ cells += _XL.s(zC,'NE'); return; }
       const num = parseFloat(n.note);
+      if (!isNaN(num)) { const k=matKey(ue); if(!matiereAgg[k]) matiereAgg[k]={sum:0,n:0}; matiereAgg[k].sum+=num; matiereAgg[k].n++; }
       cells += _XL.s(_XL.noteStyle(num), isNaN(num)?'—':num.toFixed(2));
     });
     cells += _XL.s(zC, totalPts!==null?totalPts.toFixed(2):'—');
@@ -3071,7 +3107,16 @@ function _buildSheetAnneeCourante(d){
     rows += _XL.row(cells);
     idx++;
   });
-  if (!idx) rows += _XL.row(_XL.s('sInfo','Aucune note (hors doublons) trouvée pour '+qAnnee+'.', colCount-1));
+  if (!idx) {
+    rows += _XL.row(_XL.s('sInfo','Aucune note (hors doublons) trouvée pour '+qAnnee+'.', colCount-1));
+  } else {
+    // Ligne de synthèse : moyenne par UE, sur ce seul sous-ensemble (notes réelles de l'année)
+    let moyCells = _XL.s('sMoyLabel','MOYENNE PAR UE', 2);
+    dataUEs.forEach(ue=>{ const agg=matiereAgg[matKey(ue)]; moyCells += _XL.s('sMoyVal', agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'); });
+    const trailing = 2 + btsExtraCols.length + 2; // total pts, moyenne, [extras], diff, diffAdj
+    moyCells += `<Cell ss:StyleID="sMoyVal" ss:MergeAcross="${trailing-1}"/>`;
+    rows += _XL.row(moyCells);
+  }
 
   return `<Worksheet ss:Name="Notes ${_XL.esc(qAnnee).replace(/[^0-9A-Za-z_-]/g,'_')}"><Table>${rows}</Table></Worksheet>`;
 }
