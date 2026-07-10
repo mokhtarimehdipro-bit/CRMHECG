@@ -2490,13 +2490,17 @@ function computeAndShowStats(groups){
   let displayStudents;
   if (isUEfilter || qStatut) {
     const filtered = (qStatut==='__all__' || isUEfilter) ? statsStudents : statsStudents.filter(s=>statutOf(s)===qStatut);
-    displayStudents = filtered.map((s,i)=>Object.assign({}, s, { rang: i+1, isRecaleRow: statutOf(s)==='Recalé' }));
+    displayStudents = filtered.map((s,i)=>Object.assign({}, s, { rang: i+1, zone:'classement' }));
   } else {
-    const nonRecale = statsStudents.filter(s=>statutOf(s)!=='Recalé');
-    const recale    = statsStudents.filter(s=>statutOf(s)==='Recalé');
+    // Trois zones : classement (numéroté), Recalés hors classement, puis — parmi eux — ceux en
+    // plus exclus manuellement des stats (case à cocher), regroupés à part tout en bas.
+    const nonRecale     = statsStudents.filter(s=>statutOf(s)!=='Recalé');
+    const recaleVisible = statsStudents.filter(s=>statutOf(s)==='Recalé' && !s.exclu);
+    const recaleExclu   = statsStudents.filter(s=>statutOf(s)==='Recalé' && s.exclu);
     displayStudents = [
-      ...nonRecale.map((s,i)=>Object.assign({}, s, { rang: i+1, isRecaleRow: false })),
-      ...recale.map(s=>Object.assign({}, s, { rang: null, isRecaleRow: true })),
+      ...nonRecale.map((s,i)=>Object.assign({}, s, { rang: i+1, zone:'classement' })),
+      ...recaleVisible.map(s=>Object.assign({}, s, { rang: null, zone:'recale' })),
+      ...recaleExclu.map(s=>Object.assign({}, s, { rang: null, zone:'recaleExclu' })),
     ];
   }
 
@@ -2517,13 +2521,17 @@ function computeAndShowStats(groups){
   }
 
   const latestAnnee=qAnnee||'';
-  const showSeparator = !isUEfilter && !qStatut; // vue par défaut = classement + bloc Recalés séparé
-  let separatorInserted = false;
+  const showSeparator = !isUEfilter && !qStatut; // vue par défaut = classement + blocs Recalés séparés
+  let lastZone = 'classement';
   const rowsHtml = [];
   displayStudents.forEach(x=>{
-    if (showSeparator && x.isRecaleRow && !separatorInserted) {
-      rowsHtml.push('<tr><td colspan="14" style="background:#fef2f2;color:#dc2626;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés (hors classement) —</td></tr>');
-      separatorInserted = true;
+    if (showSeparator && x.zone!==lastZone) {
+      if (x.zone==='recale') {
+        rowsHtml.push('<tr><td colspan="14" style="background:#fef2f2;color:#dc2626;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés (hors classement) —</td></tr>');
+      } else if (x.zone==='recaleExclu') {
+        rowsHtml.push('<tr><td colspan="14" style="background:#faf5ff;color:#9333ea;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés hors stats (exclusion manuelle) —</td></tr>');
+      }
+      lastZone = x.zone;
     }
     const rangCell = (x.rang!==null && x.rang!==undefined)
       ? `<td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>`
