@@ -151,6 +151,7 @@
         </div>
         <div class="flex gap-3">
           <button onclick="exportNotesCSV()" class="btn-ghost">📥 Export CSV</button>
+          <button onclick="exportNotesExcel()" class="btn-ghost">📊 Export Excel mis en forme</button>
           <button id="btnAddNote" onclick="openBulkNoteModal()" class="btn-orange hidden">+ Saisir les notes</button>
         </div>
       </div>
@@ -2658,7 +2659,9 @@ function sortNotesBy(col){
   renderNotesGrouped();
 }
 
-function exportNotesCSV(){
+// Prépare les données communes aux deux exports (CSV et Excel mis en forme) : mêmes filtres,
+// mêmes calculs — seule la mise en forme de sortie diffère entre les deux fonctions qui l'appellent.
+function _prepareNotesExportData(){
   const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
   const qMat     = matKey(document.getElementById('filterMatiere').value);
   const qAnnee   = document.getElementById('filterAnnee').value||'';
@@ -2673,7 +2676,7 @@ function exportNotesCSV(){
   // Ne garder que les étudiants ayant une note pour l'année sélectionnée (DCG comme BTS)
   if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
   if (qClasses.length) groups = groups.filter(g=>qClasses.includes(g.classe));
-  if (!groups.length){ toast('Aucune donnée à exporter.',false); return; }
+  if (!groups.length) return null;
 
   // Liste ordonnée des UEs : référentiel si disponible, sinon données filtrées (tri numérique UE1<UE2<...<UE10)
   const diplome = groups[0]?.diplome || qDiplome;
@@ -2695,7 +2698,7 @@ function exportNotesCSV(){
       defRes  = g.resultat || '—';
     }
     return {g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes, lastAnnee: g.lastAnnee||''};
-  });
+  }).sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
 
   // Pour DCG sans filtre UE + avec année : restreindre aux étudiants ayant TOUTES les UE
   // obligatoires (1 à 13, l'UE 14 facultative ne compte pas) + promo correspondante
@@ -2703,14 +2706,8 @@ function exportNotesCSV(){
     ? groupStats.filter(s=> hasAllMandatoryUE(s.g) && s.lastAnnee === qAnnee)
     : groupStats;
 
-  // En-têtes
   const btsExtraCols = isBTSexport ? ['MOY. PRO','STATUT AUTO','STATUT DÉFINITIF'] : ['STATUT'];
-  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL', 'DIFFÉRENTIEL AJUSTÉ'];
-  const rows = [header];
-
-  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par matière"
-  groupStats.sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||'')).forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes})=>{
-    // Meilleure/dernière note par UE (DCG = cumulatif, BTS = année filtrée)
+  const noteByUEForGroup = g=>{
     const noteByUE = {};
     g.notes.forEach(n=>{
       const k = matKey(n.matiere);
@@ -2718,6 +2715,38 @@ function exportNotesCSV(){
       if (qAnnee && !isDCGview){ if (n.annee!==qAnnee) return; }
       if (!noteByUE[k]||(n.annee||'')>=(noteByUE[k].annee||'')) noteByUE[k]=n;
     });
+    return noteByUE;
+  };
+
+  const total  = statsRows.length;
+  const admis  = statsRows.filter(s=>s.defRes==='Admis').length;
+  const ratt   = statsRows.filter(s=>s.defRes==='Rattrapage'||s.defRes==='—'&&s.autoRes==='Rattrapage').length;
+  const recale = statsRows.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.defRes)).length;
+  const enCours= total-admis-ratt-recale;
+  const moyVals= statsRows.map(s=>s.moy).filter(v=>v!==null&&!isNaN(v));
+  const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
+  const tauxReussite = total?Math.round(admis/total*100):null;
+
+  return { qAnnee, qDiplome, qClasses, isDCGview, diplome, dataUEs, isBTSexport, groupStats, btsExtraCols,
+    noteByUEForGroup, stats: { total, admis, ratt, recale, enCours, moyGlobal, tauxReussite } };
+}
+
+function _notesExportFilename(d, ext){
+  const parts=[d.qDiplome, d.qAnnee, ...d.qClasses].filter(Boolean);
+  return 'notes_'+(parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_')||'export')+'_'+new Date().toISOString().slice(0,10)+'.'+ext;
+}
+
+function exportNotesCSV(){
+  const d = _prepareNotesExportData();
+  if (!d){ toast('Aucune donnée à exporter.',false); return; }
+  const { dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
+
+  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL', 'DIFFÉRENTIEL AJUSTÉ'];
+  const rows = [header];
+
+  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par matière"
+  groupStats.forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes})=>{
+    const noteByUE = noteByUEForGroup(g);
     const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
     const diffLabel  = diff===null?'—':(diff>=0?'+'+diff:String(diff));
     const diffAdjLabel = diffAdj===null?'—':(diffAdj>=0?'+'+diffAdj:String(diffAdj));
@@ -2757,21 +2786,115 @@ function exportNotesCSV(){
 
   // Stats en bas — basées sur statut définitif
   rows.push([]); rows.push(['=== STATISTIQUES ===']);
-  const total  = statsRows.length;
-  const admis  = statsRows.filter(s=>s.defRes==='Admis').length;
-  const ratt   = statsRows.filter(s=>s.defRes==='Rattrapage'||s.defRes==='—'&&s.autoRes==='Rattrapage').length;
-  const recale = statsRows.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.defRes)).length;
-  const enCours= total-admis-ratt-recale;
-  const moyVals= statsRows.map(s=>s.moy).filter(v=>v!==null&&!isNaN(v));
-  const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
   rows.push(['Total','Admis','Rattrapage','Non admis / Éliminés','En cours','Moyenne','Taux réussite']);
-  rows.push([total,admis,ratt,recale,enCours,moyGlobal,total?Math.round(admis/total*100)+'%':'—']);
+  rows.push([stats.total, stats.admis, stats.ratt, stats.recale, stats.enCours, stats.moyGlobal, stats.tauxReussite!==null?stats.tauxReussite+'%':'—']);
 
-  const parts=[qDiplome,qAnnee,...qClasses].filter(Boolean);
-  const filename='notes_'+(parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_')||'export')+'_'+new Date().toISOString().slice(0,10)+'.csv';
   const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download=filename; a.click();
+  a.download=_notesExportFilename(d,'csv'); a.click();
+}
+
+// Export "Excel mis en forme" : table HTML stylée (ouvrable directement dans Excel avec ses
+// couleurs), aux tons bleu/orange de l'application — pas un simple tableau brut.
+function exportNotesExcel(){
+  const d = _prepareNotesExportData();
+  if (!d){ toast('Aucune donnée à exporter.',false); return; }
+  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
+
+  const BLUE='#1A4E8A', BLUE_LIGHT='#EAF1FA', BLUE_ZEBRA='#F5F9FD', ORANGE='#F26522', ORANGE_LIGHT='#FFF1E6';
+  const badgeStyle = statut=>{
+    const s = String(statut||'').toLowerCase();
+    if (s.includes('admis')||s.includes('obtenu'))              return 'background:#dcfce7;color:#15803d';
+    if (s.includes('rattrapage')||s.includes('attente'))        return 'background:#fef9c3;color:#a16207';
+    if (s.includes('recalé')||s.includes('non admis')||s.includes('éliminé')) return 'background:#fee2e2;color:#dc2626';
+    return 'background:#dbeafe;color:#1d4ed8';
+  };
+  const badgeCell = statut => `<td style="${badgeStyle(statut)};font-weight:bold;text-align:center;border-radius:0;padding:4px 8px">${statut||'En cours'}</td>`;
+  const numCell = (val, decimals=2) => val===null||val===undefined||isNaN(val) ? '<td style="text-align:center;color:#9ca3af">—</td>'
+    : `<td style="text-align:center;font-weight:bold;color:${val>=10?'#15803d':'#dc2626'}">${val.toFixed(decimals)}</td>`;
+  const diffCell = val => val===null||val===undefined ? '<td style="text-align:center;color:#9ca3af">—</td>'
+    : `<td style="text-align:center;font-weight:bold;color:${val>=0?'#15803d':'#dc2626'}">${val>=0?'+':''}${val}</td>`;
+
+  const header = ['Nom', 'Diplôme', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
+  const colCount = header.length;
+
+  let html = '<table border="1" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:12px">';
+
+  // Bandeau titre
+  const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ') || 'Toutes promotions';
+  html += `<tr><td colspan="${colCount}" style="background:${BLUE};color:#ffffff;font-size:18px;font-weight:bold;padding:14px 16px;border-bottom:4px solid ${ORANGE}">HECG — Relevé de notes</td></tr>`;
+  html += `<tr><td colspan="${colCount}" style="background:${BLUE_LIGHT};color:${BLUE};font-size:12px;font-weight:bold;padding:8px 16px">${titreParts} — Export du ${new Date().toLocaleDateString('fr-FR')}</td></tr>`;
+  html += `<tr><td colspan="${colCount}" style="padding:4px;border:none"></td></tr>`;
+
+  // En-têtes de colonnes
+  html += '<tr>' + header.map(h=>`<th style="background:${BLUE};color:#ffffff;font-weight:bold;padding:8px 10px;text-align:center;border:1px solid #ffffff">${h}</th>`).join('') + '</tr>';
+
+  // Lignes étudiants (zébrées)
+  const matiereAgg = {};
+  groupStats.forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes}, idx)=>{
+    const noteByUE = noteByUEForGroup(g);
+    const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
+    const rowBg = idx%2===0 ? '#ffffff' : BLUE_ZEBRA;
+    html += `<tr style="background:${rowBg}">`;
+    html += `<td style="font-weight:bold;color:${BLUE};padding:5px 10px">${g.nomPrenom}</td>`;
+    html += `<td style="text-align:center">${g.diplome||''}</td><td style="text-align:center">${anneeLabel}</td>`;
+    dataUEs.forEach(ue=>{
+      const n = noteByUE[matKey(ue)];
+      if (!n || n.note===null || n.note===undefined || n.note===''){ html += '<td style="text-align:center;color:#d1d5db">—</td>'; return; }
+      const raw = String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+      if (raw==='NE'){ html += '<td style="text-align:center;color:#4338ca;font-weight:bold">NE</td>'; return; }
+      const num = parseFloat(raw);
+      if (!isNaN(num)) { const k=matKey(ue); if(!matiereAgg[k]) matiereAgg[k]={sum:0,n:0}; matiereAgg[k].sum+=num; matiereAgg[k].n++; }
+      html += `<td style="text-align:center;color:${num>=10?'#15803d':num>=6?'#a16207':'#dc2626'}">${num.toFixed(2)}</td>`;
+    });
+    html += `<td style="text-align:center">${totalPts!==null?totalPts.toFixed(2):'—'}</td>`;
+    html += numCell(moy);
+    if (isBTSexport) {
+      html += numCell(moyPro);
+      html += badgeCell(autoRes);
+      html += badgeCell(defRes);
+    } else {
+      html += badgeCell(defRes);
+    }
+    html += diffCell(diff);
+    html += diffCell(diffAdj);
+    html += '</tr>';
+  });
+
+  // Ligne de synthèse : moyenne par matière
+  html += `<tr style="background:${ORANGE_LIGHT};border-top:2px solid ${ORANGE}">`;
+  html += `<td colspan="3" style="font-weight:bold;color:${ORANGE};padding:6px 10px">MOYENNE PAR MATIÈRE</td>`;
+  dataUEs.forEach(ue=>{
+    const agg = matiereAgg[matKey(ue)];
+    html += `<td style="text-align:center;font-weight:bold;color:${ORANGE}">${agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'}</td>`;
+  });
+  const trailingCols = 2 + btsExtraCols.length + 2; // total pts, moyenne, [extras], diff, diffAdj
+  html += `<td colspan="${trailingCols}" style="background:${ORANGE_LIGHT}"></td></tr>`;
+
+  html += `<tr><td colspan="${colCount}" style="padding:6px;border:none"></td></tr>`;
+
+  // Bloc statistiques
+  html += `<tr><td colspan="${colCount}" style="background:${BLUE};color:#ffffff;font-weight:bold;padding:8px 16px">Statistiques</td></tr>`;
+  const kpis = [
+    ['Total', stats.total, BLUE],
+    ['Admis', stats.admis, '#15803d'],
+    ['Rattrapage', stats.ratt, '#a16207'],
+    ['Non admis / Éliminés', stats.recale, '#dc2626'],
+    ['En cours', stats.enCours, '#1d4ed8'],
+    ['Moyenne', stats.moyGlobal, BLUE],
+    ['Taux réussite', stats.tauxReussite!==null?stats.tauxReussite+'%':'—', ORANGE],
+  ];
+  html += '<tr style="background:'+BLUE_LIGHT+'">' + kpis.map(([l])=>`<td style="font-weight:bold;color:${BLUE};text-align:center;padding:4px 8px;font-size:10px;text-transform:uppercase">${l}</td>`).join('') + (colCount>kpis.length?`<td colspan="${colCount-kpis.length}" style="background:${BLUE_LIGHT}"></td>`:'') + '</tr>';
+  html += '<tr>' + kpis.map(([,v,c])=>`<td style="font-weight:bold;color:${c};text-align:center;padding:6px 8px;font-size:14px">${v}</td>`).join('') + (colCount>kpis.length?`<td colspan="${colCount-kpis.length}"></td>`:'') + '</tr>';
+
+  html += '</table>';
+
+  const blob = new Blob(['﻿', html], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = _notesExportFilename(d,'xls');
+  a.click();
+  toast('Export Excel généré ✓');
 }
 
 async function showStats(){
