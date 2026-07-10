@@ -1993,19 +1993,24 @@ function getStudentGroups(notes, fallbackDiplome){
 }
 
 // Regroupe une liste de notes par UE (numéro seul, quel que soit l'intitulé/l'année) et
-// ne garde que la meilleure note par UE : une note numérique bat toujours NE, sinon la plus
-// haute l'emporte. Utilisé pour le calcul de moyenne (DCG/DSCG) ET pour l'affichage groupé.
+// ne garde que la meilleure note par UE : une note numérique bat toujours NE, la plus haute
+// valeur l'emporte sinon. En cas d'ÉGALITÉ EXACTE (même note à deux périodes différentes —
+// doublon probable), on retient systématiquement l'année la plus ancienne, indépendamment de
+// l'ordre de lecture des lignes dans la feuille (et donc peu importe la classe de l'étudiant).
+// Utilisé pour le calcul de moyenne (DCG/DSCG) ET pour l'affichage groupé.
 function bestNotesByUE(notes){
   const bestByUE = {};
   notes.forEach(n=>{
     const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
     const isNE = String(n.note).toUpperCase()==='NE';
     const existing = bestByUE[k];
-    if (!existing) { bestByUE[k]=n; }
-    else {
-      const exNE = String(existing.note).toUpperCase()==='NE';
-      if (!isNE && (exNE || parseFloat(n.note)>parseFloat(existing.note))) bestByUE[k]=n;
-    }
+    if (!existing) { bestByUE[k]=n; return; }
+    if (isNE) return; // NE ne bat jamais une note déjà retenue
+    const exNE = String(existing.note).toUpperCase()==='NE';
+    if (exNE) { bestByUE[k]=n; return; } // une note numérique bat toujours NE
+    const nVal = parseFloat(n.note), exVal = parseFloat(existing.note);
+    if (nVal > exVal) { bestByUE[k]=n; }
+    else if (nVal === exVal && (n.annee||'') < (existing.annee||'')) { bestByUE[k]=n; }
   });
   return bestByUE;
 }
@@ -2547,15 +2552,35 @@ function renderMatiereStats(){
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (qClasses.length) notes = notes.filter(n=>qClasses.includes(n.classe));
   if (!notes.length){ panel.classList.add('hidden'); return; }
-  // Une note par étudiant (filtre exact sur l'année — pas de cumul)
-  const byEtu = {};
+
+  // Regroupe TOUTES les saisies de chaque étudiant pour cette UE (toutes périodes confondues),
+  // puis : exclut les dispensés (NE), exclut les doublons suspects (même note à des périodes
+  // différentes — à corriger via auditDoublonsNotesDCG()/nettoyerDoublonsNotesDCG()), et retient
+  // sinon la saisie la plus récente.
+  const byEtuAll = {};
   notes.forEach(n=>{
     const k = n.idEtu||n.nomPrenom;
-    if (!byEtu[k] || (n.annee||'')>(byEtu[k].annee||'')) byEtu[k]=n;
+    (byEtuAll[k]=byEtuAll[k]||[]).push(n);
   });
-  const etuNotes = Object.values(byEtu);
+  const etuNotes = [];
+  let neCount = 0, doublonCount = 0;
+  Object.keys(byEtuAll).forEach(k=>{
+    const list = byEtuAll[k];
+    const numeriques = list.filter(n=>n.note!==null && n.note!==undefined && n.note!=='' && String(n.note).toUpperCase()!=='NE' && !isNaN(parseFloat(n.note)));
+    if (!numeriques.length) { if (list.some(n=>String(n.note).toUpperCase()==='NE')) neCount++; return; }
+    const valeurs = {};
+    numeriques.forEach(n=>{ const v=parseFloat(n.note).toFixed(2); (valeurs[v]=valeurs[v]||[]).push(n); });
+    const suspect = Object.values(valeurs).some(arr=>{
+      const annees = arr.map(n=>n.annee||'').filter((a,i,self)=>self.indexOf(a)===i);
+      return arr.length>1 && annees.length>1;
+    });
+    if (suspect) { doublonCount++; return; }
+    const latest = numeriques.reduce((best,n)=> (n.annee||'')>(best.annee||'') ? n : best, numeriques[0]);
+    etuNotes.push(latest);
+  });
+
+  if (!etuNotes.length){ panel.classList.add('hidden'); return; }
   const numNotes = etuNotes.map(n=>parseFloat(n.note)).filter(v=>!isNaN(v));
-  const neCount  = etuNotes.filter(n=>String(n.note).toUpperCase()==='NE').length;
   const nbCandidats = etuNotes.length;
   const nbReussite  = numNotes.filter(v=>v>=10).length;
   const moyenne = numNotes.length ? (numNotes.reduce((a,b)=>a+b,0)/numNotes.length).toFixed(2) : '—';
@@ -2570,14 +2595,14 @@ function renderMatiereStats(){
     [taux,'Taux réussite','#374151'],
     [moyenne+'/20','Moyenne','#374151'],
     [noteMax+' / '+noteMin,'Max / Min','#6b7280'],
-    ...(neCount?[[neCount,'Dispensés NE','#4338ca']]:[]),
+    ...(neCount?[[neCount,'Dispensés NE (exclus)','#4338ca']]:[]),
+    ...(doublonCount?[[doublonCount,'Doublons suspects (exclus)','#dc2626']]:[]),
   ].map(([v,l,c])=>`<div class="kpi-card"><p class="text-xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   const sorted = etuNotes.slice().sort((a,b)=>(parseFloat(b.note)||0)-(parseFloat(a.note)||0));
   document.getElementById('matiereStatsTbody').innerHTML = sorted.map((n,i)=>{
-    const isNE=String(n.note).toUpperCase()==='NE';
     const num=parseFloat(n.note);
-    const c=isNE?'#4338ca':(isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626'));
-    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNE?'NE':isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
+    const c=isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626');
+    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
   }).join('');
   panel.classList.remove('hidden');
 }
