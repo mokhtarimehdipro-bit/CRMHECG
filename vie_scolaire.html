@@ -1723,6 +1723,8 @@ let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
 let allEtudiantsRoster = []; // effectif complet (getStudentsMinList, non filtré par rôle commercial)
+let statsExclusions = {}; // idEtu|diplome|annee -> {exclu, commentaire} — exclusions manuelles du taux de réussite
+function statsExclusionKey(idEtu, diplome, annee){ return String(idEtu||'')+'|'+String(diplome||'')+'|'+String(annee||''); }
 let allReleves   = []; // relevés de notes uploadés
 let notesSortBy = 'nom', notesSortDir = 1; // tri du tableau groupé Notes ('nom' | 'diff')
 let planningPersonFilter = new Set();
@@ -1902,6 +1904,35 @@ function showModule(m){
 function initNotes(){
   if (canWrite('notes')) show('btnAddNote');
   filterMatieresUpdate(); // pré-remplir les années dès l'ouverture
+  loadStatsExclusions();
+}
+
+async function loadStatsExclusions(){
+  try {
+    const r = await api('getStatsExclusions');
+    if (!r.success) return;
+    statsExclusions = {};
+    r.data.forEach(e=>{ statsExclusions[statsExclusionKey(e.idEtu,e.diplome,e.annee)] = { exclu:e.exclu, commentaire:e.commentaire }; });
+  } catch(e){}
+}
+
+async function toggleStatExclusion(idEtu, diplome, annee, checked){
+  const key = statsExclusionKey(idEtu, diplome, annee);
+  const commentaire = statsExclusions[key]?.commentaire || '';
+  const r = await api('saveStatsExclusion', { idEtu, diplome, annee, exclu:checked, commentaire });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  statsExclusions[key] = { exclu:checked, commentaire };
+  toast(checked?'Étudiant exclu du taux de réussite ✓':'Étudiant réintégré aux stats ✓');
+  computeAndShowStats(window._lastStatsGroups||[]);
+}
+
+async function saveStatComment(idEtu, diplome, annee, commentaire){
+  const key = statsExclusionKey(idEtu, diplome, annee);
+  const exclu = statsExclusions[key]?.exclu || false;
+  const r = await api('saveStatsExclusion', { idEtu, diplome, annee, exclu, commentaire });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  statsExclusions[key] = { exclu, commentaire };
+  toast('Commentaire enregistré ✓');
 }
 
 function filterMatieresUpdate(){
@@ -2392,23 +2423,29 @@ function computeAndShowStats(groups){
       ? students.filter(s => (s.allMandatoryUE || s.resultatManuel) && s.lastAnnee === qAnnee)
       : students;
 
-  const total  = statsStudents.length;
+  // Exclusions manuelles (case par case, avec commentaire) : un étudiant coché reste visible
+  // dans le tableau/classement, mais sort du calcul du taux de réussite/échec ci-dessous.
+  const exclKey = s => statsExclusionKey(s.idEtu, s.diplome, qAnnee);
+  statsStudents.forEach(s=>{ const ex=statsExclusions[exclKey(s)]; s.exclu=!!ex?.exclu; s.exclComment=ex?.commentaire||''; });
+  const kpiStudents = statsStudents.filter(s=>!s.exclu);
+
+  const total  = kpiStudents.length;
   // BTS : rattrapage = statut AUTO (tous ceux qui sont passés en ratt, indep. du résultat final)
   //       admis/recalé = statut DÉFINITIF (auto ou post-ratt)
   const admis  = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)).length
-    : statsStudents.filter(s=>s.resultat==='Admis'||s.resultat==='Obtenu').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)).length
+    : kpiStudents.filter(s=>s.resultat==='Admis'||s.resultat==='Obtenu').length;
   const ratt   = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Rattrapage').length
-    : statsStudents.filter(s=>s.resultat==='Rattrapage').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Rattrapage').length
+    : kpiStudents.filter(s=>s.resultat==='Rattrapage').length;
   const recale = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé').length
-    : statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
-  const enCours= statsStudents.filter(s=>s.resultatAuto==='En cours').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé').length
+    : kpiStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
+  const enCours= kpiStudents.filter(s=>s.resultatAuto==='En cours').length;
 
   const noteVals = isUEfilter
-    ? statsStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
-    : statsStudents.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+    ? kpiStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
+    : kpiStudents.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
   const moyGlobal= noteVals.length?(noteVals.reduce((a,b)=>a+b,0)/noteVals.length).toFixed(2):'—';
   const noteMax= noteVals.length?Math.max(...noteVals).toFixed(2):'—';
   const noteMin= noteVals.length?Math.min(...noteVals).toFixed(2):'—';
@@ -2420,9 +2457,11 @@ function computeAndShowStats(groups){
   document.getElementById('statsPanelTitle').textContent =
     'Statistiques — ' + titleBase + (isUEfilter ? ' · '+matLabel : '');
 
+  const nbExclus = statsStudents.length - kpiStudents.length;
   document.getElementById('statsKpis').innerHTML=[
     ['Inscrits',total,'#1A4E8A'],['Admis',admis,'#15803d'],
     ['Rattrapage',ratt,'#a16207'],['Non admis / Éliminés',recale,'#dc2626'],
+    ...(nbExclus?[['Exclus (hors stats)',nbExclus,'#9333ea']]:[]),
   ].map(([l,v,c])=>`<div class="kpi-card"><p class="text-3xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   document.getElementById('statsKpis2').innerHTML=[
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
@@ -2462,18 +2501,19 @@ function computeAndShowStats(groups){
   }
 
   const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
+  const exclHead = '<th title="Exclut cet étudiant du taux de réussite/échec, sans toucher à ses notes">Exclure</th><th>Commentaire</th>';
   if (isUEfilter){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th><th></th>`;
+      `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th>${exclHead}<th></th>`;
   } else if (isBTSstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th>'+exclHead+'<th></th>';
   } else if (isDCGstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moyenne ↑</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moyenne ↑</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th>'+exclHead+'<th></th>';
   } else {
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th>'+exclHead+'<th></th>';
   }
 
   const latestAnnee=qAnnee||'';
@@ -2482,7 +2522,7 @@ function computeAndShowStats(groups){
   const rowsHtml = [];
   displayStudents.forEach(x=>{
     if (showSeparator && x.isRecaleRow && !separatorInserted) {
-      rowsHtml.push('<tr><td colspan="12" style="background:#fef2f2;color:#dc2626;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés (hors classement) —</td></tr>');
+      rowsHtml.push('<tr><td colspan="14" style="background:#fef2f2;color:#dc2626;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés (hors classement) —</td></tr>');
       separatorInserted = true;
     }
     const rangCell = (x.rang!==null && x.rang!==undefined)
@@ -2494,15 +2534,26 @@ function computeAndShowStats(groups){
     // Bouton édition : BTS uniquement pour Rattrapage (Admis/Recalé sont déterminés automatiquement)
     const canEdit = canWrite('notes') && (!isBTSstats || x.resultatAuto==='Rattrapage');
     const editBtn = canEdit ? `<button onclick="openResultatModal('${x.idEtu}','${safeNom}','${latestAnnee}','${x.diplome}','${x.resultatAuto||''}','${(x.classe||'').replace(/'/g,"\\'")}')" class="btn-ghost py-1 text-xs">✏</button>` : '';
+    // Exclusion manuelle des stats de réussite/échec, avec commentaire libre (persisté par étudiant/diplôme/année)
+    const exclArgs = `'${(x.idEtu||'').replace(/'/g,"\\'")}','${(x.diplome||'').replace(/'/g,"\\'")}','${qAnnee.replace(/'/g,"\\'")}'`;
+    const canExcl = canWrite('notes');
+    const exclCell = `<td style="text-align:center">${canExcl
+      ? `<input type="checkbox" style="width:18px;height:18px;cursor:pointer" ${x.exclu?'checked':''} onclick="toggleStatExclusion(${exclArgs},this.checked)">`
+      : (x.exclu?'✓':'')}</td>`;
+    const commentCell = `<td>${canExcl
+      ? `<input type="text" value="${(x.exclComment||'').replace(/"/g,'&quot;')}" placeholder="Motif…" style="font-size:0.72rem;padding:0.3rem 0.5rem;min-width:120px" onchange="saveStatComment(${exclArgs},this.value)">`
+      : `<span style="font-size:0.75rem;color:#6b7280">${x.exclComment||''}</span>`}</td>`;
+    const exclTds = exclCell + commentCell;
+    const rowStyle = x.exclu ? ' style="opacity:0.55"' : '';
     if (isUEfilter){
       const rawUE = x.noteUE;
       const dispUE = rawUE==='NE'?'NE':rawUE===null?'—':rawUE.toFixed(2)+'/20';
       const colUE = rawUE==='NE'?'#4338ca':rawUE===null?'#6b7280':(rawUE>=10?'#15803d':rawUE>=6?'#d97706':'#dc2626');
-      rowsHtml.push(`<tr>
+      rowsHtml.push(`<tr${rowStyle}>
         ${rangCell}
         <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
         <td style="font-weight:700;color:${colUE}">${dispUE}</td>
-        <td>${badgeRes(x.resultatAuto)}</td><td>${editBtn}</td></tr>`);
+        <td>${badgeRes(x.resultatAuto)}</td>${exclTds}<td>${editBtn}</td></tr>`);
       return;
     }
     if (isBTSstats){
@@ -2513,29 +2564,29 @@ function computeAndShowStats(groups){
       const defCell = defDisplay
         ? badgeRes(defDisplay)
         : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>';
-      rowsHtml.push(`<tr>
+      rowsHtml.push(`<tr${rowStyle}>
         ${rangCell}
         <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
         <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
         ${hasProCol?`<td style="color:#7c3aed;font-weight:700">${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`:''}
         <td>${badgeRes(provDisplay)}</td>
         <td>${defCell}</td>
-        <td>${editBtn}</td></tr>`);
+        ${exclTds}<td>${editBtn}</td></tr>`);
       return;
     }
-    if (isDCGstats){ rowsHtml.push(`<tr>
+    if (isDCGstats){ rowsHtml.push(`<tr${rowStyle}>
       ${rangCell}
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${nbUEObl}</td>
       <td style="color:#d97706;font-weight:700">${x.ueRecu||0}≈</td>
       <td style="color:#dc2626;font-weight:700">${x.ueElim||0}✘</td>
-      <td>${diffHtml}</td><td>${diffAdjHtml}</td><td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`); return; }
-    rowsHtml.push(`<tr>
+      <td>${diffHtml}</td><td>${diffAdjHtml}</td><td>${badgeRes(x.resultat)}</td>${exclTds}<td>${editBtn}</td></tr>`); return; }
+    rowsHtml.push(`<tr${rowStyle}>
       ${rangCell}
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
-      <td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`);
+      <td>${badgeRes(x.resultat)}</td>${exclTds}<td>${editBtn}</td></tr>`);
   });
   document.getElementById('statsTbody').innerHTML = rowsHtml.join('');
   panel.classList.remove('hidden');
