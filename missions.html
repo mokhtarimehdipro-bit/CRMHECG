@@ -426,7 +426,7 @@ async function aspirerMaintenant() {
         const res = await apiPost({action:'aspirerMissionsNow'});
         if (res.success) {
             showToast(res.nb === 0 ? 'Aucun nouveau mail #mission.' : `✅ ${res.nb} mission(s) importée(s) !`, res.nb===0?'info':'success');
-            if (res.nb > 0) await loadMissions();
+            if (res.nb > 0) await loadMissions(true);
         } else showToast('Erreur : ' + res.message, 'error');
     } catch(e) { showToast('Erreur réseau.', 'error'); }
     btn.disabled = false; btn.textContent = orig;
@@ -440,19 +440,63 @@ function showToast(msg, type) {
     setTimeout(() => t.remove(), 4000);
 }
 
-// ── CHARGEMENT ────────────────────────────────────────────────────────────────
-async function loadMissions() {
+// ── CHARGEMENT (cache local + rafraîchissement silencieux) ────────────────────
+const MISSIONS_CACHE_KEY = 'hecg_cache_missions_v1';
+const MISSIONS_CACHE_TTL_MS = 90 * 1000;
+
+function _applyMissionsPayload(res) {
+    allMissions = res.data || [];
+    buildCollabFilter(); updateKPIs(); applyFilters();
+}
+
+function _persistMissionsCache() {
+    try {
+        const existing = JSON.parse(sessionStorage.getItem(MISSIONS_CACHE_KEY) || 'null');
+        const ts = existing ? existing.ts : Date.now();
+        sessionStorage.setItem(MISSIONS_CACHE_KEY, JSON.stringify({ ts, res: { success: true, data: allMissions } }));
+    } catch(e) {}
+}
+
+async function _fetchMissionsFresh() {
+    const res = await apiPost({action:'getMissions'});
+    if (res.success) {
+        try { sessionStorage.setItem(MISSIONS_CACHE_KEY, JSON.stringify({ ts: Date.now(), res })); } catch(eStore) {}
+        _applyMissionsPayload(res);
+    }
+    return res;
+}
+
+async function loadMissions(forceRefresh) {
+    if (!forceRefresh) {
+        try {
+            const cached = JSON.parse(sessionStorage.getItem(MISSIONS_CACHE_KEY) || 'null');
+            if (cached && (Date.now() - cached.ts) < MISSIONS_CACHE_TTL_MS) {
+                _applyMissionsPayload(cached.res);
+                document.getElementById('loader').classList.add('hidden');
+                if (currentView === 'board') document.getElementById('boardView').classList.remove('hidden');
+                else document.getElementById('gridView').classList.remove('hidden');
+                _fetchMissionsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                return;
+            }
+        } catch(eCache) {}
+    }
     document.getElementById('loader').classList.remove('hidden');
     document.getElementById('boardView').classList.add('hidden');
     document.getElementById('gridView').classList.add('hidden');
     try {
-        const res = await apiPost({action:'getMissions'});
-        if (res.success) { allMissions = res.data || []; buildCollabFilter(); updateKPIs(); applyFilters(); }
+        await _fetchMissionsFresh();
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
     if (currentView === 'board') document.getElementById('boardView').classList.remove('hidden');
     else document.getElementById('gridView').classList.remove('hidden');
 }
+
+// Rafraîchissement périodique silencieux tant que l'onglet est visible
+setInterval(function() {
+    if (document.visibilityState === 'visible') {
+        _fetchMissionsFresh().catch(function(e){ console.error(e); });
+    }
+}, MISSIONS_CACHE_TTL_MS);
 
 // ── FILTRES ───────────────────────────────────────────────────────────────────
 function buildCollabFilter() {
@@ -729,18 +773,23 @@ function renderNotes(raw) {
 function closeModal() { document.getElementById('modalDetail').classList.add('hidden'); currentMissionId = null; }
 document.getElementById('modalDetail').addEventListener('click', e => { if (e.target===document.getElementById('modalDetail')) closeModal(); });
 
-// ── STATUT ────────────────────────────────────────────────────────────────────
+// ── STATUT (mise à jour optimiste : affichage instantané, écriture en tâche de fond) ──
 async function changeStatut(s) {
     if (!currentMissionId) return;
-    const btn = event.target, orig = btn.textContent;
-    btn.disabled = true; btn.textContent = '…';
-    const res = await apiPost({action:'updateMissionStatus', id:currentMissionId, statut:s});
-    btn.disabled = false; btn.textContent = orig;
-    if (res.success) {
-        const m = allMissions.find(x => x.id === currentMissionId);
-        if (m) { m.statut = s; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
-        closeModal(); updateKPIs(); applyFilters();
-    } else showToast('Erreur : ' + res.message, 'error');
+    const id = currentMissionId;
+    const m = allMissions.find(x => x.id === id);
+    const backupStatut = m ? m.statut : null;
+    const backupDateMaj = m ? m.dateMaj : null;
+
+    if (m) { m.statut = s; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
+    closeModal(); updateKPIs(); applyFilters(); _persistMissionsCache();
+
+    const res = await apiPost({action:'updateMissionStatus', id, statut:s});
+    if (!res.success) {
+        if (m) { m.statut = backupStatut; m.dateMaj = backupDateMaj; }
+        updateKPIs(); applyFilters(); _persistMissionsCache();
+        showToast('Erreur : ' + res.message, 'error');
+    }
 }
 
 // ── NOTE ──────────────────────────────────────────────────────────────────────
@@ -808,7 +857,7 @@ async function saveNouveauMission() {
     btn.disabled = true; btn.textContent = '…';
     const res = await apiPost(payload);
     btn.disabled = false; btn.textContent = 'Créer la mission';
-    if (res.success) { showToast('Mission créée ✓', 'success'); closeNouveauMission(); await loadMissions(); }
+    if (res.success) { showToast('Mission créée ✓', 'success'); closeNouveauMission(); await loadMissions(true); }
     else showToast('Erreur : ' + res.message, 'error');
 }
 
