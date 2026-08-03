@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -63,7 +63,10 @@
                         <div class="p-4 bg-orange-50 rounded-2xl mb-3">
                             <div class="flex justify-between items-center mb-1">
                                 <h4 class="text-[10px] font-black text-orange-600 uppercase">Entreprise actuelle / Alternance</h4>
-                                <button id="btnRetirerEnt" onclick="retirerEntreprise()" class="hidden text-[9px] font-black text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded-lg transition">✕ Retirer</button>
+                                <div class="flex gap-1">
+                                    <button id="btnLierEnt" onclick="openLinkEntModal()" class="hidden text-[9px] font-black text-blue-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition">+ Lier</button>
+                                    <button id="btnRetirerEnt" onclick="retirerEntreprise()" class="hidden text-[9px] font-black text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded-lg transition">✕ Retirer</button>
+                                </div>
                             </div>
                             <p id="etuEntreprise" class="text-sm font-bold text-gray-800">Aucune entreprise</p>
                         </div>
@@ -179,8 +182,9 @@
                     </div>
                     <div id="gedScanList" class="space-y-2"></div>
                     <p id="gedScanEmpty" class="hidden text-sm text-gray-400 italic text-center py-3">Aucun dossier correspondant trouvé dans l'arborescence Drive.</p>
+                    <p id="gedScanInfo" class="hidden mt-2 text-[10px] text-indigo-400 italic"></p>
                     <div id="gedScanTruncated" class="hidden mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
-                        ⚠️ L'arborescence est très large — le scan a été interrompu avant la fin (limite de temps). Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.
+                        ⚠️ Scan interrompu avant la fin (arborescence très large). Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.
                     </div>
                 </div>
                 <!-- Upload -->
@@ -209,6 +213,30 @@
             </div>
         </div>
     </main>
+
+    <!-- Modal lier une entreprise -->
+    <div id="linkEntModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[80] p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-black text-gray-800">Lier une entreprise</h3>
+                <button onclick="closeLinkEntModal()" class="text-gray-300 hover:text-gray-600 text-2xl font-black leading-none">×</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button id="btnEntActif" onclick="setLinkEntType('actif')" class="flex-1 py-2 rounded-xl text-sm font-black bg-[#1A4E8A] text-white transition">Entreprise actuelle</button>
+                <button id="btnEntPasse" onclick="setLinkEntType('passé')" class="flex-1 py-2 rounded-xl text-sm font-black bg-gray-100 text-gray-500 transition">Ancienne entreprise</button>
+            </div>
+            <input type="text" id="linkEntSearch" placeholder="Rechercher une entreprise..." oninput="filterLinkEnt()" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[#1A4E8A]">
+            <div id="linkEntList" class="max-h-52 overflow-y-auto space-y-0.5 border border-gray-100 rounded-xl p-2 mb-4 bg-gray-50"></div>
+            <input type="hidden" id="linkEntSelectedId">
+            <input type="hidden" id="linkEntSelectedNom">
+            <input type="hidden" id="linkEntType" value="actif">
+            <div id="linkEntSelectedInfo" class="hidden bg-orange-50 border border-orange-100 rounded-xl p-3 mb-4 text-sm font-bold text-orange-700"></div>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeLinkEntModal()" class="px-6 py-2 text-gray-400 font-black hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmLinkEnt()" class="px-6 py-3 bg-[#1A4E8A] text-white font-black rounded-xl hover:bg-blue-800 transition shadow-lg">Lier</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
@@ -241,12 +269,12 @@
         })();
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur     = userSession.nom   || "Inconnu";
-    payload.roleAuteur   = userSession.role  || "N/A";
-    payload.vieScRole    = userSession.vieScRole || userSession.role || "";
-    payload.emailAuteur  = userSession.email || "";
+    payload.idAuteur = userSession.nom || "Inconnu";
+    payload.roleAuteur = userSession.role || "N/A";
+    payload.vieScRole = userSession.vieScRole || userSession.role || "";
+    payload.emailAuteur = userSession.email || "";
     payload.sessionToken = userSession.sessionToken || "";
-
+    
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -254,7 +282,7 @@
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
         return result;
     } catch (e) {
         console.error("Erreur API :", e);
@@ -293,6 +321,7 @@
 
             } else {
                 studentId = new URLSearchParams(window.location.search).get('id');
+                document.getElementById('btnLierEnt').classList.remove('hidden');
                 // Panneau alertes visible pour admin/superviseur uniquement
                 if (currentUser.role === 'Administrateur' || currentUser.role === 'Superviseur') {
                     document.getElementById('panneauAlertes').classList.remove('hidden');
@@ -353,9 +382,10 @@
                         document.getElementById('etuNoCV').classList.add('hidden');
                     }
 
-                    const badgeCV = p.faitCV === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
-                    const badgeLI = p.faitLI === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
-                    document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI;
+                    const badgeCV  = p.faitCV  === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>'          : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
+                    const badgeLI  = p.faitLI  === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>'    : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
+                    const badgeCVT = p.cvTech  === "Oui" ? '<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV Tech</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV Tech</span>';
+                    document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI + " " + badgeCVT;
 
                     document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
                         <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${n.visible === false ? 'border-gray-300 opacity-60' : 'border-[#F26522]'}">
@@ -556,9 +586,25 @@
 
             const candidates = r.candidates || [];
 
-            // Avertissement si scan interrompu avant la fin (arborescence très large)
+            // Affiche les dossiers racines ciblés par le scan
+            const scanRoots = r.scanRoots || [];
             const truncWarn = document.getElementById('gedScanTruncated');
-            if (truncWarn) truncWarn.classList.toggle('hidden', !r.truncated);
+            if (truncWarn) {
+                truncWarn.classList.toggle('hidden', !r.truncated);
+                if (r.truncated && scanRoots.length) {
+                    truncWarn.innerHTML = `⚠️ Scan interrompu (${r.inspected} dossiers parcourus). Racines ciblées : <em>${scanRoots.join(', ')}</em>. Si le dossier n'apparaît pas, utilisez "Lier un dossier" avec l'URL Drive directe.`;
+                }
+            }
+            // Info sur les racines scannées
+            const scanInfo = document.getElementById('gedScanInfo');
+            if (scanInfo) {
+                if (scanRoots.length) {
+                    scanInfo.textContent = `Scan dans : ${scanRoots.join(', ')} (${r.inspected || 0} dossiers parcourus)`;
+                    scanInfo.classList.remove('hidden');
+                } else {
+                    scanInfo.classList.add('hidden');
+                }
+            }
 
             if (!candidates.length) {
                 list.innerHTML = '';
@@ -634,13 +680,68 @@
             reader.readAsDataURL(file);
         }
 
+        // ══ LIER UNE ENTREPRISE MANUELLEMENT ══
+        let _linkEntCache = [];
+        function setLinkEntType(type) {
+            document.getElementById('linkEntType').value = type;
+            document.getElementById('btnEntActif').className = 'flex-1 py-2 rounded-xl text-sm font-black transition ' + (type === 'actif' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-500');
+            document.getElementById('btnEntPasse').className = 'flex-1 py-2 rounded-xl text-sm font-black transition ' + (type === 'passé' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500');
+        }
+        async function openLinkEntModal() {
+            document.getElementById('linkEntSearch').value = '';
+            document.getElementById('linkEntSelectedId').value = '';
+            document.getElementById('linkEntSelectedNom').value = '';
+            document.getElementById('linkEntSelectedInfo').classList.add('hidden');
+            setLinkEntType('actif');
+            document.getElementById('linkEntModal').classList.remove('hidden');
+            document.getElementById('linkEntModal').classList.add('flex');
+            if (!_linkEntCache.length) {
+                const res = await apiPost({ action: 'getEnterprisesMinList' });
+                if (res.success) _linkEntCache = res.data;
+            }
+            _renderLinkEntList();
+        }
+        function closeLinkEntModal() {
+            document.getElementById('linkEntModal').classList.add('hidden');
+            document.getElementById('linkEntModal').classList.remove('flex');
+        }
+        function _renderLinkEntList() {
+            const search = document.getElementById('linkEntSearch').value.toLowerCase();
+            const items = _linkEntCache.filter(e => !search || e.nom.toLowerCase().includes(search));
+            const listEl = document.getElementById('linkEntList');
+            if (!items.length) { listEl.innerHTML = '<p class="text-gray-400 italic text-xs text-center py-2">Aucun résultat.</p>'; return; }
+            listEl.innerHTML = items.slice(0, 80).map(e =>
+                '<button onclick="selectLinkEnt(\'' + e.id + '\',\'' + e.nom.replace(/'/g,"\\'") + '\')" '
+                + 'class="w-full text-left px-3 py-1.5 rounded-lg hover:bg-orange-50 text-sm transition">'
+                + '<span class="font-bold text-gray-800">' + e.nom + '</span>'
+                + '</button>'
+            ).join('');
+        }
+        function filterLinkEnt() { _renderLinkEntList(); }
+        function selectLinkEnt(id, nom) {
+            document.getElementById('linkEntSelectedId').value = id;
+            document.getElementById('linkEntSelectedNom').value = nom;
+            const info = document.getElementById('linkEntSelectedInfo');
+            info.textContent = '✓ ' + nom;
+            info.classList.remove('hidden');
+        }
+        async function confirmLinkEnt() {
+            const id = document.getElementById('linkEntSelectedId').value;
+            const nom = document.getElementById('linkEntSelectedNom').value;
+            if (!id) { alert('Sélectionnez une entreprise dans la liste.'); return; }
+            const type = document.getElementById('linkEntType').value;
+            const res = await apiPost({ action: 'attachStudentToEnterprise', idEtu: studentId, idEntreprise: id, nomEntreprise: nom, type });
+            if (res.success) { closeLinkEntModal(); loadDossier(); }
+            else alert('Erreur : ' + res.message);
+        }
+
         // ══ Retrait entreprise (Update 4) ══
         async function retirerEntreprise() {
             const nom = document.getElementById('etuEntreprise').innerText;
-            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nLes deux dossiers (étudiant et entreprise) seront mis à jour automatiquement.')) return;
+            if (!confirm('Retirer l\'entreprise « ' + nom + ' » du dossier de cet étudiant ?\n\nUne entrée "Ancien alternant" sera créée en attente de confirmation dans le dossier entreprise.')) return;
             const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: studentId });
             if (!r.success) return alert('Erreur : ' + r.message);
-            alert('Entreprise retirée. Les deux dossiers ont été mis à jour (ancienne entreprise / ancien alternant).');
+            alert('Entreprise retirée. Un mouvement "Ancien alternant — À confirmer" a été créé dans le dossier entreprise.');
             loadDossier();
         }
 

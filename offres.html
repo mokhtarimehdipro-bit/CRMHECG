@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -85,6 +85,20 @@
 
         <div id="offresGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
     </main>
+
+    <!-- Modal motif de suppression -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-xl font-black text-red-700 mb-2">Confirmer la suppression</h2>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Motif de suppression <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Ex : doublon, offre expirée, erreur de saisie…" class="w-full border-2 border-gray-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-red-400 resize-none mb-6"></textarea>
+            <div class="flex gap-3">
+                <button onclick="closeMotifModal()" class="flex-1 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="flex-1 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition">Supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
 
     <div id="offreModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[60] p-4">
         <div class="bg-white rounded-[2rem] p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl">
@@ -182,9 +196,15 @@
             </div>
 
             <!-- 3. Ajout manuel -->
-            <div class="flex gap-2 mb-6">
+            <div class="flex gap-2 mb-4">
                 <input type="email" id="inputAddEmail" placeholder="Ajouter un email manuellement..." class="flex-1 border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:border-[#1A4E8A]" onkeydown="if(event.key==='Enter') addManualEmail()">
                 <button onclick="addManualEmail()" class="px-4 py-2 bg-gray-100 rounded-xl text-sm font-black text-gray-600 hover:bg-gray-200 transition whitespace-nowrap">+ Ajouter</button>
+            </div>
+
+            <!-- 3b. Message personnalisé -->
+            <div class="mb-6">
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Message personnalisé <span class="text-gray-300 font-normal normal-case">(optionnel)</span></label>
+                <textarea id="shareMessagePerso" rows="3" placeholder="Tu peux postuler directement depuis ton dossier étudiant HECG." class="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:border-[#1A4E8A] resize-none text-gray-700 placeholder-gray-300"></textarea>
             </div>
 
             <!-- 4. Actions -->
@@ -243,15 +263,14 @@
 
         let currentOffres = [];
         let showObsolete = false;
-        let showPartagee = true;
+        let showPartagee = false;
         let _statsClickData = [];
 
         // --- POSTIER CENTRAL ---
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            payload.idAuteur     = userSession.nom   || "Utilisateur Inconnu";
-            payload.roleAuteur   = userSession.role  || "Utilisateur";
-            payload.emailAuteur  = userSession.email || "";
+            payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
+            payload.roleAuteur = userSession.role || "Utilisateur";
             payload.sessionToken = userSession.sessionToken || "";
             try {
                 const response = await fetch(API_URL, {
@@ -260,7 +279,7 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-                if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+                if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
                 return result;
             } catch (e) {
                 console.error("Erreur API :", e);
@@ -332,7 +351,7 @@
                 const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
                 const matchSearch = textGlobal.includes(search);
 
-                const qualiteOffre = (o.qualite || "").toLowerCase();
+                const qualiteOffre = (o.qualite || "à qualifier").toLowerCase();
                 const matchQualite = qualite === "" || qualiteOffre.includes(qualite);
 
                 let etatOffre = (o.etat || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -568,10 +587,35 @@
             closeModal(); loadOffres();
         }
 
-        async function deleteOffre(id) {
-            if(!confirm("Êtes-vous sûr de vouloir supprimer cette offre ?")) return;
-            await apiPost({ action: 'deleteOffre', id: id });
-            loadOffres();
+        // --- MOTIF DE SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').style.display = 'none';
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            const cb = _motifCallback;
+            closeMotifModal();
+            if (cb) cb(motif);
+        }
+
+        function deleteOffre(id) {
+            const offre = allOffres ? allOffres.find(o => o.id === id) : null;
+            const label = offre ? ((offre.poste || '') + ' chez ' + (offre.entreprise || id)) : id;
+            askMotif(`Supprimer l'offre "${label}" ?`, async (motif) => {
+                await apiPost({ action: 'deleteOffre', id, motif });
+                loadOffres();
+            });
         }
 
         // --- JOURNAL TRACÉ DES OFFRES ---
@@ -652,6 +696,7 @@
             const offre = currentOffres.find(x => x.id === id);
             document.getElementById('shareOffreId').value = id;
             document.getElementById('shareOffreTitle').innerText = offre ? (offre.poste || '') : '';
+            document.getElementById('shareMessagePerso').value = '';
             document.getElementById('shareModal').classList.replace('hidden', 'flex');
 
             selectedClassesSet = new Set();
@@ -770,18 +815,52 @@
             if (recipientsList.length === 0) return alert("Aucun destinataire sélectionné.");
             const idOffre = document.getElementById('shareOffreId').value;
             const btn = document.getElementById('btnConfirmShare');
+            const nbDest = recipientsList.length;
             btn.disabled = true;
-            btn.innerText = "Diffusion en cours... ⏳";
+            btn.innerText = `Diffusion en cours (${nbDest} destinataire${nbDest > 1 ? 's' : ''})... ⏳`;
+
+            const tStart = Date.now();
+
+            // Avertissement progressif si l'envoi prend du temps (normal pour beaucoup de destinataires)
+            const timerMsg = setTimeout(() => {
+                btn.innerText = "Envoi en cours, merci de patienter... ⏳";
+            }, 20000);
+
+            const _traiterErreur = (err) => {
+                const elapsed = Date.now() - tStart;
+                clearTimeout(timerMsg);
+                if (elapsed > 18000) {
+                    // Délai long → probable timeout GAS, les emails sont très probablement partis
+                    alert(`⚠️ La connexion a expiré après ${Math.round(elapsed/1000)}s.\n\nLes ${nbDest} emails ont très probablement été envoyés. L'offre sera mise à jour dans quelques instants.`);
+                    closeShareModal();
+                    setTimeout(() => loadOffres(), 4000);
+                } else {
+                    // Erreur rapide → vraie erreur réseau
+                    alert("❌ Erreur de connexion. Vérifiez votre connexion internet et réessayez.");
+                }
+            };
+
             try {
+                const messagePerso = (document.getElementById('shareMessagePerso').value || '').trim();
                 const d = await apiPost({
                     action: 'partagerOffre',
                     id_offre: idOffre,
-                    emailsCibles: recipientsList.map(r => r.email)
+                    emailsCibles: recipientsList.map(r => r.email),
+                    messagePersonnalise: messagePerso || null
                 });
-                alert(d.message);
-                if (d.success) { closeShareModal(); loadOffres(); }
+                clearTimeout(timerMsg);
+                if (d.success) {
+                    alert(`✅ ${d.message}`);
+                    closeShareModal();
+                    loadOffres();
+                } else if (!d.success && (d.message || '').toLowerCase().includes('réseau')) {
+                    // apiPost a capté une erreur réseau/timeout et l'a renvoyée comme objet
+                    _traiterErreur(new Error(d.message));
+                } else {
+                    alert(d.message || "Erreur inconnue.");
+                }
             } catch (err) {
-                alert("Erreur de connexion lors du partage.");
+                _traiterErreur(err);
             } finally {
                 btn.disabled = false;
                 btn.innerText = "🚀 DIFFUSER L'OFFRE";
@@ -813,7 +892,7 @@
                 const d = new Date(o.date);
                 return !isNaN(d) && d >= weekStart;
             });
-            const aQualifier = currentOffres.filter(o => normalizeStr(o.qualite).includes("qualifier"));
+            const aQualifier = currentOffres.filter(o => normalizeStr(o.qualite || "à qualifier").includes("qualifier"));
             const partagees   = currentOffres.filter(o => {
                 const e = normalizeStr(o.etat);
                 return e.includes("partag") && !e.includes("non");

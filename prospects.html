@@ -43,6 +43,20 @@
         </div>
     </main>
 
+    <!-- MOTIF MODAL -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+            <h3 class="text-lg font-black text-gray-800 mb-2">Confirmer la suppression</h3>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-xs font-black text-gray-600 uppercase mb-2">Motif de suppression <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Expliquez la raison de cette suppression..." class="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-[#1A4E8A] resize-none mb-6"></textarea>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeMotifModal()" class="px-6 py-2 text-gray-400 font-black hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="px-6 py-2 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition">Confirmer la suppression</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         // Fiabilise les appels au backend Apps Script : retente automatiquement en cas
@@ -93,11 +107,32 @@
             }
         }
 
-        async function deleteProspect(id) {
-            if(confirm("Supprimer ce prospect définitivement ?")) {
-                await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id }) });
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').style.display = 'none';
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            closeMotifModal();
+            if (_motifCallback) _motifCallback(motif);
+        }
+
+        function deleteProspect(id) {
+            askMotif('Supprimer ce prospect définitivement ?', async (motif) => {
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id, motif: motif, idAuteur: u.nom || "Inconnu", emailAuteur: u.email || "", sessionToken: u.sessionToken || "" }) });
                 loadProspects();
-            }
+            });
         }
 
         loadProspects();

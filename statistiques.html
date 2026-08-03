@@ -91,10 +91,22 @@
                 </div>
             </section>
 
+            <section class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                <h2 class="text-xl font-black text-gray-800 mb-1 border-b pb-2">3. % Étudiants placés en alternance par classe</h2>
+                <p class="text-[11px] text-gray-400 italic mb-5">Périmètre : <strong>Inscrits + Préinscrits uniquement</strong>. Les étudiants dont le statut est <em>"En Initial"</em> sont exclus du total de référence (dénominateur = hors initial).</p>
+                <div id="placementByClass" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"></div>
+            </section>
+
+            <section class="bg-white p-8 rounded-[2rem] shadow-sm border border-indigo-100">
+                <h2 class="text-xl font-black text-gray-800 mb-1 border-b pb-2">3bis. % Préinscrits placés en alternance par classe</h2>
+                <p class="text-[11px] text-gray-400 italic mb-5">Périmètre : <strong>Préinscrits uniquement</strong>. Les étudiants dont le statut est <em>"En Initial"</em> sont exclus du dénominateur.</p>
+                <div id="placementByClassPreinscrits" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"></div>
+            </section>
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                
+
                 <section class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
-                    <h2 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">3. Réseau d'Entreprises & Offres</h2>
+                    <h2 class="text-xl font-black text-gray-800 mb-6 border-b pb-2">4. Réseau d'Entreprises & Offres</h2>
                     
                     <p class="text-[10px] text-gray-400 font-bold uppercase mb-3 text-center tracking-widest">Base de données B2B (Dédoublonnée)</p>
                     <div class="grid grid-cols-2 gap-4 mb-8">
@@ -127,7 +139,7 @@
 
                 <section class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                     <div class="flex justify-between items-center mb-6 border-b pb-2 cursor-pointer group" onclick="openDetail('Tous les étudiants sortis', filteredData.sorties)">
-                        <h2 class="text-xl font-black text-gray-800 group-hover:text-red-500 transition">4. Sorties (Attrition)</h2>
+                        <h2 class="text-xl font-black text-gray-800 group-hover:text-red-500 transition">5. Sorties (Attrition)</h2>
                         <span class="bg-red-100 text-red-600 font-black px-4 py-1 rounded-xl text-sm" id="kpi-sorties-tot">0 Sorties</span>
                     </div>
                     <div class="h-72"><canvas id="chartSorties"></canvas></div>
@@ -260,6 +272,9 @@ function applyCampusFilter() {
             document.getElementById('kpi-off-nonpost').innerText = rawData.offres_non_postulees.length;
             document.getElementById('kpi-sorties-tot').innerText = d.sorties.length + " Sorties";
 
+            buildPlacementByClass();
+            buildPlacementByClassPreinscrits();
+
             const motifMap = {};
             d.sorties.forEach(e => { const m = e.motif || "Non précisé"; motifMap[m] = (motifMap[m] || 0) + 1; });
             
@@ -270,6 +285,78 @@ function applyCampusFilter() {
                 options: pieOptions 
             });
         }
+        function buildPlacementByClass() {
+            const scope = [...filteredData.inscrits, ...filteredData.preinscrits];
+            const byClasse = {};
+            scope.forEach(e => {
+                const cl = e.classe || 'N/C';
+                if (!byClasse[cl]) byClasse[cl] = { total: 0, altCount: 0, initialCount: 0 };
+                const isInitial = String(e.statut||'').toLowerCase().includes('initial');
+                if (isInitial) {
+                    byClasse[cl].initialCount++;
+                } else {
+                    byClasse[cl].total++;
+                    if (e.aAlternance) byClasse[cl].altCount++;
+                }
+            });
+
+            const classes = Object.keys(byClasse).sort();
+            document.getElementById('placementByClass').innerHTML = classes.length === 0
+                ? '<p class="text-gray-400 italic text-sm col-span-full text-center">Aucune donnée disponible.</p>'
+                : classes.map(cl => {
+                    const d = byClasse[cl];
+                    const pct = d.total > 0 ? Math.round(d.altCount / d.total * 100) : 0;
+                    const color  = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                    const bg     = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fef2f2';
+                    const border = pct >= 80 ? '#86efac' : pct >= 50 ? '#fcd34d' : '#fca5a5';
+                    const clSafe = cl.replace(/'/g, "\\'");
+                    return `<div class="p-5 rounded-2xl border-2 cursor-pointer hover:opacity-75 transition text-center"
+                                 style="background:${bg};border-color:${border}"
+                                 onclick="openDetail('${clSafe} — En alternance', [...filteredData.inscrits,...filteredData.preinscrits].filter(e=>e.classe==='${clSafe}'&&e.aAlternance))">
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">${cl}</p>
+                        <p class="text-4xl font-black leading-none" style="color:${color}">${pct}<span class="text-lg">%</span></p>
+                        <p class="text-[11px] text-gray-500 font-bold mt-2">${d.altCount} / ${d.total} placés</p>
+                        ${d.initialCount > 0 ? `<p class="text-[9px] text-gray-400 italic mt-1">${d.initialCount} en initial (exclus)</p>` : ''}
+                    </div>`;
+                }).join('');
+        }
+
+        function buildPlacementByClassPreinscrits() {
+            const scope = filteredData.preinscrits;
+            const byClasse = {};
+            scope.forEach(e => {
+                const cl = e.classe || 'N/C';
+                if (!byClasse[cl]) byClasse[cl] = { total: 0, altCount: 0, initialCount: 0 };
+                const isInitial = String(e.statut||'').toLowerCase().includes('initial');
+                if (isInitial) {
+                    byClasse[cl].initialCount++;
+                } else {
+                    byClasse[cl].total++;
+                    if (e.aAlternance) byClasse[cl].altCount++;
+                }
+            });
+
+            const classes = Object.keys(byClasse).sort();
+            document.getElementById('placementByClassPreinscrits').innerHTML = classes.length === 0
+                ? '<p class="text-gray-400 italic text-sm col-span-full text-center">Aucun préinscrit disponible.</p>'
+                : classes.map(cl => {
+                    const d = byClasse[cl];
+                    const pct = d.total > 0 ? Math.round(d.altCount / d.total * 100) : 0;
+                    const color  = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                    const bg     = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fef2f2';
+                    const border = pct >= 80 ? '#86efac' : pct >= 50 ? '#fcd34d' : '#fca5a5';
+                    const clSafe = cl.replace(/'/g, "\\'");
+                    return `<div class="p-5 rounded-2xl border-2 cursor-pointer hover:opacity-75 transition text-center"
+                                 style="background:${bg};border-color:${border}"
+                                 onclick="openDetail('${clSafe} — Préinscrits en alternance', filteredData.preinscrits.filter(e=>e.classe==='${clSafe}'&&e.aAlternance))">
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">${cl}</p>
+                        <p class="text-4xl font-black leading-none" style="color:${color}">${pct}<span class="text-lg">%</span></p>
+                        <p class="text-[11px] text-gray-500 font-bold mt-2">${d.altCount} / ${d.total} placés</p>
+                        ${d.initialCount > 0 ? `<p class="text-[9px] text-gray-400 italic mt-1">${d.initialCount} en initial (exclus)</p>` : ''}
+                    </div>`;
+                }).join('');
+        }
+
         // MODALE DE DÉTAIL
         function openDetail(title, dataArray) {
             document.getElementById('modalTitle').innerText = title + " (" + dataArray.length + ")";

@@ -38,9 +38,10 @@
                 <h1 class="text-3xl font-black text-[#1A4E8A]">Journal d'Audit</h1>
                 <p class="text-sm text-gray-400 font-bold mt-1">Traçabilité complète des actions</p>
             </div>
-            <div class="flex space-x-3">
+            <div class="flex space-x-3 flex-wrap gap-2">
                 <button onclick="loadHistory()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
                 <button onclick="showSuppCritiques()" class="bg-red-100 text-red-700 px-5 py-2 rounded-xl font-bold shadow-sm hover:bg-red-200 transition">⚠️ Suppressions</button>
+                <button id="btnArchivage" onclick="toggleArchivage()" class="hidden bg-orange-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-orange-600 transition">📦 Archivage</button>
                 <button id="btnRapport" onclick="toggleRapport()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition">📊 Rapport</button>
                 <button onclick="exportCSV()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
                 <button id="btnIndicateursJour" onclick="toggleIndicateursDuJour()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition">🗓️ Indicateurs du quotidien</button>
@@ -91,6 +92,21 @@
                 <p class="text-[10px] font-black text-teal-600 uppercase tracking-widest">📋 Notes offres</p>
                 <p class="text-3xl font-black text-teal-700 mt-1" id="kpi-notes-offres">0</p>
             </div>
+        </div>
+
+        <!-- PANEL ARCHIVAGE -->
+        <div id="panelArchivage" class="hidden mb-6 bg-orange-50 border-2 border-orange-200 rounded-3xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h2 class="font-black text-orange-700 text-lg">📦 Archives — Éléments supprimés</h2>
+                    <p class="text-[10px] text-orange-500 font-bold uppercase tracking-widest mt-0.5">Restauration possible à tout moment</p>
+                </div>
+                <div class="flex gap-3 items-center">
+                    <input type="text" id="archiveSearch" placeholder="Rechercher…" oninput="filterArchives()" class="border-2 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-orange-400 w-48">
+                    <button onclick="document.getElementById('panelArchivage').classList.add('hidden')" class="text-orange-300 hover:text-orange-600 font-bold text-xl">✕</button>
+                </div>
+            </div>
+            <div id="archiveBody" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1"></div>
         </div>
 
         <!-- PANEL SUPPRESSIONS CRITIQUES -->
@@ -320,7 +336,12 @@
             if (user.role !== "Administrateur") {
                 alert("Accès Administrateur requis.");
                 window.location.href = 'dashboard.html';
-            } else { loadHistory(); }
+            } else {
+                loadHistory();
+                if (user.email === 'm.mokhtari@hecg.fr') {
+                    document.getElementById('btnArchivage').classList.remove('hidden');
+                }
+            }
         };
 
         // FONCTION ANTI-ID ET ANTI-ERREUR
@@ -1201,6 +1222,80 @@
             </div>`;
 
             document.getElementById(containerId).innerHTML = html;
+        }
+
+        // ==========================================
+        // ARCHIVAGE
+        // ==========================================
+        let allArchives = [];
+
+        async function apiPostH(payload) {
+            payload.idAuteur = user.nom || "Inconnu";
+            payload.roleAuteur = user.role || "N/A";
+            payload.emailAuteur = user.email || "";
+            payload.sessionToken = user.sessionToken || "";
+            const r = await fetch(API_URL, { method: 'POST', headers: {"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
+            return r.json();
+        }
+
+        async function toggleArchivage() {
+            const panel = document.getElementById('panelArchivage');
+            if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+            panel.classList.remove('hidden');
+            if (allArchives.length === 0) await loadArchives();
+        }
+
+        async function loadArchives() {
+            document.getElementById('archiveBody').innerHTML = '<p class="col-span-full text-center py-10 font-bold text-orange-400 animate-pulse">Chargement des archives...</p>';
+            const d = await apiPostH({ action: 'getArchives' });
+            if (d.success) { allArchives = d.data; renderArchives(allArchives); }
+            else document.getElementById('archiveBody').innerHTML = '<p class="col-span-full text-center text-red-500 font-bold p-4">Erreur : ' + d.message + '</p>';
+        }
+
+        function renderArchives(data) {
+            const body = document.getElementById('archiveBody');
+            if (!data || data.length === 0) {
+                body.innerHTML = '<p class="col-span-full text-center py-10 text-orange-300 font-bold">Aucun élément archivé.</p>';
+                return;
+            }
+            const typeBadge = (t) => {
+                const base = t.replace(' (Restauré)', '');
+                const restored = t.includes('Restauré');
+                const colors = { Contact:'bg-blue-100 text-blue-700', Entreprise:'bg-purple-100 text-purple-700', Etudiant:'bg-green-100 text-green-700' };
+                const cls = colors[base] || 'bg-gray-100 text-gray-600';
+                return `<span class="px-2 py-0.5 rounded-full text-[10px] font-black ${cls}">${base}</span>${restored ? '<span class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-green-200 text-green-800">Restauré</span>' : ''}`;
+            };
+            body.innerHTML = data.map(a => {
+                const donnees = a.donnees || {};
+                const label = donnees.nomContact || donnees.nomEntreprise || donnees.nomEtudiant || a.idOriginal;
+                const isRestored = a.type.includes('Restauré');
+                return `<div class="bg-white rounded-2xl p-5 border ${isRestored ? 'border-green-200 opacity-60' : 'border-orange-100'} shadow-sm archive-card" data-search="${(label + ' ' + a.auteur + ' ' + a.motif).toLowerCase()}">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex flex-wrap gap-1">${typeBadge(a.type)}</div>
+                        <span class="text-[10px] text-gray-400 font-bold whitespace-nowrap">${a.date} ${a.heure}</span>
+                    </div>
+                    <p class="font-black text-slate-800 text-sm mb-1 truncate" title="${label}">${label}</p>
+                    <p class="text-xs font-bold text-gray-400 mb-1">Par : <span class="text-slate-600">${a.auteur || '—'}</span></p>
+                    <p class="text-xs font-bold text-orange-600 bg-orange-50 rounded-lg px-2 py-1 mb-3 break-words">${a.motif || 'Motif non précisé'}</p>
+                    ${!isRestored ? `<button onclick="restoreArchive('${a.id}')" class="w-full py-2 bg-[#1A4E8A] text-white text-xs font-black rounded-xl hover:bg-blue-700 transition shadow-sm">Restaurer</button>` : '<p class="text-center text-[10px] text-green-600 font-black">Déjà restauré</p>'}
+                </div>`;
+            }).join('');
+        }
+
+        function filterArchives() {
+            const q = document.getElementById('archiveSearch').value.toLowerCase();
+            renderArchives(q ? allArchives.filter(a => {
+                const d = a.donnees || {};
+                const label = (d.nomContact || d.nomEntreprise || d.nomEtudiant || a.idOriginal || '').toLowerCase();
+                return label.includes(q) || (a.auteur||'').toLowerCase().includes(q) || (a.motif||'').toLowerCase().includes(q);
+            }) : allArchives);
+        }
+
+        async function restoreArchive(idArchive) {
+            if (!confirm("Restaurer cet élément ? Il sera rajouté dans son onglet d'origine.")) return;
+            const d = await apiPostH({ action: 'restoreArchive', id_archive: idArchive });
+            if (d.success) { alert("Élément restauré avec succès !"); allArchives = []; await loadArchives(); }
+            else alert("Erreur : " + d.message);
         }
 
         function exportCSV() {

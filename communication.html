@@ -41,6 +41,70 @@
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement de l'historique...</div>
         <div id="campaignsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
+
+        <!-- ===================== SUIVI DES POSTS ===================== -->
+        <div class="mt-14">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-black text-[#1A4E8A]">📱 Suivi des posts</h2>
+                    <p class="text-sm text-gray-400 mt-1">Planification et archivage des publications sur les réseaux sociaux</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="loadSuiviPostCom()" class="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition">↺ Actualiser</button>
+                    <button onclick="openSPCModal(null)" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black shadow hover:scale-105 transition text-sm">+ Nouveau post</button>
+                </div>
+            </div>
+            <div id="spcRapport" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-6 flex gap-4 flex-wrap items-end">
+                <div class="flex-1" style="min-width:160px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">🔍 Titre du post</label>
+                    <input type="text" id="spcFilterTitre" oninput="renderSPC()" placeholder="Rechercher un titre…" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:border-[#F26522]">
+                </div>
+                <div class="flex-1" style="min-width:130px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Plateforme</label>
+                    <select id="spcFilterPlatform" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Toutes</option><option>LinkedIn</option><option>Instagram</option>
+                        <option>Facebook</option><option>TikTok</option><option>X / Twitter</option>
+                    </select>
+                </div>
+                <div class="flex-1" style="min-width:120px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Thème</label>
+                    <input type="text" id="spcFilterTheme" oninput="renderSPC()" placeholder="Filtrer…" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:border-[#F26522]">
+                </div>
+                <div class="flex-1" style="min-width:130px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">État publication</label>
+                    <select id="spcFilterEtat" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Tous</option><option>Publié</option><option>Planifié</option><option>Brouillon</option><option>Annulé</option>
+                    </select>
+                </div>
+                <div class="flex-1" style="min-width:160px">
+                    <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Validation direction</label>
+                    <select id="spcFilterValidation" onchange="renderSPC()" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:border-[#F26522]">
+                        <option value="">Tous</option>
+                        <option>En attente</option><option>Validé</option><option>Demande de modification</option><option>Annulé</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Ref</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Plateforme</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Titre du post</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Dates</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Validation</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">État pub.</th>
+                                <th class="px-5 py-4 text-[10px] uppercase font-black text-slate-400 tracking-widest">Visuels</th>
+                                <th class="px-5 py-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="spcTbody"><tr><td colspan="8" class="text-center text-gray-400 py-12">Chargement…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
@@ -633,14 +697,10 @@ async function sendMail(cmpId, isTest) {
     btns.forEach(b => { b.innerText = "Calcul..."; b.disabled = true; });
 
     try {
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ 
-                action: 'previewComMail', 
-                type: cmp.type, campus: cmp.campus, cible: cmp.cible, emailsLibres: cmp.emailsLibres
-            }) 
+        const d = await apiPost({
+            action: 'previewComMail',
+            type: cmp.type, campus: cmp.campus, cible: cmp.cible, emailsLibres: cmp.emailsLibres
         });
-        const d = await res.json();
         
         btns.forEach(b => { b.innerText = "Envoi Réel 🚀"; b.disabled = false; });
 
@@ -1077,6 +1137,503 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         </div>
     </div>
 </div>
+<!-- ================== MODAL SUIVI POST COM ================== -->
+<div id="spcModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4" onclick="if(event.target===this)closeSPCModal()">
+  <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h3 class="text-xl font-black text-[#1A4E8A]" id="spcModalTitle">Nouveau post</h3>
+      <button onclick="closeSPCModal()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+    </div>
+    <input type="hidden" id="spcModalId">
+    <div class="space-y-6">
+
+      <!-- Bloc 1 : Identité du post -->
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Référence (auto si vide)</label>
+          <input type="text" id="spcModalRefpost" placeholder="ex: POST-2026-07" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Plateforme</label>
+          <select id="spcModalPlateforme" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+            <option>LinkedIn</option><option>Instagram</option><option>Facebook</option>
+            <option>TikTok</option><option>X / Twitter</option>
+          </select>
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[10px] font-black uppercase text-[#F26522] mb-2">✏️ Titre du post *</label>
+          <input type="text" id="spcModalTheme" placeholder="Donnez un titre clair à ce post…" class="w-full border-2 border-orange-200 p-3 rounded-xl font-bold outline-none focus:border-[#F26522] bg-orange-50/30 text-base">
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Idée de contenu</label>
+          <input type="text" id="spcModalIdeeContenu" placeholder="Résumé court de l'idée, angle éditorial…" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Thème</label>
+          <input type="text" id="spcModalThemeProg" placeholder="ex: JPO, Alumni, Vie étudiante, SIG…" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522]">
+        </div>
+      </div>
+
+      <!-- Bloc 2 : Dates -->
+      <div class="bg-slate-50 rounded-2xl p-5 grid grid-cols-3 gap-4 border border-slate-100">
+        <div>
+          <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">📆 Date prévisionnelle</label>
+          <input type="date" id="spcModalDatePrevue" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none focus:border-[#F26522] bg-white">
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase text-red-500 mb-2">⏰ Date butoir direction</label>
+          <input type="date" id="spcModalDateButoir" class="w-full border-2 border-red-200 p-3 rounded-xl font-bold outline-none focus:border-red-400 bg-red-50">
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">✅ Date réelle de pub.</label>
+          <input type="date" id="spcModalDateReelle" class="w-full border-2 border-white p-3 rounded-xl font-bold outline-none focus:border-[#F26522] bg-white">
+        </div>
+      </div>
+
+      <!-- Bloc 3 : Workflow de validation -->
+      <div class="bg-indigo-50/60 rounded-2xl p-5 grid grid-cols-2 gap-4 border border-indigo-100">
+        <div>
+          <label class="block text-[10px] font-black uppercase text-indigo-600 mb-2">Validation direction</label>
+          <select id="spcModalValidationEtat" class="w-full border-2 border-indigo-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-400 bg-white">
+            <option value="En attente">⏳ En attente</option>
+            <option value="Validé">✅ Validé</option>
+            <option value="Demande de modification">🔄 Demande de modification</option>
+            <option value="Annulé">❌ Annulé</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">État de publication</label>
+          <select id="spcModalEtat" class="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-[#F26522] bg-white">
+            <option>Planifié</option><option>Publié</option><option>Brouillon</option><option>Annulé</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Bloc 4 : Contenu -->
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Texte du post</label>
+        <textarea id="spcModalContenu" rows="5" placeholder="Rédigez le texte du post ici…" class="w-full border-2 border-gray-100 p-3 rounded-xl font-bold outline-none focus:border-[#F26522] resize-none leading-relaxed"></textarea>
+      </div>
+
+      <!-- Bloc 5 : Visuels -->
+      <div>
+        <label class="block text-[10px] font-black uppercase text-gray-400 mb-3">Visuels du post</label>
+        <div id="spcVisualsExisting" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+        <div id="spcNoVisualWarning" class="hidden mb-3 px-4 py-3 rounded-xl text-xs font-bold" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa">
+          Aucun visuel associé — pensez à documenter ce post avant publication.
+        </div>
+        <div id="spcNewFilesList" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+        <label for="spcVisualInput" class="inline-flex items-center gap-2 cursor-pointer px-5 py-3 border-2 border-dashed border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:border-[#F26522] hover:text-[#F26522] transition">
+          <span style="font-size:1.2rem">+</span> Ajouter des visuels (JPG, PNG, GIF — max 4 Mo/fichier)
+        </label>
+        <input type="file" id="spcVisualInput" multiple accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" onchange="spcOnFilesSelected(this)">
+      </div>
+
+    </div>
+    <div class="flex justify-between gap-3 mt-8 pt-6 border-t border-gray-100">
+      <button id="btnDeleteSPC" onclick="deleteSPCFromModal()" class="px-5 py-3 bg-red-50 text-red-500 border border-red-200 font-black rounded-xl hover:bg-red-100 transition hidden">🗑 Supprimer</button>
+      <div class="flex gap-3 ml-auto">
+        <button onclick="closeSPCModal()" class="px-6 py-3 border-2 border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition">Annuler</button>
+        <button onclick="saveSPC()" class="px-8 py-3 bg-[#F26522] text-white font-black rounded-xl shadow-lg hover:scale-105 transition">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PANNEAU DÉTAIL POST (carnet d'échanges + historique statuts) -->
+<div id="spcDetailPanel" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4" onclick="if(event.target===this)closeSPCDetail()">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div class="p-6 border-b flex justify-between items-center bg-slate-50 flex-shrink-0">
+      <div>
+        <h3 class="text-xl font-black text-[#1A4E8A]" id="spcDetailTitle">Détail du post</h3>
+        <p class="text-xs text-gray-400 font-bold mt-0.5" id="spcDetailSubtitle"></p>
+      </div>
+      <button onclick="closeSPCDetail()" class="text-gray-400 hover:text-red-500 font-bold text-3xl">&times;</button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-6 space-y-8">
+
+      <!-- Historique des statuts -->
+      <div>
+        <h4 class="text-[11px] font-black uppercase text-slate-500 mb-3 tracking-widest">📋 Historique des statuts de validation</h4>
+        <div id="spcDetailHistorique" class="space-y-2 text-sm"></div>
+      </div>
+
+      <!-- Carnet d'échanges -->
+      <div>
+        <h4 class="text-[11px] font-black uppercase text-slate-500 mb-3 tracking-widest">💬 Carnet d'échanges</h4>
+        <div id="spcDetailCarnet" class="space-y-3 mb-4"></div>
+        <div class="flex gap-2">
+          <input type="hidden" id="spcDetailId">
+          <textarea id="spcDetailEchangeInput" rows="2" placeholder="Ajouter une note, un échange, une demande…"
+            class="flex-1 border-2 border-gray-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-[#F26522] resize-none"
+            onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')addSPCEchange()"></textarea>
+          <button onclick="addSPCEchange()" class="px-4 py-2 bg-[#F26522] text-white font-black rounded-xl hover:scale-105 transition text-sm self-end">Envoyer</button>
+        </div>
+        <p class="text-[10px] text-gray-400 mt-1 ml-1">Ctrl+Entrée pour envoyer</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="spcToast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99] hidden">
+  <div id="spcToastMsg" class="px-6 py-3 rounded-2xl shadow-lg text-sm font-bold text-white"></div>
+</div>
+
+<script>
+let allSPC = [];
+let spcCurrentVisuals = []; // [{fileId, filename}] - visuels déjà en Drive
+let spcNewFiles = [];        // File[] - nouveaux fichiers à uploader
+
+function spcToast(msg, ok=true) {
+  const t = document.getElementById('spcToast');
+  const m = document.getElementById('spcToastMsg');
+  m.textContent = msg;
+  m.style.background = ok ? '#22c55e' : '#ef4444';
+  t.classList.remove('hidden'); t.style.display='flex';
+  setTimeout(() => { t.classList.add('hidden'); t.style.display='none'; }, 3500);
+}
+
+async function loadSuiviPostCom() {
+  document.getElementById('spcTbody').innerHTML = '<tr><td colspan="8" class="text-center text-gray-400 py-12 animate-pulse">Chargement…</td></tr>';
+  const res = await apiPost({ action: 'getSuiviPostCom' });
+  if (!res.success) { document.getElementById('spcTbody').innerHTML = '<tr><td colspan="8" class="text-center text-red-400 py-12">' + (res.message||'Erreur') + '</td></tr>'; return; }
+  allSPC = res.data || [];
+  renderSPC();
+  renderSPCRapport();
+}
+
+function renderSPC() {
+  const fp = document.getElementById('spcFilterPlatform').value;
+  const ft = document.getElementById('spcFilterTheme').value.toLowerCase();
+  const fti = document.getElementById('spcFilterTitre').value.toLowerCase();
+  const fe = document.getElementById('spcFilterEtat').value;
+  const fv = document.getElementById('spcFilterValidation').value;
+  const filtered = allSPC.filter(p =>
+    (!fp  || p.plateforme === fp) &&
+    (!ft  || (p.themeProg||'').toLowerCase().includes(ft)) &&
+    (!fti || (p.theme||'').toLowerCase().includes(fti) || (p.ideeContenu||'').toLowerCase().includes(fti)) &&
+    (!fe  || p.etat === fe) &&
+    (!fv  || p.validationEtat === fv)
+  );
+  const etatBadge = e => {
+    const c = {Publié:'#22c55e',Planifié:'#3b82f6',Brouillon:'#f59e0b',Annulé:'#9ca3af'}[e]||'#9ca3af';
+    return `<span style="background:${c}20;color:${c};padding:2px 8px;border-radius:999px;font-size:0.65rem;font-weight:900">${e||'—'}</span>`;
+  };
+  const validationBadge = v => {
+    const cfg = {
+      'En attente':           {bg:'#fef3c7',col:'#d97706'},
+      'Validé':               {bg:'#dcfce7',col:'#16a34a'},
+      'Demande de modification':{bg:'#ede9fe',col:'#7c3aed'},
+      'Annulé':               {bg:'#fee2e2',col:'#dc2626'}
+    }[v] || {bg:'#f3f4f6',col:'#9ca3af'};
+    return `<span style="background:${cfg.bg};color:${cfg.col};padding:3px 8px;border-radius:999px;font-size:0.65rem;font-weight:900;white-space:nowrap">${v||'—'}</span>`;
+  };
+  const visualBadge = v => {
+    const ids = v ? v.split(',').filter(Boolean) : [];
+    if (ids.length > 0)
+      return `<span style="background:#dcfce720;color:#16a34a;padding:2px 8px;border-radius:999px;font-size:0.65rem;font-weight:900;white-space:nowrap">${ids.length} visuel(s)</span>`;
+    return `<span style="background:#fff7ed;color:#ea580c;padding:2px 8px;border-radius:999px;font-size:0.65rem;font-weight:900;white-space:nowrap">Aucun visuel</span>`;
+  };
+  const butoir = db => {
+    if (!db) return '<span class="text-gray-300 text-xs">—</span>';
+    const diff = Math.ceil((new Date(db) - new Date()) / 86400000);
+    const col = diff < 0 ? '#dc2626' : diff <= 3 ? '#d97706' : '#374151';
+    return `<span style="color:${col};font-weight:700;font-size:0.75rem;white-space:nowrap">${db}${diff < 0 ? ' ⚠️' : diff <= 3 ? ' ⏰' : ''}</span>`;
+  };
+  const platIcon = {'LinkedIn':'🔵','Instagram':'📸','Facebook':'📘','TikTok':'🎵','X / Twitter':'🐦'};
+  document.getElementById('spcTbody').innerHTML = filtered.length ? filtered.map(p => `
+    <tr class="border-t border-gray-100 hover:bg-orange-50/40 transition-colors">
+      <td class="px-5 py-4 font-mono text-[11px] text-gray-400 whitespace-nowrap">${p.refpost||'—'}</td>
+      <td class="px-5 py-4 whitespace-nowrap">
+        <span class="text-sm">${platIcon[p.plateforme]||'📱'}</span>
+        <span class="text-xs font-bold text-gray-600 ml-1">${p.plateforme||'—'}</span>
+      </td>
+      <td class="px-5 py-4" style="min-width:220px;max-width:320px">
+        <div class="font-black text-gray-800 text-sm leading-snug mb-1 truncate" title="${(p.theme||'').replace(/"/g,"'")}">${p.theme||'<span class=&quot;text-gray-400 italic font-normal&quot;>Sans titre</span>'}</div>
+        ${p.ideeContenu ? `<div class="text-[11px] text-gray-500 truncate">${p.ideeContenu}</div>` : ''}
+        ${p.themeProg ? `<span style="background:#eff6ff;color:#3b82f6;padding:1px 7px;border-radius:999px;font-size:0.65rem;font-weight:800;margin-top:3px;display:inline-block">${p.themeProg}</span>` : ''}
+      </td>
+      <td class="px-5 py-4 whitespace-nowrap">
+        <div class="text-xs text-gray-600 font-bold">${p.datePrevue||'—'}</div>
+        <div class="mt-1">${butoir(p.dateButoir)}</div>
+      </td>
+      <td class="px-5 py-4">${validationBadge(p.validationEtat)}</td>
+      <td class="px-5 py-4">${etatBadge(p.etat)}</td>
+      <td class="px-5 py-4">${visualBadge(p.visuals)}</td>
+      <td class="px-5 py-4 whitespace-nowrap">
+        <button onclick="openSPCModal('${p.id}')" class="px-3 py-1.5 text-xs border border-gray-200 rounded-lg font-bold hover:bg-gray-100 transition mr-1" title="Modifier">✏️</button>
+        <button onclick="openSPCDetail('${p.id}')" class="px-3 py-1.5 text-xs border border-indigo-200 rounded-lg font-bold hover:bg-indigo-50 text-indigo-600 transition" title="Carnet & Historique">📋</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="8" class="text-center text-gray-400 py-12 text-sm italic">Aucun post trouvé.</td></tr>';
+}
+
+function renderSPCRapport() {
+  const total = allSPC.length;
+  const publie = allSPC.filter(p => p.etat === 'Publié').length;
+  const enAttente = allSPC.filter(p => p.validationEtat === 'En attente').length;
+  const aModif = allSPC.filter(p => p.validationEtat === 'Demande de modification').length;
+  const sansVisuel = allSPC.filter(p => !p.visuals).length;
+  document.getElementById('spcRapport').innerHTML = [
+    ['Total posts', total, '#1A4E8A'],
+    ['Publiés', publie, '#22c55e'],
+    ['En attente valid.', enAttente, enAttente > 0 ? '#d97706' : '#9ca3af'],
+    ['Demande modif.', aModif, aModif > 0 ? '#7c3aed' : '#9ca3af'],
+    ['Sans visuels', sansVisuel, sansVisuel > 0 ? '#ea580c' : '#9ca3af']
+  ].map(([label, val, color]) => `
+    <div class="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
+      <div style="font-size:1.5rem;font-weight:900;color:${color}">${val}</div>
+      <div style="font-size:0.65rem;font-weight:900;color:#9ca3af;text-transform:uppercase;margin-top:2px">${label}</div>
+    </div>`).join('');
+}
+
+function openSPCModal(id) {
+  const p = id ? allSPC.find(x => x.id === id) : null;
+  document.getElementById('spcModalTitle').textContent = p ? 'Modifier le post' : 'Nouveau post';
+  document.getElementById('spcModalId').value = p?.id || '';
+  document.getElementById('spcModalRefpost').value = p?.refpost || '';
+  document.getElementById('spcModalPlateforme').value = p?.plateforme || 'LinkedIn';
+  document.getElementById('spcModalTheme').value = p?.theme || '';
+  document.getElementById('spcModalDatePrevue').value = p?.datePrevue || '';
+  document.getElementById('spcModalDateButoir').value = p?.dateButoir || '';
+  document.getElementById('spcModalIdeeContenu').value = p?.ideeContenu || '';
+  document.getElementById('spcModalContenu').value = p?.contenu || '';
+  document.getElementById('spcModalDateReelle').value = p?.dateReelle || '';
+  document.getElementById('spcModalEtat').value = p?.etat || 'Planifié';
+  document.getElementById('spcModalValidationEtat').value = p?.validationEtat || 'En attente';
+  document.getElementById('spcModalThemeProg').value = p?.themeProg || '';
+  document.getElementById('btnDeleteSPC').classList.toggle('hidden', !p);
+
+  // Visuels existants
+  spcNewFiles = [];
+  const existingRaw = p?.visuals || '';
+  spcCurrentVisuals = existingRaw ? existingRaw.split(',').filter(Boolean).map(id => ({ fileId: id.trim() })) : [];
+  document.getElementById('spcVisualInput').value = '';
+  document.getElementById('spcNewFilesList').innerHTML = '';
+  spcRenderExistingVisuals();
+  spcUpdateNoVisualWarning();
+
+  document.getElementById('spcModal').classList.remove('hidden');
+  document.getElementById('spcModal').style.display = 'flex';
+}
+
+function spcRenderExistingVisuals() {
+  const container = document.getElementById('spcVisualsExisting');
+  container.innerHTML = spcCurrentVisuals.map((v, i) =>
+    `<div style="position:relative;display:inline-block">
+      <a href="https://drive.google.com/file/d/${v.fileId}/view" target="_blank">
+        <img src="https://drive.google.com/thumbnail?id=${v.fileId}&sz=w120" alt="Visuel ${i+1}"
+          style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;cursor:pointer"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;width:80px;height:80px;border-radius:8px;border:2px solid #e5e7eb;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#6b7280;background:#f9fafb">Visuel ${i+1}</div>
+      </a>
+      <button onclick="spcRemoveExistingVisual(${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:0.65rem;font-weight:900;line-height:1;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>`
+  ).join('');
+}
+
+function spcRemoveExistingVisual(idx) {
+  spcCurrentVisuals.splice(idx, 1);
+  spcRenderExistingVisuals();
+  spcUpdateNoVisualWarning();
+}
+
+function spcUpdateNoVisualWarning() {
+  const warn = document.getElementById('spcNoVisualWarning');
+  const hasAny = spcCurrentVisuals.length > 0 || spcNewFiles.length > 0;
+  warn.classList.toggle('hidden', hasAny);
+}
+
+function spcOnFilesSelected(input) {
+  const MAX = 4 * 1024 * 1024;
+  Array.from(input.files).forEach(f => {
+    if (f.size > MAX) { spcToast(`"${f.name}" dépasse 4 Mo — ignoré.`, false); return; }
+    spcNewFiles.push(f);
+  });
+  input.value = '';
+  spcRenderNewFiles();
+  spcUpdateNoVisualWarning();
+}
+
+function spcRenderNewFiles() {
+  document.getElementById('spcNewFilesList').innerHTML = spcNewFiles.map((f, i) =>
+    `<div style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 8px;font-size:0.7rem;font-weight:700;color:#1d4ed8">
+      ${f.name}
+      <button onclick="spcRemoveNewFile(${i})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-weight:900;font-size:0.8rem">&times;</button>
+    </div>`
+  ).join('');
+}
+
+function spcRemoveNewFile(idx) {
+  spcNewFiles.splice(idx, 1);
+  spcRenderNewFiles();
+  spcUpdateNoVisualWarning();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function closeSPCModal() {
+  document.getElementById('spcModal').classList.add('hidden');
+  document.getElementById('spcModal').style.display = 'none';
+  spcNewFiles = [];
+  spcCurrentVisuals = [];
+}
+
+function deleteSPCFromModal() {
+  const id = document.getElementById('spcModalId').value;
+  if (id) deleteSPCById(id);
+}
+
+async function deleteSPCById(id) {
+  if (!confirm('Supprimer ce post ?')) return;
+  const res = await apiPost({ action: 'deleteSuiviPostCom', id });
+  if (res.success) { closeSPCModal(); spcToast('Post supprimé.'); loadSuiviPostCom(); }
+  else spcToast(res.message || 'Erreur suppression.', false);
+}
+
+async function saveSPC() {
+  const plateforme = document.getElementById('spcModalPlateforme').value;
+  if (!plateforme) { spcToast('Sélectionnez une plateforme.', false); return; }
+
+  const refpostInput = document.getElementById('spcModalRefpost').value.trim();
+  const refpost = refpostInput || ('SPC-' + new Date().toISOString().replace(/[-T:.Z]/g,'').slice(0,15));
+
+  const saveBtn = document.querySelector('#spcModal button[onclick="saveSPC()"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Enregistrement…'; }
+
+  // Upload des nouveaux fichiers
+  const uploadedIds = [...spcCurrentVisuals.map(v => v.fileId)];
+  for (let i = 0; i < spcNewFiles.length; i++) {
+    const f = spcNewFiles[i];
+    const ext = f.name.split('.').pop();
+    const filename = refpost + '-' + (uploadedIds.length + 1) + '.' + ext;
+    try {
+      spcToast(`Upload visuel ${i+1}/${spcNewFiles.length}…`, true);
+      const base64 = await fileToBase64(f);
+      const res = await apiPost({ action: 'uploadSPCVisual', base64, mimeType: f.type, filename });
+      if (res.success) uploadedIds.push(res.fileId);
+      else spcToast(`Erreur upload "${f.name}" : ${res.message}`, false);
+    } catch(e) { spcToast(`Erreur upload "${f.name}"`, false); }
+  }
+
+  const payload = {
+    action: 'saveSuiviPostCom',
+    id:             document.getElementById('spcModalId').value || '',
+    refpost,
+    plateforme,
+    theme:          document.getElementById('spcModalTheme').value || '',
+    datePrevue:     document.getElementById('spcModalDatePrevue').value || '',
+    dateButoir:     document.getElementById('spcModalDateButoir').value || '',
+    ideeContenu:    document.getElementById('spcModalIdeeContenu').value || '',
+    contenu:        document.getElementById('spcModalContenu').value || '',
+    dateReelle:     document.getElementById('spcModalDateReelle').value || '',
+    etat:           document.getElementById('spcModalEtat').value || 'Planifié',
+    validationEtat: document.getElementById('spcModalValidationEtat').value || 'En attente',
+    themeProg:      document.getElementById('spcModalThemeProg').value || '',
+    visuals:        uploadedIds.join(',')
+  };
+  const res = await apiPost(payload);
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer'; }
+  if (res.success) { closeSPCModal(); spcToast('Post enregistré !'); loadSuiviPostCom(); }
+  else spcToast(res.message || 'Erreur enregistrement.', false);
+}
+
+// --- PANNEAU DÉTAIL : CARNET D'ÉCHANGES + HISTORIQUE STATUTS ---
+let spcDetailPost = null;
+
+function openSPCDetail(id) {
+  spcDetailPost = allSPC.find(x => x.id === id) || null;
+  if (!spcDetailPost) return;
+  document.getElementById('spcDetailId').value = id;
+  document.getElementById('spcDetailTitle').textContent = spcDetailPost.refpost || id;
+  document.getElementById('spcDetailSubtitle').textContent = [spcDetailPost.plateforme, spcDetailPost.ideeContenu].filter(Boolean).join(' · ');
+  document.getElementById('spcDetailEchangeInput').value = '';
+  renderSPCDetailHistorique();
+  renderSPCDetailCarnet();
+  const panel = document.getElementById('spcDetailPanel');
+  panel.classList.remove('hidden');
+  panel.style.display = 'flex';
+}
+
+function closeSPCDetail() {
+  const panel = document.getElementById('spcDetailPanel');
+  panel.classList.add('hidden');
+  panel.style.display = 'none';
+  spcDetailPost = null;
+}
+
+function renderSPCDetailHistorique() {
+  const hist = spcDetailPost?.historiqueStatuts || [];
+  const statCfg = {
+    'En attente':              {bg:'#fef3c7',col:'#d97706',icon:'⏳'},
+    'Validé':                  {bg:'#dcfce7',col:'#16a34a',icon:'✅'},
+    'Demande de modification': {bg:'#ede9fe',col:'#7c3aed',icon:'🔄'},
+    'Annulé':                  {bg:'#fee2e2',col:'#dc2626',icon:'❌'}
+  };
+  const el = document.getElementById('spcDetailHistorique');
+  if (!hist.length) { el.innerHTML = '<p class="text-xs text-gray-400 italic">Aucun historique de statut.</p>'; return; }
+  el.innerHTML = hist.map((h, i) => {
+    const cfg = statCfg[h.nouvelEtat] || {bg:'#f3f4f6',col:'#9ca3af',icon:'•'};
+    return `<div class="flex items-start gap-3">
+      <div style="width:24px;height:24px;background:${cfg.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;flex-shrink:0;margin-top:2px">${cfg.icon}</div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span style="background:${cfg.bg};color:${cfg.col};padding:1px 8px;border-radius:999px;font-size:0.65rem;font-weight:900">${h.nouvelEtat}</span>
+          ${h.ancienEtat ? `<span class="text-[10px] text-gray-400">← ${h.ancienEtat}</span>` : '<span class="text-[10px] text-gray-400 italic">Création</span>'}
+        </div>
+        <div class="text-[10px] text-gray-400 mt-0.5">${h.date} · ${h.auteur}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSPCDetailCarnet() {
+  const carnet = spcDetailPost?.carnetEchanges || [];
+  const el = document.getElementById('spcDetailCarnet');
+  if (!carnet.length) { el.innerHTML = '<p class="text-xs text-gray-400 italic">Aucun échange enregistré.</p>'; return; }
+  el.innerHTML = carnet.map(c => `
+    <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+      <div class="flex justify-between items-center mb-1">
+        <span class="text-[10px] font-black text-[#1A4E8A]">${c.auteur}</span>
+        <span class="text-[10px] text-gray-400">${c.date}</span>
+      </div>
+      <p class="text-sm text-gray-700 whitespace-pre-wrap">${c.message}</p>
+    </div>`).join('');
+}
+
+async function addSPCEchange() {
+  const id = document.getElementById('spcDetailId').value;
+  const msg = document.getElementById('spcDetailEchangeInput').value.trim();
+  if (!msg) return;
+  const btn = document.querySelector('#spcDetailPanel button[onclick="addSPCEchange()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const res = await apiPost({ action: 'addSPCEchange', id, message: msg });
+  if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+  if (res.success) {
+    document.getElementById('spcDetailEchangeInput').value = '';
+    // Mettre à jour l'objet local
+    const idx = allSPC.findIndex(x => x.id === id);
+    if (idx !== -1) {
+      allSPC[idx].carnetEchanges = res.carnetEchanges || [];
+      spcDetailPost = allSPC[idx];
+    }
+    renderSPCDetailCarnet();
+    spcToast('Note ajoutée !');
+  } else {
+    spcToast(res.message || 'Erreur.', false);
+  }
+}
+
+// Chargement auto de la section Suivi posts
+window.addEventListener('load', () => { setTimeout(loadSuiviPostCom, 500); });
+</script>
+
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -408,13 +408,13 @@ function setView(v, rerender) {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function apiPost(payload) {
-    payload.idAuteur     = user.nom           || "Inconnu";
-    payload.roleAuteur   = user.role          || "N/A";
-    payload.emailAuteur  = user.email         || "";
-    payload.sessionToken = user.sessionToken  || "";
+    payload.idAuteur    = user.nom    || "Inconnu";
+    payload.roleAuteur  = user.role   || "N/A";
+    payload.emailAuteur = user.email  || "";
+    payload.sessionToken = user.sessionToken || "";
     const r = await fetch(API_URL, {method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
     const result = await r.json();
-    if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+    if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
     return result;
 }
 

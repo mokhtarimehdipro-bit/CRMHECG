@@ -27,6 +27,7 @@
                         <span id="btnDeleteEntDP"></span>
                     </div>
                 </div>
+                <div id="scoreBadge" class="mt-3 mb-1"></div>
                 <div id="contactsList" class="space-y-2"></div>
                 <button onclick="toggleAddContactForm()" class="mt-3 text-sm font-bold text-[#1A4E8A] hover:underline">+ Ajouter un contact</button>
                 <div id="addContactForm" class="hidden mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
@@ -93,6 +94,7 @@
                     <div class="bg-gradient-to-br from-[#1A4E8A] to-[#002a5c] p-6 rounded-3xl shadow-lg text-white">
                         <h3 class="font-black text-blue-100 mb-4 uppercase tracking-wider text-sm">🎓 Alternants en poste</h3>
                         <div id="listEtu" class="text-sm space-y-3"></div>
+                        <button onclick="openLinkStudentModal()" class="mt-4 w-full text-[11px] font-black text-blue-300 hover:text-white border border-blue-500/40 hover:border-white/40 py-2 rounded-xl transition">+ Lier un étudiant manuellement</button>
                     </div>
 
                     <div id="anciensAlternantsBlock" class="hidden bg-amber-50 p-6 rounded-3xl border border-amber-200">
@@ -125,7 +127,85 @@
                 </div>
             </div>
         </div>
-    </main>
+    <!-- Modal modification contact -->
+    <div id="editContactDPModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[80] p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black text-gray-800">Modifier le contact</h3>
+                <button onclick="closeEditContactDPModal()" class="text-gray-300 hover:text-gray-600 text-2xl font-black leading-none">×</button>
+            </div>
+            <input type="hidden" id="editDPContactId">
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Prénom</label><input type="text" id="editDPPrenom" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Nom</label><input type="text" id="editDPNom" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Email 1</label><input type="email" id="editDPMail1" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Email 2</label><input type="email" id="editDPMail2" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Téléphone 1</label><input type="text" id="editDPTel1" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+                <div><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Téléphone 2</label><input type="text" id="editDPTel2" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white"></div>
+            </div>
+            <div class="mb-3">
+                <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Poste</label>
+                <select id="editDPPoste" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white">
+                    <option value="">-- Poste du contact --</option>
+                    <option value="RH">RH</option>
+                    <option value="Gérant">Gérant</option>
+                    <option value="Expert comptable">Expert comptable</option>
+                    <option value="Collaborateur comptable">Collaborateur comptable</option>
+                </select>
+            </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6 space-y-2">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="editDPIsMA" onchange="toggleEditDPMABlock()" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                    <label for="editDPIsMA" class="text-xs font-black text-amber-700 cursor-pointer">🎓 Maître d'apprentissage (MA)</label>
+                </div>
+                <div id="editDPMABlock" class="hidden space-y-1">
+                    <p class="text-[10px] text-amber-600 font-bold">Sélectionner le ou les étudiants rattachés :</p>
+                    <div id="editDPMAStudentList" class="max-h-32 overflow-y-auto space-y-1 bg-white border border-amber-200 rounded-lg p-2 text-xs text-gray-400 italic">Chargement...</div>
+                </div>
+            </div>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeEditContactDPModal()" class="px-6 py-2 text-gray-400 font-black hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="saveEditContactDP()" class="px-6 py-3 bg-[#1A4E8A] text-white font-black rounded-xl hover:bg-blue-800 transition shadow-lg">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal lier un étudiant -->
+    <div id="linkStudentModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-[80] p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-black text-gray-800">Lier un étudiant</h3>
+                <button onclick="closeLinkStudentModal()" class="text-gray-300 hover:text-gray-600 text-2xl font-black leading-none">×</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button id="btnLinkActif" onclick="setLinkStuType('actif')" class="flex-1 py-2 rounded-xl text-sm font-black bg-[#1A4E8A] text-white transition">Actif (en cours)</button>
+                <button id="btnLinkPasse" onclick="setLinkStuType('passé')" class="flex-1 py-2 rounded-xl text-sm font-black bg-gray-100 text-gray-500 transition">Ancien étudiant</button>
+            </div>
+            <input type="text" id="linkStuSearch" placeholder="Rechercher par nom ou classe..." oninput="filterLinkStudents()" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[#1A4E8A]">
+            <div id="linkStuList" class="max-h-52 overflow-y-auto space-y-0.5 border border-gray-100 rounded-xl p-2 mb-4 bg-gray-50"></div>
+            <input type="hidden" id="linkStuSelectedId">
+            <input type="hidden" id="linkStuType" value="actif">
+            <div id="linkStuSelectedInfo" class="hidden bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 text-sm font-bold text-blue-700"></div>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeLinkStudentModal()" class="px-6 py-2 text-gray-400 font-black hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmLinkStudent()" class="px-6 py-3 bg-[#1A4E8A] text-white font-black rounded-xl hover:bg-blue-800 transition shadow-lg">Lier</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal motif de suppression -->
+    <div id="motifModal" class="fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[90] p-4" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-xl font-black text-red-700 mb-2">Confirmer la suppression</h2>
+            <p id="motifModalDesc" class="text-sm text-gray-500 font-bold mb-5"></p>
+            <label class="block text-[10px] font-black uppercase text-gray-400 mb-2">Motif <span class="text-red-500">*</span></label>
+            <textarea id="motifInput" rows="3" placeholder="Ex : doublon, départ, erreur de saisie…" class="w-full border-2 border-gray-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-red-400 resize-none mb-6"></textarea>
+            <div class="flex gap-3">
+                <button onclick="closeMotifModal()" class="flex-1 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
+                <button onclick="confirmMotifDelete()" class="flex-1 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition">Supprimer</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
@@ -159,14 +239,13 @@
 
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-            
-            // On prépare les étiquettes pour le script Google
-            payload.idAuteur     = userSession.nom   || "Inconnu";
-            payload.auteur       = userSession.nom   || "Inconnu";
-            payload.roleAuteur   = userSession.role  || "N/A";
-            payload.emailAuteur  = userSession.email || "";
-            payload.sessionToken = userSession.sessionToken || "";
 
+            // On prépare les étiquettes pour le script Google
+            payload.idAuteur = userSession.nom || "Inconnu";    // Pour l'onglet HISTORIQUE
+            payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
+            payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
+            payload.sessionToken = userSession.sessionToken || "";
+            
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -174,14 +253,14 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-                if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+                if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
                 return result;
             } catch (e) {
                 console.error("Erreur API :", e);
                 return { success: false, message: "Erreur de connexion" };
             }
         }
-        
+
 
         const partId = new URLSearchParams(window.location.search).get('id');
         let currentUser = null;
@@ -211,6 +290,18 @@
                     adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
                     const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
                     document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
+
+                    // Badge score
+                    const score = d.score || 0;
+                    const sd = d.scoreDetails || {};
+                    const scoreCol = score >= 200 ? 'text-amber-600' : score >= 50 ? 'text-blue-600' : 'text-slate-400';
+                    document.getElementById('scoreBadge').innerHTML = `
+                      <div class="flex items-center gap-3 flex-wrap py-2">
+                        <span class="text-2xl font-black ${scoreCol}">⭐ ${score} pts</span>
+                        <span class="text-[10px] bg-green-50 text-green-700 px-3 py-1 rounded-full font-black">A : ${sd.A||0} pts — ${sd.activeCount||0} alternant${(sd.activeCount||0)>1?'s':''} actif${(sd.activeCount||0)>1?'s':''}</span>
+                        <span class="text-[10px] bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-black">B : ${sd.B||0} pts — ${sd.sortiCount||0} ancien${(sd.sortiCount||0)>1?'s':''}</span>
+                        <span class="text-[10px] bg-purple-50 text-purple-700 px-3 py-1 rounded-full font-black">C : ${sd.C||0} pts — ${sd.qualifiedContactCount||0} contact${(sd.qualifiedContactCount||0)>1?'s':''} qualifié${(sd.qualifiedContactCount||0)>1?'s':''}</span>
+                      </div>`;
 
                     // Bouton supprimer entreprise (RP uniquement)
                     const btnDelEnt = document.getElementById('btnDeleteEntDP');
@@ -383,18 +474,14 @@
             const c = contactsData[idx];
             if (!c) return;
             if (btn.dataset.action === 'edit') {
-                const newNom    = prompt('Nom :',         c.nom    || ''); if (newNom    === null) return;
-                const newPrenom = prompt('Prénom :',      c.prenom || ''); if (newPrenom === null) return;
-                const newMail   = prompt('Email 1 :',     c.mail   || ''); if (newMail   === null) return;
-                const newMail2  = prompt('Email 2 :',     c.mail2  || ''); if (newMail2  === null) return;
-                const newTel    = prompt('Téléphone 1 :', c.tel    || ''); if (newTel    === null) return;
-                const newTel2   = prompt('Téléphone 2 :', c.tel2   || ''); if (newTel2   === null) return;
-                const res = await apiPost({ action: 'updateContact', id_contact: c.id_contact, nom: newNom, prenom: newPrenom, mail: newMail, mail2: newMail2, tel: newTel, tel2: newTel2 });
-                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                openEditContactDPModal(idx);
             } else if (btn.dataset.action === 'delete') {
-                if (!confirm('Supprimer ' + (c.prenom || '') + ' ' + (c.nom || '') + ' ?')) return;
-                const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact });
-                if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                const nomC = ((c.prenom || '') + ' ' + (c.nom || '')).trim();
+                askMotif('Supprimer le contact "' + nomC + '" ?', async (motif) => {
+                    const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact, motif });
+                    if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                });
+                return;
             }
         });
 
@@ -424,15 +511,42 @@
             }
         }
 
-        async function deleteEnterprise() {
-            if (!confirm('⚠️ Supprimer l\'entreprise ' + nomEntrepriseActuelle + ' et TOUS ses contacts ?\n\nCette action est irréversible.')) return;
-            const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: partId });
-            if (res.success) {
-                alert('✅ Entreprise supprimée.');
-                window.close();
-            } else {
-                alert('Erreur : ' + res.message);
-            }
+        function deleteEnterprise() {
+            const idASupprimer = partId;
+            askMotif('Supprimer l\'entreprise "' + nomEntrepriseActuelle + '" et TOUS ses contacts ?', async (motif) => {
+                try {
+                    const res = await apiPost({ action: 'deleteEnterprise', id_entreprise: idASupprimer, motif });
+                    if (res && res.success) {
+                        window.location.href = 'partenaires.html';
+                    } else {
+                        alert('Erreur lors de la suppression : ' + (res ? res.message : 'Réponse invalide du serveur'));
+                    }
+                } catch(e) {
+                    alert('Erreur inattendue : ' + e.message);
+                }
+            });
+        }
+
+        // --- MOTIF SUPPRESSION ---
+        let _motifCallback = null;
+        function askMotif(description, callback) {
+            document.getElementById('motifModalDesc').textContent = description;
+            document.getElementById('motifInput').value = '';
+            _motifCallback = callback;
+            document.getElementById('motifModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('motifInput').focus(), 100);
+        }
+        function closeMotifModal() {
+            document.getElementById('motifModal').style.display = 'none';
+            _motifCallback = null;
+        }
+        function confirmMotifDelete() {
+            const motif = document.getElementById('motifInput').value.trim();
+            if (!motif) { document.getElementById('motifInput').style.borderColor = '#ef4444'; document.getElementById('motifInput').focus(); return; }
+            document.getElementById('motifInput').style.borderColor = '';
+            const cb = _motifCallback;
+            closeMotifModal();
+            if (cb) cb(motif);
         }
 
         async function addContact() {
@@ -495,7 +609,7 @@
         }
 
         async function signalFormerAlternant(idEtudiant, prenom, nomFamille) {
-            if (!confirm(`Enregistrer le départ de ${prenom} ${nomFamille} ?\n\nLes deux dossiers (entreprise et étudiant) seront mis à jour automatiquement.`)) return;
+            if (!confirm(`Signaler que ${prenom} ${nomFamille} a quitté cette entreprise ?\nCela créera une entrée "À confirmer" dans la section ci-dessous.`)) return;
             const btn = event.target;
             btn.disabled = true; btn.innerText = "⏳";
             const res = await apiPost({ action: 'signalFormerAlternant', idEntreprise: partId, idEtudiant, prenom, nom: nomFamille });
@@ -518,6 +632,126 @@
             const res = await apiPost({ action: 'removeFormerAlternant', id });
             if (res.success) loadDetails();
             else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✗ Erreur de saisie"; }
+        }
+
+        // ══ MODIFIER CONTACT (MODAL PLEIN FORMULAIRE) ══
+        function openEditContactDPModal(idx) {
+            const c = contactsData[idx];
+            if (!c) return;
+            document.getElementById('editDPContactId').value = c.id_contact;
+            document.getElementById('editDPPrenom').value = c.prenom || '';
+            document.getElementById('editDPNom').value = c.nom || '';
+            document.getElementById('editDPMail1').value = c.mail || '';
+            document.getElementById('editDPMail2').value = c.mail2 || '';
+            document.getElementById('editDPTel1').value = c.tel || '';
+            document.getElementById('editDPTel2').value = c.tel2 || '';
+            document.getElementById('editDPPoste').value = c.poste || '';
+            const isMA = c.is_ma === 'Oui';
+            document.getElementById('editDPIsMA').checked = isMA;
+            document.getElementById('editDPMABlock').classList.toggle('hidden', !isMA);
+            document.getElementById('editContactDPModal').classList.remove('hidden');
+            document.getElementById('editContactDPModal').classList.add('flex');
+            if (isMA) _loadEditDPMAStudents();
+        }
+        function closeEditContactDPModal() {
+            document.getElementById('editContactDPModal').classList.add('hidden');
+            document.getElementById('editContactDPModal').classList.remove('flex');
+        }
+        async function toggleEditDPMABlock() {
+            const isMA = document.getElementById('editDPIsMA').checked;
+            document.getElementById('editDPMABlock').classList.toggle('hidden', !isMA);
+            if (isMA) await _loadEditDPMAStudents();
+        }
+        async function _loadEditDPMAStudents() {
+            if (allStudentsCacheDP.length === 0) {
+                const res = await apiPost({ action: 'getStudentsMinList' });
+                if (res.success) allStudentsCacheDP = res.data;
+            }
+            document.getElementById('editDPMAStudentList').innerHTML = allStudentsCacheDP.map(s =>
+                '<label class="flex items-center gap-2 p-1 rounded hover:bg-amber-50 cursor-pointer">'
+                + '<input type="checkbox" value="' + s.id + '" class="edit-dp-ma-chk w-3 h-3 accent-amber-500">'
+                + '<span class="font-bold text-gray-700 text-xs">' + s.prenom + ' ' + s.nom + '</span>'
+                + '<span class="text-gray-400 text-[10px]">' + (s.classe || '') + '</span></label>'
+            ).join('') || '<p class="text-gray-400 italic">Aucun étudiant.</p>';
+        }
+        async function saveEditContactDP() {
+            const id_contact = document.getElementById('editDPContactId').value;
+            const isMA = document.getElementById('editDPIsMA').checked;
+            const res = await apiPost({
+                action: 'updateContact',
+                id_contact,
+                prenom: document.getElementById('editDPPrenom').value.trim(),
+                nom: document.getElementById('editDPNom').value.trim(),
+                mail: document.getElementById('editDPMail1').value.trim(),
+                mail2: document.getElementById('editDPMail2').value.trim(),
+                tel: document.getElementById('editDPTel1').value.trim(),
+                tel2: document.getElementById('editDPTel2').value.trim(),
+                poste: document.getElementById('editDPPoste').value,
+                is_ma: isMA ? 'Oui' : 'Non'
+            });
+            if (!res.success) { alert('Erreur : ' + res.message); return; }
+            if (isMA) {
+                const ids_etudiants = [...document.querySelectorAll('.edit-dp-ma-chk:checked')].map(c => c.value);
+                if (ids_etudiants.length > 0) {
+                    await apiPost({ action: 'linkMAToStudents', ids_etudiants, id_entreprise: partId, id_contact, nom_entreprise: nomEntrepriseActuelle });
+                }
+            }
+            closeEditContactDPModal();
+            loadDetails();
+        }
+
+        // ══ LIER UN ÉTUDIANT MANUELLEMENT ══
+        let _linkStuCache = [];
+        function setLinkStuType(type) {
+            document.getElementById('linkStuType').value = type;
+            document.getElementById('btnLinkActif').className = 'flex-1 py-2 rounded-xl text-sm font-black transition ' + (type === 'actif' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-500');
+            document.getElementById('btnLinkPasse').className = 'flex-1 py-2 rounded-xl text-sm font-black transition ' + (type === 'passé' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500');
+        }
+        async function openLinkStudentModal() {
+            document.getElementById('linkStuSearch').value = '';
+            document.getElementById('linkStuSelectedId').value = '';
+            document.getElementById('linkStuSelectedInfo').classList.add('hidden');
+            setLinkStuType('actif');
+            document.getElementById('linkStudentModal').classList.remove('hidden');
+            document.getElementById('linkStudentModal').classList.add('flex');
+            if (allStudentsCacheDP.length === 0) {
+                const res = await apiPost({ action: 'getStudentsMinList' });
+                if (res.success) allStudentsCacheDP = res.data;
+            }
+            _linkStuCache = allStudentsCacheDP;
+            _renderLinkStuList();
+        }
+        function closeLinkStudentModal() {
+            document.getElementById('linkStudentModal').classList.add('hidden');
+            document.getElementById('linkStudentModal').classList.remove('flex');
+        }
+        function _renderLinkStuList() {
+            const search = document.getElementById('linkStuSearch').value.toLowerCase();
+            const items = _linkStuCache.filter(s => !search || (s.nom + ' ' + s.prenom + ' ' + (s.classe || '')).toLowerCase().includes(search));
+            const listEl = document.getElementById('linkStuList');
+            if (!items.length) { listEl.innerHTML = '<p class="text-gray-400 italic text-xs text-center py-2">Aucun résultat.</p>'; return; }
+            listEl.innerHTML = items.slice(0, 80).map(s =>
+                '<button onclick="selectLinkStudent(\'' + s.id + '\',\'' + (s.prenom + ' ' + s.nom).replace(/'/g,"\\'") + '\',\'' + (s.classe||'').replace(/'/g,"\\'") + '\')" '
+                + 'class="w-full text-left px-3 py-1.5 rounded-lg hover:bg-blue-50 text-sm transition flex justify-between items-center">'
+                + '<span class="font-bold text-gray-800">' + s.prenom + ' ' + s.nom + '</span>'
+                + '<span class="text-gray-400 text-[10px]">' + (s.classe || '') + '</span>'
+                + '</button>'
+            ).join('');
+        }
+        function filterLinkStudents() { _renderLinkStuList(); }
+        function selectLinkStudent(id, fullName, classe) {
+            document.getElementById('linkStuSelectedId').value = id;
+            const info = document.getElementById('linkStuSelectedInfo');
+            info.textContent = '✓ ' + fullName + (classe ? ' (' + classe + ')' : '');
+            info.classList.remove('hidden');
+        }
+        async function confirmLinkStudent() {
+            const id = document.getElementById('linkStuSelectedId').value;
+            if (!id) { alert('Sélectionnez un étudiant dans la liste.'); return; }
+            const type = document.getElementById('linkStuType').value;
+            const res = await apiPost({ action: 'attachStudentToEnterprise', idEtu: id, idEntreprise: partId, nomEntreprise: nomEntrepriseActuelle, type });
+            if (res.success) { closeLinkStudentModal(); loadDetails(); }
+            else alert('Erreur : ' + res.message);
         }
 
         async function ajouterOffreRapide() {

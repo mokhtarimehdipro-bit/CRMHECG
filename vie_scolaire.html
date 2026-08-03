@@ -151,6 +151,7 @@
         </div>
         <div class="flex gap-3">
           <button onclick="exportNotesCSV()" class="btn-ghost">📥 Export CSV</button>
+          <button onclick="exportNotesExcel()" class="btn-ghost">📊 Export Excel mis en forme</button>
           <button id="btnAddNote" onclick="openBulkNoteModal()" class="btn-orange hidden">+ Saisir les notes</button>
         </div>
       </div>
@@ -169,8 +170,8 @@
           <div><label>Année</label>
             <select id="filterAnnee"><option value="">Toutes</option></select>
           </div>
-          <div><label>Classe</label>
-            <select id="filterClasse"><option value="">Toutes</option></select>
+          <div><label>Classe <span style="text-transform:none;font-weight:400;color:#d1d5db">(rien = toutes, Ctrl+clic = multi)</span></label>
+            <select id="filterClasse" multiple onchange="if(allNotes.length) renderNotesGrouped()" style="height:5.2rem"></select>
           </div>
           <div><label>Étudiant</label>
             <input type="text" id="filterEtu" placeholder="Nom ou prénom..." oninput="renderNotesGrouped()">
@@ -179,7 +180,11 @@
             <select id="filterMatiere" onchange="if(allNotes.length) renderNotesGrouped()"><option value="">Toutes</option></select>
           </div>
         </div>
-        <button onclick="loadNotes()" class="mt-4 btn-primary">🔍 Afficher</button>
+        <div class="flex items-center gap-4 mt-4">
+          <button onclick="loadNotes()" class="btn-primary">🔍 Afficher</button>
+          <p id="saisieCounter" class="hidden text-sm font-bold text-gray-500"></p>
+          <button id="btnExportSaisie" onclick="exportSaisieXLSX()" class="hidden btn-ghost text-xs">📥 Export quantitatif</button>
+        </div>
       </div>
 
       <!-- Table groupée par étudiant -->
@@ -188,11 +193,13 @@
           <table>
             <thead><tr>
               <th style="width:32px"></th>
-              <th>Étudiant</th><th>Diplôme</th><th>Classe</th><th>Année</th>
-              <th>UE saisies</th><th>Points</th><th>Moyenne</th><th style="color:#7c3aed">Moy. Pro</th><th>Différentiel</th>
+              <th onclick="sortNotesBy('nom')" style="cursor:pointer;user-select:none">Étudiant <span id="sortIcon_nom"></span></th><th>Diplôme</th>
+              <th onclick="sortNotesBy('classe')" style="cursor:pointer;user-select:none">Classe <span id="sortIcon_classe"></span></th><th>Année</th>
+              <th>UE saisies</th><th>Points</th><th onclick="sortNotesBy('moy')" style="cursor:pointer;user-select:none">Moyenne <span id="sortIcon_moy"></span></th><th style="color:#7c3aed">Moy. Pro</th><th onclick="sortNotesBy('diff')" style="cursor:pointer;user-select:none">Différentiel <span id="sortIcon_diff"></span></th>
+              <th onclick="sortNotesBy('diffAdj')" style="cursor:pointer;user-select:none" title="DCG : exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté <span id="sortIcon_diffAdj"></span></th>
               <th>Résultat</th><th></th>
             </tr></thead>
-            <tbody id="notesTbody"><tr><td colspan="12" class="text-center text-gray-400 py-8">Sélectionnez des filtres et cliquez Afficher.</td></tr></tbody>
+            <tbody id="notesTbody"><tr><td colspan="13" class="text-center text-gray-400 py-8">Sélectionnez des filtres et cliquez Afficher.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -214,8 +221,18 @@
 
       <!-- Stats Panel -->
       <div id="statsPanel" class="hidden mt-6">
-        <div class="flex justify-between items-center mb-4">
+        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
           <h2 class="text-xl font-black text-[#1A4E8A]" id="statsPanelTitle">Statistiques promotion</h2>
+          <div id="statsStatutFilterWrap" class="hidden" style="min-width:180px">
+            <select id="statsStatutFilter" onchange="computeAndShowStats(window._lastStatsGroups||[])">
+              <option value="">Classement (hors Recalé)</option>
+              <option value="Admis">Admis</option>
+              <option value="Rattrapage">Rattrapage</option>
+              <option value="Recalé">Recalé</option>
+              <option value="En cours">En cours</option>
+              <option value="__all__">Tous (avec Recalé)</option>
+            </select>
+          </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis"></div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="statsKpis2"></div>
@@ -331,6 +348,8 @@
           </div>
         </div>
         <div id="kpiObjSemaine" class="hidden grid grid-cols-4 gap-3 mb-3"></div>
+        <div id="poleSummaryBar" class="hidden grid gap-3 mb-3"></div>
+        <div id="poleFilterBar" class="hidden flex flex-wrap gap-2 mb-3"></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
           <div id="objectifsContent"><p class="text-center text-gray-400 py-8 text-sm">Chargement…</p></div>
         </div>
@@ -399,7 +418,58 @@
           <p class="text-xs text-gray-400">indicateurs documentés</p>
         </div>
       </div>
+      <div id="qualiopiSurveyBlock" class="qualiopi-card hidden" style="border-left:4px solid #F26522"></div>
       <div id="qualiopiContent"></div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : liens d'envoi -->
+    <div id="qLinksModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">🔗 Liens individuels — Enquête formateurs</h3>
+        <p class="text-xs text-gray-400 mb-4">Chaque lien contient le code anonyme du formateur. Copiez-collez le lien correspondant dans votre mail d'envoi manuel.</p>
+        <div style="max-height:50vh;overflow-y:auto">
+          <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+            <thead><tr style="text-align:left;color:#9ca3af;font-size:0.7rem;text-transform:uppercase">
+              <th style="padding:6px">Formateur</th><th style="padding:6px">Email</th><th style="padding:6px">Lien</th><th></th>
+            </tr></thead>
+            <tbody id="qLinksTbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:0.6rem;margin-top:1.25rem">
+          <button onclick="closeQLinksModal()" class="btn-ghost">Fermer</button>
+          <button onclick="copyAllQLinks()" class="btn-orange">📋 Copier tout (nom, email, lien)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : suivi nominatif -->
+    <div id="qSuiviModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">👥 Suivi des réponses (usage interne)</h3>
+        <p class="text-xs text-gray-400 mb-4">Vue nominative réservée à la direction — sert uniquement à relancer les formateurs qui n'ont pas encore répondu.</p>
+        <div style="max-height:50vh;overflow-y:auto">
+          <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+            <thead><tr style="text-align:left;color:#9ca3af;font-size:0.7rem;text-transform:uppercase">
+              <th style="padding:6px">Formateur</th><th style="padding:6px">Statut</th><th style="padding:6px">Date réponse</th>
+            </tr></thead>
+            <tbody id="qSuiviTbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:1.25rem">
+          <button onclick="closeQSuiviModal()" class="btn-ghost">Fermer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questionnaire Qualiopi formateurs : résultats détaillés -->
+    <div id="qDetailModal" class="modal-overlay hidden">
+      <div class="modal-box p-8" style="max-width:640px">
+        <h3 class="text-xl font-black text-[#1A4E8A] mb-2">📈 Résultats détaillés (anonymisés)</h3>
+        <div id="qDetailContent" style="max-height:60vh;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:1.25rem">
+          <button onclick="closeQDetailModal()" class="btn-ghost">Fermer</button>
+        </div>
+      </div>
     </div>
 
     <!-- ===================== SALLES & SIMULATIONS ===================== -->
@@ -553,6 +623,15 @@
             <option value="month">Ce mois</option><option value="year">Cette année</option>
           </select>
         </div>
+        <div class="flex-1" style="min-width:160px"><label>Sujet</label>
+          <input type="text" id="mmokFilterSujet" placeholder="Rechercher un sujet…" oninput="renderMMOK()">
+        </div>
+        <div class="flex-1" style="min-width:140px"><label>Thème</label>
+          <select id="mmokFilterTheme" onchange="renderMMOK()">
+            <option value="">Tous</option>
+            <option>SIG</option><option>MSI</option><option>Responsable de Campus</option><option>Choix libre</option>
+          </select>
+        </div>
         <div class="flex-1" style="min-width:140px"><label>État</label>
           <select id="mmokFilterEtat" onchange="renderMMOK()">
             <option value="">Tous</option><option>Publié</option><option>Planifié</option><option>Brouillon</option>
@@ -563,10 +642,10 @@
         <div class="overflow-x-auto">
           <table>
             <thead><tr>
-              <th>REFPOST</th><th>Plateforme</th><th>Thème</th>
-              <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th></th>
+              <th>REFPOST</th><th>Plateforme</th><th>Sujet</th><th>Thème</th>
+              <th>Date prév.</th><th>Idée contenu</th><th>Date réelle</th><th>État</th><th>Médias</th><th></th>
             </tr></thead>
-            <tbody id="mmokTbody"><tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
+            <tbody id="mmokTbody"><tr><td colspan="10" class="text-center text-gray-400 py-8">Chargement…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -579,7 +658,62 @@
           <h1 class="text-2xl font-black text-[#1A4E8A]">📧 Mails — Historique des envois</h1>
           <p class="text-sm text-gray-400 mt-1">Récapitulatif de tous les e-mails sortants de l'application (campagnes, offres, relances automatiques)</p>
         </div>
-        <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
+        <div class="flex gap-2 items-center">
+          <button onclick="ouvrirPreviewRelance()" id="btnRelanceHebdo" class="btn-orange flex items-center gap-2">
+            <span>Relance hebdo Préinscrits</span>
+          </button>
+          <button onclick="loadMails()" class="btn-ghost">↺ Actualiser</button>
+        </div>
+      </div>
+
+      <!-- Config CRON relance hebdo -->
+      <div id="relanceCronCard" class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-5 hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <span class="text-[11px] font-black text-gray-400 uppercase tracking-wider">Relance hebdo CRON</span>
+            <span id="relanceCronBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full">—</span>
+            <span id="relanceTriggerBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 hidden">⚠️ Trigger non installé</span>
+          </div>
+          <div class="flex gap-2 items-center">
+            <button onclick="installRelanceTrigger()" id="btnInstallTrigger" class="btn-primary text-xs py-1.5 px-4 hidden">⚙️ Installer le CRON</button>
+            <button onclick="toggleRelanceCron()" id="btnToggleRelanceCron" class="btn-ghost text-xs py-1 px-3">—</button>
+            <button onclick="declencherRelanceMaintenant()" class="btn-orange text-xs py-1.5 px-4">Déclencher maintenant</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+          <div class="bg-slate-50 rounded-xl p-3">
+            <span class="text-[10px] font-black text-gray-400 uppercase">Dernier envoi</span>
+            <p id="relanceCronLastRun" class="font-bold text-gray-700 mt-0.5">—</p>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-3">
+            <span class="text-[10px] font-black text-gray-400 uppercase">Prochain envoi estimé</span>
+            <p id="relanceCronNextRun" class="font-bold text-[#1A4E8A] mt-0.5">—</p>
+          </div>
+        </div>
+        <p class="text-[11px] font-black text-gray-400 uppercase tracking-wider mb-3">Filtres destinataires (sauvegardés pour le CRON)</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Classes (séparées par ,)</label>
+            <input type="text" id="relanceFiltreClasses" placeholder="Ex: BTS1, BUT2..." class="w-full border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Campus (séparés par ,)</label>
+            <input type="text" id="relanceFiltreCampus" placeholder="Ex: Marseille, Aix..." class="w-full border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Noms / Prénoms libres</label>
+            <input type="text" id="relanceFiltreNoms" placeholder="Ex: Dupont, Marie..." class="w-full border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Emails (séparés par ,)</label>
+            <input type="text" id="relanceFiltreEmails" placeholder="Ex: jean@mail.fr,..." class="w-full border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none focus:border-[#1A4E8A]">
+          </div>
+        </div>
+        <div class="flex gap-2 items-center">
+          <button onclick="saveRelanceCronConfig()" class="btn-primary text-xs py-1.5 px-4">Sauvegarder les filtres</button>
+          <button onclick="viderFiltresCron()" class="btn-ghost text-xs py-1 px-3">Vider les filtres</button>
+          <span id="relanceCronSaveStatus" class="text-xs text-green-600 font-bold hidden ml-2">Filtres sauvegardés.</span>
+        </div>
       </div>
 
       <!-- Filtres -->
@@ -652,7 +786,118 @@
   </div>
 </div>
 
+<!-- ================== MODAL RELANCE HEBDO PRÉVISUALISATION ================== -->
+<div id="relanceModal" class="modal-overlay hidden" onclick="if(event.target===this)closeRelanceModal()">
+  <div style="background:#fff;border-radius:1rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);width:100%;max-width:960px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 bg-slate-50 rounded-t-2xl flex justify-between items-start">
+      <div>
+        <h3 class="text-lg font-black text-[#1A4E8A]">Relance hebdomadaire — Préinscrits en recherche</h3>
+        <p id="relanceKpi" class="text-sm text-gray-400 mt-0.5"></p>
+      </div>
+      <div class="flex gap-2 items-center shrink-0 ml-4">
+        <button id="btnEnvoyerTous" onclick="envoyerSelectionRelance()" class="btn-orange text-sm px-4 py-2 hidden">Envoyer la sélection</button>
+        <button onclick="closeRelanceModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none font-bold px-1">×</button>
+      </div>
+    </div>
+    <!-- Body -->
+    <div class="flex flex-1 overflow-hidden">
+
+      <!-- Colonne gauche : liste étudiants -->
+      <div class="w-68 shrink-0 border-r border-gray-100 flex flex-col bg-slate-50" style="width:17rem;">
+        <!-- En-tête sélection -->
+        <div id="relanceListHeader" class="hidden border-b border-gray-200 bg-white px-3 py-2 flex items-center justify-between shrink-0">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="relanceCbAll" checked onchange="toggleSelectAllRelance(this.checked)" class="w-4 h-4 accent-[#1A4E8A]">
+            <span class="text-xs font-bold text-gray-600">Tout sélectionner</span>
+          </label>
+          <span id="relanceSelCount" class="text-[10px] font-bold text-gray-400"></span>
+        </div>
+        <!-- Recherche rapide -->
+        <div class="px-3 pt-2 pb-1 shrink-0 border-b border-gray-100 bg-slate-50">
+          <input type="text" id="relanceSearch" placeholder="Filtrer par nom, classe, campus, email…"
+            oninput="filterRelanceList(this.value)"
+            class="w-full border border-gray-200 rounded-lg p-1.5 text-xs font-bold outline-none focus:border-[#1A4E8A] bg-white">
+        </div>
+        <!-- Liste scrollable -->
+        <div class="flex-1 overflow-y-auto p-3" id="relanceStudentList">
+          <p class="text-center text-[#1A4E8A] animate-pulse py-8 text-sm">Chargement…</p>
+        </div>
+      </div>
+
+      <!-- Colonne droite : preview + éditeur -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Placeholder -->
+        <div id="relancePreviewEmpty" class="flex-1 flex items-center justify-center text-gray-300 text-sm italic p-8 text-center">
+          Sélectionnez un étudiant dans la liste pour prévisualiser son mail personnalisé.
+        </div>
+
+        <!-- Panel preview -->
+        <div id="relancePreviewPanel" class="hidden flex-1 flex flex-col overflow-hidden">
+          <!-- Barre d'actions du mail sélectionné -->
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white shrink-0">
+            <div>
+              <span id="relanceStudentInfo" class="font-black text-[#1A4E8A] text-sm"></span>
+              <span id="relanceEditBadge" class="hidden ml-2 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">HTML modifié</span>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button onclick="resetRelanceHtml()" id="btnResetHtml" class="hidden btn-ghost text-xs py-1 px-3">Réinitialiser</button>
+              <button onclick="toggleRelanceEditor()" id="btnToggleEditor" class="btn-ghost text-xs py-1 px-3">Modifier HTML</button>
+              <button onclick="envoyerTestRelance()" id="btnTestRelance" class="btn-ghost text-xs py-1 px-3 border-amber-300 text-amber-700 hover:bg-amber-50">Tester (moi)</button>
+              <button onclick="envoyerUnRelance()" id="btnEnvoyerUn" class="btn-orange text-xs py-1 px-3">Envoyer ce mail</button>
+            </div>
+          </div>
+
+          <!-- Zone preview / éditeur (permutable) -->
+          <div class="flex-1 overflow-hidden flex flex-col relative">
+            <iframe id="relanceIframe" class="flex-1 w-full border-0" srcdoc="" style="min-height:0;"></iframe>
+            <textarea id="relanceEditor" class="hidden flex-1 w-full border-0 p-4 font-mono text-xs resize-none outline-none bg-gray-50" style="min-height:0;" placeholder="HTML du mail…" oninput="onRelanceEditorInput()"></textarea>
+          </div>
+
+          <!-- Barre de validation de l'éditeur -->
+          <div id="relanceEditorBar" class="hidden border-t border-gray-100 bg-white px-4 py-2 flex justify-between items-center shrink-0">
+            <span class="text-xs text-gray-400">Modifiez le HTML puis cliquez sur Appliquer pour rafraîchir l'aperçu.</span>
+            <button onclick="appliquerEditionRelance()" class="btn-primary text-xs py-1.5 px-4">Appliquer l'aperçu</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ================== MODALS ================== -->
+
+<!-- Correction de la classe sur des notes déjà saisies (après coup) -->
+<div id="classeEditModal" class="modal-overlay hidden">
+  <div class="modal-box p-8" style="max-width:26rem">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">✏ Corriger la classe</h3>
+    <p class="text-xs text-gray-400 mb-4" id="classeEditNom"></p>
+    <input type="hidden" id="classeEditIdEtu">
+    <div class="mb-3"><label>Année concernée</label>
+      <select id="classeEditAnnee"></select>
+    </div>
+    <div class="mb-1"><label>Nouvelle classe</label>
+      <input type="text" id="classeEditValue" placeholder="ex: AIX_DCG1">
+    </div>
+    <p class="text-xs text-gray-400 mb-4">S'applique à toutes les notes de cet étudiant pour l'année choisie.</p>
+    <div class="flex justify-end gap-3">
+      <button onclick="closeClasseEditModal()" class="btn-ghost">Annuler</button>
+      <button onclick="saveClasseEdit()" class="btn-orange">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Relevés de notes : consultation de l'historique complet (aucun écrasement à l'upload) -->
+<div id="relevesModal" class="modal-overlay hidden">
+  <div class="modal-box p-8" style="max-width:32rem">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">📎 Relevés de notes</h3>
+    <p class="text-xs text-gray-400 mb-4" id="relevesModalSub"></p>
+    <div id="relevesModalList" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:0.5rem"></div>
+    <div class="flex justify-end mt-5">
+      <button onclick="closeRelevesModal()" class="btn-ghost">Fermer</button>
+    </div>
+  </div>
+</div>
 
 <!-- Bulk Note Modal -->
 <div id="noteModal" class="modal-overlay hidden">
@@ -681,8 +926,8 @@
         </div>
       </div>
       <div class="flex gap-3 mb-5 items-end">
-        <div class="flex-1"><label>Classe (auto)</label>
-          <input type="text" id="noteClasse" readonly style="background:#f9fafb">
+        <div class="flex-1"><label>Classe <span style="text-transform:none;font-weight:400;color:#d1d5db">(pré-remplie, modifiable)</span></label>
+          <input type="text" id="noteClasse" placeholder="ex: AIX_DCG1">
         </div>
         <button onclick="chargerUEs()" class="btn-primary" style="white-space:nowrap">📋 Charger les UE</button>
       </div>
@@ -719,12 +964,23 @@
 <div id="releveModal" class="modal-overlay hidden">
   <div class="modal-box p-6 max-w-lg">
     <h3 class="text-xl font-black text-[#1A4E8A] mb-2">Joindre un relevé de notes</h3>
-    <p class="text-sm text-gray-400 mb-5" id="releveModalInfo"></p>
-    <div class="space-y-4">
-      <div><label>Fichier (PDF, image…)</label><input type="file" id="releveFileInput" accept=".pdf,.jpg,.jpeg,.png,.docx"></div>
+    <p class="text-sm text-gray-400 mb-3" id="releveModalInfo"></p>
+    <!-- Relevés déjà enregistrés pour cet étudiant -->
+    <div id="releveExistingZone" class="hidden mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <p class="text-xs font-bold text-blue-700 mb-2">Relevés déjà enregistrés :</p>
+      <ul id="releveExistingList" class="space-y-1 text-xs"></ul>
+    </div>
+    <!-- Zone upload -->
+    <div id="releveUploadZone" class="space-y-4">
+      <div><label>Nouveau fichier (PDF, image…)</label><input type="file" id="releveFileInput" accept=".pdf,.jpg,.jpeg,.png,.docx"></div>
+    </div>
+    <!-- Zone succès post-upload -->
+    <div id="releveSuccessZone" class="hidden mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+      <p class="text-sm font-bold text-green-700 mb-2">✓ Relevé enregistré</p>
+      <a id="releveSuccessLink" href="#" target="_blank" class="text-blue-600 underline text-sm font-medium">📄 Ouvrir le relevé</a>
     </div>
     <div class="flex justify-end gap-3 mt-5">
-      <button onclick="closeReleveModal()" class="btn-ghost">Fermer sans joindre</button>
+      <button onclick="closeReleveModal()" class="btn-ghost">Fermer</button>
       <button onclick="uploadReleve()" id="btnUploadReleve" class="btn-orange">⬆ Envoyer</button>
     </div>
   </div>
@@ -1026,6 +1282,17 @@
       <div>
         <label>Descriptif (optionnel)</label>
         <textarea id="objectifDescriptif" rows="2" placeholder="Contexte, méthode, cible…"></textarea>
+      </div>
+      <div>
+        <label>Pôle</label>
+        <input type="text" id="objectifPole" list="polesObjectifsList" placeholder="ex: Alternance, Pédagogique…">
+        <datalist id="polesObjectifsList">
+          <option value="Pôle Alternance">
+          <option value="Pôle Pédagogique">
+          <option value="Pôle Communication">
+          <option value="Pôle Administratif">
+          <option value="Direction">
+        </datalist>
       </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
@@ -1368,7 +1635,16 @@
           <option>TikTok</option><option>X / Twitter</option>
         </select>
       </div>
-      <div><label>Thème</label><input type="text" id="mmokModalTheme" placeholder="ex: JPO, Témoignage, Formation…"></div>
+      <div><label>Sujet</label><input type="text" id="mmokModalSujet" placeholder="Sujet du post…"></div>
+      <div><label>Thème</label>
+        <select id="mmokModalTheme">
+          <option value="">— Choisir —</option>
+          <option value="SIG">SIG</option>
+          <option value="MSI">MSI</option>
+          <option value="Responsable de Campus">Responsable de Campus</option>
+          <option value="Choix libre">Choix libre</option>
+        </select>
+      </div>
       <div><label>Date prévisionnelle</label><input type="date" id="mmokModalDatePrevue"></div>
       <div><label>Date réelle de publication</label><input type="date" id="mmokModalDateReelle"></div>
       <div><label>État</label>
@@ -1378,6 +1654,17 @@
       </div>
       <div class="col-span-2 md:col-span-3"><label>Idée de contenu</label><input type="text" id="mmokModalIdeeContenu" placeholder="Résumé court de l'idée…"></div>
       <div class="col-span-2 md:col-span-3"><label>Contenu (texte du post)</label><textarea id="mmokModalContenu" rows="4" placeholder="Tapez le texte du post ici…"></textarea></div>
+      <div class="col-span-2 md:col-span-3"><label>Lien du post (URL)</label><input type="url" id="mmokModalLien" placeholder="https://…"></div>
+      <div class="col-span-2 md:col-span-3">
+        <label>Visuels du post</label>
+        <div id="mmokVisualsExisting" class="flex flex-wrap gap-2 mb-2"></div>
+        <div id="mmokNoVisualWarning" class="hidden mb-2 px-3 py-2 rounded-xl text-xs font-bold" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa">Aucun visuel associé — pensez à documenter ce post.</div>
+        <div id="mmokNewFilesList" class="flex flex-wrap gap-2 mb-2"></div>
+        <label for="mmokVisualInput" class="inline-flex items-center gap-2 cursor-pointer px-4 py-2" style="border:2px dashed #e5e7eb;border-radius:0.75rem;font-size:0.75rem;font-weight:700;color:#6b7280">
+          + Ajouter des visuels (JPG, PNG, GIF — max 4 Mo/fichier)
+        </label>
+        <input type="file" id="mmokVisualInput" multiple accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="mmokOnFilesSelected(this)">
+      </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
       <button id="btnDeleteMmok" onclick="deleteMMOKFromModal()" class="btn-danger hidden">Supprimer</button>
@@ -1463,6 +1750,12 @@ const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
 let refMatieres = {};
 // ── Données globales ────────────────────────────────────────────────
 let allNotes     = [], allFormateurs = [], allTaches = [], allEtudiants = [];
+let allEtudiantsRoster = []; // effectif complet (getStudentsMinList, non filtré par rôle commercial)
+let statsExclusions = {}; // idEtu|diplome|annee -> {exclu, commentaire} — exclusions manuelles du taux de réussite
+function statsExclusionKey(idEtu, diplome, annee){ return String(idEtu||'')+'|'+String(diplome||'')+'|'+String(annee||''); }
+let allReleves   = []; // relevés de notes uploadés
+let notesSortBy = 'nom', notesSortDir = 1; // tri du tableau groupé Notes ('nom' | 'diff')
+let statsSortBy = 'moy', statsSortDir = -1; // tri du panneau Statistiques promotion ('moy' | 'classe' | 'nom')
 let planningPersonFilter = new Set();
 let draggedTaskId = null;
 let inscriptionPreviews = [];
@@ -1472,6 +1765,26 @@ let qualiopiPreuves = [];
 // ── Helpers ─────────────────────────────────────────────────────────
 function show(id){ document.getElementById(id)?.classList.remove('hidden'); }
 function hide(id){ document.getElementById(id)?.classList.add('hidden'); }
+
+// Ordre d'affichage des matières BTS CG dans la grille de saisie
+// Groupe 0 (0-4): CGE / Anglais / Math / CEJM
+// Groupe 1 (5-9): E5 / E6 / E7 / E8
+// Groupe 2 (10+): EF1 / EF2 / EF3 / autres
+function btsMatiereOrder(matiere) {
+  const m = (matiere || '').trim();
+  if (/\bcge\b/i.test(m) || /^comptabilit/i.test(m))                    return 0;
+  if (/anglais/i.test(m) || /langue\s+vivante/i.test(m))                return 1;
+  if (/math/i.test(m) || /statistique/i.test(m))                        return 2;
+  if (/\bcejm\b/i.test(m) || /culture\s+.*(économique|juridique)/i.test(m)) return 3;
+  if (/^E5(\s|$|-)/i.test(m.trim()) || /^e5$/i.test(m.trim()))         return 5;
+  if (/^E6(\s|$|-)/i.test(m.trim()) || /^e6$/i.test(m.trim()))         return 6;
+  if (/^E7(\s|$|-)/i.test(m.trim()) || /^e7$/i.test(m.trim()))         return 7;
+  if (/^E8(\s|$|-)/i.test(m.trim()) || /^e8$/i.test(m.trim()))         return 8;
+  if (/^EF1(\s|$|-)/i.test(m.trim()) || /^ef1$/i.test(m.trim()))       return 10;
+  if (/^EF2(\s|$|-)/i.test(m.trim()) || /^ef2$/i.test(m.trim()))       return 11;
+  if (/^EF3(\s|$|-)/i.test(m.trim()) || /^ef3$/i.test(m.trim()))       return 12;
+  return 99;
+}
 function toast(msg, ok=true){
   const t=document.getElementById('toast'), m=document.getElementById('toastMsg');
   m.textContent=msg; m.className='px-5 py-3 rounded-2xl shadow-lg text-sm font-bold text-white '+(ok?'bg-green-600':'bg-red-500');
@@ -1492,8 +1805,55 @@ function fmtNote(n){
   const f=parseFloat(n); return isNaN(f)?'—':`${f.toFixed(2)}/20`;
 }
 function badgeRes(r){
-  const map={'Admis':'badge-admis','Rattrapage':'badge-ratt','Recalé':'badge-recale','Non admis':'badge-recale','En cours':'badge-cours'};
+  const map={'Admis':'badge-admis','Obtenu':'badge-admis','Rattrapage':'badge-ratt','Recalé':'badge-recale','Non admis':'badge-recale','En cours':'badge-cours'};
   return `<span class="badge ${map[r]||'bg-gray-100 text-gray-500'}">${r||'—'}</span>`;
+}
+
+// Calcule le résultat définitif BTS en remplaçant les notes des matières rattrapées par la note de rattrapage
+function calcBTSResultatPostRatt(group) {
+  const rattMap = {};
+  (group.notes || []).forEach(n => {
+    if ((n.matiere||'').startsWith('Ratt. ')) {
+      const num = parseFloat(n.note);
+      if (!isNaN(num)) rattMap[(n.matiere).slice(6)] = num;
+    }
+  });
+  if (Object.keys(rattMap).length === 0) return null;
+  const btsRef = refMatieres['BTS CG'] || [];
+  let totalWtd = 0, totalC = 0;
+  (group.notes || []).filter(n => !(n.matiere||'').startsWith('Ratt. ')).forEach(n => {
+    if (String(n.note).toUpperCase() === 'NE') return;
+    const noteNum = parseFloat(n.note);
+    if (isNaN(noteNum)) return;
+    const c = parseFloat(n.coeff ?? 0);
+    if (c === 0) return;
+    const ref = btsRef.find(r => r.matiere === n.matiere);
+    if (ref && ref.type === 'autre') return;
+    const rattKey = btsMatiereRattName(n.matiere);
+    const noteToUse = (rattKey !== null && rattMap[rattKey] !== undefined) ? rattMap[rattKey] : noteNum;
+    totalWtd += noteToUse * c;
+    totalC += c;
+  });
+  if (totalC === 0) return null;
+  return (totalWtd / totalC) >= 10 ? 'Obtenu' : 'Recalé';
+}
+
+// Auto-sauvegarde le résultat définitif BTS post-rattrapage
+async function _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe) {
+  try {
+    const fresh = await api('getNotes', { diplome: 'BTS CG', annee: annee || '', classe: classe || '' });
+    if (!fresh.success) return;
+    const stuNotes = (fresh.data || []).filter(n => n.idEtu === idEtu);
+    if (!stuNotes.length) return;
+    const groups = getStudentGroups(stuNotes, 'BTS CG');
+    if (!groups.length) return;
+    const g = groups[0];
+    const { moy, moyPro } = calcGroupStats(g);
+    if (calcBTSResultatAuto(moy, moyPro) !== 'Rattrapage') return;
+    const postRatt = calcBTSResultatPostRatt(g);
+    if (!postRatt) return;
+    await api('updateResultatNote', { idEtu, nomPrenom, annee, diplome: 'BTS CG', resultat: postRatt, emailAuteur: user?.email || '', vieScRole });
+  } catch(e) { console.warn('_autoSaveBTSPostRatt:', e); }
 }
 
 const JOURS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
@@ -1526,9 +1886,24 @@ async function init(){
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
   // Référentiel
-  try { const r = await api('getReferentielMatieres'); if (r.success) refMatieres = r.data; } catch(e){}
+  try {
+    const r = await api('getReferentielMatieres');
+    if (r.success) {
+      refMatieres = r.data;
+      // Trier les matières BTS CG selon l'ordre de saisie défini
+      if (refMatieres['BTS CG']) {
+        refMatieres['BTS CG'].sort((a, b) => btsMatiereOrder(a.matiere) - btsMatiereOrder(b.matiere));
+      }
+      // Le menu "Matière" a pu se construire vide si l'utilisateur a sélectionné un diplôme
+      // avant la fin de ce chargement (showModule(first) plus haut ne l'attend pas) — on le
+      // reconstruit donc une fois le référentiel disponible, si l'onglet Notes est actif.
+      if (document.getElementById('section-notes')?.classList.contains('active')) filterMatieresUpdate();
+    }
+  } catch(e){}
   // Étudiants (pour selects)
   try { const r = await api('getDashboardData', {role:user.role, userId:user.ref}); if (r.success) allEtudiants = r.data; } catch(e){}
+  // Effectif complet des étudiants (indépendant du rôle commercial) — pour le compteur de saisie Vie scolaire
+  try { const r = await api('getStudentsMinList'); if (r.success) allEtudiantsRoster = r.data; } catch(e){}
   // Formateurs (onglet Adultes — enseignants)
   try { const r = await api('getPersonnel'); if (r.success){ allFormateurs = r.data; renderFormateurs(); } } catch(e){}
   // Personnel staff (onglet Personnel — staff admin, pour les surveillants de simulation)
@@ -1546,7 +1921,7 @@ function showModule(m){
   if (m==='planning')    loadPlanning();
   if (m==='ged')         loadGed();
   if (m==='qualiopi')    loadQualiopi();
-  if (m==='mails')       loadMails();
+  if (m==='mails')       { loadMails(); loadRelanceCronConfig(); }
   if (m==='salles')      loadSalles();
   if (m==='suiviexb')    { if(canWrite('suiviexb')) show('btnAddSuiviEXB'); }
   if (m==='mmok')        loadMMOK();
@@ -1558,6 +1933,35 @@ function showModule(m){
 function initNotes(){
   if (canWrite('notes')) show('btnAddNote');
   filterMatieresUpdate(); // pré-remplir les années dès l'ouverture
+  loadStatsExclusions();
+}
+
+async function loadStatsExclusions(){
+  try {
+    const r = await api('getStatsExclusions');
+    if (!r.success) return;
+    statsExclusions = {};
+    r.data.forEach(e=>{ statsExclusions[statsExclusionKey(e.idEtu,e.diplome,e.annee)] = { exclu:e.exclu, commentaire:e.commentaire }; });
+  } catch(e){}
+}
+
+async function toggleStatExclusion(idEtu, diplome, annee, checked){
+  const key = statsExclusionKey(idEtu, diplome, annee);
+  const commentaire = statsExclusions[key]?.commentaire || '';
+  const r = await api('saveStatsExclusion', { idEtu, diplome, annee, exclu:checked, commentaire });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  statsExclusions[key] = { exclu:checked, commentaire };
+  toast(checked?'Étudiant exclu du taux de réussite ✓':'Étudiant réintégré aux stats ✓');
+  computeAndShowStats(window._lastStatsGroups||[]);
+}
+
+async function saveStatComment(idEtu, diplome, annee, commentaire){
+  const key = statsExclusionKey(idEtu, diplome, annee);
+  const exclu = statsExclusions[key]?.exclu || false;
+  const r = await api('saveStatsExclusion', { idEtu, diplome, annee, exclu, commentaire });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  statsExclusions[key] = { exclu, commentaire };
+  toast('Commentaire enregistré ✓');
 }
 
 function filterMatieresUpdate(){
@@ -1582,33 +1986,42 @@ async function loadNotes(){
     const diplome = document.getElementById('filterDiplome').value;
     if (!diplome) {
       allNotes = [];
-      document.getElementById('notesTbody').innerHTML='<tr><td colspan="12" class="text-center text-gray-400 py-8">Sélectionnez un diplôme pour afficher la liste.</td></tr>';
+      document.getElementById('notesTbody').innerHTML='<tr><td colspan="13" class="text-center text-gray-400 py-8">Sélectionnez un diplôme pour afficher la liste.</td></tr>';
       document.getElementById('statsPanel')?.classList.add('hidden');
       document.getElementById('matiereStatsPanel')?.classList.add('hidden');
       return;
     }
     const annee   = document.getElementById('filterAnnee').value;
-    const classe  = document.getElementById('filterClasse').value;
     const isDCG   = diplome==='DCG'||diplome==='DSCG';
-    loading('notesTbody', 12);
-    const params = isDCG ? { diplome, classe, maxAnnee: annee||'' } : { diplome, annee, classe };
+    loading('notesTbody', 13);
+    // La classe se filtre côté client (multi-sélection) — on récupère tout le diplôme (borné par maxAnnee pour DCG/DSCG)
+    const params = isDCG ? { diplome, maxAnnee: annee||'' } : { diplome, annee };
     const r = await api('getNotes', params);
     if (!r.success){ toast('Erreur : '+r.message,false); return; }
     allNotes = r.data;
+    // Charger les relevés en parallèle
+    try { const rr = await api('getReleveNotes', {diplome}); allReleves = rr.success ? rr.data : []; } catch(e){ allReleves=[]; }
     const classes = [...new Set(allNotes.map(n=>n.classe).filter(Boolean))].sort();
     const selC = document.getElementById('filterClasse');
-    const prevC = selC.value;
-    selC.innerHTML='<option value="">Toutes</option>'+classes.map(c=>`<option ${c===prevC?'selected':''}>${c}</option>`).join('');
+    const prevSelected = new Set(getSelectedClasses());
+    selC.innerHTML = classes.map(c=>`<option ${prevSelected.has(c)?'selected':''}>${c}</option>`).join('');
     renderNotesGrouped();
   } finally {
     _loadNotesRunning = false;
   }
 }
 
-function getStudentGroups(notes){
+// fallbackDiplome : diplôme du filtre actif (qDiplome). Les notes affichées sont déjà filtrées
+// côté serveur pour ce diplôme — si la classe d'un étudiant est mal renseignée/atypique et que
+// diplomeFromClasse() n'arrive pas à la reconnaître, on retombe sur ce diplôme connu plutôt que
+// de laisser l'étudiant dans un groupe "diplôme inconnu" (moyenne calculée mais différentiel
+// silencieusement absent, car les calculs DCG/BTS sont conditionnés par le diplôme du groupe).
+function getStudentGroups(notes, fallbackDiplome){
   const groups = {};
+  const KNOWN_DIPLOMES = ['DCG','DSCG','BTS CG'];
   notes.forEach(n => {
-    const diplome = diplomeFromClasse(n.classe);
+    let diplome = diplomeFromClasse(n.classe);
+    if (fallbackDiplome && !KNOWN_DIPLOMES.includes(diplome)) diplome = fallbackDiplome;
     const key = (n.idEtu || n.nomPrenom || '?') + '|' + diplome;
     if (!groups[key]) groups[key] = { _key:key, idEtu:n.idEtu||'', nomPrenom:n.nomPrenom, classe:n.classe, diplome, notes:[], resultat:n.resultat, annees:[], lastAnnee:'' };
     groups[key].notes.push(n);
@@ -1643,28 +2056,43 @@ function getStudentGroups(notes){
   return result;
 }
 
+// Regroupe une liste de notes par UE (numéro seul, quel que soit l'intitulé/l'année) et
+// ne garde que la meilleure note par UE : une note numérique bat toujours NE, la plus haute
+// valeur l'emporte sinon. En cas d'ÉGALITÉ EXACTE (même note à deux périodes différentes —
+// doublon probable), on retient systématiquement l'année la plus ancienne, indépendamment de
+// l'ordre de lecture des lignes dans la feuille (et donc peu importe la classe de l'étudiant).
+// Utilisé pour le calcul de moyenne (DCG/DSCG) ET pour l'affichage groupé.
+function bestNotesByUE(notes){
+  const bestByUE = {};
+  notes.forEach(n=>{
+    const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
+    const isNE = String(n.note).toUpperCase()==='NE';
+    const existing = bestByUE[k];
+    if (!existing) { bestByUE[k]=n; return; }
+    if (isNE) return; // NE ne bat jamais une note déjà retenue
+    const exNE = String(existing.note).toUpperCase()==='NE';
+    if (exNE) { bestByUE[k]=n; return; } // une note numérique bat toujours NE
+    const nVal = parseFloat(n.note), exVal = parseFloat(existing.note);
+    if (nVal > exVal) { bestByUE[k]=n; }
+    else if (nVal === exVal && (n.annee||'') < (existing.annee||'')) { bestByUE[k]=n; }
+  });
+  return bestByUE;
+}
+
 function calcGroupStats(g){
   const diplome = g.diplome;
   const isDCG = diplome==='DCG'||diplome==='DSCG';
   const isBTS = diplome==='BTS CG';
   let notesWithVal = g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='');
   if (isDCG) {
-    const bestByUE = {};
-    notesWithVal.forEach(n=>{
-      const k=matKey(n.matiere); // normalisé : "UE 2 - Droit..." et "UE 2" → même clé "ue2"
-      const isNE = String(n.note).toUpperCase()==='NE';
-      const existing = bestByUE[k];
-      if (!existing) { bestByUE[k]=n; }
-      else {
-        // Une note numérique bat toujours NE ; sinon garder la meilleure
-        const exNE = String(existing.note).toUpperCase()==='NE';
-        if (!isNE && (exNE || parseFloat(n.note)>parseFloat(existing.note))) bestByUE[k]=n;
-      }
-    });
-    notesWithVal = Object.values(bestByUE);
+    notesWithVal = Object.values(bestNotesByUE(notesWithVal));
   }
   let totalPts=0, totalCoeff=0, proPts=0, proCoeff=0;
   let ueOk=0, ueElim=0, ueRecu=0, ueTotal=0;
+  // Différentiel (diff) et différentiel ajusté (diffAdj) : accumulateurs séparés de la moyenne
+  // générale (totalPts/totalCoeff), qui elle reste inchangée par tout ce qui suit.
+  let diffPts=0, diffCoeff=0; // diff : exclut l'UE 14 (facultative) quand sa note est < 10
+  let adjPts=0, adjCoeff=0;   // diffAdj : en plus, exclut toute UE éliminatoire (<6)
   const btsRef = isBTS ? (refMatieres['BTS CG']||[]) : null;
   notesWithVal.forEach(n=>{
     const isNE = String(n.note).toUpperCase()==='NE';
@@ -1685,19 +2113,29 @@ function calcGroupStats(g){
       if(noteNum>=10) ueOk++;
       else if(noteNum>=6) ueRecu++;
       else ueElim++;
+      // UE 14 (facultative, ex-"Espagnol des affaires"/LV2) : ne compte dans AUCUN différentiel
+      // quand la note est < 10 — bonus uniquement, jamais de pénalité pour cette UE optionnelle.
+      const isUE14Faible = matKey(n.matiere)==='ue14' && noteNum<10;
+      if (!isUE14Faible) {
+        diffPts += p; diffCoeff += c;
+        if (noteNum>=6) { adjPts += p; adjCoeff += c; } // + règle générale : <6 = éliminatoire, exclue de l'ajusté
+      }
     }
   });
   const moy = totalCoeff>0 ? Math.round(totalPts/totalCoeff*100)/100 : null;
   const moyPro = proCoeff>0 ? Math.round(proPts/proCoeff*100)/100 : null;
-  let diff = null;
+  let diff = null, diffAdj = null;
   if (isBTS && moy!==null) diff = Math.round((moy-10)*100)/100;
-  else if (isDCG && ueTotal>0) diff = Math.round((totalPts - ueTotal*10)*100)/100;
-  return { totalPts, totalCoeff, moy, moyPro, diff, ueOk, ueElim, ueRecu, ueTotal };
+  else if (isDCG && diffCoeff>0) {
+    diff = Math.round((diffPts - diffCoeff*10)*100)/100;
+    if (adjCoeff>0) diffAdj = Math.round((adjPts - adjCoeff*10)*100)/100;
+  }
+  return { totalPts, totalCoeff, moy, moyPro, diff, diffAdj, ueOk, ueElim, ueRecu, ueTotal };
 }
 
 function renderNotesGrouped(){
   if (!allNotes.length) {
-    document.getElementById('notesTbody').innerHTML='<tr><td colspan="12" class="text-center text-gray-400 py-8">Sélectionnez un diplôme et cliquez Afficher.</td></tr>';
+    document.getElementById('notesTbody').innerHTML='<tr><td colspan="13" class="text-center text-gray-400 py-8">Sélectionnez un diplôme et cliquez Afficher.</td></tr>';
     document.getElementById('statsPanel')?.classList.add('hidden');
     document.getElementById('matiereStatsPanel')?.classList.add('hidden');
     return;
@@ -1706,50 +2144,99 @@ function renderNotesGrouped(){
   const qMat   = matKey(document.getElementById('filterMatiere').value);
   const qAnnee = document.getElementById('filterAnnee').value||'';
   const qDiplome = document.getElementById('filterDiplome').value||'';
+  const qClasses = getSelectedClasses();
   const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
   if (qMat)    notes = notes.filter(n=>matKey(n.matiere)===qMat);
   if (qEtu)    notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   // Pour DCG/DSCG : filtre cumulatif (notes jusqu'à l'année sélectionnée)
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
-  let groups = getStudentGroups(notes);
-  // Pour BTS : filtre exact par année de promo
-  if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
+  let groups = getStudentGroups(notes, qDiplome);
+  // N'afficher que les étudiants ayant au moins une note pour l'année sélectionnée
+  // (DCG reste cumulatif pour le CALCUL de la moyenne, mais la LISTE se restreint à la promo/année choisie)
+  if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
+  if (qClasses.length) groups = groups.filter(g=>qClasses.includes(g.classe));
+  updateSaisieCounter(groups, qDiplome, qClasses, qAnnee);
   const tbody = document.getElementById('notesTbody');
-  if (!groups.length){ tbody.innerHTML='<tr><td colspan="12" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
+  if (!groups.length){ tbody.innerHTML='<tr><td colspan="13" class="text-center text-gray-400 py-8">Aucune note trouvée. Vérifiez les filtres.</td></tr>'; return; }
+  ['nom','classe','moy','diff','diffAdj'].forEach(c=>{
+    const el = document.getElementById('sortIcon_'+c);
+    if (el) el.textContent = notesSortBy===c ? (notesSortDir>0?'▲':'▼') : '';
+  });
   let html='';
-  groups.sort((a,b)=>(a.nomPrenom||'').localeCompare(b.nomPrenom||'')).forEach(g=>{
-    const {totalPts, moy, moyPro, diff, ueOk, ueElim, ueRecu, ueTotal} = calcGroupStats(g);
+  // Pré-calcul des stats (évite de recalculer bestNotesByUE deux fois) + tri configurable
+  const groupsWithStats = groups.map(g=>({ g, stats: calcGroupStats(g) }));
+  const groupsByKey = {}; // pour openClasseEditModal (évite d'échapper les données dans l'attribut onclick)
+  groupsWithStats.sort((a,b)=>{
+    if (notesSortBy==='diff' || notesSortBy==='diffAdj' || notesSortBy==='moy') {
+      const da=a.stats[notesSortBy], db=b.stats[notesSortBy];
+      if (da===null && db===null) return 0;
+      if (da===null) return 1;   // valeurs manquantes toujours en fin de liste
+      if (db===null) return -1;
+      return notesSortDir*(da-db);
+    }
+    if (notesSortBy==='classe') return notesSortDir*((a.g.classe||'').localeCompare(b.g.classe||''));
+    return notesSortDir*((a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
+  });
+  groupsWithStats.forEach(({g, stats})=>{
+    const {totalPts, moy, moyPro, diff, diffAdj, ueOk, ueElim, ueRecu, ueTotal} = stats;
     const nbUE = ueTotal || g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='').length;
     const isDCGrow = g.diplome==='DCG'||g.diplome==='DSCG';
     const diffHtml = diff===null?'—': diff>=0
       ? `<span style="color:#15803d;font-weight:700">+${diff}</span>`
       : `<span style="color:#dc2626;font-weight:700">${diff}</span>`;
+    const diffAdjHtml = diffAdj===null?'—': diffAdj>=0
+      ? `<span style="color:#15803d;font-weight:700">+${diffAdj}</span>`
+      : `<span style="color:#dc2626;font-weight:700">${diffAdj}</span>`;
     const anneeLabel = g.annees.length>1 ? g.annees[0]+'→'+g.annees[g.annees.length-1] : (g.annees[0]||'—');
     const latestAnnee = g.annees[g.annees.length-1]||'';
     const gkey = g.idEtu+'_'+g.diplome;
     const gid  = CSS.escape(gkey);
+    groupsByKey[gkey] = g;
     const isBTSrow = g.diplome==='BTS CG';
     const autoRes  = isBTSrow ? calcBTSResultatAuto(moy, moyPro) : '';
-    const dispRes  = isBTSrow ? (autoRes === 'Rattrapage' ? (g.resultat || 'Rattrapage') : autoRes) : g.resultat;
+    const btsProvDisplay = isBTSrow ? (autoRes === 'Admis' ? 'Obtenu' : autoRes) : '';
+    const btsDefDisplay  = isBTSrow
+      ? (autoRes === 'Rattrapage'
+          ? (g.resultat ? (g.resultat === 'Admis' ? 'Obtenu' : g.resultat) : (calcBTSResultatPostRatt(g) || null))
+          : (autoRes === 'Admis' ? 'Obtenu' : autoRes))
+      : '';
+    const dispRes  = isBTSrow ? (btsDefDisplay || btsProvDisplay || '') : g.resultat;
     html+=`<tr style="cursor:pointer" onclick="toggleGroup('${gkey}')">
       <td><span id="icon_${gid}" style="font-size:0.7rem;color:#9ca3af">▶</span></td>
       <td style="font-weight:600">${g.nomPrenom}</td>
-      <td>${g.diplome||'—'}</td><td>${g.classe||'—'}</td>
+      <td>${g.diplome||'—'}</td>
+      <td>${g.classe||'—'} ${canWrite('notes')?`<button onclick="event.stopPropagation();openClasseEditModal('${gkey}')" class="btn-ghost py-1 text-xs" title="Corriger la classe">✏</button>`:''}</td>
       <td style="font-size:0.75rem;color:#6b7280">${anneeLabel}</td>
       <td>${isDCGrow ? `<span title="saisies" style="color:#6b7280;font-size:0.8rem">${ueTotal} saisies</span> <span title="validées">${ueOk}✔</span> <span title="reçues" style="color:#d97706">${ueRecu}≈</span> <span title="éliminées" style="color:#dc2626">${ueElim}✘</span>` : nbUE}</td>
       <td>${totalPts?totalPts.toFixed(2):'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${moy!==null?moy.toFixed(2)+'/20':'—'}</td>
       <td>${isBTSrow?(moyPro!==null?`<span style="color:#7c3aed;font-weight:700">${moyPro.toFixed(2)}/20</span>`:'<span style="color:#9ca3af;font-size:0.75rem">—</span>'):''}  </td>
       <td>${diffHtml}</td>
-      <td>${badgeRes(dispRes)}</td>
+      <td>${isDCGrow ? diffAdjHtml : '<span style="color:#9ca3af;font-size:0.75rem">—</span>'}</td>
+      <td>${isBTSrow
+        ? `<div style="display:flex;flex-direction:column;gap:2px">
+             <div style="display:flex;align-items:center;gap:3px"><span style="font-size:0.58rem;color:#9ca3af;font-weight:700;text-transform:uppercase;white-space:nowrap">Prov.</span>${badgeRes(btsProvDisplay)}</div>
+             <div style="display:flex;align-items:center;gap:3px"><span style="font-size:0.58rem;color:#9ca3af;font-weight:700;text-transform:uppercase;white-space:nowrap">Déf.</span>${btsDefDisplay ? badgeRes(btsDefDisplay) : '<span style="color:#9ca3af;font-size:0.7rem;font-style:italic">—</span>'}</div>
+           </div>`
+        : badgeRes(dispRes)}</td>
       <td>
-        ${canWrite('notes')?`<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
-        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}','${g.diplome==='BTS CG'?calcBTSResultatAuto(moy,moyPro):''}','${(g.classe||'').replace(/'/g,"\\'")}');" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>`:''}
+        ${(()=>{
+          const relev = allReleves.filter(r=>r.idEtu===g.idEtu).sort((a,b)=>b.dateUpload.localeCompare(a.dateUpload));
+          const safeNomRelev = (g.nomPrenom||'').replace(/'/g,"\\'");
+          const relevBtn = relev.length===1
+            ? `<a href="${relev[0].fileUrl}" target="_blank" onclick="event.stopPropagation()" class="btn-ghost py-1 text-xs" title="Voir relevé (${relev[0].annee||'—'}) : ${relev[0].fileName}">📎</a>`
+            : relev.length>1
+              ? `<button onclick="event.stopPropagation();openRelevesModal('${g.idEtu}','${safeNomRelev}')" class="btn-ghost py-1 text-xs" title="${relev.length} relevés disponibles">📎${relev.length}</button>`
+              : '';
+          const writeBtn = canWrite('notes') ? `<button onclick="event.stopPropagation();openBulkNoteModal('${g.idEtu}')" class="btn-ghost py-1 text-xs" title="Saisir notes">✏</button>
+        <button onclick="event.stopPropagation();openResultatModal('${g.idEtu}','${g.nomPrenom.replace(/'/g,"\\'")}','${latestAnnee}','${g.diplome}','${g.diplome==='BTS CG'?calcBTSResultatAuto(moy,moyPro):''}','${(g.classe||'').replace(/'/g,"\\'")}');" class="btn-ghost py-1 text-xs" title="Résultat">🏁</button>` : '';
+          return relevBtn + writeBtn;
+        })()}
       </td>
     </tr>
     <tr id="detail_${gid}" style="display:none">
-      <td colspan="12" style="padding:0;background:#f8fafc">
+      <td colspan="13" style="padding:0;background:#f8fafc">
         <table style="width:100%;background:transparent">
           <thead><tr style="background:#f1f5f9"><th></th><th>Année</th><th>Matière</th><th>Note</th><th>Coeff</th><th>Points</th><th>Résultat</th><th></th></tr></thead>
           <tbody>${(()=>{
@@ -1760,6 +2247,51 @@ function renderNotesGrouped(){
             const safeId=(g.idEtu||'').replace(/'/g,"\\'");
             const safeNom=(g.nomPrenom||'').replace(/'/g,"\\'");
             const safeCls=(g.classe||'').replace(/'/g,"\\'");
+
+            // DCG/DSCG : une même UE peut avoir été saisie sur plusieurs années (retake, ou
+            // ré-import avec un intitulé différent — "UE 1" vs "UE 1 - Fondamentaux du droit").
+            // On regroupe par UE, on n'affiche que la note retenue (celle qui compte dans la
+            // moyenne, via bestNotesByUE — même logique que calcGroupStats) et l'historique
+            // complet (toutes les saisies, aucune n'est supprimée) reste consultable en dépliant.
+            if (isDCGrow) {
+              const byUE={};
+              mainNotes.forEach(n=>{ const k=matKey(n.matiere); (byUE[k]=byUE[k]||[]).push(n); });
+              const withVal = mainNotes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='');
+              const bestMap = bestNotesByUE(withVal);
+              const ueKeys = Object.keys(byUE).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0));
+              return ueKeys.map(k=>{
+                const entries = byUE[k].slice().sort((a,b)=>(b.annee||'').localeCompare(a.annee||''));
+                // L'intitulé le plus complet (le plus long, ex: "UE 1 - Fondamentaux du droit") sert de libellé affiché
+                const label = entries.reduce((best,e)=>((e.matiere||'').length>(best||'').length?e.matiere:best), entries[0].matiere);
+                const retenue = bestMap[k] || entries[0];
+                const nc = retenue.note===null||retenue.note===undefined?'':'color:'+(String(retenue.note).toUpperCase()==='NE'?'#4338ca':(parseFloat(retenue.note)>=10?'#15803d':parseFloat(retenue.note)>=6?'#d97706':'#dc2626'));
+                const hasMulti = entries.length>1;
+                const hid = 'ueh_'+gid+'_'+k;
+                let row=`<tr style="background:transparent">
+                  <td>${hasMulti?`<span onclick="event.stopPropagation();toggleUEHistory('${hid}')" id="icon_${hid}" style="cursor:pointer;color:#9ca3af;font-size:0.7rem">▸</span>`:''}</td>
+                  <td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${retenue.annee||'—'}${hasMulti?` <span title="Nombre de saisies pour cette UE">(${entries.length})</span>`:''}</td>
+                  <td>${label}</td>
+                  <td style="font-weight:700;${nc}">${fmtNote(retenue.note)}</td>
+                  <td>${retenue.coeff??'—'}</td>
+                  <td>${retenue.points!==null?retenue.points.toFixed(2):'—'}</td>
+                  <td>${badgeRes(retenue.resultat)}</td>
+                  <td>${canWrite('notes')?`<button onclick="event.stopPropagation();deleteNote('${retenue.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td>
+                </tr>`;
+                if (hasMulti) {
+                  row += `<tr id="${hid}" style="display:none"><td colspan="8" style="padding:0;background:#fff7ed">
+                    <table style="width:100%;background:transparent">
+                      <tbody>${entries.map(e=>{
+                        const isRet = e.id===retenue.id;
+                        const ncE='color:'+(String(e.note).toUpperCase()==='NE'?'#4338ca':(parseFloat(e.note)>=10?'#15803d':parseFloat(e.note)>=6?'#d97706':'#dc2626'));
+                        return `<tr style="background:transparent"><td style="width:32px"></td><td style="font-size:0.7rem;color:#9ca3af;padding-left:0.5rem">${e.annee||'—'}${isRet?' <span style="color:#15803d;font-weight:700">✓ retenue</span>':''}</td><td style="font-size:0.78rem;color:#6b7280">${e.matiere}</td><td style="font-weight:600;${ncE}">${fmtNote(e.note)}</td><td>${e.coeff??'—'}</td><td>${e.points!==null?e.points.toFixed(2):'—'}</td><td></td><td>${canWrite('notes')?`<button onclick="event.stopPropagation();deleteNote('${e.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td></tr>`;
+                      }).join('')}</tbody>
+                    </table>
+                  </td></tr>`;
+                }
+                return row;
+              }).join('');
+            }
+
             return mainNotes.sort((a,b)=>((a.annee||'')+(a.matiere||'')).localeCompare((b.annee||'')+(b.matiere||''))).map(n=>{
               const nc=n.note===null||n.note===undefined?'':'color:'+(String(n.note).toUpperCase()==='NE'?'#4338ca':((g.diplome==='DCG'||g.diplome==='DSCG')?(n.note>=10?'#15803d':n.note>=6?'#d97706':'#dc2626'):'#1A4E8A'));
               let row=`<tr style="background:transparent"><td></td><td style="font-size:0.72rem;color:#9ca3af;white-space:nowrap">${n.annee||'—'}</td><td>${n.matiere}</td><td style="font-weight:700;${nc}">${fmtNote(n.note)}</td><td>${n.coeff??'—'}</td><td>${n.points!==null?n.points.toFixed(2):'—'}</td><td>${badgeRes(n.resultat)}</td><td>${canWrite('notes')?`<button onclick="deleteNote('${n.id}')" class="btn-danger" title="Supprimer">🗑</button>`:''}</td></tr>`;
@@ -1782,6 +2314,7 @@ function renderNotesGrouped(){
       </td>
     </tr>`;
   });
+  window._notesGroupsByKey = groupsByKey;
   tbody.innerHTML = html;
   renderMatiereStats();
   computeAndShowStats(groups);
@@ -1815,7 +2348,8 @@ async function saveRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, btn) 
   if (btn && typeof btn === 'object') { btn.textContent = '…'; btn.disabled = true; }
   const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: parseFloat(val) }] });
   if (!r.success) { toast('Erreur : ' + r.message, false); if(btn&&typeof btn==='object'){btn.textContent='💾';btn.disabled=false;} return; }
-  toast('Note rattrapage enregistrée ✓');
+  await _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe);
+  toast('Note rattrapage enregistrée — résultat définitif calculé ✓');
   loadNotes();
 }
 
@@ -1827,16 +2361,18 @@ async function editRattNote(evt, idEtu, nomPrenom, classe, annee, rattKey, curre
   if (isNaN(num) || num < 0 || num > 20) { toast('Note invalide (0-20).', false); return; }
   const r = await api('saveNotesBulk', { idEtu, nomPrenom, classe, diplome: 'BTS CG', annee, notes: [{ matiere: 'Ratt. '+rattKey, coeff: 0, note: num }] });
   if (!r.success) { toast('Erreur : ' + r.message, false); return; }
-  toast('Note rattrapage mise à jour ✓');
+  await _autoSaveBTSPostRatt(idEtu, nomPrenom, annee, classe);
+  toast('Note rattrapage mise à jour — résultat définitif recalculé ✓');
   loadNotes();
 }
 
 function computeAndShowStats(groups){
   const panel = document.getElementById('statsPanel');
   if (!groups || !groups.length){ panel.classList.add('hidden'); return; }
+  window._lastStatsGroups = groups; // pour re-filtrer par statut sans tout recharger
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qAnnee   = document.getElementById('filterAnnee').value||'';
-  const qClasse  = document.getElementById('filterClasse').value||'';
+  const qClasses = getSelectedClasses();
   const qMatRaw  = document.getElementById('filterMatiere').value||'';
   const qMat     = matKey(qMatRaw);
   const isDCGstats = qDiplome==='DCG'||qDiplome==='DSCG';
@@ -1849,10 +2385,11 @@ function computeAndShowStats(groups){
   const nbUEObl = qDiplome==='DCG'?13:6;
 
   const students = groups.map(g=>{
-    const {totalPts,moy,moyPro,diff,ueOk,ueElim,ueRecu,ueTotal}=calcGroupStats(g);
+    const {totalPts,moy,moyPro,diff,diffAdj,ueOk,ueElim,ueRecu,ueTotal}=calcGroupStats(g);
     let resultatAuto = g.resultat||'En cours';
     let resultatManuel = '';
     let noteUE = null;
+    let postRattResult = null;
 
     if (isUEfilter){
       const noteObj = g.notes.find(n=>matKey(n.matiere)===qMat);
@@ -1871,132 +2408,230 @@ function computeAndShowStats(groups){
     } else if (isBTSstats){
       resultatAuto   = calcBTSResultatAuto(moy, moyPro);
       resultatManuel = g.resultat||'';
+      if (resultatAuto === 'Rattrapage') {
+        const prComp = calcBTSResultatPostRatt(g);
+        if (prComp) postRattResult = prComp;
+        else if (resultatManuel && resultatManuel !== 'Rattrapage') postRattResult = resultatManuel === 'Admis' ? 'Obtenu' : resultatManuel;
+      }
     } else if (isDCGstats){
-      // DCG auto : Admis si moy ≥ 10 ET aucune UE éliminatoire (note < 6), sinon Recalé
-      if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
+      // DCG : un résultat fixé manuellement (ex: décision de jury sur un dossier pas encore
+      // complet) prévaut toujours sur le calcul auto — sinon Admis si moy ≥ 10 et aucune UE
+      // éliminatoire (note < 6), sinon Recalé.
+      if (g.resultat) { resultatAuto = g.resultat; resultatManuel = g.resultat; }
+      else if (moy !== null) resultatAuto = (ueElim === 0 && moy >= 10) ? 'Admis' : 'Recalé';
       else              resultatAuto = 'En cours';
     }
 
     // BTS: Admis/Recalé → statut_final = statut_auto (identiques) ; Rattrapage → statut_final vide (en attente des rattrapages)
-    // Pour DCG : résultat = auto (100 % calculé depuis les notes)
+    // Pour DCG : résultat = manuel si fixé, sinon calculé depuis les notes
     const resultat = isBTSstats
       ? (resultatAuto === 'Rattrapage' ? (resultatManuel || '') : resultatAuto)
       : resultatAuto;
 
     return {nomPrenom:g.nomPrenom,classe:g.classe,idEtu:g.idEtu,diplome:g.diplome,
             lastAnnee:g.lastAnnee||'',
-            totalPts,moy,moyPro,diff,ueOk,ueElim,ueRecu,ueTotal,
-            resultat,resultatAuto,resultatManuel,noteUE};
+            totalPts,moy,moyPro,diff,diffAdj,ueOk,ueElim,ueRecu,ueTotal,
+            allMandatoryUE: hasAllMandatoryUE(g),
+            resultat,resultatAuto,resultatManuel,noteUE,postRattResult};
   }).sort((a,b)=>{
     if (isUEfilter){
       const va = a.noteUE==='NE'?10:(a.noteUE??-1);
       const vb = b.noteUE==='NE'?10:(b.noteUE??-1);
       return vb-va;
     }
-    return (b.moy??-1)-(a.moy??-1);
+    if (statsSortBy==='classe') return statsSortDir*((a.classe||'').localeCompare(b.classe||''));
+    if (statsSortBy==='nom')    return statsSortDir*((a.nomPrenom||'').localeCompare(b.nomPrenom||''));
+    return statsSortDir*((a.moy??-1)-(b.moy??-1)); // 'moy' : statsSortDir=-1 par défaut => plus grand d'abord
   });
 
   // Pour DCG sans filtre UE + avec année : ne garder que les étudiants ayant toutes leurs UE
-  // ET dont la dernière saisie correspond à l'année sélectionnée (= promo)
-  const statsStudents = (isDCGstats && qAnnee && !isUEfilter)
-    ? students.filter(s => s.ueTotal >= nbUEObl && s.lastAnnee === qAnnee)
-    : students;
+  // (ou dont le résultat a été fixé manuellement — décision de jury) ET dont la dernière saisie
+  // correspond à l'année sélectionnée (= promo)
+  // Avec un filtre UE (matière sélectionnée) : exclure les dispensés (NE) — ils n'ont pas
+  // vraiment passé cette matière, les inclure fausserait les stats de cette matière.
+  const statsStudents = isUEfilter
+    ? students.filter(s => s.noteUE !== 'NE')
+    : (isDCGstats && qAnnee)
+      ? students.filter(s => (s.allMandatoryUE || s.resultatManuel) && s.lastAnnee === qAnnee)
+      : students;
 
-  const total  = statsStudents.length;
+  // Exclusions manuelles (case par case, avec commentaire) : un étudiant coché reste visible
+  // dans le tableau/classement, mais sort du calcul du taux de réussite/échec ci-dessous.
+  const exclKey = s => statsExclusionKey(s.idEtu, s.diplome, qAnnee);
+  statsStudents.forEach(s=>{ const ex=statsExclusions[exclKey(s)]; s.exclu=!!ex?.exclu; s.exclComment=ex?.commentaire||''; });
+  const kpiStudents = statsStudents.filter(s=>!s.exclu);
+
+  const total  = kpiStudents.length;
   // BTS : rattrapage = statut AUTO (tous ceux qui sont passés en ratt, indep. du résultat final)
   //       admis/recalé = statut DÉFINITIF (auto ou post-ratt)
   const admis  = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Admis' || s.resultatManuel==='Admis').length
-    : statsStudents.filter(s=>s.resultat==='Admis').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)).length
+    : kpiStudents.filter(s=>s.resultat==='Admis'||s.resultat==='Obtenu').length;
   const ratt   = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Rattrapage').length
-    : statsStudents.filter(s=>s.resultat==='Rattrapage').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Rattrapage').length
+    : kpiStudents.filter(s=>s.resultat==='Rattrapage').length;
   const recale = isBTSstats
-    ? statsStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé').length
-    : statsStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
-  const enCours= statsStudents.filter(s=>s.resultatAuto==='En cours').length;
+    ? kpiStudents.filter(s=>s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé').length
+    : kpiStudents.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.resultat)).length;
+  const enCours= kpiStudents.filter(s=>s.resultatAuto==='En cours').length;
 
   const noteVals = isUEfilter
-    ? statsStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
-    : statsStudents.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+    ? kpiStudents.map(s=>s.noteUE==='NE'?null:s.noteUE).filter(v=>v!==null&&!isNaN(v))
+    : kpiStudents.map(s=>s.moy).filter(v=>v!==null&&v!==undefined&&!isNaN(v));
   const moyGlobal= noteVals.length?(noteVals.reduce((a,b)=>a+b,0)/noteVals.length).toFixed(2):'—';
   const noteMax= noteVals.length?Math.max(...noteVals).toFixed(2):'—';
   const noteMin= noteVals.length?Math.min(...noteVals).toFixed(2):'—';
   // Taux réussite BTS = admis définitifs / total (y compris post-ratt admis)
   const taux   = total?Math.round(admis/total*100):0;
 
-  const titleParts=[qDiplome,qAnnee,qClasse].filter(Boolean);
+  const titleParts=[qDiplome,qAnnee,...qClasses].filter(Boolean);
   const titleBase = titleParts.join(' · ')||'tous filtres';
   document.getElementById('statsPanelTitle').textContent =
     'Statistiques — ' + titleBase + (isUEfilter ? ' · '+matLabel : '');
 
+  const nbExclus = statsStudents.length - kpiStudents.length;
   document.getElementById('statsKpis').innerHTML=[
     ['Inscrits',total,'#1A4E8A'],['Admis',admis,'#15803d'],
     ['Rattrapage',ratt,'#a16207'],['Non admis / Éliminés',recale,'#dc2626'],
+    ...(nbExclus?[['Exclus (hors stats)',nbExclus,'#9333ea']]:[]),
   ].map(([l,v,c])=>`<div class="kpi-card"><p class="text-3xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   document.getElementById('statsKpis2').innerHTML=[
     ['Moyenne',moyGlobal],['Taux réussite',taux+'%'],['Note max',noteMax],['Note min',noteMin],['En cours',enCours],
   ].map(([l,v])=>`<div class="kpi-card"><p class="text-2xl font-black text-gray-700">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
 
+  // Filtre "Statut" appliqué au tableau (classement) — les KPI ci-dessus restent calculés sur
+  // l'ensemble de statsStudents, non affectés par ce filtre d'affichage.
+  document.getElementById('statsStatutFilterWrap').classList.toggle('hidden', isUEfilter);
+  const qStatut = isUEfilter ? '' : (document.getElementById('statsStatutFilter').value||'');
+  function statutOf(s){
+    if (isBTSstats) {
+      if (s.resultatAuto==='Admis' || ['Admis','Obtenu'].includes(s.resultatManuel) || ['Admis','Obtenu'].includes(s.postRattResult)) return 'Admis';
+      if (s.resultatAuto==='Rattrapage') return 'Rattrapage';
+      if (s.resultatAuto==='Recalé' || s.resultatManuel==='Recalé' || s.postRattResult==='Recalé') return 'Recalé';
+      return 'En cours';
+    }
+    if (s.resultat==='Admis'||s.resultat==='Obtenu') return 'Admis';
+    if (s.resultat==='Rattrapage') return 'Rattrapage';
+    if (['Recalé','Non admis','Éliminé'].includes(s.resultat)) return 'Recalé';
+    return 'En cours';
+  }
+  // Par défaut (qStatut==='', hors filtre UE) : les Recalés ne comptent pas dans le rang (même
+  // avec une très bonne moyenne, une note éliminatoire exclut du classement) — ils restent
+  // visibles mais rejetés en bas de tableau, sans numéro de rang. Avec un filtre explicite
+  // (Admis/Rattrapage/Recalé/Tous), le classement redevient simple et séquentiel sur le sous-ensemble choisi.
+  let displayStudents;
+  if (isUEfilter || qStatut) {
+    const filtered = (qStatut==='__all__' || isUEfilter) ? statsStudents : statsStudents.filter(s=>statutOf(s)===qStatut);
+    displayStudents = filtered.map((s,i)=>Object.assign({}, s, { rang: i+1, zone:'classement' }));
+  } else {
+    // Trois zones : classement (numéroté), Recalés hors classement, puis — parmi eux — ceux en
+    // plus exclus manuellement des stats (case à cocher), regroupés à part tout en bas.
+    const nonRecale     = statsStudents.filter(s=>statutOf(s)!=='Recalé');
+    const recaleVisible = statsStudents.filter(s=>statutOf(s)==='Recalé' && !s.exclu);
+    const recaleExclu   = statsStudents.filter(s=>statutOf(s)==='Recalé' && s.exclu);
+    displayStudents = [
+      ...nonRecale.map((s,i)=>Object.assign({}, s, { rang: i+1, zone:'classement' })),
+      ...recaleVisible.map(s=>Object.assign({}, s, { rang: null, zone:'recale' })),
+      ...recaleExclu.map(s=>Object.assign({}, s, { rang: null, zone:'recaleExclu' })),
+    ];
+  }
+
   const hasProCol = isBTSstats && statsStudents.some(s=>s.moyPro!==null&&s.moyPro!==undefined);
+  const exclHead = '<th title="Exclut cet étudiant du taux de réussite/échec, sans toucher à ses notes">Exclure</th><th>Commentaire</th>';
+  const sortIcon = c => statsSortBy===c ? (statsSortDir>0?'▲':'▼') : '';
+  const thClasse = `<th onclick="sortStatsBy('classe')" style="cursor:pointer;user-select:none">Classe <span>${sortIcon('classe')}</span></th>`;
+  const thMoy = label => `<th onclick="sortStatsBy('moy')" style="cursor:pointer;user-select:none" title="Classement basé sur cette moyenne">${label} <span>${sortIcon('moy')}</span></th>`;
   if (isUEfilter){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th><th></th>`;
+      `<th>Rang</th><th>Étudiant</th><th>Classe</th><th>${matLabel}</th><th>Résultat UE</th>${exclHead}<th></th>`;
   } else if (isBTSstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th>'+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moy. Générale')+(hasProCol?'<th>Moy. Pro</th>':'')+'<th>Statut Auto</th><th>Statut Définitif</th>'+exclHead+'<th></th>';
   } else if (isDCGstats){
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th>Résultat</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moyenne')+'<th>Validées ✔</th><th>Reçues ≈</th><th>Éliminées ✘</th><th>Différentiel</th><th title="Exclut les UE éliminatoires (<6), qui seront de toute façon repassées">Différentiel ajusté</th><th>Résultat</th>'+exclHead+'<th></th>';
   } else {
     document.querySelector('#statsPanel table thead tr').innerHTML=
-      '<th>Rang</th><th>Étudiant</th><th>Classe</th><th>Moy. Générale ↑</th><th>Résultat</th><th></th>';
+      '<th>Rang</th><th>Étudiant</th>'+thClasse+thMoy('Moy. Générale')+'<th>Résultat</th>'+exclHead+'<th></th>';
   }
 
   const latestAnnee=qAnnee||'';
-  document.getElementById('statsTbody').innerHTML=statsStudents.map((x,i)=>{
+  const showSeparator = !isUEfilter && !qStatut; // vue par défaut = classement + blocs Recalés séparés
+  let lastZone = 'classement';
+  const rowsHtml = [];
+  displayStudents.forEach(x=>{
+    if (showSeparator && x.zone!==lastZone) {
+      if (x.zone==='recale') {
+        rowsHtml.push('<tr><td colspan="14" style="background:#fef2f2;color:#dc2626;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés (hors classement) —</td></tr>');
+      } else if (x.zone==='recaleExclu') {
+        rowsHtml.push('<tr><td colspan="14" style="background:#faf5ff;color:#9333ea;font-weight:900;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 1rem;text-align:center">— Recalés hors stats (exclusion manuelle) —</td></tr>');
+      }
+      lastZone = x.zone;
+    }
+    const rangCell = (x.rang!==null && x.rang!==undefined)
+      ? `<td style="font-weight:900;color:#1A4E8A">#${x.rang}</td>`
+      : `<td style="font-weight:900;color:#dc2626;font-size:0.7rem">—</td>`;
     const diffHtml=x.diff===null?'—':x.diff>=0?`<span style="color:#15803d;font-weight:700">+${x.diff}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diff}</span>`;
+    const diffAdjHtml=x.diffAdj===null?'—':x.diffAdj>=0?`<span style="color:#15803d;font-weight:700">+${x.diffAdj}</span>`:`<span style="color:#dc2626;font-weight:700">${x.diffAdj}</span>`;
     const safeNom=(x.nomPrenom||'').replace(/'/g,"\\'");
     // Bouton édition : BTS uniquement pour Rattrapage (Admis/Recalé sont déterminés automatiquement)
     const canEdit = canWrite('notes') && (!isBTSstats || x.resultatAuto==='Rattrapage');
     const editBtn = canEdit ? `<button onclick="openResultatModal('${x.idEtu}','${safeNom}','${latestAnnee}','${x.diplome}','${x.resultatAuto||''}','${(x.classe||'').replace(/'/g,"\\'")}')" class="btn-ghost py-1 text-xs">✏</button>` : '';
+    // Exclusion manuelle des stats de réussite/échec, avec commentaire libre (persisté par étudiant/diplôme/année)
+    const exclArgs = `'${(x.idEtu||'').replace(/'/g,"\\'")}','${(x.diplome||'').replace(/'/g,"\\'")}','${qAnnee.replace(/'/g,"\\'")}'`;
+    const canExcl = canWrite('notes');
+    const exclCell = `<td style="text-align:center">${canExcl
+      ? `<input type="checkbox" style="width:18px;height:18px;cursor:pointer" ${x.exclu?'checked':''} onclick="toggleStatExclusion(${exclArgs},this.checked)">`
+      : (x.exclu?'✓':'')}</td>`;
+    const commentCell = `<td>${canExcl
+      ? `<input type="text" value="${(x.exclComment||'').replace(/"/g,'&quot;')}" placeholder="Motif…" style="font-size:0.72rem;padding:0.3rem 0.5rem;min-width:120px" onchange="saveStatComment(${exclArgs},this.value)">`
+      : `<span style="font-size:0.75rem;color:#6b7280">${x.exclComment||''}</span>`}</td>`;
+    const exclTds = exclCell + commentCell;
+    const rowStyle = x.exclu ? ' style="opacity:0.55"' : '';
     if (isUEfilter){
       const rawUE = x.noteUE;
       const dispUE = rawUE==='NE'?'NE':rawUE===null?'—':rawUE.toFixed(2)+'/20';
       const colUE = rawUE==='NE'?'#4338ca':rawUE===null?'#6b7280':(rawUE>=10?'#15803d':rawUE>=6?'#d97706':'#dc2626');
-      return `<tr>
-        <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+      rowsHtml.push(`<tr${rowStyle}>
+        ${rangCell}
         <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
         <td style="font-weight:700;color:${colUE}">${dispUE}</td>
-        <td>${badgeRes(x.resultatAuto)}</td><td>${editBtn}</td></tr>`;
+        <td>${badgeRes(x.resultatAuto)}</td>${exclTds}<td>${editBtn}</td></tr>`);
+      return;
     }
     if (isBTSstats){
-      // Colonne Définitif : auto pour Admis/Recalé ; valeur saisie pour Rattrapage
-      const defCell = x.resultatAuto==='Rattrapage'
-        ? (x.resultatManuel ? badgeRes(x.resultatManuel) : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>')
-        : badgeRes(x.resultatAuto);
-      return `<tr>
-        <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+      const provDisplay = x.resultatAuto === 'Admis' ? 'Obtenu' : x.resultatAuto;
+      const defDisplay  = x.resultatAuto === 'Rattrapage'
+        ? (x.postRattResult || (x.resultatManuel && x.resultatManuel !== 'Rattrapage' ? (x.resultatManuel === 'Admis' ? 'Obtenu' : x.resultatManuel) : null))
+        : (x.resultatAuto === 'Admis' ? 'Obtenu' : x.resultatAuto);
+      const defCell = defDisplay
+        ? badgeRes(defDisplay)
+        : '<span style="color:#9ca3af;font-size:0.75rem;font-style:italic">En attente rattrapages</span>';
+      rowsHtml.push(`<tr${rowStyle}>
+        ${rangCell}
         <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
         <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
         ${hasProCol?`<td style="color:#7c3aed;font-weight:700">${x.moyPro!==null?x.moyPro.toFixed(2)+'/20':'—'}</td>`:''}
-        <td>${badgeRes(x.resultatAuto)}</td>
+        <td>${badgeRes(provDisplay)}</td>
         <td>${defCell}</td>
-        <td>${editBtn}</td></tr>`;
+        ${exclTds}<td>${editBtn}</td></tr>`);
+      return;
     }
-    if (isDCGstats) return `<tr>
-      <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+    if (isDCGstats){ rowsHtml.push(`<tr${rowStyle}>
+      ${rangCell}
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
+      <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.ueOk}/${nbUEObl}</td>
       <td style="color:#d97706;font-weight:700">${x.ueRecu||0}≈</td>
       <td style="color:#dc2626;font-weight:700">${x.ueElim||0}✘</td>
-      <td>${diffHtml}</td><td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
-    return `<tr>
-      <td style="font-weight:900;color:#1A4E8A">#${i+1}</td>
+      <td>${diffHtml}</td><td>${diffAdjHtml}</td><td>${badgeRes(x.resultat)}</td>${exclTds}<td>${editBtn}</td></tr>`); return; }
+    rowsHtml.push(`<tr${rowStyle}>
+      ${rangCell}
       <td style="font-weight:600">${x.nomPrenom}</td><td>${x.classe}</td>
       <td style="font-weight:700;color:#1A4E8A">${x.moy!==null?x.moy.toFixed(2)+'/20':'—'}</td>
-      <td>${badgeRes(x.resultat)}</td><td>${editBtn}</td></tr>`;
-  }).join('');
+      <td>${badgeRes(x.resultat)}</td>${exclTds}<td>${editBtn}</td></tr>`);
+  });
+  document.getElementById('statsTbody').innerHTML = rowsHtml.join('');
   panel.classList.remove('hidden');
 }
 
@@ -2005,23 +2640,59 @@ function renderMatiereStats(){
   const qDiplome = document.getElementById('filterDiplome').value||'';
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
+  const qClasses = getSelectedClasses();
   const panel    = document.getElementById('matiereStatsPanel');
   if (!panel) return;
   if (!qMat || !allNotes.length){ panel.classList.add('hidden'); return; }
-  const isDCGview = qDiplome==='DCG'||qDiplome==='DSCG';
+  // IMPORTANT : on ne filtre PAS par année ici, avant la détection des doublons — un étudiant
+  // qui a la même note à la même UE en 2023-2024 ET en 2025-2026 (classe différente : "DCG" vs
+  // "DCG3A") doit être détecté comme doublon AVANT de savoir sur quelle année on l'affichera.
+  // Filtrer par année trop tôt masquerait le doublon (une seule année visible à la fois) et le
+  // ferait apparaître à tort comme une saisie normale sur l'année la plus récente.
   let notes = allNotes.filter(n=>matKey(n.matiere)===qMat);
-  if (qAnnee) notes = notes.filter(n=>n.annee===qAnnee);
   if (qEtu) notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (!notes.length){ panel.classList.add('hidden'); return; }
-  // Une note par étudiant (filtre exact sur l'année — pas de cumul)
-  const byEtu = {};
+
+  // Regroupe TOUTES les saisies de chaque étudiant pour cette UE (toutes périodes confondues) :
+  // exclut les dispensés (NE) ; en cas de doublon (même note à des années différentes), ne retient
+  // QUE l'année la plus ancienne (cf. auditDoublonsNotesDCG()/nettoyerDoublonsNotesDCG() pour
+  // nettoyer la donnée en base) ; sinon retient la saisie la plus récente (cas normal/retake).
+  const byEtuAll = {};
   notes.forEach(n=>{
     const k = n.idEtu||n.nomPrenom;
-    if (!byEtu[k] || (n.annee||'')>(byEtu[k].annee||'')) byEtu[k]=n;
+    (byEtuAll[k]=byEtuAll[k]||[]).push(n);
   });
-  const etuNotes = Object.values(byEtu);
+  const canoniques = []; // une entrée "représentative" par étudiant pour cette UE
+  let neCount = 0;
+  Object.keys(byEtuAll).forEach(k=>{
+    const list = byEtuAll[k];
+    const numeriques = list.filter(n=>n.note!==null && n.note!==undefined && n.note!=='' && String(n.note).toUpperCase()!=='NE' && !isNaN(parseFloat(n.note)));
+    if (!numeriques.length) { if (list.some(n=>String(n.note).toUpperCase()==='NE')) neCount++; return; }
+    const valeurs = {};
+    numeriques.forEach(n=>{ const v=parseFloat(n.note).toFixed(2); (valeurs[v]=valeurs[v]||[]).push(n); });
+    // Groupe de doublon = même valeur exacte sur au moins 2 années différentes
+    const groupeDoublon = Object.values(valeurs).find(arr=>{
+      const annees = arr.map(n=>n.annee||'').filter((a,i,self)=>self.indexOf(a)===i);
+      return arr.length>1 && annees.length>1;
+    });
+    if (groupeDoublon) {
+      const oldest = groupeDoublon.reduce((best,n)=> (n.annee||'')<(best.annee||'') ? n : best, groupeDoublon[0]);
+      canoniques.push(Object.assign({}, oldest, { estDoublonNettoye:true }));
+      return;
+    }
+    const latest = numeriques.reduce((best,n)=> (n.annee||'')>(best.annee||'') ? n : best, numeriques[0]);
+    canoniques.push(latest);
+  });
+
+  // Filtres appliqués APRÈS détermination de l'entrée représentative : l'année (si sélectionnée)
+  // et la classe se jugent sur cette entrée canonique, pas sur les lignes brutes.
+  let etuNotes = canoniques;
+  if (qAnnee)          etuNotes = etuNotes.filter(n=>n.annee===qAnnee);
+  if (qClasses.length) etuNotes = etuNotes.filter(n=>qClasses.includes(n.classe));
+  const doublonCount = canoniques.filter(n=>n.estDoublonNettoye && (!qAnnee || n.annee===qAnnee) && (!qClasses.length || qClasses.includes(n.classe))).length;
+
+  if (!etuNotes.length){ panel.classList.add('hidden'); return; }
   const numNotes = etuNotes.map(n=>parseFloat(n.note)).filter(v=>!isNaN(v));
-  const neCount  = etuNotes.filter(n=>String(n.note).toUpperCase()==='NE').length;
   const nbCandidats = etuNotes.length;
   const nbReussite  = numNotes.filter(v=>v>=10).length;
   const moyenne = numNotes.length ? (numNotes.reduce((a,b)=>a+b,0)/numNotes.length).toFixed(2) : '—';
@@ -2036,14 +2707,15 @@ function renderMatiereStats(){
     [taux,'Taux réussite','#374151'],
     [moyenne+'/20','Moyenne','#374151'],
     [noteMax+' / '+noteMin,'Max / Min','#6b7280'],
-    ...(neCount?[[neCount,'Dispensés NE','#4338ca']]:[]),
+    ...(neCount?[[neCount,'Dispensés NE (exclus)','#4338ca']]:[]),
+    ...(doublonCount?[[doublonCount,'Doublons (année la + ancienne retenue)','#d97706']]:[]),
   ].map(([v,l,c])=>`<div class="kpi-card"><p class="text-xl font-black" style="color:${c}">${v}</p><p class="text-xs text-gray-400 font-bold uppercase mt-1">${l}</p></div>`).join('');
   const sorted = etuNotes.slice().sort((a,b)=>(parseFloat(b.note)||0)-(parseFloat(a.note)||0));
   document.getElementById('matiereStatsTbody').innerHTML = sorted.map((n,i)=>{
-    const isNE=String(n.note).toUpperCase()==='NE';
     const num=parseFloat(n.note);
-    const c=isNE?'#4338ca':(isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626'));
-    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNE?'NE':isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
+    const c=isNaN(num)?'#6b7280':(num>=10?'#15803d':num>=6?'#d97706':'#dc2626');
+    const dupBadge = n.estDoublonNettoye ? ' <span title="Doublon détecté : note identique sur une année plus récente, ignorée" style="font-size:0.6rem;background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:9999px;font-weight:700">DOUBLON</span>' : '';
+    return `<tr><td style="color:#9ca3af;font-weight:700">${i+1}</td><td style="font-weight:600">${n.nomPrenom}${dupBadge}</td><td>${n.classe||'—'}</td><td style="font-size:0.75rem;color:#9ca3af">${n.annee||'—'}</td><td style="font-weight:700;color:${c}">${isNaN(num)?'—':num.toFixed(2)+'/20'}</td><td>${badgeRes(n.resultat)}</td></tr>`;
   }).join('');
   panel.classList.remove('hidden');
 }
@@ -2058,60 +2730,148 @@ function toggleGroup(key){
   if (ico) ico.textContent = open?'▶':'▼';
 }
 
-function exportNotesCSV(){
+// Historique des saisies multi-années pour une même UE (DCG/DSCG), repliée par défaut
+function toggleUEHistory(id){
+  const esc = CSS.escape(id);
+  const row = document.getElementById(esc);
+  const ico = document.getElementById('icon_'+esc);
+  if (!row) return;
+  const open = row.style.display!=='none';
+  row.style.display = open?'none':'table-row';
+  if (ico) ico.textContent = open?'▸':'▾';
+}
+
+// Correction "après la saisie" : la classe est utilisée pour reconnaître le diplôme (DCG/BTS/DSCG)
+// et calculer moyenne/différentiel — une classe mal renseignée (ex: import ancien, faute de frappe)
+// peut donc fausser silencieusement les stats. Ce flux permet de la rectifier sans ressaisir les notes.
+function openClasseEditModal(gkey){
+  const g = (window._notesGroupsByKey||{})[gkey];
+  if (!g) return;
+  document.getElementById('classeEditIdEtu').value = g.idEtu;
+  document.getElementById('classeEditNom').textContent = g.nomPrenom + ' — ' + (g.diplome||'');
+  const classeByAnnee = {};
+  g.notes.forEach(n=>{ if (n.annee) classeByAnnee[n.annee] = n.classe; });
+  const anneesTri = g.annees.slice().sort().reverse();
+  const selA = document.getElementById('classeEditAnnee');
+  selA.innerHTML = anneesTri.map(a=>`<option value="${a}">${a}</option>`).join('');
+  const valInp = document.getElementById('classeEditValue');
+  selA.onchange = ()=>{ valInp.value = classeByAnnee[selA.value] || g.classe || ''; };
+  selA.value = anneesTri[0]||'';
+  valInp.value = classeByAnnee[selA.value] || g.classe || '';
+  document.getElementById('classeEditModal').classList.remove('hidden');
+}
+function closeClasseEditModal(){ document.getElementById('classeEditModal').classList.add('hidden'); }
+async function saveClasseEdit(){
+  const idEtu = document.getElementById('classeEditIdEtu').value;
+  const annee = document.getElementById('classeEditAnnee').value;
+  const classe = document.getElementById('classeEditValue').value.trim();
+  if (!classe){ toast('Classe requise.',false); return; }
+  const r = await api('updateNotesClasse', { idEtu, annee, classe });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  toast(`Classe mise à jour sur ${r.nb} note(s) ✓`);
+  closeClasseEditModal();
+  loadNotes();
+}
+
+// Consultation de tous les relevés uploadés pour un étudiant (aucun n'est jamais écrasé à l'upload,
+// cf. handleUploadReleveNote côté serveur qui ajoute toujours une nouvelle ligne/fichier)
+let _relevesModalIdEtu = null, _relevesModalNom = '';
+function openRelevesModal(idEtu, nomPrenom){
+  _relevesModalIdEtu = idEtu; _relevesModalNom = nomPrenom;
+  renderRelevesModalList();
+  document.getElementById('relevesModal').classList.remove('hidden');
+}
+function renderRelevesModalList(){
+  const relev = allReleves.filter(r=>r.idEtu===_relevesModalIdEtu).sort((a,b)=>b.dateUpload.localeCompare(a.dateUpload));
+  document.getElementById('relevesModalSub').textContent = _relevesModalNom + ' — ' + relev.length + ' relevé(s)';
+  document.getElementById('relevesModalList').innerHTML = relev.map(r=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #f1f5f9;border-radius:0.75rem;padding:0.6rem 0.9rem">
+      <a href="${r.fileUrl}" target="_blank" style="text-decoration:none;flex:1;min-width:0">
+        <span style="font-weight:700;color:#1A4E8A;font-size:0.85rem">${r.annee||'—'}</span>
+        <span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem">${r.fileName}</span>
+      </a>
+      <span style="font-size:0.7rem;color:#9ca3af;white-space:nowrap;margin-left:0.75rem">${r.dateUpload}</span>
+      ${canWrite('notes')?`<button onclick="deleteReleve('${r.id}')" class="btn-danger" style="margin-left:0.5rem" title="Supprimer (fichier Drive inclus)">🗑</button>`:''}
+    </div>`).join('');
+}
+async function deleteReleve(id){
+  if (!confirm('Supprimer ce relevé ? Le fichier sera aussi supprimé du Drive (corbeille).')) return;
+  const r = await api('deleteReleveNote', { id });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  allReleves = allReleves.filter(x=>x.id!==id);
+  toast('Relevé supprimé ✓');
+  renderRelevesModalList();
+  renderNotesGrouped();
+}
+function closeRelevesModal(){ document.getElementById('relevesModal').classList.add('hidden'); }
+
+// Tri du tableau groupé Notes : 'nom'/'classe' (alpha), 'moy'/'diff'/'diffAdj' (numérique)
+function sortNotesBy(col){
+  if (notesSortBy===col) notesSortDir = -notesSortDir;
+  else { notesSortBy = col; notesSortDir = (col==='diff'||col==='diffAdj'||col==='moy') ? -1 : 1; } // valeurs numériques : plus grand d'abord par défaut
+  renderNotesGrouped();
+}
+
+// Tri du panneau Statistiques promotion (DCG, BTS, générique) : 'moy' (numérique) ou 'classe'/'nom' (alpha)
+function sortStatsBy(col){
+  if (statsSortBy===col) statsSortDir = -statsSortDir;
+  else { statsSortBy = col; statsSortDir = col==='moy' ? -1 : 1; }
+  computeAndShowStats(window._lastStatsGroups||[]);
+}
+
+// Prépare les données communes aux deux exports (CSV et Excel mis en forme) : mêmes filtres,
+// mêmes calculs — seule la mise en forme de sortie diffère entre les deux fonctions qui l'appellent.
+function _prepareNotesExportData(){
   const qEtu     = (document.getElementById('filterEtu').value||'').toLowerCase();
   const qMat     = matKey(document.getElementById('filterMatiere').value);
   const qAnnee   = document.getElementById('filterAnnee').value||'';
   const qDiplome = document.getElementById('filterDiplome').value||'';
-  const qClasse  = document.getElementById('filterClasse').value||'';
+  const qClasses = getSelectedClasses();
   const isDCGview= qDiplome==='DCG'||qDiplome==='DSCG';
   let notes = allNotes;
   if (qMat)  notes = notes.filter(n=>matKey(n.matiere)===qMat);
   if (qEtu)  notes = notes.filter(n=>(n.nomPrenom||'').toLowerCase().includes(qEtu));
   if (qAnnee && isDCGview) notes = notes.filter(n=>(n.annee||'')<=qAnnee);
-  let groups = getStudentGroups(notes);
-  if (qAnnee && !isDCGview) groups = groups.filter(g=>g.annees.includes(qAnnee));
-  if (qClasse) groups = groups.filter(g=>(g.classe||'')===qClasse);
-  if (!groups.length){ toast('Aucune donnée à exporter.',false); return; }
+  let groups = getStudentGroups(notes, qDiplome);
+  // Ne garder que les étudiants ayant une note pour l'année sélectionnée (DCG comme BTS)
+  if (qAnnee) groups = groups.filter(g=>g.annees.includes(qAnnee));
+  if (qClasses.length) groups = groups.filter(g=>qClasses.includes(g.classe));
+  if (!groups.length) return null;
 
-  // Liste ordonnée des UEs : référentiel si disponible, sinon données filtrées
+  // Liste ordonnée des UEs : référentiel si disponible, sinon données filtrées (tri numérique UE1<UE2<...<UE10)
   const diplome = groups[0]?.diplome || qDiplome;
   const refMats = (refMatieres[diplome]||[]).map(m=>m.matiere);
   const dataUEs = refMats.length ? refMats :
-    [...new Set(notes.map(n=>n.matiere))].sort((a,b)=>matKey(a).localeCompare(matKey(b)));
+    [...new Set(notes.map(n=>n.matiere))].sort(compareMatiereUE);
 
   const isBTSexport = diplome==='BTS CG';
   const isDCGexport = diplome==='DCG'||diplome==='DSCG';
-  const nbUEOblExp  = diplome==='DCG'?13:6;
 
   // Pré-calcul des statuts pour chaque étudiant
   const groupStats = groups.map(g=>{
-    const {totalPts, moy, moyPro, diff} = calcGroupStats(g);
+    const {totalPts, moy, moyPro, diff, diffAdj, ueElim} = calcGroupStats(g);
     let autoRes = '', defRes = '';
     if (isBTSexport){
       autoRes = calcBTSResultatAuto(moy, moyPro);
       defRes  = autoRes === 'Rattrapage' ? (g.resultat || '—') : autoRes;
     } else {
-      defRes  = g.resultat || '—';
+      // DCG : résultat manuel prioritaire (décision de jury), sinon calcul auto — mêmes règles
+      // que le panneau Statistiques promotion (computeAndShowStats), pour rester cohérent.
+      if (g.resultat) { defRes = g.resultat; autoRes = g.resultat; }
+      else if (moy !== null) { defRes = (ueElim===0 && moy>=10) ? 'Admis' : 'Recalé'; autoRes = defRes; }
+      else { defRes = 'En cours'; autoRes = 'En cours'; }
     }
-    return {g, totalPts, moy, moyPro, diff, autoRes, defRes, lastAnnee: g.lastAnnee||''};
-  });
+    return {g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes, lastAnnee: g.lastAnnee||''};
+  }).sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||''));
 
-  // Pour DCG sans filtre UE + avec année : restreindre aux étudiants avec toutes les UE + promo correspondante
+  // Pour DCG sans filtre UE + avec année : restreindre aux étudiants ayant TOUTES les UE
+  // obligatoires (1 à 13, l'UE 14 facultative ne compte pas) + promo correspondante
   const statsRows = (isDCGexport && qAnnee && !qMat)
-    ? groupStats.filter(s=>{
-        const {ueTotal} = calcGroupStats(s.g);
-        return ueTotal >= nbUEOblExp && s.lastAnnee === qAnnee;
-      })
+    ? groupStats.filter(s=> hasAllMandatoryUE(s.g) && s.lastAnnee === qAnnee)
     : groupStats;
 
-  // En-têtes
   const btsExtraCols = isBTSexport ? ['MOY. PRO','STATUT AUTO','STATUT DÉFINITIF'] : ['STATUT'];
-  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL'];
-  const rows = [header];
-
-  groupStats.sort((a,b)=>(a.g.nomPrenom||'').localeCompare(b.g.nomPrenom||'')).forEach(({g, totalPts, moy, moyPro, diff, autoRes, defRes})=>{
-    // Meilleure/dernière note par UE (DCG = cumulatif, BTS = année filtrée)
+  const noteByUEForGroup = g=>{
     const noteByUE = {};
     g.notes.forEach(n=>{
       const k = matKey(n.matiere);
@@ -2119,8 +2879,41 @@ function exportNotesCSV(){
       if (qAnnee && !isDCGview){ if (n.annee!==qAnnee) return; }
       if (!noteByUE[k]||(n.annee||'')>=(noteByUE[k].annee||'')) noteByUE[k]=n;
     });
+    return noteByUE;
+  };
+
+  const total  = statsRows.length;
+  const admis  = statsRows.filter(s=>s.defRes==='Admis').length;
+  const ratt   = statsRows.filter(s=>s.defRes==='Rattrapage'||s.defRes==='—'&&s.autoRes==='Rattrapage').length;
+  const recale = statsRows.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.defRes)).length;
+  const enCours= total-admis-ratt-recale;
+  const moyVals= statsRows.map(s=>s.moy).filter(v=>v!==null&&!isNaN(v));
+  const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
+  const tauxReussite = total?Math.round(admis/total*100):null;
+
+  return { qAnnee, qDiplome, qClasses, isDCGview, diplome, dataUEs, isBTSexport, groupStats, btsExtraCols,
+    noteByUEForGroup, stats: { total, admis, ratt, recale, enCours, moyGlobal, tauxReussite } };
+}
+
+function _notesExportFilename(d, ext){
+  const parts=[d.qDiplome, d.qAnnee, ...d.qClasses].filter(Boolean);
+  return 'notes_'+(parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_')||'export')+'_'+new Date().toISOString().slice(0,10)+'.'+ext;
+}
+
+function exportNotesCSV(){
+  const d = _prepareNotesExportData();
+  if (!d){ toast('Aucune donnée à exporter.',false); return; }
+  const { dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
+
+  const header = ['NOM','DIPLOME','ANNEE', ...dataUEs, 'TOTAL POINTS','MOYENNE GÉNÉRALE', ...btsExtraCols, 'DIFFÉRENTIEL', 'DIFFÉRENTIEL AJUSTÉ'];
+  const rows = [header];
+
+  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par matière"
+  groupStats.forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes})=>{
+    const noteByUE = noteByUEForGroup(g);
     const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
     const diffLabel  = diff===null?'—':(diff>=0?'+'+diff:String(diff));
+    const diffAdjLabel = diffAdj===null?'—':(diffAdj>=0?'+'+diffAdj:String(diffAdj));
     const extraVals = isBTSexport
       ? [moyPro!==null?moyPro.toFixed(2):'—', autoRes||'—', defRes||'—']
       : [defRes];
@@ -2129,32 +2922,252 @@ function exportNotesCSV(){
       ...dataUEs.map(ue=>{
         const n = noteByUE[matKey(ue)];
         if (!n || n.note===null || n.note===undefined || n.note==='') return '—';
-        return String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+        const raw = String(n.note).toUpperCase()==='NE' ? 'NE' : n.note;
+        const num = parseFloat(raw);
+        if (raw!=='NE' && !isNaN(num)) {
+          const k = matKey(ue);
+          if (!matiereAgg[k]) matiereAgg[k] = {sum:0, n:0};
+          matiereAgg[k].sum += num; matiereAgg[k].n++;
+        }
+        return raw;
       }),
       totalPts!==null ? totalPts.toFixed(2) : '—',
       moy!==null ? moy.toFixed(2) : '—',
       ...extraVals,
       diffLabel,
+      diffAdjLabel,
     ]);
   });
 
+  // Ligne de synthèse : moyenne de la promotion pour chaque matière/UE
+  rows.push([
+    'MOYENNE PAR MATIÈRE', '', '',
+    ...dataUEs.map(ue=>{ const agg = matiereAgg[matKey(ue)]; return agg && agg.n ? (agg.sum/agg.n).toFixed(2) : '—'; }),
+    '', '',
+    ...btsExtraCols.map(()=>''),
+    '', '',
+  ]);
+
   // Stats en bas — basées sur statut définitif
   rows.push([]); rows.push(['=== STATISTIQUES ===']);
-  const total  = statsRows.length;
-  const admis  = statsRows.filter(s=>s.defRes==='Admis').length;
-  const ratt   = statsRows.filter(s=>s.defRes==='Rattrapage'||s.defRes==='—'&&s.autoRes==='Rattrapage').length;
-  const recale = statsRows.filter(s=>['Recalé','Non admis','Éliminé'].includes(s.defRes)).length;
-  const enCours= total-admis-ratt-recale;
-  const moyVals= statsRows.map(s=>s.moy).filter(v=>v!==null&&!isNaN(v));
-  const moyGlobal=moyVals.length?(moyVals.reduce((a,b)=>a+b,0)/moyVals.length).toFixed(2):'—';
   rows.push(['Total','Admis','Rattrapage','Non admis / Éliminés','En cours','Moyenne','Taux réussite']);
-  rows.push([total,admis,ratt,recale,enCours,moyGlobal,total?Math.round(admis/total*100)+'%':'—']);
+  rows.push([stats.total, stats.admis, stats.ratt, stats.recale, stats.enCours, stats.moyGlobal, stats.tauxReussite!==null?stats.tauxReussite+'%':'—']);
 
-  const parts=[qDiplome,qAnnee,qClasse].filter(Boolean);
-  const filename='notes_'+(parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_')||'export')+'_'+new Date().toISOString().slice(0,10)+'.csv';
   const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download=filename; a.click();
+  a.download=_notesExportFilename(d,'csv'); a.click();
+}
+
+// Export "Excel mis en forme" : table HTML stylée (ouvrable directement dans Excel avec ses
+// couleurs), aux tons bleu/orange de l'application — pas un simple tableau brut.
+// Notes réellement "de cette année" pour un étudiant : exclut celles qui ne sont qu'un doublon
+// (même UE, même note exacte) d'une année STRICTEMENT antérieure — cf. audit doublons DCG.
+function _notesReellesPourAnnee(g, annee){
+  if (!annee) return [];
+  return g.notes.filter(n=>{
+    if (n.annee!==annee || n.note===null || n.note===undefined || n.note==='') return false;
+    if (String(n.note).toUpperCase()==='NE') return true; // rien à comparer, on garde
+    const num = parseFloat(n.note);
+    if (isNaN(num)) return false;
+    const k = matKey(n.matiere);
+    const estDoublonAncien = g.notes.some(o=> o!==n && matKey(o.matiere)===k && (o.annee||'')<annee &&
+      String(o.note).toUpperCase()!=='NE' && !isNaN(parseFloat(o.note)) && parseFloat(o.note).toFixed(2)===num.toFixed(2));
+    return !estDoublonAncien;
+  });
+}
+
+const _XL = {
+  esc: s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
+  s: (id, val, merge) => `<Cell ss:StyleID="${id}"${merge?` ss:MergeAcross="${merge}"`:''}><Data ss:Type="String">${_XL.esc(val)}</Data></Cell>`,
+  n: (id, val, merge) => `<Cell ss:StyleID="${id}"${merge?` ss:MergeAcross="${merge}"`:''}><Data ss:Type="Number">${val}</Data></Cell>`,
+  row: cells => `<Row>${cells}</Row>`,
+  noteStyle: num => isNaN(num) ? 'sGray' : (num>=10 ? 'sGreen' : (num>=6 ? 'sOrange' : 'sRed')),
+  badgeStyle: statut => {
+    const s = String(statut||'').toLowerCase();
+    if (s.includes('admis')||s.includes('obtenu')) return 'sBadgeAdmis';
+    if (s.includes('rattrapage')||s.includes('attente')) return 'sBadgeRatt';
+    if (s.includes('recalé')||s.includes('non admis')||s.includes('éliminé')) return 'sBadgeRecale';
+    return 'sBadgeCours';
+  },
+};
+
+const _XL_STYLES = `<Styles>
+ <Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="16" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>
+ <Style ss:ID="sSubtitle"><Font ss:Bold="1" ss:Size="11" ss:Color="#1A4E8A"/><Interior ss:Color="#EAF1FA" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sInfo"><Font ss:Italic="1" ss:Color="#6B7280"/></Style>
+ <Style ss:ID="sHeader"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:WrapText="1"/></Style>
+ <Style ss:ID="sRowA"><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sRowB"><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sNameA"><Font ss:Bold="1" ss:Color="#1A4E8A"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sNameB"><Font ss:Bold="1" ss:Color="#1A4E8A"/><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sCenterA"><Alignment ss:Horizontal="Center"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sCenterB"><Alignment ss:Horizontal="Center"/><Interior ss:Color="#F5F9FD" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sGreen"><Font ss:Bold="1" ss:Color="#15803D"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sOrange"><Font ss:Bold="1" ss:Color="#A16207"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sRed"><Font ss:Bold="1" ss:Color="#DC2626"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sGray"><Font ss:Color="#9CA3AF"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeAdmis"><Font ss:Bold="1" ss:Color="#15803D"/><Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeRatt"><Font ss:Bold="1" ss:Color="#A16207"/><Interior ss:Color="#FEF9C3" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeRecale"><Font ss:Bold="1" ss:Color="#DC2626"/><Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sBadgeCours"><Font ss:Bold="1" ss:Color="#1D4ED8"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sMoyLabel"><Font ss:Bold="1" ss:Color="#F26522"/><Interior ss:Color="#FFF1E6" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sMoyVal"><Font ss:Bold="1" ss:Color="#F26522"/><Interior ss:Color="#FFF1E6" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatsBand"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1A4E8A" ss:Pattern="Solid"/></Style>
+ <Style ss:ID="sStatLabel"><Font ss:Bold="1" ss:Size="9" ss:Color="#1A4E8A"/><Interior ss:Color="#EAF1FA" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValBlue"><Font ss:Bold="1" ss:Size="14" ss:Color="#1A4E8A"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValGreen"><Font ss:Bold="1" ss:Size="14" ss:Color="#15803D"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValOrange"><Font ss:Bold="1" ss:Size="14" ss:Color="#F26522"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValRed"><Font ss:Bold="1" ss:Size="14" ss:Color="#DC2626"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="sStatValIndigo"><Font ss:Bold="1" ss:Size="14" ss:Color="#1D4ED8"/><Alignment ss:Horizontal="Center"/></Style>
+</Styles>`;
+
+// Feuille 1 — récapitulatif cumulatif (mêmes données que l'export précédent : un étudiant compte
+// dès qu'il a au moins une note sur l'année sélectionnée, mais ses totaux/moyenne/différentiel
+// portent sur tout son historique DCG, meilleure note retenue par UE).
+function _buildSheetRecap(d){
+  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols, noteByUEForGroup, stats } = d;
+  const header = ['Nom', 'Classe', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
+  const colCount = header.length;
+  const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ') || 'Toutes promotions';
+  let rows = '';
+  rows += _XL.row(_XL.s('sTitle','HECG — Relevé de notes (cumulatif)', colCount-1));
+  rows += _XL.row(_XL.s('sSubtitle', titreParts+' — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
+  rows += _XL.row('<Cell/>');
+  rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
+
+  const matiereAgg = {};
+  groupStats.forEach(({g, totalPts, moy, moyPro, diff, diffAdj, autoRes, defRes}, idx)=>{
+    const noteByUE = noteByUEForGroup(g);
+    const anneeLabel = g.annees.length>1 ? g.annees.join('/') : (g.annees[0]||'—');
+    const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.classe||'') + _XL.s(zC, anneeLabel);
+    dataUEs.forEach(ue=>{
+      const n = noteByUE[matKey(ue)];
+      if (!n || n.note===null || n.note===undefined || n.note===''){ cells += _XL.s(zC,'—'); return; }
+      if (String(n.note).toUpperCase()==='NE'){ cells += _XL.s(zC,'NE'); return; }
+      const num = parseFloat(n.note);
+      if (!isNaN(num)) { const k=matKey(ue); if(!matiereAgg[k]) matiereAgg[k]={sum:0,n:0}; matiereAgg[k].sum+=num; matiereAgg[k].n++; }
+      cells += _XL.s(_XL.noteStyle(num), isNaN(num)?'—':num.toFixed(2));
+    });
+    cells += _XL.s(zC, totalPts!==null?totalPts.toFixed(2):'—');
+    cells += _XL.s(moy===null?'sGray':_XL.noteStyle(moy), moy===null?'—':moy.toFixed(2));
+    if (isBTSexport) {
+      cells += _XL.s(moyPro===null?'sGray':_XL.noteStyle(moyPro), moyPro===null?'—':moyPro.toFixed(2));
+      cells += _XL.s(_XL.badgeStyle(autoRes), autoRes||'En cours');
+      cells += _XL.s(_XL.badgeStyle(defRes), defRes||'En cours');
+    } else {
+      cells += _XL.s(_XL.badgeStyle(defRes), defRes||'En cours');
+    }
+    [diff, diffAdj].forEach(v=>{ cells += _XL.s(v===null?'sGray':(v>=0?'sGreen':'sRed'), v===null?'—':(v>=0?'+'+v:String(v))); });
+    rows += _XL.row(cells);
+  });
+
+  // Moyenne par matière
+  let moyCells = _XL.s('sMoyLabel','MOYENNE PAR MATIÈRE', 2);
+  dataUEs.forEach(ue=>{ const agg=matiereAgg[matKey(ue)]; moyCells += _XL.s('sMoyVal', agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'); });
+  const trailing = 2 + btsExtraCols.length + 2;
+  moyCells += `<Cell ss:StyleID="sMoyVal" ss:MergeAcross="${trailing-1}"/>`;
+  rows += _XL.row(moyCells);
+  rows += _XL.row('<Cell/>');
+
+  // Bloc stats
+  rows += _XL.row(_XL.s('sStatsBand','Statistiques', colCount-1));
+  const kpis = [
+    ['Total', stats.total, 'sStatValBlue'], ['Admis', stats.admis, 'sStatValGreen'],
+    ['Rattrapage', stats.ratt, 'sStatValOrange'], ['Non admis / Éliminés', stats.recale, 'sStatValRed'],
+    ['En cours', stats.enCours, 'sStatValIndigo'], ['Moyenne', stats.moyGlobal, 'sStatValBlue'],
+    ['Taux réussite', stats.tauxReussite!==null?stats.tauxReussite+'%':'—', 'sStatValOrange'],
+  ];
+  const filler = colCount>kpis.length ? colCount-kpis.length : 0;
+  rows += _XL.row(kpis.map(([l])=>_XL.s('sStatLabel',l)).join('') + (filler?`<Cell ss:MergeAcross="${filler-1}"/>`:''));
+  rows += _XL.row(kpis.map(([,v,st])=>_XL.s(st,v)).join('') + (filler?`<Cell ss:MergeAcross="${filler-1}"/>`:''));
+
+  return `<Worksheet ss:Name="Récap (cumulatif)"><Table>${rows}</Table></Worksheet>`;
+}
+
+// Feuille 2 — uniquement les notes réellement saisies pour l'année sélectionnée (doublons exclus,
+// cf. _notesReellesPourAnnee ci-dessus).
+// Feuille 2 — même présentation que la feuille 1 (une ligne par étudiant, UE en colonnes), mais
+// chaque colonne UE n'affiche QUE la note effectivement datée de l'année sélectionnée — et jamais
+// un doublon (même note, année antérieure) : dans ce cas la cellule reste vide, la vraie note
+// ayant déjà été comptée sur sa propre année. Total pts/Moyenne/Différentiel sont recalculés sur
+// ce seul sous-ensemble (pas de report de l'historique cumulatif de la feuille 1).
+function _buildSheetAnneeCourante(d){
+  const { qDiplome, qAnnee, qClasses, dataUEs, isBTSexport, groupStats, btsExtraCols } = d;
+  const header = ['Nom', 'Classe', 'Année', ...dataUEs, 'Total pts', 'Moyenne', ...btsExtraCols, 'Différentiel', 'Différentiel ajusté'];
+  const colCount = header.length;
+  let rows = '';
+  rows += _XL.row(_XL.s('sTitle','HECG — Notes saisies '+(qAnnee||'(sélectionnez une année)'), colCount-1));
+  if (!qAnnee) {
+    rows += _XL.row(_XL.s('sInfo','Sélectionnez une année dans les filtres avant d\'exporter pour remplir cette feuille.', colCount-1));
+    return `<Worksheet ss:Name="Notes annee en cours"><Table>${rows}</Table></Worksheet>`;
+  }
+  const titreParts = [qDiplome, qAnnee, ...qClasses].filter(Boolean).join(' · ');
+  rows += _XL.row(_XL.s('sSubtitle',titreParts+' — doublons (même note, année antérieure) exclus des colonnes UE — Export du '+new Date().toLocaleDateString('fr-FR'), colCount-1));
+  rows += _XL.row('<Cell/>');
+  rows += _XL.row(header.map(h=>_XL.s('sHeader',h)).join(''));
+
+  let idx = 0;
+  const matiereAgg = {}; // matKey(ue) -> {sum, n} — pour la ligne "Moyenne par UE" en bas
+  groupStats.forEach(({g})=>{
+    const notesAnnee = _notesReellesPourAnnee(g, qAnnee);
+    if (!notesAnnee.length) return; // rien de réel pour cette année (tout doublon, ou pas concerné)
+    // Réutilise calcGroupStats sur ce seul sous-ensemble : mêmes règles (meilleure note par UE,
+    // UE14 bonus, différentiel ajusté...) qu'ailleurs dans l'application, appliquées à l'année seule.
+    const { totalPts, moy, diff, diffAdj } = calcGroupStats({ diplome: g.diplome, notes: notesAnnee });
+    const noteByUE = {};
+    notesAnnee.forEach(n=>{ noteByUE[matKey(n.matiere)] = n; });
+    const zA = idx%2===0 ? 'sNameA' : 'sNameB', zC = idx%2===0 ? 'sCenterA' : 'sCenterB';
+    let cells = _XL.s(zA, g.nomPrenom) + _XL.s(zC, g.classe||'') + _XL.s(zC, qAnnee);
+    dataUEs.forEach(ue=>{
+      const n = noteByUE[matKey(ue)];
+      if (!n){ cells += _XL.s(zC,'—'); return; }
+      if (String(n.note).toUpperCase()==='NE'){ cells += _XL.s(zC,'NE'); return; }
+      const num = parseFloat(n.note);
+      if (!isNaN(num)) { const k=matKey(ue); if(!matiereAgg[k]) matiereAgg[k]={sum:0,n:0}; matiereAgg[k].sum+=num; matiereAgg[k].n++; }
+      cells += _XL.s(_XL.noteStyle(num), isNaN(num)?'—':num.toFixed(2));
+    });
+    cells += _XL.s(zC, totalPts!==null?totalPts.toFixed(2):'—');
+    cells += _XL.s(moy===null?'sGray':_XL.noteStyle(moy), moy===null?'—':moy.toFixed(2));
+    btsExtraCols.forEach(()=>{ cells += _XL.s(zC,'—'); }); // statut non pertinent sur un sous-ensemble partiel
+    [diff, diffAdj].forEach(v=>{ cells += _XL.s(v===null?'sGray':(v>=0?'sGreen':'sRed'), v===null?'—':(v>=0?'+'+v:String(v))); });
+    rows += _XL.row(cells);
+    idx++;
+  });
+  if (!idx) {
+    rows += _XL.row(_XL.s('sInfo','Aucune note (hors doublons) trouvée pour '+qAnnee+'.', colCount-1));
+  } else {
+    // Ligne de synthèse : moyenne par UE, sur ce seul sous-ensemble (notes réelles de l'année)
+    let moyCells = _XL.s('sMoyLabel','MOYENNE PAR UE', 2);
+    dataUEs.forEach(ue=>{ const agg=matiereAgg[matKey(ue)]; moyCells += _XL.s('sMoyVal', agg&&agg.n?(agg.sum/agg.n).toFixed(2):'—'); });
+    const trailing = 2 + btsExtraCols.length + 2; // total pts, moyenne, [extras], diff, diffAdj
+    moyCells += `<Cell ss:StyleID="sMoyVal" ss:MergeAcross="${trailing-1}"/>`;
+    rows += _XL.row(moyCells);
+  }
+
+  return `<Worksheet ss:Name="Notes ${_XL.esc(qAnnee).replace(/[^0-9A-Za-z_-]/g,'_')}"><Table>${rows}</Table></Worksheet>`;
+}
+
+// Export "Excel mis en forme" : classeur SpreadsheetML (2 onglets réels, avec mise en forme
+// native Excel — couleurs, gras, badges) aux tons bleu/orange de l'application.
+function exportNotesExcel(){
+  const d = _prepareNotesExportData();
+  if (!d){ toast('Aucune donnée à exporter.',false); return; }
+
+  const xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n'
+    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" '
+    + 'xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n'
+    + _XL_STYLES
+    + _buildSheetRecap(d)
+    + _buildSheetAnneeCourante(d)
+    + '</Workbook>';
+
+  const blob = new Blob(['﻿', xml], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = _notesExportFilename(d,'xls');
+  a.click();
+  toast('Export Excel généré (2 onglets) ✓');
 }
 
 async function showStats(){
@@ -2240,9 +3253,10 @@ function filterEtuSuggestions(){
 }
 function diplomeFromClasse(classe){
   const c=(classe||'').toUpperCase();
-  if (c.startsWith('BTS CG')) return 'BTS CG';
-  if (c.startsWith('DSCG'))   return 'DSCG';
-  if (c.startsWith('DCG'))    return 'DCG';
+  // .includes() plutôt que .startsWith() : tolère "1DCG A", "Groupe DCG1", "DCG - Promo 2025/2026"...
+  if (c.includes('BTS'))  return 'BTS CG';
+  if (c.includes('DSCG')) return 'DSCG'; // vérifié avant DCG : "DSCG" ne contient pas "DCG" comme sous-chaîne, mais on garde l'ordre par sécurité
+  if (c.includes('DCG'))  return 'DCG';
   return (classe||'').split(' ')[0]||'';
 }
 // Normalise un nom de matière pour la comparaison : "UE 2 - Droit des sociétés" et "UE 2" → "ue2"
@@ -2250,6 +3264,98 @@ function matKey(name){
   const s = (name||'').trim();
   const m = s.match(/^(UE\s*\d+[a-zA-Z]*)/i);
   return m ? m[1].toLowerCase().replace(/\s+/g,'') : s.toLowerCase();
+}
+
+// Tri numérique des UE ("UE 2" avant "UE 10") — matKey seul trierait alphabétiquement, ce qui est faux
+function ueNum(key){ const n = parseInt(String(key||'').replace(/\D/g,''),10); return isNaN(n) ? 9999 : n; }
+function compareMatiereUE(a,b){ return ueNum(matKey(a)) - ueNum(matKey(b)); }
+
+function getSelectedClasses(){
+  return Array.from(document.getElementById('filterClasse').selectedOptions).map(o=>o.value).filter(Boolean);
+}
+
+// Vérifie que TOUTES les UE obligatoires (1 à 13 pour DCG, 1 à 6 pour DSCG — l'UE 14/7 est
+// facultative) ont été saisies avec une note, pas seulement qu'il y a "assez" d'UE saisies au
+// total. Sans ça, un étudiant ayant passé UE1-12 + UE14 (13 saisies) mais PAS l'UE13 (obligatoire)
+// serait compté à tort comme complet, puisque ueTotal>=13 devient vrai par coïncidence.
+// Compteur "X étudiants saisis / Y inscrits" pour la promo/année/classe(s) actuellement filtrée(s).
+// Le numérateur vient des groupes déjà affichés (au moins une note pour l'année choisie) ; le
+// dénominateur vient de la liste globale des étudiants (allEtudiants), en excluant les sortis.
+function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
+  const el = document.getElementById('saisieCounter');
+  const btnExport = document.getElementById('btnExportSaisie');
+  if (!el) return;
+  if (!qDiplome || !qAnnee) {
+    el.classList.add('hidden');
+    if (btnExport) btnExport.classList.add('hidden');
+    window._lastSaisieContext = null;
+    return;
+  }
+  const inscrits = (allEtudiantsRoster||[]).filter(e=>{
+    // Le champ "typo" n'est pas toujours renseigné/à jour pour tout le monde (calculerTypoEtu()
+    // n'est jamais appelé côté serveur pour le recalculer) — une liste blanche stricte sur
+    // typo==='inscrit' faisait donc disparaître des étudiants réellement inscrits. On exclut donc
+    // explicitement les 3 catégories à écarter, plutôt que d'exiger une valeur précise pour tous.
+    const typo = String(e.typo||'').trim();
+    if (typo==='préinscrit' || typo==='prospect' || typo==='sortie') return false;
+    if (String(e.sortie||'').trim()) return false; // date de sortie renseignée = plus inscrit
+    if (!String(e.classe||'').trim()) return false; // pas de classe = pas rattaché à une promo
+    if (diplomeFromClasse(e.classe) !== qDiplome) return false;
+    if (qClasses.length && !qClasses.includes(e.classe)) return false;
+    return true;
+  });
+  const nbSaisis = groups.length;
+  const nbInscrits = inscrits.length;
+  const pct = nbInscrits ? Math.round(nbSaisis/nbInscrits*100) : 0;
+  el.textContent = `📊 ${nbSaisis} / ${nbInscrits||'—'} étudiant(s) saisi(s) pour ${qAnnee}` + (nbInscrits?` (${pct}%)`:'');
+  el.classList.remove('hidden');
+  if (btnExport) btnExport.classList.remove('hidden');
+  window._lastSaisieContext = { groups, qDiplome, qClasses, qAnnee, inscrits };
+}
+
+// Export .xls (table HTML colorée, ouvrable directement dans Excel) : vert = étudiant déjà saisi
+// pour l'année sélectionnée, blanc = manquant. Reprend exactement le périmètre du compteur ci-dessus.
+function exportSaisieXLSX(){
+  const ctx = window._lastSaisieContext;
+  if (!ctx || !ctx.inscrits.length){ toast('Aucun étudiant à exporter pour ces filtres.',false); return; }
+  const { groups, qDiplome, qClasses, qAnnee, inscrits } = ctx;
+  const saisisIds  = new Set(groups.map(g=>String(g.idEtu||'').trim()).filter(Boolean));
+  const saisisNoms = new Set(groups.map(g=>(g.nomPrenom||'').trim().toLowerCase()).filter(Boolean));
+  const rows = inscrits.map(e=>{
+    const isSaisi = saisisIds.has(String(e.id||'').trim())
+      || saisisNoms.has((e.nom+' '+e.prenom).trim().toLowerCase())
+      || saisisNoms.has((e.prenom+' '+e.nom).trim().toLowerCase());
+    return { nom:e.nom||'', prenom:e.prenom||'', classe:e.classe||'', saisi:isSaisi };
+  }).sort((a,b)=> a.classe.localeCompare(b.classe) || a.nom.localeCompare(b.nom));
+
+  let html = '<table border="1"><thead><tr style="background:#1A4E8A;color:#ffffff;font-weight:bold">'
+    + '<th>Nom</th><th>Prénom</th><th>Classe</th><th>Statut</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const bg = r.saisi ? '#C6EFCE' : '#FFFFFF';
+    const statut = r.saisi ? 'Saisi' : 'Manquant';
+    html += `<tr style="background:${bg}"><td>${r.nom}</td><td>${r.prenom}</td><td>${r.classe}</td><td>${statut}</td></tr>`;
+  });
+  html += '</tbody></table>';
+
+  const nbSaisi = rows.filter(r=>r.saisi).length;
+  const parts = [qDiplome, qAnnee, ...qClasses].filter(Boolean);
+  const filename = 'saisie_' + parts.join('_').replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xls';
+
+  const blob = new Blob(['﻿', html], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  toast(`Export généré : ${nbSaisi}/${rows.length} saisis ✓`);
+}
+
+function hasAllMandatoryUE(g){
+  const isDCG = g.diplome==='DCG', isDSCG = g.diplome==='DSCG';
+  if (!isDCG && !isDSCG) return true;
+  const nbObl = isDCG ? 13 : 6;
+  const keys = new Set(g.notes.filter(n=>n.note!==null&&n.note!==undefined&&n.note!=='').map(n=>matKey(n.matiere)));
+  for (let i=1;i<=nbObl;i++){ if (!keys.has('ue'+i)) return false; }
+  return true;
 }
 
 function selectEtu(id, nom, classe){
@@ -2366,7 +3472,19 @@ async function chargerUEs(){
   });
 
   const tbody = document.getElementById('bulkUETbody');
+  const isBTSgrid = diplome === 'BTS CG';
+  let _lastBTSGroup = -1;
   tbody.innerHTML = mats.map((m,idx)=>{
+    // Séparateur visuel entre groupes BTS (CGE…CEJM / E5…E8 / EF1…EF3)
+    let groupSep = '';
+    if (isBTSgrid) {
+      const order = btsMatiereOrder(m.matiere);
+      const curGroup = Math.floor(order / 5);
+      if (_lastBTSGroup >= 0 && curGroup !== _lastBTSGroup) {
+        groupSep = '<tr><td colspan="4" style="height:8px;background:#f1f5f9;border-top:2px solid #e5e7eb"></td></tr>';
+      }
+      _lastBTSGroup = curGroup;
+    }
     const k=matKey(m.matiere);
     const latest = latestMap[k];   // Note la plus récente (pré-remplissage)
     const best   = bestMap[k];
@@ -2394,7 +3512,7 @@ async function chargerUEs(){
         }).join(' · ')
       : '';
 
-    return `<tr>
+    return groupSep + `<tr>
       <td style="font-weight:600">${m.matiere}${histHtml}</td>
       <td>${m.coeff}</td>
       <td>
@@ -2445,6 +3563,7 @@ function unlockNote(btn, idx, setNE=false){
   const label = orig.toUpperCase()==='NE' ? 'NE' : (orig ? orig+'/20' : '—');
   if (!confirm(`Modifier la note existante ${label} (${yr}) ?\n\nLa valeur sera écrasée à l'enregistrement.`)) return;
   inp.removeAttribute('readonly');
+  inp.dataset.forceSave = '1'; // forcer la sauvegarde quelle que soit la valeur
   inp.style.cursor = '';
   if (setNE){ inp.value='NE'; onNoteInput(inp, idx); }
   else { onNoteInput(inp, idx); inp.focus(); inp.select(); }
@@ -2456,17 +3575,28 @@ async function saveNotesBulk(){
   if (!bulkCurrentEtu){ toast('Aucune session active.',false); return; }
   const mats = JSON.parse(document.getElementById('bulkUEGrid').dataset.mats||'[]');
   const notes = [];
-  const overwrites = []; // { matiere, ancienne, ancienneAnnee, nouvelle }
+  const toDelete = []; // IDs de notes vidées manuellement → suppression côté serveur
+  const overwrites = [];
   mats.forEach((m,idx)=>{
     const inp = document.getElementById('ue_note_'+idx);
     if (!inp) return;
+    // forceSave doit être lu AVANT le test de valeur vide
+    const forceSave = inp.dataset.forceSave === '1';
     let val = inp.value.trim();
-    if (!val) return; // vide → pas d'envoi
+
+    // Note vidée après déverrouillage → demande de suppression
+    if (!val && forceSave) {
+      const k = matKey(m.matiere);
+      const existCurr = bulkCurrMap[k];
+      if (existCurr?.id) toDelete.push(existCurr.id);
+      return;
+    }
+    if (!val) return; // champ vide sans déverrouillage → pas d'envoi
+
     if (val.toUpperCase()==='NE') val='NE';
     const sujet = document.getElementById('ue_sujet_'+idx)?.value||'';
     const k = matKey(m.matiere);
 
-    // Vérifier si la note a été modifiée (comparaison avec l'original stocké)
     const original = inp.dataset.original??'';
     const originalYear = inp.dataset.originalYear||'';
     const valChanged = val.toUpperCase() !== String(original).toUpperCase();
@@ -2475,30 +3605,38 @@ async function saveNotesBulk(){
     const existCurr = bulkCurrMap[k];
     const existCurrNote = existCurr ? String(existCurr.note??'') : '';
 
-    // Si la note n'a pas changé ET qu'elle est déjà enregistrée pour cette année → ignorer
-    if (!valChanged && existCurrNote.toUpperCase()===val.toUpperCase()) return;
+    // Ignorer si inchangée ET déjà enregistrée pour cette année (sauf déverrouillage explicite)
+    if (!forceSave && !valChanged && existCurrNote.toUpperCase()===val.toUpperCase()) return;
 
-    // Écrasement : note pour l'année cible existe ET nouvelle valeur ≠ existante
     if (existCurrNote!=='' && existCurrNote.toUpperCase()!==val.toUpperCase()) {
       overwrites.push({ matiere: m.matiere, ancienne: existCurrNote, ancienneAnnee: existCurr?.annee||'', nouvelle: val });
     }
 
     notes.push({ matiere:m.matiere, coeff:m.coeff, note:val, sujetMemoire:sujet });
   });
-  if (!notes.length){ toast('Aucune modification détectée.',false); return; }
-  // Demander confirmation si des notes vont être écrasées
+  if (!notes.length && !toDelete.length){ toast('Aucune modification détectée.',false); return; }
+  // Confirmation si des notes existantes vont être modifiées
   if (overwrites.length > 0) {
     const lignes = overwrites.map(o=>`• ${o.matiere} (${o.ancienneAnnee}) : ${o.ancienne==='NE'?'NE':o.ancienne+'/20'} → ${o.nouvelle==='NE'?'NE':o.nouvelle+'/20'}`).join('\n');
     const ok = confirm(`⚠️ ${overwrites.length} note(s) vont être modifiées :\n\n${lignes}\n\nConfirmer l'enregistrement ?`);
     if (!ok) return;
   }
+  if (toDelete.length > 0) {
+    const ok = confirm(`⚠️ ${toDelete.length} note(s) vidée(s) vont être supprimées définitivement.\nConfirmer ?`);
+    if (!ok) return;
+  }
   const nomPrenom = bulkCurrentEtu.nomPrenom || document.getElementById('noteEtuSearch').value || '';
+  // On relit la classe dans le champ (modifiable) au moment de l'enregistrement, pas celle
+  // capturée à l'ouverture — permet de la corriger juste avant de sauvegarder.
+  const classeToSave = document.getElementById('noteClasse').value.trim() || bulkCurrentEtu.classe;
   const r = await api('saveNotesBulk',{
     idEtu: bulkCurrentEtu.idEtu, nomPrenom,
-    classe: bulkCurrentEtu.classe, diplome: bulkCurrentEtu.diplome, annee: bulkCurrentEtu.annee, notes
+    classe: classeToSave, diplome: bulkCurrentEtu.diplome, annee: bulkCurrentEtu.annee,
+    notes, toDelete
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  toast(`✓ ${r.nbInsert} créées, ${r.nbUpdate} mises à jour`);
+  const delMsg = r.nbDelete ? `, ${r.nbDelete} supprimée(s)` : '';
+  toast(`✓ ${r.nbInsert} créées, ${r.nbUpdate} mises à jour${delMsg}`);
   show('bulkAfterSave'); loadNotes();
 }
 
@@ -2509,11 +3647,35 @@ function closeNoteModal(){
 }
 
 // ── Relevé de Note ────────────────────────────────────────────────
-function openReleveModal(){
+async function _refreshReleveExistingList(idEtu){
+  const existingZone = document.getElementById('releveExistingZone');
+  const existingList = document.getElementById('releveExistingList');
+  existingZone.classList.add('hidden');
+  existingList.innerHTML = '';
+  if (!idEtu) return;
+  try {
+    const rr = await api('getReleveNotes', { idEtu });
+    const list = rr.success ? rr.data : [];
+    if (list.length) {
+      list.sort((a,b) => b.dateUpload.localeCompare(a.dateUpload));
+      existingList.innerHTML = list.map(r =>
+        `<li><a href="${r.fileUrl}" target="_blank" class="text-blue-600 underline">📄 ${r.fileName}</a><span class="text-gray-400 ml-1"> — ${r.annee||''} — ${r.dateUpload||''}</span></li>`
+      ).join('');
+      existingZone.classList.remove('hidden');
+    }
+  } catch(e) { /* silencieux */ }
+}
+
+async function openReleveModal(){
   document.getElementById('releveModal').classList.remove('hidden');
   document.getElementById('releveFileInput').value='';
+  hide('releveSuccessZone');
+  show('releveUploadZone');
+  document.getElementById('btnUploadReleve').disabled = false;
+  document.getElementById('btnUploadReleve').textContent = '⬆ Envoyer';
   const info=`${bulkCurrentEtu?.nomPrenom||''} — ${bulkCurrentEtu?.diplome||''} ${bulkCurrentEtu?.annee||''} — ${bulkCurrentEtu?.classe||''}`;
   document.getElementById('releveModalInfo').textContent=info;
+  await _refreshReleveExistingList(bulkCurrentEtu?.idEtu||'');
 }
 function closeReleveModal(){ document.getElementById('releveModal').classList.add('hidden'); }
 
@@ -2526,6 +3688,7 @@ async function uploadReleve(){
     const b64=e.target.result.split(',')[1];
     const r=await api('uploadReleveNote',{
       base64Data:b64, mimeType:file.type, fileName:file.name,
+      idEtu:bulkCurrentEtu?.idEtu||'',
       nomPrenom:bulkCurrentEtu?.nomPrenom||'',
       nom:bulkCurrentEtu?.nom||'', prenom:bulkCurrentEtu?.prenom||'',
       classe:bulkCurrentEtu?.classe||'',
@@ -2533,7 +3696,15 @@ async function uploadReleve(){
     });
     btn.textContent='⬆ Envoyer'; btn.disabled=false;
     if (!r.success){ toast('Erreur : '+r.message,false); return; }
-    toast('Relevé enregistré ✓ ('+r.name+')'); closeReleveModal(); closeNoteModal();
+    // Afficher le lien directement dans le modal (sans fermer)
+    hide('releveUploadZone');
+    const linkEl = document.getElementById('releveSuccessLink');
+    linkEl.href = r.url;
+    linkEl.textContent = '📄 Ouvrir le relevé — ' + r.name;
+    show('releveSuccessZone');
+    toast('Relevé enregistré ✓');
+    // Mettre à jour la liste des relevés existants sans réinitialiser le modal
+    await _refreshReleveExistingList(bulkCurrentEtu?.idEtu||'');
   };
   reader.readAsDataURL(file);
 }
@@ -3529,7 +4700,110 @@ async function loadQualiopi(){
   const r=await api('getQualiopiPreuves');
   qualiopiPreuves = r.success ? r.data : [];
   renderQualiopi();
+  if (canWrite('qualiopi')) loadQuestionnaireSurvey();
 }
+
+// ── Enquête de satisfaction formateurs (Indicateurs 14 & 17) ────────
+const QUESTIONNAIRE_LABELS = {
+  q14_1:"Soutien au développement des compétences pédagogiques",
+  q14_2:"Suffisance des échanges avec l'équipe pédagogique",
+  q14_3:"Accès aux informations nécessaires à la mission",
+  q17_1:"Efficacité du dispositif de suivi des apprenants",
+  q17_2:"Information en temps utile sur les difficultés des apprenants",
+  q17_3:"Coordination avec l'équipe pédagogique pour les apprenants en difficulté",
+};
+let qSurveyStats = null;
+
+async function loadQuestionnaireSurvey(){
+  const r = await api('getQuestionnaireQualiopiStats');
+  qSurveyStats = r.success ? r.data : { nbReponses:0, stats:{}, comments:{} };
+  renderQuestionnaireSurveyBlock();
+}
+
+function renderQuestionnaireSurveyBlock(){
+  const block = document.getElementById('qualiopiSurveyBlock');
+  if (!qSurveyStats) { block.classList.add('hidden'); return; }
+  const avg14 = ['q14_1','q14_2','q14_3'].map(k=>qSurveyStats.stats[k]?.avg).filter(v=>v!=null);
+  const avg17 = ['q17_1','q17_2','q17_3'].map(k=>qSurveyStats.stats[k]?.avg).filter(v=>v!=null);
+  const m14 = avg14.length ? (avg14.reduce((a,b)=>a+b,0)/avg14.length).toFixed(1) : '—';
+  const m17 = avg17.length ? (avg17.reduce((a,b)=>a+b,0)/avg17.length).toFixed(1) : '—';
+  block.classList.remove('hidden');
+  block.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+      <div>
+        <h2 style="font-size:1.05rem;font-weight:900;color:#1f2937">📋 Enquête qualité — Formateurs (Indicateurs 14 & 17)</h2>
+        <p style="font-size:0.8rem;color:#6b7280;margin-top:0.2rem">${qSurveyStats.nbReponses} réponse(s) reçue(s) · Score moyen Ind.14 : <strong>${m14}/5</strong> · Score moyen Ind.17 : <strong>${m17}/5</strong></p>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button onclick="openQLinksModal()" style="background:#1A4E8A;color:#fff;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">🔗 Générer les liens</button>
+        <button onclick="openQSuiviModal()" style="background:#f3f4f6;color:#4b5563;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">👥 Suivi des réponses</button>
+        <button onclick="openQDetailModal()" style="background:#f3f4f6;color:#4b5563;padding:0.5rem 0.9rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer">📈 Résultats détaillés</button>
+      </div>
+    </div>`;
+}
+
+async function openQLinksModal(){
+  document.getElementById('qLinksModal').classList.remove('hidden');
+  document.getElementById('qLinksTbody').innerHTML = '<tr><td colspan="4" style="padding:10px;color:#9ca3af">Chargement…</td></tr>';
+  const r = await api('getQuestionnaireLinks');
+  const list = r.success ? r.data : [];
+  document.getElementById('qLinksTbody').innerHTML = list.length ? list.map(f=>`
+    <tr style="border-top:1px solid #f3f4f6">
+      <td style="padding:6px">${f.nom} ${f.prenom}</td>
+      <td style="padding:6px;color:#6b7280">${f.email||'—'}</td>
+      <td style="padding:6px"><a href="${f.lien}" target="_blank" style="color:#1A4E8A;word-break:break-all">${f.lien}</a></td>
+      <td style="padding:6px"><button onclick="navigator.clipboard.writeText('${f.lien}');toast('Lien copié ✓')" class="btn-ghost py-1 text-xs">Copier</button></td>
+    </tr>`).join('') : '<tr><td colspan="4" style="padding:10px;color:#9ca3af">Aucun formateur en poste avec un code actif.</td></tr>';
+  window._qLinksList = list;
+}
+function closeQLinksModal(){ document.getElementById('qLinksModal').classList.add('hidden'); }
+function copyAllQLinks(){
+  const list = window._qLinksList || [];
+  const text = list.map(f=>`${f.nom} ${f.prenom}\t${f.email||''}\t${f.lien}`).join('\n');
+  navigator.clipboard.writeText(text);
+  toast('Liste copiée ✓');
+}
+
+async function openQSuiviModal(){
+  document.getElementById('qSuiviModal').classList.remove('hidden');
+  document.getElementById('qSuiviTbody').innerHTML = '<tr><td colspan="3" style="padding:10px;color:#9ca3af">Chargement…</td></tr>';
+  const r = await api('getQuestionnaireQualiopiSuivi');
+  const list = r.success ? r.data : [];
+  document.getElementById('qSuiviTbody').innerHTML = list.length ? list.map(f=>`
+    <tr style="border-top:1px solid #f3f4f6">
+      <td style="padding:6px">${f.nom} ${f.prenom}</td>
+      <td style="padding:6px">${f.aRepondu?'<span style="color:#15803d;font-weight:700">✓ A répondu</span>':'<span style="color:#dc2626;font-weight:700">En attente</span>'}</td>
+      <td style="padding:6px;color:#6b7280">${f.dateReponse||'—'}</td>
+    </tr>`).join('') : '<tr><td colspan="3" style="padding:10px;color:#9ca3af">Aucun formateur en poste.</td></tr>';
+}
+function closeQSuiviModal(){ document.getElementById('qSuiviModal').classList.add('hidden'); }
+
+async function openQDetailModal(){
+  document.getElementById('qDetailModal').classList.remove('hidden');
+  document.getElementById('qDetailContent').innerHTML = '<p style="color:#9ca3af;padding:10px">Chargement…</p>';
+  const r = await api('getQuestionnaireQualiopiStats');
+  const d = r.success ? r.data : { nbReponses:0, stats:{}, comments:{} };
+  let html = `<p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">${d.nbReponses} réponse(s) au total.</p>`;
+  [['Indicateur 14',['q14_1','q14_2','q14_3'],'comment14'], ['Indicateur 17',['q17_1','q17_2','q17_3'],'comment17']].forEach(([titre,keys,commentKey])=>{
+    html += `<h4 style="font-weight:900;color:#1A4E8A;margin:1rem 0 0.5rem">${titre}</h4>`;
+    keys.forEach(k=>{
+      const s = d.stats[k];
+      const pct = s ? Math.round((s.avg/5)*100) : 0;
+      html += `<div style="margin-bottom:0.75rem">
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#374151"><span>${QUESTIONNAIRE_LABELS[k]||k}</span><strong>${s?s.avg+'/5 ('+s.n+')':'—'}</strong></div>
+        <div style="background:#f3f4f6;border-radius:9999px;height:8px;margin-top:4px"><div style="background:#F26522;width:${pct}%;height:8px;border-radius:9999px"></div></div>
+      </div>`;
+    });
+    const comments = d.comments[commentKey]||[];
+    if (comments.length) {
+      html += `<div style="margin-top:0.5rem"><p style="font-size:0.7rem;font-weight:900;color:#9ca3af;text-transform:uppercase;margin-bottom:0.3rem">Commentaires libres (anonymes)</p>`
+            + comments.map(c=>`<p style="background:#f9fafb;border-radius:0.6rem;padding:0.5rem 0.75rem;font-size:0.8rem;color:#4b5563;margin-bottom:0.3rem">“${c}”</p>`).join('')
+            + `</div>`;
+    }
+  });
+  document.getElementById('qDetailContent').innerHTML = html;
+}
+function closeQDetailModal(){ document.getElementById('qDetailModal').classList.add('hidden'); }
 
 // ── Couleurs des critères (CSS inline, pas @apply) ──────────────────
 const CRITERE_COLORS={1:'#2563eb',2:'#4338ca',3:'#7c3aed',4:'#9333ea',5:'#db2777',6:'#e11d48'};
@@ -3820,6 +5094,364 @@ function resetMailsFilters() {
   loadMails();
 }
 
+// ── RELANCE HEBDO — PRÉVISUALISATION, SÉLECTION & ENVOI ──────────────────
+let relanceData   = [];  // [{id, nom, prenom, mail, nbOffres, sujet, html, htmlEdited}]
+let relanceSelIdx = -1;
+
+// ---- Helpers sélection ----
+function getCheckedRelanceIdxs() {
+  return [...document.querySelectorAll('.relance-cb:checked')].map(cb => parseInt(cb.dataset.idx));
+}
+
+function updateRelanceSendBtn() {
+  const n   = getCheckedRelanceIdxs().length;
+  const btn = document.getElementById('btnEnvoyerTous');
+  if (!btn) return;
+  btn.textContent = n ? 'Envoyer la sélection (' + n + ')' : 'Envoyer la sélection';
+  btn.disabled = n === 0;
+  // Sync "tout sélectionner"
+  const cbAll = document.getElementById('relanceCbAll');
+  if (cbAll) cbAll.checked = n === relanceData.length && relanceData.length > 0;
+  const selCount = document.getElementById('relanceSelCount');
+  if (selCount) selCount.textContent = n + '/' + relanceData.length + ' sélectionné(s)';
+}
+
+function toggleSelectAllRelance(checked) {
+  document.querySelectorAll('.relance-cb').forEach(cb => cb.checked = checked);
+  updateRelanceSendBtn();
+}
+
+// ---- Ouverture & chargement ----
+async function ouvrirPreviewRelance() {
+  document.getElementById('relanceModal').classList.remove('hidden');
+  document.getElementById('relanceStudentList').innerHTML = '<p class="text-center text-[#1A4E8A] animate-pulse py-8 text-sm">Génération des aperçus…</p>';
+  document.getElementById('relanceKpi').textContent = '';
+  document.getElementById('relanceListHeader').classList.add('hidden');
+  document.getElementById('btnEnvoyerTous').classList.add('hidden');
+  document.getElementById('relancePreviewEmpty').classList.remove('hidden');
+  document.getElementById('relancePreviewPanel').classList.add('hidden');
+  relanceData = []; relanceSelIdx = -1; relanceSearchQuery = '';
+  const si = document.getElementById('relanceSearch'); if (si) si.value = '';
+
+  const res = await api('previewRelanceHebdo', {});
+  if (!res.success) {
+    document.getElementById('relanceStudentList').innerHTML = '<p class="text-center text-red-400 py-8 text-sm">' + (res.message || 'Erreur') + '</p>';
+    return;
+  }
+  relanceData = (res.data || []).map(d => ({ ...d, htmlEdited: null }));
+  const nbOffresTotal = relanceData.reduce((s, d) => s + d.nbOffres, 0);
+  document.getElementById('relanceKpi').textContent = relanceData.length + ' étudiant(s) ciblé(s) · ' + nbOffresTotal + ' offre(s) partagées';
+  if (relanceData.length) {
+    document.getElementById('relanceListHeader').classList.remove('hidden');
+    document.getElementById('btnEnvoyerTous').classList.remove('hidden');
+  }
+  renderRelanceList();
+  updateRelanceSendBtn();
+}
+
+
+// ---- Sélection d'un étudiant pour preview ----
+function selectRelanceEtu(i) {
+  relanceSelIdx = i;
+  renderRelanceList();
+  const d = relanceData[i];
+  document.getElementById('relancePreviewEmpty').classList.add('hidden');
+  const panel = document.getElementById('relancePreviewPanel');
+  panel.classList.remove('hidden'); panel.classList.add('flex');
+  document.getElementById('relanceStudentInfo').textContent = d.prenom + ' ' + d.nom + ' — ' + d.mail;
+  document.getElementById('relanceEditBadge').classList.toggle('hidden', !d.htmlEdited);
+  document.getElementById('btnResetHtml').classList.toggle('hidden', !d.htmlEdited);
+  // Fermer l'éditeur
+  document.getElementById('relanceEditor').classList.add('hidden');
+  document.getElementById('relanceEditorBar').classList.add('hidden');
+  document.getElementById('relanceIframe').classList.remove('hidden');
+  document.getElementById('btnToggleEditor').textContent = 'Modifier HTML';
+  // Charger la preview
+  const html = d.htmlEdited || d.html;
+  document.getElementById('relanceIframe').srcdoc = html;
+  document.getElementById('relanceEditor').value  = html;
+}
+
+// ---- Éditeur HTML ----
+function toggleRelanceEditor() {
+  const editor    = document.getElementById('relanceEditor');
+  const iframe    = document.getElementById('relanceIframe');
+  const editorBar = document.getElementById('relanceEditorBar');
+  const btn       = document.getElementById('btnToggleEditor');
+  if (!editor.classList.contains('hidden')) {
+    editor.classList.add('hidden'); editorBar.classList.add('hidden');
+    iframe.classList.remove('hidden'); btn.textContent = 'Modifier HTML';
+  } else {
+    if (relanceSelIdx < 0) return;
+    editor.value = relanceData[relanceSelIdx].htmlEdited || relanceData[relanceSelIdx].html;
+    iframe.classList.add('hidden');
+    editor.classList.remove('hidden'); editorBar.classList.remove('hidden');
+    btn.textContent = 'Fermer éditeur';
+  }
+}
+
+function onRelanceEditorInput() { /* apply on button click only */ }
+
+function appliquerEditionRelance() {
+  if (relanceSelIdx < 0) return;
+  const html = document.getElementById('relanceEditor').value;
+  relanceData[relanceSelIdx].htmlEdited = html;
+  document.getElementById('relanceIframe').srcdoc = html;
+  document.getElementById('relanceEditor').classList.add('hidden');
+  document.getElementById('relanceEditorBar').classList.add('hidden');
+  document.getElementById('relanceIframe').classList.remove('hidden');
+  document.getElementById('btnToggleEditor').textContent = 'Modifier HTML';
+  document.getElementById('relanceEditBadge').classList.remove('hidden');
+  document.getElementById('btnResetHtml').classList.remove('hidden');
+  renderRelanceList();
+}
+
+function resetRelanceHtml() {
+  if (relanceSelIdx < 0) return;
+  relanceData[relanceSelIdx].htmlEdited = null;
+  const d = relanceData[relanceSelIdx];
+  document.getElementById('relanceIframe').srcdoc = d.html;
+  document.getElementById('relanceEditor').value  = d.html;
+  document.getElementById('relanceEditBadge').classList.add('hidden');
+  document.getElementById('btnResetHtml').classList.add('hidden');
+  renderRelanceList();
+}
+
+// ---- Envois ----
+async function envoyerTestRelance() {
+  if (relanceSelIdx < 0) { toast('Sélectionnez un étudiant pour prévisualiser son mail avant de tester.', false); return; }
+  const d       = relanceData[relanceSelIdx];
+  const myEmail = user && user.email ? user.email : '';
+  if (!myEmail) { toast('Email de connexion introuvable pour le test.', false); return; }
+  const html = d.htmlEdited || d.html;
+  if (!confirm('Envoyer un test du mail de ' + d.prenom + ' ' + d.nom + ' à ' + myEmail + ' ?')) return;
+  const btn = document.getElementById('btnTestRelance');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  const res = await api('sendOneRelance', {
+    mailDest: myEmail,
+    sujet:    '[TEST] Relance hebdo — ' + d.prenom + ' ' + d.nom,
+    htmlBody: html,
+    nomEtu:   d.prenom + ' ' + d.nom + ' (TEST)',
+    idEtu:    d.id
+  });
+  if (res.success) toast('Test envoyé à ' + myEmail, true);
+  else             toast('Erreur : ' + (res.message || 'inconnue'), false);
+  btn.disabled = false; btn.textContent = 'Tester (moi)';
+}
+
+async function envoyerUnRelance() {
+  if (relanceSelIdx < 0) return;
+  const d    = relanceData[relanceSelIdx];
+  const html = d.htmlEdited || d.html;
+  if (!confirm('Envoyer le mail à ' + d.prenom + ' ' + d.nom + ' (' + d.mail + ') ?')) return;
+  const btn = document.getElementById('btnEnvoyerUn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  const res = await api('sendOneRelance', {
+    mailDest: d.mail,
+    sujet:    d.sujet || ('Relance hebdomadaire — ' + d.nbOffres + ' offre(s) en attente de candidature'),
+    htmlBody: html, nomEtu: d.prenom + ' ' + d.nom, idEtu: d.id
+  });
+  if (res.success) { toast('Mail envoyé à ' + d.mail, true); loadMails(); }
+  else             { toast('Erreur : ' + (res.message || 'inconnue'), false); }
+  btn.disabled = false; btn.textContent = 'Envoyer ce mail';
+}
+
+async function envoyerSelectionRelance() {
+  const idxs = getCheckedRelanceIdxs();
+  if (!idxs.length) { toast('Aucun étudiant sélectionné.', false); return; }
+  if (!confirm('Envoyer la relance à ' + idxs.length + ' étudiant(s) sélectionné(s) ?')) return;
+  const btn = document.getElementById('btnEnvoyerTous');
+  btn.disabled = true;
+  let sent = 0, errors = 0;
+  for (const i of idxs) {
+    const d = relanceData[i];
+    btn.textContent = 'Envoi ' + (sent + errors + 1) + '/' + idxs.length + '…';
+    const res = await api('sendOneRelance', {
+      mailDest: d.mail,
+      sujet:    d.sujet || ('Relance hebdomadaire — ' + d.nbOffres + ' offre(s) en attente de candidature'),
+      htmlBody: d.htmlEdited || d.html,
+      nomEtu:   d.prenom + ' ' + d.nom,
+      idEtu:    d.id
+    });
+    if (res.success) sent++; else { errors++; console.warn('Erreur ' + d.mail + ': ' + res.message); }
+  }
+  toast(sent + ' mail(s) envoyé(s)' + (errors ? ' · ' + errors + ' erreur(s)' : ''), sent > 0);
+  if (sent) loadMails();
+  btn.disabled = false;
+  updateRelanceSendBtn();
+}
+
+function closeRelanceModal() {
+  document.getElementById('relanceModal').classList.add('hidden');
+}
+
+// ── FILTRE LIVE DANS LA LISTE DU MODAL ───────────────────────────
+let relanceSearchQuery = '';
+function filterRelanceList(q) {
+  relanceSearchQuery = (q || '').toLowerCase().trim();
+  renderRelanceList();
+  updateRelanceSendBtn();
+}
+
+// Override renderRelanceList pour respecter le filtre de recherche
+function renderRelanceList() {
+  const el = document.getElementById('relanceStudentList');
+  const all = relanceData;
+  const visible = relanceSearchQuery
+    ? all.filter(d =>
+        (d.prenom + ' ' + d.nom).toLowerCase().includes(relanceSearchQuery) ||
+        (d.mail || '').toLowerCase().includes(relanceSearchQuery) ||
+        (d.classe || '').toLowerCase().includes(relanceSearchQuery) ||
+        (d.campus || '').toLowerCase().includes(relanceSearchQuery))
+    : all;
+
+  if (!all.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 py-8 text-sm italic">Aucun Préinscrit en recherche avec des offres partagées.</p>';
+    return;
+  }
+  if (!visible.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 py-6 text-xs italic">Aucun résultat pour cette recherche.</p>';
+    return;
+  }
+  el.innerHTML = visible.map(d => {
+    const i   = all.indexOf(d);
+    const sel = relanceSelIdx === i;
+    const edited = !!d.htmlEdited;
+    return `<div class="flex items-start gap-2 mb-2">
+      <input type="checkbox" class="relance-cb mt-3.5 ml-0.5 w-4 h-4 accent-[#1A4E8A] shrink-0 cursor-pointer"
+        data-idx="${i}" id="relCb${i}" checked onchange="updateRelanceSendBtn()">
+      <div onclick="selectRelanceEtu(${i})" class="flex-1 p-3 rounded-xl cursor-pointer border transition-all
+        ${sel ? 'bg-[#1A4E8A] border-[#1A4E8A]' : 'bg-white border-gray-100 hover:border-[#1A4E8A]'}">
+        <div class="font-bold text-sm ${sel ? 'text-white' : 'text-gray-800'}">${d.prenom} ${d.nom}</div>
+        <div class="text-xs mt-0.5 ${sel ? 'text-blue-200' : 'text-gray-400'} truncate">${d.mail}</div>
+        <div class="flex items-center gap-2 mt-1 flex-wrap">
+          ${d.classe ? `<span class="text-[10px] font-bold ${sel ? 'text-blue-200' : 'text-gray-400'}">${d.classe}</span>` : ''}
+          <span class="text-xs font-bold ${sel ? 'text-orange-300' : 'text-[#FF7A00]'}">${d.nbOffres} offre(s)</span>
+          ${edited ? '<span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">modifié</span>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── CONFIG CRON ──────────────────────────────────────────────────
+let relanceCronEnabled = true;
+
+async function loadRelanceCronConfig() {
+  const card = document.getElementById('relanceCronCard');
+  const res  = await api('getRelanceConfig', {});
+  if (!res || !res.success) return;
+  card.classList.remove('hidden');
+  relanceCronEnabled = res.enabled !== false;
+  _applyRelanceCronUI(res);
+  // Pré-remplir les filtres
+  const f = res.filters || {};
+  document.getElementById('relanceFiltreClasses').value = (f.classes || []).join(', ');
+  document.getElementById('relanceFiltreCampus').value  = (f.campus  || []).join(', ');
+  document.getElementById('relanceFiltreNoms').value    = (f.noms    || []).join(', ');
+  document.getElementById('relanceFiltreEmails').value  = (f.emails  || []).join(', ');
+}
+
+function _applyRelanceCronUI(res) {
+  const badge = document.getElementById('relanceCronBadge');
+  const btn   = document.getElementById('btnToggleRelanceCron');
+  const enabled = res.enabled !== false;
+  badge.textContent = enabled ? 'Actif' : 'Suspendu';
+  badge.className   = 'text-[10px] font-black px-2 py-0.5 rounded-full ' + (enabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600');
+  btn.textContent   = enabled ? 'Suspendre' : 'Activer';
+  btn.className     = enabled ? 'btn-ghost text-xs py-1 px-3 text-red-600 border-red-200 hover:bg-red-50' : 'btn-primary text-xs py-1 px-3';
+
+  // Statut trigger Google Apps Script
+  const trigBadge = document.getElementById('relanceTriggerBadge');
+  const btnInstall = document.getElementById('btnInstallTrigger');
+  if (res.triggerInstalled) {
+    trigBadge.classList.add('hidden');
+    btnInstall.classList.add('hidden');
+  } else {
+    trigBadge.classList.remove('hidden');
+    btnInstall.classList.remove('hidden');
+  }
+
+  const fmt = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+      + ' à ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  };
+  document.getElementById('relanceCronLastRun').textContent = res.lastRun ? fmt(res.lastRun) : 'Jamais exécuté';
+  document.getElementById('relanceCronNextRun').textContent = res.nextRun ? fmt(res.nextRun) : '—';
+}
+
+async function installRelanceTrigger() {
+  if (!confirm('Installer le déclencheur automatique Google Apps Script ?\n\nLa relance hebdo s\'exécutera automatiquement chaque lundi entre 8h et 9h.')) return;
+  const btn = document.getElementById('btnInstallTrigger');
+  btn.disabled = true; btn.textContent = 'Installation…';
+  const res = await api('installRelanceTrigger', {});
+  if (res && res.success) {
+    toast('✅ ' + (res.message || 'Trigger installé.'), true);
+    loadRelanceCronConfig();
+  } else {
+    toast('Erreur : ' + (res?.message || 'inconnue'), false);
+  }
+  btn.disabled = false; btn.textContent = '⚙️ Installer le CRON';
+}
+
+async function toggleRelanceCron() {
+  relanceCronEnabled = !relanceCronEnabled;
+  const res = await api('saveRelanceConfig', { enabled: relanceCronEnabled });
+  if (res.success) {
+    const badge = document.getElementById('relanceCronBadge');
+    const btn   = document.getElementById('btnToggleRelanceCron');
+    badge.textContent = relanceCronEnabled ? 'Actif' : 'Suspendu';
+    badge.className   = 'text-[10px] font-black px-2 py-0.5 rounded-full ' + (relanceCronEnabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600');
+    btn.textContent   = relanceCronEnabled ? 'Suspendre' : 'Activer';
+    btn.className     = relanceCronEnabled ? 'btn-ghost text-xs py-1 px-3 text-red-600 border-red-200 hover:bg-red-50' : 'btn-primary text-xs py-1 px-3';
+    toast(relanceCronEnabled ? 'Relance CRON activée.' : 'Relance CRON suspendue.', true);
+  } else {
+    toast('Erreur : ' + (res.message || 'inconnue'), false);
+    relanceCronEnabled = !relanceCronEnabled;
+  }
+}
+
+async function saveRelanceCronConfig() {
+  const split = s => s.split(',').map(x => x.trim()).filter(Boolean);
+  const filters = {
+    classes: split(document.getElementById('relanceFiltreClasses').value),
+    campus:  split(document.getElementById('relanceFiltreCampus').value),
+    noms:    split(document.getElementById('relanceFiltreNoms').value),
+    emails:  split(document.getElementById('relanceFiltreEmails').value)
+  };
+  const res = await api('saveRelanceConfig', { filters: JSON.stringify(filters) });
+  const status = document.getElementById('relanceCronSaveStatus');
+  if (res.success) {
+    status.classList.remove('hidden');
+    setTimeout(() => status.classList.add('hidden'), 2500);
+  } else {
+    toast('Erreur : ' + (res.message || 'inconnue'), false);
+  }
+}
+
+function viderFiltresCron() {
+  ['relanceFiltreClasses','relanceFiltreCampus','relanceFiltreNoms','relanceFiltreEmails'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+async function declencherRelanceMaintenant() {
+  if (!confirm('Déclencher l\'envoi de la relance hebdo maintenant pour tous les Préinscrits en recherche ciblés ?')) return;
+  const btn = document.querySelector('[onclick="declencherRelanceMaintenant()"]');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  const res = await api('sendRelanceHebdo', {});
+  if (res.success) {
+    toast(res.message || 'Relance envoyée.', true);
+    loadRelanceCronConfig();
+    loadMails();
+  } else {
+    toast('Erreur : ' + (res.message || 'inconnue'), false);
+  }
+  btn.disabled = false; btn.textContent = 'Déclencher maintenant';
+}
+
 // ══════════════════════════════════════════════════════════════════
 // REFTACHE — GESTION DES TYPES DE TÂCHES
 // ══════════════════════════════════════════════════════════════════
@@ -3857,6 +5489,7 @@ async function updateRefTachePrio(id, prio){
 // OBJECTIFS DE LA SEMAINE
 // ══════════════════════════════════════════════════════════════════
 let allObjectifs = [];
+let currentPoleFilter = 'all';
 
 function getWeekNumber(d){
   const date=new Date(d.getTime());
@@ -3945,6 +5578,7 @@ async function loadObjectifs(){
   ]);
   if (!rObj.success){ document.getElementById('objectifsContent').innerHTML='<p class="text-center text-red-400 py-8 text-sm">Erreur chargement objectifs</p>'; return; }
   allObjectifs=rObj.data||[];
+  currentPoleFilter='all';
   currentSyntheseData=(rSynth.success&&rSynth.data&&rSynth.data[0])||{};
   document.getElementById('syntheseSaveStatus').textContent='';
   renderSyntheseSection(currentSyntheseData);
@@ -4169,13 +5803,75 @@ async function loadObjectifsStatsSemaines(){
   el.innerHTML=html;
 }
 
+function setPoleFilter(pole){
+  currentPoleFilter = pole;
+  renderObjectifs();
+}
+
 function renderObjectifs(){
-  // KPI bar
+  // ── Filtre et synthèse par pôle ──────────────────────────────────
+  const poles = [...new Set(allObjectifs.map(o=>o.pole||'').filter(Boolean))].sort();
+  const filterBar   = document.getElementById('poleFilterBar');
+  const summaryBar  = document.getElementById('poleSummaryBar');
+
+  if (poles.length > 0) {
+    // Boutons filtre
+    filterBar.classList.remove('hidden');
+    filterBar.innerHTML = [
+      {k:'all', label:'🌐 Tous'},
+      ...poles.map(p=>({k:p, label:'🏢 '+p}))
+    ].map(({k,label})=>{
+      const active = currentPoleFilter===k;
+      return `<button onclick="setPoleFilter('${k.replace(/'/g,"\\'")}')"`
+        +` style="padding:0.3rem 1rem;border-radius:999px;font-size:0.75rem;font-weight:800;cursor:pointer;`
+        +`border:2px solid ${active?'#4338CA':'#e5e7eb'};background:${active?'#EEF2FF':'#fff'};`
+        +`color:${active?'#4338CA':'#6b7280'};transition:all 0.15s">${label}</button>`;
+    }).join('');
+
+    // Cards synthèse par pôle (uniquement en mode "Tous")
+    if (currentPoleFilter==='all') {
+      summaryBar.classList.remove('hidden');
+      summaryBar.style.gridTemplateColumns = `repeat(${Math.min(poles.length,4)},1fr)`;
+      summaryBar.innerHTML = poles.map(pole=>{
+        const pObjs  = allObjectifs.filter(o=>o.pole===pole);
+        const tot    = pObjs.length;
+        const ok     = pObjs.filter(o=>o.valide==='TRUE').length;
+        const enC    = pObjs.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
+        const taux   = tot ? Math.round(ok/tot*100) : 0;
+        const col    = taux>=80?'#15803d':taux>=50?'#d97706':'#dc2626';
+        const bg     = taux>=80?'#f0fdf4':taux>=50?'#fffbeb':'#fef2f2';
+        const border = taux>=80?'#86efac':taux>=50?'#fcd34d':'#fca5a5';
+        const poleSafe = pole.replace(/'/g,"\\'");
+        return `<div onclick="setPoleFilter('${poleSafe}')" style="background:${bg};border:2px solid ${border};border-radius:0.9rem;padding:0.8rem 1rem;cursor:pointer;transition:opacity 0.15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">
+          <div style="font-size:0.68rem;font-weight:900;color:#4338CA;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem">🏢 ${pole}</div>
+          <div style="display:flex;align-items:center;gap:0.7rem">
+            <span style="font-size:1.8rem;font-weight:900;line-height:1;color:${col}">${taux}<span style="font-size:1rem">%</span></span>
+            <div style="font-size:0.7rem;color:#6b7280;line-height:1.6">
+              <div><strong style="color:${col}">${ok}</strong>/${tot} validés</div>
+              <div>${enC} en cours</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      summaryBar.classList.add('hidden');
+    }
+  } else {
+    filterBar.classList.add('hidden');
+    summaryBar.classList.add('hidden');
+  }
+
+  // Objectifs à afficher (filtrés)
+  const displayObjs = currentPoleFilter==='all'
+    ? allObjectifs
+    : allObjectifs.filter(o=>o.pole===currentPoleFilter);
+
+  // ── KPI bar (adapté au filtre actif) ─────────────────────────────
   const kpiEl=document.getElementById('kpiObjSemaine');
-  if (allObjectifs.length){
-    const total=allObjectifs.length;
-    const ok=allObjectifs.filter(o=>o.valide==='TRUE').length;
-    const enCours=allObjectifs.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
+  if (displayObjs.length){
+    const total=displayObjs.length;
+    const ok=displayObjs.filter(o=>o.valide==='TRUE').length;
+    const enCours=displayObjs.filter(o=>o.valide!=='TRUE'&&!o.etatFinSemaine).length;
     const nok=total-ok-enCours;
     const taux=total?Math.round(ok/total*100):0;
     kpiEl.innerHTML=[
@@ -4194,9 +5890,11 @@ function renderObjectifs(){
   } else {
     kpiEl.classList.add('hidden');
   }
+
+  // ── Table ─────────────────────────────────────────────────────────
   const el=document.getElementById('objectifsContent');
-  if (!allObjectifs.length){
-    el.innerHTML=`<p class="text-center text-gray-400 py-10 text-sm">${vieScRole==='Super-admin'?'Aucun objectif cette semaine. Cliquez "+ Objectif" pour en ajouter.':'Aucun objectif défini pour cette semaine.'}</p>`;
+  if (!displayObjs.length){
+    el.innerHTML=`<p class="text-center text-gray-400 py-10 text-sm">${currentPoleFilter!=='all'?`Aucun objectif pour le pôle « ${currentPoleFilter} » cette semaine.`:vieScRole==='Super-admin'?'Aucun objectif cette semaine. Cliquez "+ Objectif" pour en ajouter.':'Aucun objectif défini pour cette semaine.'}</p>`;
     return;
   }
   const isSA=vieScRole==='Super-admin';
@@ -4210,7 +5908,7 @@ function renderObjectifs(){
       <th style="background:#f9fafb;border-bottom:2px solid #e5e7eb;border-left:1px solid #e5e7eb;padding:0.75rem 1rem;font-size:0.75rem;font-weight:900;color:#6b7280;text-align:left;width:22%">Retour équipes</th>
       <th style="background:#f9fafb;border-bottom:2px solid #e5e7eb;border-left:1px solid #e5e7eb;padding:0.75rem 1rem;font-size:0.75rem;font-weight:900;color:#6b7280;text-align:center;width:12%">Validé</th>
     </tr></thead><tbody>`;
-  allObjectifs.forEach(obj=>{
+  displayObjs.forEach(obj=>{
     const p=obj.priorite||1;
     const bg=prioBg[p]||'#f9fafb';
     const bc=prioBorder[p]||'#e5e7eb';
@@ -4222,6 +5920,7 @@ function renderObjectifs(){
           ${isSA?`<button onclick='openObjectifModal(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="flex-shrink:0;margin-top:0.1rem;padding:0.15rem 0.4rem;border-radius:0.4rem;border:1px solid #e5e7eb;background:#fff;font-size:0.7rem;cursor:pointer;color:#6b7280" title="Modifier">✏️</button>`:''}
           <div style="${valideStyle}">
             <div style="font-weight:700;color:#1f2937;font-size:0.85rem">${p>=4?'🚨 ':''}${obj.nom}</div>
+            ${obj.pole?`<div style="display:inline-block;margin-top:0.2rem;padding:0.1rem 0.5rem;background:#EEF2FF;color:#4338CA;border-radius:999px;font-size:0.68rem;font-weight:800">🏢 ${obj.pole}</div>`:''}
             ${obj.quantite?`<div style="font-size:0.75rem;color:#6b7280;margin-top:0.15rem">Cible : <strong>${obj.quantite}</strong></div>`:''}
             ${obj.descriptif?`<div style="font-size:0.72rem;color:#9ca3af;margin-top:0.15rem;font-style:italic">${obj.descriptif}</div>`:''}
           </div>
@@ -4273,6 +5972,7 @@ function openObjectifModal(obj){
   document.getElementById('objectifQuantite').value=obj?.quantite||'';
   document.getElementById('objectifPriorite').value=String(obj?.priorite||3);
   document.getElementById('objectifDescriptif').value=obj?.descriptif||'';
+  document.getElementById('objectifPole').value=obj?.pole||'';
   if (obj?.id) show('btnDeleteObjectif'); else hide('btnDeleteObjectif');
 }
 function closeObjectifModal(){ document.getElementById('objectifModal').classList.add('hidden'); }
@@ -4288,6 +5988,7 @@ async function saveObjectif(){
     quantite:    document.getElementById('objectifQuantite').value||'',
     priorite:    Number(document.getElementById('objectifPriorite').value),
     descriptif:  document.getElementById('objectifDescriptif').value,
+    pole:        document.getElementById('objectifPole').value.trim(),
     emailAuteur: user.email||user.ref,
   });
   if (!r.success){ toast('Erreur : '+r.message,false); return; }
@@ -5859,36 +7560,100 @@ function renderMMOKRapport(){
   </div>`:'');
 }
 
+const THEME_COLORS={'SIG':'#1A4E8A','MSI':'#8b5cf6','Responsable de Campus':'#F26522','Choix libre':'#6b7280'};
+let mmokCurrentVisuals=[], mmokNewFiles=[];
+
+function showMmokText(txt){
+  let d=document.getElementById('mmokTextPopup');
+  if(!d){d=document.createElement('div');d.id='mmokTextPopup';d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';d.onclick=()=>d.remove();document.body.appendChild(d);}
+  d.innerHTML=`<div style="background:#fff;border-radius:1rem;padding:1.5rem 2rem;max-width:560px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,.2);font-size:0.95rem;font-weight:600;color:#1e293b;white-space:pre-wrap;word-break:break-word">${txt.replace(/</g,'&lt;')}<br><br><button onclick="document.getElementById('mmokTextPopup').remove()" style="margin-top:4px;font-size:0.75rem;font-weight:700;color:#6b7280;border:none;background:none;cursor:pointer">Fermer</button></div>`;
+}
+
 function renderMMOK(){
   const platform=document.getElementById('mmokFilterPlatform').value;
   const period=document.getElementById('mmokFilterPeriod').value;
+  const sujetQ=(document.getElementById('mmokFilterSujet').value||'').toLowerCase().trim();
+  const theme=document.getElementById('mmokFilterTheme').value;
   const etat=document.getElementById('mmokFilterEtat').value;
   const now=new Date();
   const startWeek=new Date(now);startWeek.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1));startWeek.setHours(0,0,0,0);
   const starts={week:startWeek,month:new Date(now.getFullYear(),now.getMonth(),1),year:new Date(now.getFullYear(),0,1)};
   let f=[...allMMOK];
   if(platform) f=f.filter(p=>p.plateforme===platform);
+  if(sujetQ) f=f.filter(p=>(p.sujet||'').toLowerCase().includes(sujetQ));
+  if(theme) f=f.filter(p=>p.theme===theme);
   if(etat) f=f.filter(p=>p.etat===etat);
   if(period&&starts[period]){const st=starts[period];f=f.filter(p=>{const d=new Date(p.dateReelle||p.datePrevue||'');return !isNaN(d)&&d>=st;});}
   f.sort((a,b)=>new Date(b.datePrevue||b.dateReelle||0)-new Date(a.datePrevue||a.dateReelle||0));
+  const mediasBadge=p=>{
+    const ids=(p.visuals||'').split(',').filter(Boolean);
+    const parts=[];
+    if(p.lien) parts.push(`<a href="${p.lien}" target="_blank" rel="noopener" style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap;text-decoration:none">Lien</a>`);
+    if(ids.length) parts.push(`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap">${ids.length} visuel(s)</span>`);
+    if(!parts.length) parts.push(`<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:999px;font-size:0.68rem;font-weight:900;white-space:nowrap">Aucun</span>`);
+    return parts.join(' ');
+  };
   document.getElementById('mmokTbody').innerHTML=f.length?f.map(p=>{
     const col=PLAT_COLORS[p.plateforme]||'#6b7280';
+    const tc=THEME_COLORS[p.theme]||'#9ca3af';
+    const themeBadge=p.theme?`<span style="background:${tc}18;color:${tc};padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:900;white-space:nowrap">${p.theme}</span>`:'<span style="color:#d1d5db">—</span>';
     const eBadge=p.etat==='Publié'?'badge-admis':p.etat==='Planifié'?'badge-ratt':'bg-gray-100 text-gray-500';
+    const safeS=(p.sujet||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const sujetCell=p.sujet?`<span onclick="showMmokText('${safeS}')" style="cursor:pointer;font-weight:600;font-size:0.85rem;color:#1e293b" title="Cliquer pour voir en entier">${(p.sujet.length>40?p.sujet.slice(0,40)+'…':p.sujet)}</span>`:'<span style="color:#d1d5db">—</span>';
     return `<tr>
       <td style="font-family:monospace;font-size:0.75rem;color:#9ca3af">${p.refpost||'—'}</td>
       <td><span class="plat-badge" style="background:${col}">${p.plateforme||'—'}</span></td>
-      <td style="font-weight:600">${p.theme||'—'}</td>
+      <td>${sujetCell}</td>
+      <td>${themeBadge}</td>
       <td style="font-size:0.85rem">${p.datePrevue||'—'}</td>
       <td style="font-size:0.82rem;color:#4b5563;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.ideeContenu||'').replace(/"/g,'&quot;')}">${p.ideeContenu||'—'}</td>
       <td style="font-size:0.85rem">${p.dateReelle||'—'}</td>
       <td><span class="badge ${eBadge}">${p.etat||'—'}</span></td>
+      <td style="white-space:nowrap">${mediasBadge(p)}</td>
       <td style="white-space:nowrap">
         <button onclick="openMMOKModal('${p.id}')" class="btn-ghost py-1 text-xs">✏</button>
         <button onclick="deleteMMOKById('${p.id}')" class="btn-danger py-1 text-xs">🗑</button>
       </td>
     </tr>`;
-  }).join(''):'<tr><td colspan="8" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
+  }).join(''):'<tr><td colspan="10" class="text-center text-gray-400 py-8">Aucun post trouvé.</td></tr>';
 }
+
+function mmokRenderExistingVisuals(){
+  const c=document.getElementById('mmokVisualsExisting');
+  c.innerHTML=mmokCurrentVisuals.map((v,i)=>
+    `<div style="position:relative;display:inline-block">
+      <a href="https://drive.google.com/file/d/${v.fileId}/view" target="_blank">
+        <img src="https://drive.google.com/thumbnail?id=${v.fileId}&sz=w120" alt="Visuel ${i+1}"
+          style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;width:72px;height:72px;border-radius:8px;border:2px solid #e5e7eb;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#6b7280;background:#f9fafb">Visuel ${i+1}</div>
+      </a>
+      <button onclick="mmokRemoveExistingVisual(${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:0.65rem;font-weight:900;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>`
+  ).join('');
+}
+function mmokRemoveExistingVisual(idx){mmokCurrentVisuals.splice(idx,1);mmokRenderExistingVisuals();mmokUpdateNoVisualWarning();}
+function mmokUpdateNoVisualWarning(){
+  const w=document.getElementById('mmokNoVisualWarning');
+  w.classList.toggle('hidden',mmokCurrentVisuals.length>0||mmokNewFiles.length>0);
+}
+function mmokOnFilesSelected(input){
+  const MAX=4*1024*1024;
+  Array.from(input.files).forEach(f=>{
+    if(f.size>MAX){toast('"'+f.name+'" dépasse 4 Mo — ignoré.',false);return;}
+    mmokNewFiles.push(f);
+  });
+  input.value='';
+  mmokRenderNewFiles();mmokUpdateNoVisualWarning();
+}
+function mmokRenderNewFiles(){
+  document.getElementById('mmokNewFilesList').innerHTML=mmokNewFiles.map((f,i)=>
+    `<div style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:3px 8px;font-size:0.7rem;font-weight:700;color:#1d4ed8">
+      ${f.name}<button onclick="mmokRemoveNewFile(${i})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-weight:900">&times;</button>
+    </div>`
+  ).join('');
+}
+function mmokRemoveNewFile(idx){mmokNewFiles.splice(idx,1);mmokRenderNewFiles();mmokUpdateNoVisualWarning();}
 
 function openMMOKModal(id){
   const p=id?allMMOK.find(x=>x.id===id):null;
@@ -5896,33 +7661,64 @@ function openMMOKModal(id){
   document.getElementById('mmokModalId').value=p?.id||'';
   document.getElementById('mmokModalRefpost').value=p?.refpost||'';
   document.getElementById('mmokModalPlateforme').value=p?.plateforme||'LinkedIn';
+  document.getElementById('mmokModalSujet').value=p?.sujet||'';
   document.getElementById('mmokModalTheme').value=p?.theme||'';
   document.getElementById('mmokModalDatePrevue').value=p?.datePrevue||'';
   document.getElementById('mmokModalIdeeContenu').value=p?.ideeContenu||'';
   document.getElementById('mmokModalContenu').value=p?.contenu||'';
   document.getElementById('mmokModalDateReelle').value=p?.dateReelle||'';
   document.getElementById('mmokModalEtat').value=p?.etat||'Planifié';
+  document.getElementById('mmokModalLien').value=p?.lien||'';
+  mmokNewFiles=[];
+  mmokCurrentVisuals=(p?.visuals||'').split(',').filter(Boolean).map(id=>({fileId:id.trim()}));
+  document.getElementById('mmokVisualInput').value='';
+  document.getElementById('mmokNewFilesList').innerHTML='';
+  mmokRenderExistingVisuals();mmokUpdateNoVisualWarning();
   document.getElementById('btnDeleteMmok').classList.toggle('hidden',!p);
   show('mmokModal');
 }
 
-function closeMMOKModal(){hide('mmokModal');}
+function closeMMOKModal(){
+  hide('mmokModal');
+  mmokNewFiles=[];mmokCurrentVisuals=[];
+}
 function deleteMMOKFromModal(){const id=document.getElementById('mmokModalId').value;if(id) deleteMMOKById(id);}
 
 async function saveMMOK(){
   const plateforme=document.getElementById('mmokModalPlateforme').value;
   if(!plateforme){toast('Sélectionnez une plateforme.',false);return;}
+  const refpost=document.getElementById('mmokModalRefpost').value.trim()||('MMOK-'+new Date().toISOString().replace(/[-T:.Z]/g,'').slice(0,15));
+  const saveBtn=document.querySelector('#mmokModal .btn-orange');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Enregistrement…';}
+  // Upload nouveaux visuels
+  const uploadedIds=[...mmokCurrentVisuals.map(v=>v.fileId)];
+  for(let i=0;i<mmokNewFiles.length;i++){
+    const f=mmokNewFiles[i];
+    const ext=f.name.split('.').pop();
+    const filename=refpost+'-'+(uploadedIds.length+1)+'.'+ext;
+    try{
+      toast('Upload visuel '+(i+1)+'/'+mmokNewFiles.length+'…',true);
+      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
+      const res=await api('uploadMMOKVisual',{base64,mimeType:f.type,filename});
+      if(res.success) uploadedIds.push(res.fileId);
+      else toast('Erreur upload "'+f.name+'" : '+(res.message||''),false);
+    }catch(e){toast('Erreur upload "'+f.name+'"',false);}
+  }
   const r=await api('saveMMOK',{
     id:document.getElementById('mmokModalId').value||'',
-    refpost:document.getElementById('mmokModalRefpost').value||'',
+    refpost,
     plateforme,
+    sujet:document.getElementById('mmokModalSujet').value||'',
     theme:document.getElementById('mmokModalTheme').value||'',
     datePrevue:document.getElementById('mmokModalDatePrevue').value||'',
     ideeContenu:document.getElementById('mmokModalIdeeContenu').value||'',
     contenu:document.getElementById('mmokModalContenu').value||'',
     dateReelle:document.getElementById('mmokModalDateReelle').value||'',
     etat:document.getElementById('mmokModalEtat').value||'Planifié',
+    lien:document.getElementById('mmokModalLien').value||'',
+    visuals:uploadedIds.join(','),
   });
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Enregistrer';}
   if(!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Post enregistré ✓');closeMMOKModal();loadMMOK();
 }

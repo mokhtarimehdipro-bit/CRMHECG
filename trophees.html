@@ -339,12 +339,12 @@ let allActionRows = [];
 let filteredActionRows = [];
 
 async function apiPost(payload) {
-    const _s = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.sessionToken = _s.sessionToken || "";
-    payload.emailAuteur  = payload.emailAuteur || _s.email || "";
-    const r = await fetch(API_URL, {method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload)});
+    payload.idAuteur     = NOM_USER   || "Inconnu";
+    payload.emailAuteur  = EMAIL_USER || "";
+    payload.sessionToken = user.sessionToken || "";
+    const r = await fetch(API_URL, {method:'POST', body: JSON.stringify(payload)});
     const result = await r.json();
-    if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+    if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
     return result;
 }
 

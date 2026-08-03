@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -237,11 +237,10 @@
         })();
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
-    payload.idAuteur     = userSession.nom   || "Inconnu";
-    payload.roleAuteur   = userSession.role  || "N/A";
-    payload.emailAuteur  = userSession.email || "";
+    payload.idAuteur = userSession.nom || "Inconnu";
+    payload.roleAuteur = userSession.role || "N/A";
     payload.sessionToken = userSession.sessionToken || "";
-
+    
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -249,7 +248,7 @@
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+        if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
         return result;
     } catch (e) {
         console.error("Erreur API :", e);
