@@ -287,27 +287,61 @@
             }
         }
 
-        // 1. LE CHARGEUR (Récupère la donnée et la stocke)
-        async function loadOffres() {
+        // 1. LE CHARGEUR (cache local + rafraîchissement silencieux)
+        const OFFRES_CACHE_KEY = 'hecg_cache_offres_v1';
+        const OFFRES_CACHE_TTL_MS = 90 * 1000;
+
+        function _applyOffresPayload(data) {
+            currentOffres = (data.success && Array.isArray(data.data)) ? data.data : [];
+            populateVilleFilter();
+            populateEntrepriseFilter();
+            renderStats(computeStats());
+            updateToggleBtns();
+            filterOffres();
+        }
+
+        function _persistOffresCache() {
+            try {
+                const existing = JSON.parse(sessionStorage.getItem(OFFRES_CACHE_KEY) || 'null');
+                const ts = existing ? existing.ts : Date.now();
+                sessionStorage.setItem(OFFRES_CACHE_KEY, JSON.stringify({ ts, data: { success: true, data: currentOffres } }));
+            } catch(e) {}
+        }
+
+        async function _fetchOffresFresh() {
+            const data = await apiPost({ action: 'getOffres' });
+            if (data.success) {
+                try { sessionStorage.setItem(OFFRES_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                _applyOffresPayload(data);
+            } else {
+                console.warn('getOffres API error:', data.message);
+            }
+            return data;
+        }
+
+        async function loadOffres(forceRefresh) {
             const loader = document.getElementById('loader');
             try {
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(OFFRES_CACHE_KEY) || 'null');
+                        if (cached && (Date.now() - cached.ts) < OFFRES_CACHE_TTL_MS) {
+                            loader.classList.add('hidden');
+                            document.getElementById('offresGrid').classList.remove('hidden');
+                            _applyOffresPayload(cached.data);
+                            _fetchOffresFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
+                }
+
                 loader.classList.remove('hidden');
                 document.getElementById('offresGrid').classList.add('hidden');
 
-                const data = await apiPost({ action: 'getOffres' });
+                await _fetchOffresFresh();
 
                 loader.classList.add('hidden');
                 document.getElementById('offresGrid').classList.remove('hidden');
-
-                currentOffres = (data.success && Array.isArray(data.data)) ? data.data : [];
-                populateVilleFilter();
-                populateEntrepriseFilter();
-                renderStats(computeStats());
-                updateToggleBtns();
-                filterOffres();
-                if (!data.success) {
-                    console.warn('getOffres API error:', data.message);
-                }
             } catch (err) {
                 loader.classList.add('hidden');
                 const grid = document.getElementById('offresGrid');
@@ -316,12 +350,19 @@
                     <p class="text-red-500 font-black text-lg mb-2">⚠️ Erreur de chargement</p>
                     <p class="text-gray-500 text-sm mb-1">Impossible de contacter le serveur. Vérifiez votre connexion internet.</p>
                     <p class="text-gray-300 text-xs mt-2 font-mono">${err && err.message ? err.message : String(err)}</p>
-                    <button onclick="loadOffres()" class="mt-4 px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-bold text-sm hover:bg-blue-800 transition">🔄 Réessayer</button>
+                    <button onclick="loadOffres(true)" class="mt-4 px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-bold text-sm hover:bg-blue-800 transition">🔄 Réessayer</button>
                 </div>`;
                 renderStats(computeStats());
                 updateToggleBtns();
             }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchOffresFresh().catch(function(e){ console.error(e); });
+            }
+        }, OFFRES_CACHE_TTL_MS);
 
         function populateVilleFilter() {
             const sel = document.getElementById('fOffreVille');
@@ -567,9 +608,10 @@
 
         async function saveOffre() {
             const btn = document.getElementById('btnSaveOffre');
+            const idValue = document.getElementById('formOffreId').value;
             const payload = {
-                action: document.getElementById('formOffreId').value ? 'updateOffre' : 'addOffre',
-                id: document.getElementById('formOffreId').value,
+                action: idValue ? 'updateOffre' : 'addOffre',
+                id: idValue,
                 poste: document.getElementById('offrePoste').value,
                 entreprise: document.getElementById('offreEnt').value,
                 url: document.getElementById('offreUrl').value,
@@ -580,11 +622,30 @@
                 etat: document.getElementById('offreEtat').value
             };
             if(!payload.poste || !payload.entreprise || !payload.url) return alert("Veuillez remplir les champs obligatoires.");
-            
+
             btn.disabled = true; btn.innerText = "Enregistrement...";
-            await apiPost(payload);
+            const res = await apiPost(payload);
             btn.disabled = false; btn.innerText = "Enregistrer";
-            closeModal(); loadOffres();
+            closeModal();
+
+            if (!res.success) { alert('Erreur sauvegarde : ' + (res.message || 'Échec inconnu')); return; }
+
+            if (idValue) {
+                // Mise à jour optimiste : on patche l'offre existante sans recharger toute la liste
+                const idx = currentOffres.findIndex(o => o.id === idValue);
+                if (idx > -1) {
+                    currentOffres[idx] = Object.assign({}, currentOffres[idx], payload);
+                    populateVilleFilter(); populateEntrepriseFilter();
+                    renderStats(computeStats()); updateToggleBtns(); filterOffres();
+                    _persistOffresCache();
+                } else {
+                    loadOffres(true);
+                }
+            } else {
+                // Nouvelle offre : l'ID généré côté serveur n'est pas encore connu, on recharge une fois
+                try { sessionStorage.removeItem(OFFRES_CACHE_KEY); } catch(e) {}
+                loadOffres(true);
+            }
         }
 
         // --- MOTIF DE SUPPRESSION ---
@@ -610,11 +671,26 @@
         }
 
         function deleteOffre(id) {
-            const offre = allOffres ? allOffres.find(o => o.id === id) : null;
+            const offre = currentOffres.find(o => o.id === id) || null;
             const label = offre ? ((offre.poste || '') + ' chez ' + (offre.entreprise || id)) : id;
             askMotif(`Supprimer l'offre "${label}" ?`, async (motif) => {
-                await apiPost({ action: 'deleteOffre', id, motif });
-                loadOffres();
+                // Mise à jour optimiste : on retire l'offre immédiatement de l'affichage
+                const idx = currentOffres.findIndex(o => o.id === id);
+                const backup = idx > -1 ? currentOffres[idx] : null;
+                if (idx > -1) {
+                    currentOffres.splice(idx, 1);
+                    populateVilleFilter(); populateEntrepriseFilter();
+                    renderStats(computeStats()); updateToggleBtns(); filterOffres();
+                    _persistOffresCache();
+                }
+                const res = await apiPost({ action: 'deleteOffre', id, motif });
+                if (!res.success && backup) {
+                    currentOffres.splice(idx, 0, backup);
+                    populateVilleFilter(); populateEntrepriseFilter();
+                    renderStats(computeStats()); updateToggleBtns(); filterOffres();
+                    _persistOffresCache();
+                    alert('Erreur suppression : ' + (res.message || 'Échec inconnu'));
+                }
             });
         }
 
@@ -833,7 +909,7 @@
                     // Délai long → probable timeout GAS, les emails sont très probablement partis
                     alert(`⚠️ La connexion a expiré après ${Math.round(elapsed/1000)}s.\n\nLes ${nbDest} emails ont très probablement été envoyés. L'offre sera mise à jour dans quelques instants.`);
                     closeShareModal();
-                    setTimeout(() => loadOffres(), 4000);
+                    setTimeout(() => loadOffres(true), 4000);
                 } else {
                     // Erreur rapide → vraie erreur réseau
                     alert("❌ Erreur de connexion. Vérifiez votre connexion internet et réessayez.");
@@ -852,7 +928,7 @@
                 if (d.success) {
                     alert(`✅ ${d.message}`);
                     closeShareModal();
-                    loadOffres();
+                    loadOffres(true);
                 } else if (!d.success && (d.message || '').toLowerCase().includes('réseau')) {
                     // apiPost a capté une erreur réseau/timeout et l'a renvoyée comme objet
                     _traiterErreur(new Error(d.message));
