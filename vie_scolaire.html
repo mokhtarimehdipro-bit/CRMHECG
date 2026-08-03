@@ -1791,13 +1791,63 @@ function toast(msg, ok=true){
   t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),3500);
 }
 function loading(tbodyId, cols){ document.getElementById(tbodyId).innerHTML=`<tr><td colspan="${cols}" class="text-center text-gray-400 py-10">Chargement…</td></tr>`; }
-async function api(action, extra={}){
+
+// Cache local (lecture seule) : évite de rappeler le serveur pour les mêmes données
+// à chaque changement de module. Liste blanche volontairement restreinte aux actions
+// de lecture pure connues, sans effet de bord (pas de GED/aspiration/génération de dossier).
+const VS_CACHE_TTL_MS = 90 * 1000;
+const VS_CACHEABLE_ACTIONS = new Set([
+  'getReferentielMatieres','getDashboardData','getStudentsMinList','getEnterprisesMinList',
+  'getPersonnel','getPersonnelList','getNotes','getStatsNotes','getHistoriqueStatutNotes',
+  'getClassesInfo','getFormateurs','getPlanningTaches','getRefTaches','getQualiopiPreuves',
+  'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
+  'getStatsMatieres','getMailsLog','getSalles','getSimulations','getSuiviEXB','getMMOK',
+  'getReleveNotes','getQuestionnaireLinks','getStatsExclusions','getRelanceConfig'
+]);
+
+function _vsCacheKey(action, extra) { return 'hecg_cache_vs_v1_' + action + '_' + JSON.stringify(extra || {}); }
+
+async function _apiFresh(action, extra, cacheKey) {
   const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
     body: JSON.stringify({action, emailAuteur: user.email||user.ref, vieScRole, roleAuteur: vieScRole,
       sessionToken: user.sessionToken||'', ...extra}) });
   const data = await res.json();
   if (data.sessionExpired) { toast('Session expirée — reconnexion requise', false); setTimeout(()=>{localStorage.removeItem('user');window.location.href='index.html';},2000); return data; }
+  if (cacheKey && data.success) {
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+  }
   return data;
+}
+
+function _vsClearCache() {
+  try {
+    Object.keys(sessionStorage).forEach(function(k) {
+      if (k.indexOf('hecg_cache_vs_v1_') === 0) sessionStorage.removeItem(k);
+    });
+  } catch(e) {}
+}
+
+async function api(action, extra={}, opts={}){
+  // Toute action qui n'est pas dans la liste blanche de lecture est considérée comme une
+  // écriture : on invalide tout le cache de lecture pour éviter d'afficher des données
+  // obsolètes juste après une sauvegarde (ex : enregistrer une note puis recharger la liste).
+  if (!VS_CACHEABLE_ACTIONS.has(action)) {
+    const data = await _apiFresh(action, extra, null);
+    _vsClearCache();
+    return data;
+  }
+  if (opts.forceRefresh) {
+    return _apiFresh(action, extra, _vsCacheKey(action, extra));
+  }
+  const cacheKey = _vsCacheKey(action, extra);
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+    if (cached && (Date.now() - cached.ts) < VS_CACHE_TTL_MS) {
+      _apiFresh(action, extra, cacheKey).catch(function(e){ console.error(e); }); // rafraîchissement silencieux du cache
+      return cached.data;
+    }
+  } catch(e) {}
+  return _apiFresh(action, extra, cacheKey);
 }
 function fmtNote(n){
   if(n===null||n===undefined||n==='') return '—';
