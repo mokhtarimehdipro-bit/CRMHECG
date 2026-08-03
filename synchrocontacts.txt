@@ -1,0 +1,479 @@
+// =========================================================================
+// MOTEUR DE SYNCHRONISATION GOOGLE CONTACTS - HECG
+// ⚠️ Aucune bibliothèque externe requise — auth JWT native via Utilities
+// =========================================================================
+
+const SERVICE_ACCOUNT_EMAIL = 'robot-signature-hecg@signature-hecg-officiel.iam.gserviceaccount.com';
+
+const PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCsdka615zrvROl\neHyFa/2aawECkcjwU6vQUhIXAq9JI/IsSNKhGU6cZRKe/wxX9KTyRL6ztnIvW0Pt\n1lAkDy4zKLO1dEpBpHNW+PyQrDIoG/ARwD0T14jV+4SmPYKevMWfCIs4X+vYHnoX\nFIZo4ei2tmbDoAk54eNDKf+oAXVKkFDNoHsQdBXLkynk6igC2dnEnVcGKattezOV\nTnfhPLK+cj/tTaJHRegU1aqdwoDfbA6FVFby7tlXsMc29OOewOLwj52UeW/XmDv8\n7AKNloBgc0QrEYkVS09HlO0hMrTOX7/Ao2JxovPg/R6BPjHxb1oX4Je7rs1onn7z\n5CwNEkslAgMBAAECggEAEmhRZlHrItI8jZXNnKQJHnk7U13iF5ymowaPfbtAoErg\n508ihCViWZkEIspQM/cdv+oMfLwFdf6Ewpb0WNTx9m3quHxgDJ+T2/2ZX4uxksxg\nlFRzcHG53jUJVIEONwkpAq9zxKGgV6HxIBOFwR4Tq6TOVST4tx/gFOQfsHvvW/Tc\nfrdBFx+WbSBV+kcWqB3wq0xHr9LgW54SZ8YM6H0FGald34S3IF/vwyjtLIYgRQ3/\nZNJIjRQRpOlgjUMXazkzluX9RGK3ydL7zP+xQli5BH/aImV+SuzzRGDLxue6zQCB\njYkU7y79uqr6AK8Gq6cf+/ypnviiG+ax2jLJv1Y/oQKBgQDVpw81mXz7xf+KAAdS\n1yGbixhoVDafaTaE2e8CQ2rFlh85DyRy3f7zQ+DyNOXukx3LjZXkbcMz060FaLKy\nX7Qzep2b2C1s9g+25ZIHZvUxncQvPq9K6vsexgMLJZo3dzfUTVj1H5VNzkCklHrB\nX1bYmGDbQVPCsapzCZxsTAt4PQKBgQDOpSrqP+8tLDt+a+RfSFExL+68jXpEsDAd\nJwa405Wg77o2YCumdbfRdZ6q0MBKAuGWRTuY7zUirhnhsgSu++gq+U82+KWYgjR4\nECkKaSDo+XmppZTCRGX+nJOY3y1qd0cB4hW+9cHI/++UGsP5yWbynfYIr/+U4zT6\nypmVS9dlCQKBgQCMbCqg7eqpiC82QmKN3fumwbsfBwqHp50/oAVpFWpdxxdqZztr\ni+D/fkOgrYfaUDMrEDnOUx4TODLl9TRN7H0BwLtKLMFedjNJ4IUj/FV3cNv6uVZ5\nBQxb44UolGRRxDebf+LR6Ro2czMleLld0w2/ehdexAcLVb5TsaNvwmNfeQKBgQC8\nt3RQx6CbJXkTxF6kcbvMatThF2dhEXJvPTPTWU+d0TDC9eMHOxxrSrpjjw78yFLS\nVFnQGizxhgQW7OeAEof9rv8b2coJVGesej2wxz+J5EOqnZAUNjjbZI0aoD6uq02K\nt7laUr/t22YlYKg3FypQSdfmKS0FANZibuIByWhlWQKBgHwQGyNHkEddB5IBNQ4G\nSRC2IzeOb+SvDmj+vgox3tM9mntOTa5nAJueD0tCi+Bor3WA3YxFdcOIf2ly39Ts\niTCYNtR7IBmXhrehndsqKfTz7K0mYm3GWqyQWyVPaRyHKb3Kc3eeMlAnweUYHbfV\nt2epNa0zscpTqcKo+JOs042c\n-----END PRIVATE KEY-----\n';
+
+const TARGET_USERS = [
+  'm.mokhtari@hecg.fr', 'a.mhoudini@hecg.fr', 'n.mas@hecg.fr', 'd.benyounes@hecg.fr',
+  'v.velcker@hecg.fr', 'contact@hecg.fr', 'k.bouhassane@hecg.fr',
+  'communication@hecg.fr'
+];
+
+// ==========================================
+// POINT D'ENTRÉE PRINCIPAL
+// ==========================================
+
+function synchroniserTousLesContacts() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const dataEtu  = extractEtudiants(ss);
+  const dataPart = extractPartenaires(ss);
+  const tousLesContacts = [...dataEtu, ...dataPart];
+
+  Logger.log(`🔍 ${tousLesContacts.length} contacts trouvés. Début de la synchronisation...`);
+
+  for (let i = 0; i < TARGET_USERS.length; i++) {
+    const userEmail = TARGET_USERS[i].toLowerCase().trim();
+    Logger.log(`\n➡️ Traitement pour : ${userEmail}`);
+
+    let token;
+    try {
+      token = getServiceAccountToken(userEmail);
+    } catch(e) {
+      Logger.log(`❌ Échec d'authentification pour ${userEmail} : ${e.message}`);
+      continue;
+    }
+
+    // 1. Suppression complète pour repartir d'un carnet propre
+    supprimerTousLesContacts(token);
+
+    // 2. Collecter tous les libellés uniques et créer les groupes manquants
+    const tousLesLibelles = new Set();
+    tousLesContacts.forEach(c => {
+      const lbls = c.labels || [c.label];
+      lbls.forEach(l => { if (l) tousLesLibelles.add(l); });
+    });
+    const groupesMap = preparerGroupes(token, tousLesLibelles);
+
+    // 3. Réimport en batch (200 contacts par requête)
+    const contactsValides = tousLesContacts.filter(c =>
+      (c.phones && c.phones.length > 0) || !!c.phone || !!c.entreprise || !!c.nom || !!c.prenom
+    );
+    const contactsAjoutes = importerContactsEnBatch(token, contactsValides, groupesMap);
+    Logger.log(`✅ Terminé pour ${userEmail} : ${contactsAjoutes} contacts importés.`);
+  }
+}
+
+// ==========================================
+// LECTURE DES FEUILLES
+// ==========================================
+
+function extractEtudiants(ss) {
+  const sheet   = getSheetSafe(ss, "ETUDIANTS");
+  const data    = sheet.getDataRange().getValues();
+  const partMap = buildPartenaireMap(ss); // index id_contact → infos contact entreprise
+  let contacts  = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const nom    = String(data[i][2]  || "").trim();
+    const prenom = String(data[i][3]  || "").trim();
+    const tel    = formatPhone(data[i][5]);
+    const typo   = String(data[i][20] || "").toLowerCase();
+    const statut = String(data[i][13] || "").trim();
+    const classe = String(data[i][14] || "").trim();
+    const campus = String(data[i][22] || "").trim();
+    const idCont = String(data[i][12] || "").trim();
+    const nomEnt = String(data[i][21] || "").trim();
+
+    if (!tel || (!prenom && !nom)) continue;
+
+    // Label principal — ordre important : préinscrit AVANT inscrit (car "préinscrit" contient "inscrit")
+    let mainLabel;
+    if (typo.includes("prein") || typo.includes("préin")) {
+      mainLabel = "Étudiant Préinscrit";
+    } else if (typo.includes("sorti")) {
+      mainLabel = "Étudiant Sorti";
+    } else if (typo.includes("inscrit") || typo.includes("alternance")) {
+      mainLabel = "Étudiant Inscrit";
+    } else {
+      mainLabel = "Prospect";
+    }
+
+    // Labels multiples : statut + classe + campus (Set pour éviter les doublons)
+    const labelsSet = new Set([mainLabel]);
+    if (statut) labelsSet.add(statut);
+    if (classe)  labelsSet.add(classe);
+    if (campus)  labelsSet.add(campus);
+
+    contacts.push({
+      nom, prenom,
+      phones:     [tel],
+      emails:     [],
+      labels:     [...labelsSet],
+      entreprise: nomEnt,
+      contactEnt: partMap[idCont] || null
+    });
+  }
+  return contacts;
+}
+
+// Construit un index { id_contact → { nomComplet, tel, nomEnt } } depuis la feuille Partenariat
+function buildPartenaireMap(ss) {
+  const sheet = getSheetSafe(ss, "Partenariat");
+  const data  = sheet.getDataRange().getValues();
+  const map   = {};
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0] || "").trim();
+    if (!id) continue;
+    const prenom = String(data[i][4] || "").trim();
+    const nom    = String(data[i][3] || "").trim();
+    const tel    = formatPhone(data[i][5]) || formatPhone(data[i][9]);
+    const nomEnt = String(data[i][2] || "").trim();
+    map[id] = {
+      nomComplet: [prenom, nom].filter(Boolean).join(" "),
+      tel,
+      nomEnt
+    };
+  }
+  return map;
+}
+
+function extractPartenaires(ss) {
+  const sheet            = getSheetSafe(ss, "Partenariat");
+  const data             = sheet.getDataRange().getValues();
+  const etudiantsParCont = buildEtudiantsParContact(ss); // index id_contact → noms étudiants
+  let contacts = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const idContact  = String(data[i][0] || "").trim();
+    const entreprise = String(data[i][2] || "").trim();
+    const nom        = String(data[i][3] || "").trim();
+    const prenom     = String(data[i][4] || "").trim();
+    const tel1       = formatPhone(data[i][5]);
+    const email1     = String(data[i][6] || "").trim();
+    const email2     = String(data[i][8] || "").trim();
+    const tel2       = formatPhone(data[i][9]);
+
+    if (!entreprise && !nom && !prenom) continue;
+
+    const phones = [];
+    if (tel1) phones.push(tel1);
+    if (tel2 && tel2 !== tel1) phones.push(tel2);
+
+    const emails = [];
+    if (email1 && email1.includes('@')) emails.push(email1);
+    if (email2 && email2.includes('@') && email2 !== email1) emails.push(email2);
+
+    const etudiants = etudiantsParCont[idContact] || [];
+
+    contacts.push({ nom, prenom, phones, emails, label: "Entreprise", entreprise, etudiants });
+  }
+  return contacts;
+}
+
+// Index id_contact → liste des noms complets d'étudiants rattachés (via id_cont col M)
+function buildEtudiantsParContact(ss) {
+  const sheet = getSheetSafe(ss, "ETUDIANTS");
+  const data  = sheet.getDataRange().getValues();
+  const map   = {};
+  for (let i = 1; i < data.length; i++) {
+    const idCont = String(data[i][12] || "").trim();
+    if (!idCont) continue;
+    const prenom = String(data[i][3] || "").trim();
+    const nom    = String(data[i][2] || "").trim();
+    const nomComplet = [prenom, nom].filter(Boolean).join(" ");
+    if (!nomComplet) continue;
+    if (!map[idCont]) map[idCont] = [];
+    map[idCont].push(nomComplet);
+  }
+  return map;
+}
+
+// ==========================================
+// FORMATAGE ET NORMALISATION DES TÉLÉPHONES
+// ==========================================
+
+// Formats gérés : 0612345678 / 06 12 34 56 78 / +33612345678 / 0033612345678 / 612345678
+function formatPhone(phoneRaw) {
+  if (!phoneRaw) return "";
+  let cleaned = String(phoneRaw).trim().replace(/[^\d+]/g, '');
+
+  let digits9 = null;
+
+  if (cleaned.startsWith('+33') && cleaned.substring(3).length === 9) {
+    digits9 = cleaned.substring(3);
+  } else if (cleaned.startsWith('0033') && cleaned.substring(4).length === 9) {
+    digits9 = cleaned.substring(4);
+  } else if (cleaned.startsWith('0') && cleaned.length === 10) {
+    digits9 = cleaned.substring(1);
+  } else if (/^\d{9}$/.test(cleaned)) {
+    digits9 = cleaned;
+  }
+
+  if (digits9) {
+    return `+33 ${digits9[0]} ${digits9.slice(1,3)} ${digits9.slice(3,5)} ${digits9.slice(5,7)} ${digits9.slice(7,9)}`;
+  }
+
+  // Numéro étranger ou format non reconnu
+  if (!cleaned.startsWith('+')) cleaned = '+' + cleaned;
+  return cleaned.length > 8 ? cleaned : "";
+}
+
+function phoneKey(phone) {
+  return String(phone || "").replace(/\D/g, '');
+}
+
+// ==========================================
+// AUTHENTIFICATION JWT NATIVE (sans bibliothèque)
+// ==========================================
+
+function getServiceAccountToken(userEmail) {
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = _b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claim  = _b64url(JSON.stringify({
+    iss:   SERVICE_ACCOUNT_EMAIL,
+    sub:   userEmail,
+    scope: 'https://www.googleapis.com/auth/contacts',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600
+  }));
+
+  const toSign    = header + '.' + claim;
+  const signature = _b64url(Utilities.computeRsaSha256Signature(toSign, PRIVATE_KEY));
+  const jwt       = toSign + '.' + signature;
+
+  const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post',
+    payload: {
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt
+    },
+    muteHttpExceptions: true
+  });
+
+  const result = JSON.parse(resp.getContentText());
+  if (!result.access_token) {
+    throw new Error(resp.getContentText());
+  }
+  return result.access_token;
+}
+
+// Encode en Base64 URL-safe sans padding (requis pour JWT)
+function _b64url(input) {
+  const bytes = (typeof input === 'string')
+    ? Utilities.newBlob(input).getBytes()
+    : input;
+  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, '');
+}
+
+// ==========================================
+// API GOOGLE CONTACTS
+// ==========================================
+
+// Supprime tous les contacts existants (pagination + batch de 500 max par appel)
+function supprimerTousLesContacts(token) {
+  const baseUrl = 'https://people.googleapis.com/v1/people/me/connections?personFields=names&pageSize=1000';
+  let resourceNames = [];
+  let nextPageToken = null;
+
+  // Récupération paginée de tous les resourceNames
+  do {
+    const url = baseUrl + (nextPageToken ? '&pageToken=' + encodeURIComponent(nextPageToken) : '');
+    const resp = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + token },
+      muteHttpExceptions: true
+    });
+    const result = JSON.parse(resp.getContentText());
+    if (result.connections) {
+      result.connections.forEach(p => resourceNames.push(p.resourceName));
+    }
+    nextPageToken = result.nextPageToken || null;
+  } while (nextPageToken);
+
+  Logger.log(`🗑️ ${resourceNames.length} contacts à supprimer...`);
+  if (resourceNames.length === 0) return;
+
+  // Suppression par lots de 500 (limite de l'API)
+  for (let i = 0; i < resourceNames.length; i += 500) {
+    const batch = resourceNames.slice(i, i + 500);
+    UrlFetchApp.fetch('https://people.googleapis.com/v1/people:batchDeleteContacts', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ resourceNames: batch }),
+      muteHttpExceptions: true
+    });
+  }
+  Logger.log(`✅ ${resourceNames.length} contacts supprimés.`);
+}
+
+// Crée uniquement les groupes manquants — pas de suppression (évite le rate limit)
+// Retry automatique sur 429, re-fetch sur 409 (race condition)
+function preparerGroupes(token, libellesNecessaires) {
+  const urlBase = 'https://people.googleapis.com/v1/contactGroups';
+
+  // Récupérer TOUS les groupes existants avec pagination
+  const map = {};
+  let nextPageToken = null;
+  do {
+    const pageUrl = urlBase + (nextPageToken ? '?pageToken=' + encodeURIComponent(nextPageToken) : '');
+    const data = JSON.parse(UrlFetchApp.fetch(pageUrl, {
+      headers: { Authorization: 'Bearer ' + token },
+      muteHttpExceptions: true
+    }).getContentText());
+    (data.contactGroups || []).forEach(g => { map[g.name] = g.resourceName; });
+    nextPageToken = data.nextPageToken || null;
+  } while (nextPageToken);
+
+  // Créer uniquement les groupes absents
+  for (const nom of libellesNecessaires) {
+    if (!nom || map[nom]) continue;
+
+    let attempts = 0;
+    while (attempts < 3) {
+      const createRes = UrlFetchApp.fetch(urlBase, {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + token },
+        payload: JSON.stringify({ contactGroup: { name: nom } }),
+        muteHttpExceptions: true
+      });
+      const created = JSON.parse(createRes.getContentText());
+
+      if (created.resourceName) {
+        map[nom] = created.resourceName;
+        break;
+      } else if (created.error && created.error.code === 429) {
+        Logger.log(`⏳ Rate limit — pause 65s avant réessai du groupe "${nom}"...`);
+        Utilities.sleep(65000);
+        attempts++;
+      } else if (created.error && created.error.code === 409) {
+        // Groupe créé en parallèle ou résidu → re-fetch pour récupérer son resourceName
+        const refetch = JSON.parse(UrlFetchApp.fetch(urlBase, {
+          headers: { Authorization: 'Bearer ' + token },
+          muteHttpExceptions: true
+        }).getContentText());
+        (refetch.contactGroups || []).forEach(g => { map[g.name] = g.resourceName; });
+        break;
+      } else {
+        Logger.log(`⚠️ Groupe "${nom}" non créé : ${JSON.stringify(created.error || created)}`);
+        break;
+      }
+    }
+    Utilities.sleep(700); // ~85 créations max/minute → sous la limite de 90
+  }
+  return map;
+}
+
+// Importe les contacts en lots de 200 (batchCreateContacts)
+// Réduit ~1200 appels API à ~6 → exécution en quelques secondes au lieu de 20 min
+function importerContactsEnBatch(token, contacts, groupesMap) {
+  const BATCH_SIZE = 200;
+  let total = 0;
+
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const batch = contacts.slice(i, i + BATCH_SIZE);
+    const persons = batch
+      .map(c => buildContactPerson(c, groupesMap))
+      .filter(p => p !== null);
+
+    if (persons.length === 0) continue;
+
+    const resp = UrlFetchApp.fetch('https://people.googleapis.com/v1/people:batchCreateContacts', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({
+        contacts: persons.map(p => ({ contactPerson: p })),
+        readMask: 'names'
+      }),
+      muteHttpExceptions: true
+    });
+
+    const result = JSON.parse(resp.getContentText());
+    if (result.error) {
+      Logger.log(`⚠️ Erreur batch ${i}–${i + batch.length} : ${JSON.stringify(result.error)}`);
+    } else {
+      total += persons.length;
+    }
+
+    if (i + BATCH_SIZE < contacts.length) Utilities.sleep(1200); // respect rate limit entre batches
+  }
+  return total;
+}
+
+// Construit l'objet contactPerson pour l'API à partir d'un contact local
+function buildContactPerson(contactData, groupesMap) {
+  const phoneList = contactData.phones || (contactData.phone ? [contactData.phone] : []);
+  const emailList = contactData.emails
+    || (contactData.email && contactData.email.includes('@') ? [contactData.email] : []);
+
+  const labels = contactData.labels || [contactData.label];
+  const memberships = labels
+    .filter(l => l && groupesMap[l])
+    .map(l => ({ contactGroupMembership: { contactGroupResourceName: groupesMap[l] } }));
+
+  if (memberships.length === 0) return null;
+
+  const person = {
+    names:       [{ givenName: contactData.prenom || '', familyName: contactData.nom || '' }],
+    memberships: memberships
+  };
+
+  if (phoneList.length > 0) {
+    person.phoneNumbers = phoneList.map((p, i) => ({ value: p, type: i === 0 ? 'mobile' : 'work' }));
+  }
+  if (emailList.length > 0) {
+    person.emailAddresses = emailList.map(e => ({ value: e, type: 'work' }));
+  }
+  if (contactData.entreprise) {
+    person.organizations = [{ name: contactData.entreprise, type: 'work' }];
+  }
+  const champsSup = [];
+
+  // Infos contact entreprise pour les étudiants
+  if (contactData.contactEnt) {
+    const ce = contactData.contactEnt;
+    if (ce.nomComplet) person.relations = [{ person: ce.nomComplet, type: 'manager' }];
+    if (ce.nomEnt) champsSup.push({ key: 'Entreprise contact',     value: ce.nomEnt });
+    if (ce.tel)    champsSup.push({ key: 'Tél contact entreprise', value: ce.tel });
+  }
+
+  // Étudiants rattachés pour les contacts partenaires (mécanique inverse)
+  if (contactData.etudiants && contactData.etudiants.length > 0) {
+    champsSup.push({ key: 'Étudiants HECG', value: contactData.etudiants.join(', ') });
+  }
+
+  if (champsSup.length > 0) person.userDefined = champsSup;
+
+  return person;
+}
+
+// ==========================================
+// DÉCLENCHEUR AUTOMATIQUE (à exécuter UNE SEULE FOIS)
+// ==========================================
+
+// Lance synchroniserTousLesContacts() chaque jour à 2h du matin (heure de Paris).
+// À exécuter manuellement une seule fois depuis l'éditeur Apps Script.
+function creerDeclencheurQuotidien() {
+  // Supprimer les éventuels anciens déclencheurs pour éviter les doublons
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'synchroniserTousLesContacts') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  // Créer le déclencheur quotidien à 2h, fuseau Europe/Paris
+  ScriptApp.newTrigger('synchroniserTousLesContacts')
+    .timeBased()
+    .atHour(2)
+    .everyDays(1)
+    .inTimezone('Europe/Paris')
+    .create();
+  Logger.log('✅ Déclencheur activé : synchronisation automatique chaque jour à 2h (heure de Paris).');
+}
+
+// ==========================================
+// UTILITAIRES
+// ==========================================
+
+function getSheetSafe(ss, name) {
+  const s = ss.getSheetByName(name) || ss.getSheetByName(name.toLowerCase());
+  if (!s) throw new Error("Onglet introuvable : " + name);
+  return s;
+}

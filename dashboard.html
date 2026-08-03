@@ -319,6 +319,33 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+        // Fiabilise les appels au backend Apps Script : retente automatiquement en cas
+        // d'erreur transitoire (quota/concurrence) avant de remonter l'erreur à l'appelant.
+        (function() {
+            var _nativeFetch = window.fetch;
+            var RETRY_DELAYS_MS = [700, 1800];
+            window.fetch = function(input, init) {
+                var url = typeof input === 'string' ? input : (input && input.url) || '';
+                if (url.indexOf('script.google.com/macros/s/') === -1) return _nativeFetch(input, init);
+                var attempt = 0;
+                function tryOnce() {
+                    return _nativeFetch(input, init).then(function(res) {
+                        if (!res.ok && attempt < RETRY_DELAYS_MS.length) {
+                            var delay = RETRY_DELAYS_MS[attempt++];
+                            return new Promise(function(r) { setTimeout(r, delay); }).then(tryOnce);
+                        }
+                        return res;
+                    }, function(err) {
+                        if (attempt < RETRY_DELAYS_MS.length) {
+                            var delay = RETRY_DELAYS_MS[attempt++];
+                            return new Promise(function(r) { setTimeout(r, delay); }).then(tryOnce);
+                        }
+                        throw err;
+                    });
+                }
+                return tryOnce();
+            };
+        })();
 
         // LA STATION D'EXPÉDITION CENTRALE
 async function apiPost(payload) {

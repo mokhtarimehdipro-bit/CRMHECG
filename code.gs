@@ -1,4 +1,4 @@
-﻿
+
 /**
  * CRM HECG - MOTEUR BACKEND V12.5 "PRO-COM"
  * Base de données centralisée, Intelligence Commerciale & Marketing Automation
@@ -16,6 +16,42 @@ function getSheetSafe(ss, name) {
 }
 
 function createJsonResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
+
+// ==========================================
+// CACHE (réduit la charge sur Sheets/quota d'exécution sous accès concurrent)
+// ==========================================
+/**
+ * Référentiel "Personnel" : jamais écrit par l'appli (édité à la main dans le
+ * classeur), lu en revanche à ~18 endroits différents à chaque requête.
+ * Mise en cache 5 min sans invalidation nécessaire.
+ */
+function getPersonnelDataCached_(ss) {
+  var cache = CacheService.getScriptCache();
+  var key = 'personnel_data_v1';
+  try {
+    var hit = cache.get(key);
+    if (hit) return JSON.parse(hit);
+  } catch(e) {}
+  var data = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+  try { cache.put(key, JSON.stringify(data), 300); } catch(e) {}
+  return data;
+}
+
+/**
+ * Cache générique pour une réponse JSON déjà construite (createJsonResponse).
+ * Utilisé sur les endpoints de lecture les plus sollicités (dashboard, stats...)
+ * pour absorber les pics d'appels concurrents. TTL volontairement court.
+ */
+function getCachedJsonResponse_(cacheKey, ttlSeconds, buildFn) {
+  var cache = CacheService.getScriptCache();
+  try {
+    var hit = cache.get(cacheKey);
+    if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+  } catch(e) {}
+  var response = buildFn();
+  try { cache.put(cacheKey, response.getContent(), ttlSeconds); } catch(e) {}
+  return response;
+}
 
 // ==========================================
 // GESTION DES SESSIONS (sécurité)
@@ -51,6 +87,12 @@ function _createSession(ss, userRef, email, nom, role, vieScRole) {
 
 function _validateSession(ss, token) {
   if (!token || String(token).length < 10) return null;
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'sess_v1_' + token;
+  try {
+    var cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch(eCache) {}
   try {
     var ws = _getSessionSheet(ss);
     var data = ws.getDataRange().getValues();
@@ -59,7 +101,10 @@ function _validateSession(ss, token) {
       if (String(data[i][0]) === String(token)) {
         var created = data[i][6];
         if (created instanceof Date && (now - created) < 7 * 24 * 60 * 60 * 1000) {
-          return { ref: String(data[i][1]), email: String(data[i][2]), nom: String(data[i][3]), role: String(data[i][4]), vieScRole: String(data[i][5]) };
+          var session = { ref: String(data[i][1]), email: String(data[i][2]), nom: String(data[i][3]), role: String(data[i][4]), vieScRole: String(data[i][5]) };
+          // Session valable 7 jours : cache 30 min suffit à absorber les pics sans staleness sensible
+          try { cache.put(cacheKey, JSON.stringify(session), 1800); } catch(eCache2) {}
+          return session;
         }
         return null; // Session expirée
       }
@@ -106,35 +151,56 @@ function doPost(e) {
       'getPartnerDetails','getAllAlerts','getStudentDetails','getComEvents','getCampagnes',
       'getEvents','getParticipants','getProspects','getOffres','getHistory','getBilanJournalier',
       'getRapportHebdomadaire','getFormateurs','getPersonnel','getPersonnelList','getPersonnelStaff',
-      'getReferentielMatieres','getNotes','getStatsNotes','getClassesInfo','getPlanningTaches',
+      'getReferentielMatieres','getNotes','getStatsNotes','getClassesInfo','getPlanningTaches','getReleveNotes',
       'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
       'getStatsMatieres','getRefTaches','getQualiopiPreuves','getQualiopiDossierUrl',
-      'gedListFolder','gedGetDroits','gedGetStudentDocs','gedGetSubfolder',
-      'getMissions','getMailsLog','getMailDetail','getSettings','getStudentsMinList',
+      'gedListFolder','gedGetDroits','gedGetStudentDocs','gedGetSubfolder','gedScanForStudent',
+      'getMissions','getMailsLog','getMailDetail','getSettings','getStudentsMinList','getEnterprisesMinList',
       'getHistoriqueStatutNotes','getTropheeData','getActivityStats','getHistoriqueStatutNotes',
-      'getSalles','getSimulations','getSuiviEXB','getMMOK','getAllStudentAlerts',
-      'getOffreNotes','checkPartnerDuplicate','getClassesList','getPartnerAlerts','getStudentAlerts'
+      'getSalles','getSimulations','getSuiviEXB','getMMOK','getAllStudentAlerts','getSuiviPostCom',
+      'getOffreNotes','checkPartnerDuplicate','getClassesList','getPartnerAlerts','getStudentAlerts',
+      'aspirerMissionsNow'
     ]);
 
     var sessionToken = params.sessionToken || p.sessionToken || "";
     var session = null;
     if (!PUBLIC_ACTIONS.has(action)) {
       session = _validateSession(ss, sessionToken);
-      if (sessionToken && !session) {
-        // Token fourni mais invalide/expiré → rejeter l'écriture
-        return createJsonResponse({ success: false, message: "Session expirée. Veuillez vous reconnecter.", sessionExpired: true });
+      if (!session) {
+        // Fallback : si pas de token, vérifier que idAuteur ou emailAuteur est un membre du Personnel connu
+        // (empêche les appels vraiment anonymes tout en laissant fonctionner les anciens HTML)
+        var nomAuteur   = String(params.idAuteur    || p.idAuteur    || "").trim();
+        var emailAuteur = String(params.emailAuteur || p.emailAuteur || "").trim().toLowerCase();
+        var anonymes = ["inconnu","utilisateur inconnu",""];
+        if ((nomAuteur && anonymes.indexOf(nomAuteur.toLowerCase()) === -1) || emailAuteur) {
+          try {
+            var dPerso = getPersonnelDataCached_(ss);
+            var isKnown = false;
+            for (var pi = 1; pi < dPerso.length; pi++) {
+              var fullNom  = (String(dPerso[pi][2]||"") + " " + String(dPerso[pi][1]||"")).trim().toLowerCase();
+              var emailPer = String(dPerso[pi][6]||"").trim().toLowerCase();
+              if ((nomAuteur   && fullNom  === nomAuteur.toLowerCase())  ||
+                  (emailAuteur && emailPer === emailAuteur && emailAuteur !== "")) {
+                isKnown = true; break;
+              }
+            }
+            if (isKnown) {
+              session = { nom: nomAuteur || emailAuteur, email: emailAuteur, role: String(params.roleAuteur || p.roleAuteur || ""), vieScRole: String(params.vieScRole || p.vieScRole || ""), ref: "" };
+            }
+          } catch(ePerso) {}
+        }
+        if (!session) {
+          var msg = sessionToken ? "Session expirée. Veuillez vous reconnecter." : "Authentification requise. Accès refusé.";
+          return createJsonResponse({ success: false, message: msg, sessionExpired: true });
+        }
       }
-      if (session) {
-        // Enrichir les paramètres avec l'identité validée (remplace l'identité client)
-        params.emailAuteur = session.email || params.emailAuteur;
-        params.nomAuteur   = session.nom   || params.nomAuteur;
-        p.emailAuteur      = session.email || p.emailAuteur;
-        p.nomAuteur        = session.nom   || p.nomAuteur;
-        // vieScRole : garder celui envoyé par le client si cohérent avec la session
-        if (!params.vieScRole && session.vieScRole) params.vieScRole = session.vieScRole;
-        if (!p.vieScRole   && session.vieScRole) p.vieScRole = session.vieScRole;
-      }
-      // Sans token : accepter pour compatibilité mais emailAuteur sera "inconnu" dans les logs
+      // Enrichir les paramètres avec l'identité validée
+      params.emailAuteur = session.email;
+      params.nomAuteur   = session.nom;
+      p.emailAuteur      = session.email;
+      p.nomAuteur        = session.nom;
+      if (!params.vieScRole && session.vieScRole) params.vieScRole = session.vieScRole;
+      if (!p.vieScRole   && session.vieScRole) p.vieScRole = session.vieScRole;
     }
     // ────────────────────────────────────────────────────────────
 
@@ -158,6 +224,8 @@ function doPost(e) {
       case "deleteContact": return handleDeleteContact(params, ss);
       case "updateEnterprise": return handleUpdateEnterprise(params, ss);
       case "deleteEnterprise": return handleDeleteEnterprise(params, ss);
+      case "getArchives": return handleGetArchives(params, ss);
+      case "restoreArchive": return handleRestoreArchive(params, ss);
       case "linkMAToStudents": return handleLinkMAToStudents(params, ss);
       case "confirmFormerAlternant": return handleConfirmFormerAlternant(params, ss);
       case "removeFormerAlternant": return handleRemoveFormerAlternant(params, ss);
@@ -168,6 +236,7 @@ function doPost(e) {
       case "getPartnerDetails": return handleGetPartnerDetails(params, ss);
       
       case "getAllAlerts": return handleGetAllAlerts(params, ss);
+      case "getAlertsHistory": return handleGetAlertsHistory(params, ss);
       case "completeAlert": return handleCompleteAlert(params, ss);
       case "updateAlert": return handleUpdateAlert(params, ss);
       case "cancelAlert": return handleCancelAlert(params, ss);
@@ -195,17 +264,13 @@ function doPost(e) {
       case "getClassesList": return handleGetClassesList(ss);
       case "getMailsLog":   return handleGetMailsLog(params, ss);
       case "getMailDetail": return handleGetMailDetail(params, ss);
-      
-      // --- ROUTES POUR LES ALERTES ---
-      case "getPartnerDetails": return handleGetPartnerDetails(params, ss);
-      case "getAllAlerts": return handleGetAllAlerts(params, ss);
-      case "completeAlert": return handleCompleteAlert(params, ss);
-     
-      
-      
-     
-      
-      
+      case "sendRelanceHebdo":     return handleSendRelanceHebdo(params, ss);
+      case "previewRelanceHebdo":  return handlePreviewRelanceHebdo(params, ss);
+      case "sendOneRelance":       return handleSendOneRelance(params, ss);
+      case "getRelanceConfig":     return handleGetRelanceConfig(params, ss);
+      case "saveRelanceConfig":    return handleSaveRelanceConfig(params, ss);
+      case "installRelanceTrigger": return handleInstallRelanceTrigger(params, ss);
+
       // --- ROUTES POUR LE MODULE CAMPAGNES (VOTRE ERREUR ÉTAIT ICI) ---
       case "getCampagnes": return handleGetCampagnes(ss);
       case "addCampagne": return handleCreateCampaign(params, ss);
@@ -218,6 +283,8 @@ function doPost(e) {
       case "getSettings": return handleGetSettings(ss);
       case "saveSettings": return handleSaveSettings(params, ss);
       case "getStudentsMinList": return handleGetStudentsMinList(ss);
+      case "getEnterprisesMinList": return handleGetEnterprisesMinList(ss);
+      case "attachStudentToEnterprise": return handleAttachStudentToEnterprise(params, ss);
       case "getEvents": return handleGetEvents(params, ss);
       case "addEvent": return handleAddEvent(params, ss);
       case "getParticipants": return handleGetParticipants(params, ss);
@@ -274,10 +341,18 @@ function doPost(e) {
       case 'saveQualiopiPreuve':         return handleSaveQualiopiPreuve(p, ss);
       case 'deleteQualiopiPreuve':       return handleDeleteQualiopiPreuve(p, ss);
       case 'saveNotesBulk':              return handleSaveNotesBulk(p, ss);
+      case 'updateNotesClasse':          return handleUpdateNotesClasse(p, ss);
+      case 'getStatsExclusions':         return handleGetStatsExclusions(p, ss);
+      case 'saveStatsExclusion':         return handleSaveStatsExclusion(p, ss);
       case 'uploadReleveNote':           return handleUploadReleveNote(p, ss);
+      case 'getReleveNotes':             return handleGetReleveNotes(p, ss);
+      case 'deleteReleveNote':           return handleDeleteReleveNote(p, ss);
       case 'getPersonnelList':           return handleGetPersonnelList(p, ss);
       case 'uploadQualiopiFile':         return handleUploadQualiopiFile(p, ss);
       case 'getQualiopiDossierUrl':      return handleGetQualiopiDossierUrl(p, ss);
+      case 'getQuestionnaireQualiopiStats': return handleGetQuestionnaireQualiopiStats(p, ss);
+      case 'getQuestionnaireQualiopiSuivi': return handleGetQuestionnaireQualiopiSuivi(p, ss);
+      case 'getQuestionnaireLinks':          return handleGetQuestionnaireLinks(p, ss);
       case 'getRefTaches':               return handleGetRefTaches(p, ss);
       case 'saveRefTache':               return handleSaveRefTache(p, ss);
       case 'getPersonnel':               return handleGetPersonnel(p, ss);
@@ -322,6 +397,14 @@ function doPost(e) {
       case 'saveMMOK':          return handleSaveMMOK(p, ss);
       case 'deleteMMOK':        return handleDeleteMMOK(p, ss);
 
+      // --- ROUTES SUIVI POST COM ---
+      case 'getSuiviPostCom':    return handleGetSuiviPostCom(p, ss);
+      case 'saveSuiviPostCom':   return handleSaveSuiviPostCom(p, ss);
+      case 'deleteSuiviPostCom': return handleDeleteSuiviPostCom(p, ss);
+      case 'uploadSPCVisual':    return handleUploadSPCVisual(p, ss);
+      case 'uploadMMOKVisual':   return handleUploadMMOKVisual(p, ss);
+      case 'addSPCEchange':      return handleAddSPCEchange(p, ss);
+
       default:
         return createJsonResponse({ success: false, message: "Action inconnue : " + action });
     } // <--- CETTE ACCOLADE FERME LE SWITCH
@@ -342,6 +425,14 @@ function doGet(e) {
     temp.eventId = e.parameter.id;
     return temp.evaluate().setTitle("Inscription HECG").addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
+  if (e.parameter.page === 'questionnaire') {
+    const temp = HtmlService.createTemplateFromFile('questionnaire_qualiopi');
+    const code = e.parameter.code || '';
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    temp.code  = code;
+    temp.valid = !!_findFormateurByCode(ss, code);
+    return temp.evaluate().setTitle("Questionnaire HECG").addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   return HtmlService.createHtmlOutput("Portail HECG Prive");
 }
 
@@ -350,7 +441,7 @@ function doGet(e) {
 // ==========================================
 function handleLogin(params, ss) {
   const id = String(params.identifiant).trim(); const mdp = String(params.password).trim();
-  const sP = getSheetSafe(ss, "Personnel"); const dP = sP.getDataRange().getValues();
+  const dP = getPersonnelDataCached_(ss);
   for(let i=1; i<dP.length; i++) {
     if((id == String(dP[i][0]) || id == String(dP[i][6])) && mdp == String(dP[i][4])) {
       const email = String(dP[i][6] || "").trim().toLowerCase();
@@ -362,7 +453,10 @@ function handleLogin(params, ss) {
     }
   }
   const sE = getSheetSafe(ss, "ETUDIANTS"); const dE = sE.getDataRange().getValues();
-  for(let j=1; j<dE.length; j++) if(id == String(dE[j][0]) && mdp == String(dE[j][1])) return createJsonResponse({ success: true, role: "Etudiant", nom: dE[j][3]+" "+dE[j][2], ref: dE[j][0] });
+  for(let j=1; j<dE.length; j++) if(id == String(dE[j][0]) && mdp == String(dE[j][1])) {
+    const studentToken = _createSession(ss, dE[j][0], String(dE[j][4]||""), dE[j][3]+" "+dE[j][2], "Etudiant", "");
+    return createJsonResponse({ success: true, role: "Etudiant", nom: dE[j][3]+" "+dE[j][2], ref: dE[j][0], sessionToken: studentToken });
+  }
   return createJsonResponse({ success: false, message: "Identifiants incorrects." });
 }
 
@@ -377,37 +471,42 @@ function calculerTypoEtu(entree, sortie, classe) {
 }
 
 function handleDashboardData(params, ss) {
-  const role = params.role; const userId = params.userId; 
-  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-  const dC = getSheetSafe(ss, "Carnet_route").getDataRange().getValues();
-  const dP = getSheetSafe(ss, "Personnel").getDataRange().getValues();
-  const dernierEchangeMap = {};
-  for (let i = 1; i < dC.length; i++) {
-    const etuId = String(dC[i][0]); const dateEch = new Date(dC[i][2]);
-    if (!dernierEchangeMap[etuId] || dateEch > dernierEchangeMap[etuId]) dernierEchangeMap[etuId] = dateEch;
-  }
-  const list = [];
-  for (let k = 1; k < dE.length; k++) {
-    if (role === "Administrateur" || role === "Communication" || role === "Superviseur") {
-      list.push({ 
-        id: dE[k][0], nom: dE[k][2], prenom: dE[k][3], mail: dE[k][4], tel: dE[k][5], cv: dE[k][6], id_ent: dE[k][11], id_cont: dE[k][12], 
-        statut: dE[k][13], classe: dE[k][14], faitCV: dE[k][15], faitLI: dE[k][16], entree: dE[k][17], sortie: dE[k][18], 
-        motif: dE[k][19], typo: dE[k][20], entreprise: dE[k][21], 
-        campus: dE[k][22], // <--- NOUVEAU : Lecture Colonne W
-        refPerso: dE[k][7], dernierEchange: dernierEchangeMap[dE[k][0]] || null
-      });
+  const role = params.role;
+  // Réponse identique pour tout le monde à un même rôle : mise en cache 20s pour absorber
+  // les chargements/rafraîchissements concurrents (endpoint public très sollicité).
+  return getCachedJsonResponse_('dash_v1_' + role, 20, function() {
+    const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const dC = getSheetSafe(ss, "Carnet_route").getDataRange().getValues();
+    const dP = getPersonnelDataCached_(ss);
+    const dernierEchangeMap = {};
+    for (let i = 1; i < dC.length; i++) {
+      const etuId = String(dC[i][0]); const dateEch = new Date(dC[i][2]);
+      if (!dernierEchangeMap[etuId] || dateEch > dernierEchangeMap[etuId]) dernierEchangeMap[etuId] = dateEch;
     }
-  }
-  const referents = [];
-  for(let r=1; r<dP.length; r++) if(dP[r][0]) referents.push({ ref: dP[r][0], nom: dP[r][2] + " " + dP[r][1] });
-  return createJsonResponse({ success: true, data: list, referents: referents });
+    const list = [];
+    for (let k = 1; k < dE.length; k++) {
+      if (role === "Administrateur" || role === "Communication" || role === "Superviseur") {
+        list.push({
+          id: dE[k][0], nom: dE[k][2], prenom: dE[k][3], mail: dE[k][4], tel: dE[k][5], cv: dE[k][6], id_ent: dE[k][11], id_cont: dE[k][12],
+          statut: dE[k][13], classe: dE[k][14], faitCV: dE[k][15], faitLI: dE[k][16], entree: dE[k][17], sortie: dE[k][18],
+          motif: dE[k][19], typo: dE[k][20], entreprise: dE[k][21],
+          campus: dE[k][22],
+          cvTech: String(dE[k][24] || ""),  // Col Y
+          refPerso: dE[k][7], dernierEchange: dernierEchangeMap[dE[k][0]] || null
+        });
+      }
+    }
+    const referents = [];
+    for(let r=1; r<dP.length; r++) if(dP[r][0]) referents.push({ ref: dP[r][0], nom: dP[r][2] + " " + dP[r][1] });
+    return createJsonResponse({ success: true, data: list, referents: referents });
+  });
 }
 
 function handleAddStudent(p, ss) {
   const ws = getSheetSafe(ss, "ETUDIANTS");
   const id = "ETU" + new Date().getTime().toString().slice(-5);
   
-  const typoAAppliquer = p.forceTypo || calculerTypoEtu(p.entree, p.sortie, p.classe);
+  const typoAAppliquer = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
 
   const newRow = [
     id, 
@@ -444,21 +543,31 @@ function handleAddStudent(p, ss) {
 
 
 function handleDeleteStudent(p, ss) {
-  const ws = getSheetSafe(ss, "ETUDIANTS");
-  const d = ws.getDataRange().getValues();
-  for (let i = 1; i < d.length; i++) {
-    if (String(d[i][0]) === p.id_etu) {
-      const nomEtu = (d[i][3] || "") + " " + (d[i][2] || "");
-      const classeEtu = d[i][14] || "?";
-      const statutEtu = d[i][13] || "?";
-      ws.deleteRow(i + 1);
-      const logDetail = "A supprimé la fiche de " + nomEtu.trim() + " (Classe: " + classeEtu + ", Statut: " + statutEtu + ")";
-      logAction(p.idAuteur, p.roleAuteur, "Suppression", "Dossier étudiant", p.id_etu, logDetail);
-      notifierSuppression(p.idAuteur, p.roleAuteur, "Étudiant supprimé", nomEtu.trim() + " — Classe : " + classeEtu + " — Statut : " + statutEtu + " — ID : " + p.id_etu);
-      return createJsonResponse({ success: true });
+  const targetId = String(p.id_etu || p.id || "").trim();
+  if (!targetId) return createJsonResponse({ success: false, message: "ID étudiant manquant" });
+  if (!String(p.motif || "").trim()) return createJsonResponse({ success: false, message: "Le motif de suppression est obligatoire." });
+  try {
+    const ws = getSheetSafe(ss, "ETUDIANTS");
+    const d = ws.getDataRange().getValues();
+    for (let i = 1; i < d.length; i++) {
+      if (String(d[i][0]).trim() === targetId) {
+        const nomEtu = (d[i][3] || "") + " " + (d[i][2] || "");
+        const classeEtu = d[i][14] || "?";
+        const statutEtu = d[i][13] || "?";
+        try { _archiveItem(ss, "Etudiant", p.emailAuteur || p.idAuteur, p.motif || "", targetId, { row: d[i], nomEtudiant: nomEtu.trim(), classe: classeEtu, statut: statutEtu }); } catch(eArch) {}
+        ws.deleteRow(i + 1);
+        try {
+          const logDetail = "A supprimé la fiche de " + nomEtu.trim() + " (Classe: " + classeEtu + ", Statut: " + statutEtu + ") — Motif : " + (p.motif || "Non précisé");
+          logAction(p.idAuteur, p.roleAuteur, "Suppression", "Dossier étudiant", targetId, logDetail);
+          notifierSuppression(p.idAuteur, p.roleAuteur, "Étudiant supprimé", nomEtu.trim() + " — Classe : " + classeEtu + " — Motif : " + (p.motif || "Non précisé"));
+        } catch(eLog) {}
+        return createJsonResponse({ success: true });
+      }
     }
+    return createJsonResponse({ success: false, message: "Étudiant introuvable (ID : " + targetId + ")" });
+  } catch(e) {
+    return createJsonResponse({ success: false, message: "Erreur suppression étudiant : " + e.toString() });
   }
-  return createJsonResponse({ success: false });
 }
 
 function handleStudentDetails(params, ss) { 
@@ -467,13 +576,13 @@ function handleStudentDetails(params, ss) {
   let prof = null;
   for (let i = 1; i < dE.length; i++) {
     if (String(dE[i][0]).trim() === id) { 
-      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22] };
+      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || "") };
       break;
     }
   }
   if (prof && prof.refPerso) {
     try {
-      const dPerso = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+      const dPerso = getPersonnelDataCached_(ss);
       for (let j = 1; j < dPerso.length; j++) {
         if (String(dPerso[j][0] || "").trim() === prof.refPerso) {
           prof.referent = { nom: dPerso[j][1] || "", prenom: dPerso[j][2] || "", mail: dPerso[j][6] || "" };
@@ -563,7 +672,7 @@ function handleAddNote(p, ss) {
   if (p.isStudentNote) {
     try {
       const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-      const dP = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+      const dP = getPersonnelDataCached_(ss);
       let etuRow = null;
       for (let i = 1; i < dE.length; i++) {
         if (String(dE[i][0]).trim() === String(p.targetId).trim()) { etuRow = dE[i]; break; }
@@ -597,11 +706,11 @@ function handleAddNote(p, ss) {
     } catch(eNotif) { console.error("Erreur notif référent : " + eNotif.toString()); }
   }
 
-  // Si c'est un responsable qui écrit, on notifie l'étudiant par mail
-  if (!p.isStudentNote) {
+  // Si c'est un responsable qui écrit ET que la note est visible par l'étudiant, on notifie l'étudiant
+  if (!p.isStudentNote && visibleEtudiant) {
     try {
       const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-      const dP = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+      const dP = getPersonnelDataCached_(ss);
 
       // 1. Trouver l'email de l'étudiant cible
       let mailEtu = null;
@@ -663,32 +772,35 @@ function handleUploadCV(p, ss) {
 // STATISTIQUES & B2B
 // ==========================================
 function handleGetStats(params, ss) {
-  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues(); 
-  const dP = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
-  const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues(); 
-  const stats = { inscrits: [], preinscrits: [], prospects: [], sorties: [], partenaires_avec: [], partenaires_sans: [], offres_actives: [], offres_non_partagees: [], offres_non_postulees: [] };
-  const entAccueil = new Set(); const today = new Date(); today.setHours(0,0,0,0);
-  for (let i = 1; i < dE.length; i++) {
-    if (!dE[i][0]) continue;
-    const typo = String(dE[i][20] || "PROSPECT").trim();
-    const typoLow = typo.toLowerCase();
-    const aAlt = String(dE[i][13]).toLowerCase().includes("alternance");
-    if (aAlt && dE[i][21]) entAccueil.add(String(dE[i][21]).toLowerCase().trim());
+  // Réponse indépendante de l'utilisateur : mise en cache 30s (endpoint public très sollicité).
+  return getCachedJsonResponse_('stats_v1', 30, function() {
+    const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const dP = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
+    const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
+    const stats = { inscrits: [], preinscrits: [], prospects: [], sorties: [], partenaires_avec: [], partenaires_sans: [], offres_actives: [], offres_non_partagees: [], offres_non_postulees: [] };
+    const entAccueil = new Set(); const today = new Date(); today.setHours(0,0,0,0);
+    for (let i = 1; i < dE.length; i++) {
+      if (!dE[i][0]) continue;
+      const typo = String(dE[i][20] || "PROSPECT").trim();
+      const typoLow = typo.toLowerCase();
+      const aAlt = String(dE[i][13]).toLowerCase().includes("alternance");
+      if (aAlt && dE[i][21]) entAccueil.add(String(dE[i][21]).toLowerCase().trim());
 
-    const etuObj = { id: dE[i][0], nom: dE[i][2] + " " + dE[i][3], classe: dE[i][14], aAlternance: aAlt, motif: dE[i][19], email: dE[i][4], campus: dE[i][22] };
+      const etuObj = { id: dE[i][0], nom: dE[i][2] + " " + dE[i][3], classe: dE[i][14], aAlternance: aAlt, motif: dE[i][19], email: dE[i][4], campus: dE[i][22], statut: String(dE[i][13]||"") };
 
-    if (typoLow.includes("sorti") || typoLow.includes("refus")) stats.sorties.push(etuObj);
-    else if (typoLow === "prospect") stats.prospects.push(etuObj);
-    else if (typoLow.includes("préin")) stats.preinscrits.push(etuObj);
-    else stats.inscrits.push(etuObj);
-  }
-  const ents = {};
-  for (let j = 1; j < dP.length; j++) if (dP[j][2]) {
-    const n = String(dP[j][2]).toLowerCase().trim();
-    if (!ents[n]) ents[n] = { nom: dP[j][2], nbContacts: 1 }; else ents[n].nbContacts++;
-  }
-  for (const k in ents) { if (entAccueil.has(k)) stats.partenaires_avec.push(ents[k]); else stats.partenaires_sans.push(ents[k]); }
-  return createJsonResponse({ success: true, data: stats });
+      if (typoLow.includes("sorti") || typoLow.includes("refus")) stats.sorties.push(etuObj);
+      else if (typoLow === "prospect") stats.prospects.push(etuObj);
+      else if (typoLow.includes("préin")) stats.preinscrits.push(etuObj);
+      else stats.inscrits.push(etuObj);
+    }
+    const ents = {};
+    for (let j = 1; j < dP.length; j++) if (dP[j][2]) {
+      const n = String(dP[j][2]).toLowerCase().trim();
+      if (!ents[n]) ents[n] = { nom: dP[j][2], nbContacts: 1 }; else ents[n].nbContacts++;
+    }
+    for (const k in ents) { if (entAccueil.has(k)) stats.partenaires_avec.push(ents[k]); else stats.partenaires_sans.push(ents[k]); }
+    return createJsonResponse({ success: true, data: stats });
+  });
 }
 
 function handleGetPartners(params, ss) {
@@ -697,13 +809,53 @@ function handleGetPartners(params, ss) {
   const entreprises = {};
   for (let i = 1; i < dP.length; i++) {
     const idEnt = String(dP[i][1] || "").trim(); if (!idEnt) continue;
-    if (!entreprises[idEnt]) entreprises[idEnt] = { id: idEnt, nom: dP[i][2], adresse: String(dP[i][10] || "").trim(), cp: String(dP[i][11] || "").trim(), ville: String(dP[i][12] || "").trim(), contacts: [], alternants: [], anciensAlternants: [] };
-    entreprises[idEnt].contacts.push({ id_contact: dP[i][0], nom: dP[i][3], prenom: dP[i][4], tel: dP[i][5], email: dP[i][6], tel2: dP[i][9], mail2: dP[i][8], poste: String(dP[i][13] || "").trim(), is_ma: String(dP[i][14] || "Non").trim() });
+    if (!entreprises[idEnt]) entreprises[idEnt] = { id: idEnt, nom: String(dP[i][2] || "").trim(), adresse: String(dP[i][10] || "").trim(), cp: String(dP[i][11] || "").trim(), ville: String(dP[i][12] || "").trim(), contacts: [], alternants: [], anciensAlternants: [] };
+    entreprises[idEnt].contacts.push({ id_contact: dP[i][0], nom: String(dP[i][3] || "").trim(), prenom: String(dP[i][4] || "").trim(), tel: dP[i][5], email: dP[i][6], tel2: dP[i][9], mail2: dP[i][8], poste: String(dP[i][13] || "").trim(), is_ma: String(dP[i][14] || "Non").trim() });
   }
+  // Index insensible à la casse pour matcher les IDs entreprise
+  const entUpperIndex = {};
+  Object.keys(entreprises).forEach(k => { entUpperIndex[k.toUpperCase()] = k; });
+  // Score A : somme (50 + jours présence) par alternant actif × nb actifs ; B : 50 × nb sortis ; C : 10 × nb contacts complets
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const scoreData = {};
   for (let j = 1; j < dE.length; j++) {
-    const idEntEtu = String(dE[j][11]).trim();
-    if (entreprises[idEntEtu] && String(dE[j][13]).toLowerCase().includes("alternance")) entreprises[idEntEtu].alternants.push({ nom: dE[j][2], prenom: dE[j][3] });
+    const idEntEtu = String(dE[j][11] || "").trim();
+    const realKey = entreprises[idEntEtu] ? idEntEtu : (entUpperIndex[idEntEtu.toUpperCase()] || null);
+    if (!realKey) continue;
+    const statut = String(dE[j][13] || "").toLowerCase();
+    const typo   = String(dE[j][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const isActiveAlt = statut.includes("altern") || statut.includes("apprenti");
+    const isSorti     = typo.includes("sorti");
+    if (isActiveAlt) {
+      entreprises[realKey].alternants.push({ nom: String(dE[j][2] || ""), prenom: String(dE[j][3] || "") });
+    }
+    if (!scoreData[realKey]) scoreData[realKey] = { activeScoreSum: 0, activeCount: 0, sortiCount: 0 };
+    if (isActiveAlt) {
+      const raw = dE[j][17];
+      let days = 0;
+      if (raw) {
+        const d = raw instanceof Date ? raw : new Date(String(raw).replace(/^'/, '').trim());
+        if (!isNaN(d.getTime())) days = Math.max(0, Math.floor((today - d) / 86400000));
+      }
+      scoreData[realKey].activeScoreSum += 50 + days;
+      scoreData[realKey].activeCount++;
+    } else if (isSorti) {
+      scoreData[realKey].sortiCount++;
+    }
   }
+  Object.values(entreprises).forEach(ent => {
+    const sd = scoreData[ent.id] || { activeScoreSum: 0, activeCount: 0, sortiCount: 0 };
+    const scoreA = sd.activeScoreSum * sd.activeCount;
+    const scoreB = sd.sortiCount * 50;
+    const scoreC = ent.contacts.filter(c => {
+      const hasName = !!(c.nom && c.prenom);
+      const hasMail = !!(c.email && String(c.email).includes('@'));
+      const hasTel  = !!(c.tel || c.tel2);
+      return hasName && (hasMail || hasTel);
+    }).length * 10;
+    ent.score = scoreA + scoreB + scoreC;
+    ent.scoreDetails = { A: scoreA, B: scoreB, C: scoreC };
+  });
   // Anciens alternants (changements d'entreprise détectés)
   const wsA = ss.getSheetByName("ANCIENS_ALTERNANTS");
   if (wsA && wsA.getLastRow() > 1) {
@@ -1850,10 +2002,18 @@ function handleGetProspects(params, ss) {
   return createJsonResponse({ success: true, data: list.reverse() });
 }
 
-function handleDeleteProspect(params, ss) { 
+function handleDeleteProspect(params, ss) {
   const ws = getSheetSafe(ss, "PROSPECTS"); const d = ws.getDataRange().getValues();
-  for(let i=1; i<d.length; i++) if(String(d[i][0]) === params.id) { ws.deleteRow(i+1); return createJsonResponse({success: true}); }
-  return createJsonResponse({success: false}); 
+  for(let i=1; i<d.length; i++) {
+    if(String(d[i][0]) === params.id) {
+      const label = (d[i][2]||"") + " " + (d[i][1]||"") + " — " + (d[i][3]||"");
+      _archiveItem(ss, "Prospect", params.emailAuteur || params.idAuteur, params.motif || "", params.id, { row: d[i], label: label.trim() });
+      ws.deleteRow(i+1);
+      logAction(params.idAuteur, params.roleAuteur, "Suppression", "Prospects", params.id, "Prospect supprimé : " + label.trim() + " — Motif : " + (params.motif || "Non précisé"));
+      return createJsonResponse({success: true});
+    }
+  }
+  return createJsonResponse({success: false});
 }
 
 // ==========================================
@@ -2688,7 +2848,8 @@ function handleGetStudentsMinList(ss) {
         email:  mail,                          // col E
         classe: String(data[i][14] || "").trim(), // col O
         statut: String(data[i][13] || "").toLowerCase(), // col N
-        typo:   String(data[i][20] || "").toLowerCase()  // col U
+        typo:   String(data[i][20] || "").toLowerCase(),  // col U
+        sortie: String(data[i][18] || "").trim()  // col S — date de sortie (vide = toujours inscrit)
       });
     }
   }
@@ -2696,7 +2857,69 @@ function handleGetStudentsMinList(ss) {
   return createJsonResponse({ success: true, data: list });
 }
 
+function handleGetEnterprisesMinList(ss) {
+  try {
+    var sheet = getSheetSafe(ss, "PARTENARIAT");
+    var data = sheet.getDataRange().getValues();
+    var seen = {};
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      var id = String(data[i][1] || "").trim();
+      var nom = String(data[i][2] || "").trim();
+      if (id && nom && !seen[id]) {
+        seen[id] = true;
+        result.push({ id: id, nom: nom });
+      }
+    }
+    result.sort(function(a, b) { return a.nom.localeCompare(b.nom, 'fr'); });
+    return createJsonResponse({ success: true, data: result });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
 
+function handleAttachStudentToEnterprise(p, ss) {
+  try {
+    var idEtu = String(p.idEtu || "").trim();
+    var idEnt = String(p.idEntreprise || "").trim().toUpperCase();
+    var nomEnt = String(p.nomEntreprise || "").trim();
+    var type = String(p.type || "actif");
+
+    var sheetEtu = getSheetSafe(ss, "ETUDIANTS");
+    var dataEtu = sheetEtu.getDataRange().getValues();
+    var rowIdx = -1, nom = "", prenom = "", classe = "", campus = "";
+    for (var i = 1; i < dataEtu.length; i++) {
+      if (String(dataEtu[i][0]).trim() === idEtu) {
+        rowIdx = i + 1;
+        nom    = String(dataEtu[i][2] || "").trim();
+        prenom = String(dataEtu[i][3] || "").trim();
+        classe = String(dataEtu[i][14] || "").trim();
+        campus = String(dataEtu[i][22] || "").trim();
+        break;
+      }
+    }
+    if (rowIdx === -1) return createJsonResponse({ success: false, message: "Étudiant introuvable" });
+
+    if (type === "actif") {
+      sheetEtu.getRange(rowIdx, 12).setValue(idEnt);
+      sheetEtu.getRange(rowIdx, 13).setValue("");
+      sheetEtu.getRange(rowIdx, 22).setValue(nomEnt);
+      var currentStatut = String(dataEtu[rowIdx - 1][13] || "").toLowerCase();
+      if (!currentStatut.includes("altern") && !currentStatut.includes("apprenti")) {
+        sheetEtu.getRange(rowIdx, 14).setValue("Alternant");
+      }
+      logAction(p.idAuteur, p.roleAuteur, "Liaison manuelle", "Etudiant", idEtu, prenom + " " + nom + " → rattaché à " + nomEnt);
+    } else {
+      var ws = _getOrCreateAnciensSheet(ss);
+      var existing = ws.getDataRange().getValues();
+      var doublon = existing.slice(1).some(function(r) {
+        return String(r[1]).trim().toUpperCase() === idEnt && String(r[2]).trim() === idEtu && String(r[6]) !== "Erreur";
+      });
+      if (doublon) return createJsonResponse({ success: false, message: "Un lien existe déjà pour cet étudiant et cette entreprise." });
+      ws.appendRow(["ANC-" + Date.now(), idEnt, idEtu, nom, prenom, new Date(), "Confirmé", nomEnt, classe, campus, "Ajout manuel"]);
+      logAction(p.idAuteur, p.roleAuteur, "Liaison passée", "AncienAlternant", idEtu, prenom + " " + nom + " — ancienne entreprise « " + nomEnt + " » ajoutée");
+    }
+    return createJsonResponse({ success: true });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
 
 function handlePreviewComMail(p, ss) {
   try {
@@ -3136,13 +3359,81 @@ function handleGetAllAlerts(p, ss) {
         date: dateObj.toLocaleDateString('fr-FR'),
         msg: dA[i][3],
         freq: dA[i][4],
-        destinataire: dA[i][6] || "" // <-- ON LIT BIEN L'EMAIL ICI
+        destinataire: dA[i][6] || "",
+        auteur: dA[i][7] || ""
       });
     }
     
     // On trie pour avoir les plus urgentes en premier
     list.sort((a, b) => new Date(a.dateRaw) - new Date(b.dateRaw));
     
+    return createJsonResponse({ success: true, data: list });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// 1b. Historique complet de toutes les alertes (y compris Terminé/Annulé)
+function handleGetAlertsHistory(p, ss) {
+  try {
+    const list = [];
+
+    // --- ALERTES PARTENAIRES ---
+    const sA = ss.getSheetByName("ALERTES_PARTENAIRES");
+    if (sA) {
+      const dA = sA.getDataRange().getValues();
+      const sP = ss.getSheetByName("Partenariat") || ss.getSheetByName("PARTENARIAT");
+      const partMap = {};
+      if (sP) {
+        const dP = sP.getDataRange().getValues();
+        for (let j = 1; j < dP.length; j++) {
+          const cleanId = String(dP[j][1] || "").trim().toUpperCase();
+          if (cleanId) partMap[cleanId] = String(dP[j][2] || "Entreprise sans nom").trim();
+        }
+      }
+      for (let i = 1; i < dA.length; i++) {
+        if (!dA[i][0]) continue;
+        const dateObj = new Date(dA[i][2]);
+        const idAlerte = String(dA[i][1]).trim().toUpperCase();
+        const nomTrouve = partMap[idAlerte] || ("ID : " + dA[i][1]);
+        list.push({
+          id: dA[i][0], type: "Partenaire",
+          sujetId: dA[i][1], sujetNom: nomTrouve,
+          partId: dA[i][1], nomPartenaire: nomTrouve,
+          dateRaw: dateObj.toISOString(), date: dateObj.toLocaleDateString('fr-FR'),
+          msg: dA[i][3], freq: dA[i][4],
+          statut: dA[i][5] || "À faire",
+          auteur: dA[i][7] || ""
+        });
+      }
+    }
+
+    // --- ALERTES ÉTUDIANTS ---
+    const sE = ss.getSheetByName("ALERTES_ETUDIANTS");
+    if (sE) {
+      const dAE = sE.getDataRange().getValues();
+      const dEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+      const etuMap = {};
+      for (let j = 1; j < dEtu.length; j++) {
+        const eid = String(dEtu[j][0] || "").trim();
+        if (eid) etuMap[eid] = (String(dEtu[j][3] || "") + " " + String(dEtu[j][2] || "")).trim();
+      }
+      for (let i = 1; i < dAE.length; i++) {
+        if (!dAE[i][0]) continue;
+        const dateObj = new Date(dAE[i][2]);
+        const idEtu = String(dAE[i][1] || "").trim();
+        const nomEtu = etuMap[idEtu] || ("ID : " + idEtu);
+        list.push({
+          id: dAE[i][0], type: "Étudiant",
+          sujetId: idEtu, sujetNom: nomEtu,
+          partId: idEtu, nomPartenaire: nomEtu,
+          dateRaw: dateObj.toISOString(), date: dateObj.toLocaleDateString('fr-FR'),
+          msg: dAE[i][3], freq: dAE[i][4],
+          statut: dAE[i][5] || "À faire",
+          auteur: dAE[i][7] || ""
+        });
+      }
+    }
+
+    list.sort((a, b) => new Date(b.dateRaw) - new Date(a.dateRaw));
     return createJsonResponse({ success: true, data: list });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -3344,7 +3635,7 @@ function notifierMMOKEtCreerMission(ss, p, typeAlerte, idCible, action, msgAlert
   // Fallback : résolution de l'email via p.ref (Personnel col A → col G)
   if (!emailAuteur && p.ref) {
     try {
-      const dPerso = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+      const dPerso = getPersonnelDataCached_(ss);
       for (let k = 1; k < dPerso.length; k++) {
         if (String(dPerso[k][0] || "").trim() === String(p.ref).trim()) {
           emailAuteur = String(dPerso[k][6] || "").trim().toLowerCase();
@@ -3388,7 +3679,7 @@ function notifierMMOKEtCreerMission(ss, p, typeAlerte, idCible, action, msgAlert
   }
   let nomCollab = nomAuteur;
   try {
-    const dP2 = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+    const dP2 = getPersonnelDataCached_(ss);
     for (let k = 1; k < dP2.length; k++) {
       if (String(dP2[k][6] || "").trim().toLowerCase() === emailAuteur) {
         nomCollab = (String(dP2[k][2] || "") + " " + String(dP2[k][1] || "")).trim();
@@ -3407,9 +3698,9 @@ function handleSetPartnerAlert(p, ss) {
   try {
     const sheet = getSheetSafe(ss, "ALERTES_PARTENAIRES");
     const newId = "AL" + Math.floor(1000 + Math.random() * 9000);
-    
-    // LA CORRECTION EST ICI : on récupère bien le "targetId" envoyé par le dossier
-    const idPartenaire = String(p.targetId || p.partnerId || p.id_partenaire || p.id || "").trim().toUpperCase() || "ID_MANQUANT";
+
+    const idPartenaire = String(p.targetId || p.partnerId || p.id_partenaire || p.id || "").trim().toUpperCase();
+    if (!idPartenaire) return createJsonResponse({ success: false, message: "Impossible de créer une alerte sans nom d'entreprise. Veuillez sélectionner un partenaire valide." });
     
     const newRow = [
       newId,
@@ -3418,7 +3709,8 @@ function handleSetPartnerAlert(p, ss) {
       p.message || p.msg || "Relance à effectuer", // Col D : Message
       p.frequence || p.freq || "Unique",      // Col E : Fréquence
       "À faire",                              // Col F : Statut
-      p.destinataire || "m.mokhtari@hecg.fr"  // Col G : Email
+      p.destinataire || "m.mokhtari@hecg.fr", // Col G : Email
+      p.emailAuteur || p.idAuteur || ""       // Col H : Auteur
     ];
     
     sheet.appendRow(newRow);
@@ -3462,8 +3754,16 @@ function handleGetPartnerDetails(params, ss) {
     if (!info) return createJsonResponse({ success: false, message: "Entreprise introuvable" });
     
     const dataEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const nomEntLower = info.entreprise.toLowerCase();
     const alternants = dataEtu
-      .filter(r => String(r[11]).trim().toUpperCase() === id && String(r[13]).toLowerCase().includes("alternance"))
+      .filter(r => {
+        const statut = String(r[13] || "").toLowerCase();
+        if (statut.includes("sorti") || statut.includes("diplômé") || statut.includes("diplome")) return false;
+        const entId = String(r[11] || "").trim().toUpperCase();
+        if (entId === id) return true;
+        // Fallback : col L vide mais col V correspond au nom de l'entreprise
+        return !entId && String(r[21] || "").trim().toLowerCase() === nomEntLower;
+      })
       .map(r => ({ id: String(r[0]).trim(), nom: r[3] + " " + r[2], prenom: String(r[3]).trim(), nomFamille: String(r[2]).trim(), classe: r[14] }));
     
     // --- LA CORRECTION EST ICI : ON UTILISE SUIVI_PARTENARIAT ---
@@ -3519,9 +3819,46 @@ function handleGetPartnerDetails(params, ss) {
       }
     } catch(eAnc) {}
 
-    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants } });
-  } catch (e) { 
-    return createJsonResponse({ success: false, message: e.toString() }); 
+    // Calcul du score — logique identique à handleGetPartners
+    const todayScore = new Date(); todayScore.setHours(0, 0, 0, 0);
+    let activeScoreSum = 0;
+    let activeCount = 0;
+    let sortiCount = 0;
+    for (let k = 1; k < dataEtu.length; k++) {
+      const entIdK = String(dataEtu[k][11] || "").trim().toUpperCase();
+      if (entIdK !== id) continue;
+      const statutK   = String(dataEtu[k][13] || "").toLowerCase();
+      const typoK     = String(dataEtu[k][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const isActiveAlt = statutK.includes("altern") || statutK.includes("apprenti");
+      const isSorti     = typoK.includes("sorti");
+      if (isActiveAlt) {
+        const raw = dataEtu[k][17];
+        let days = 0;
+        if (raw) {
+          const d = raw instanceof Date ? raw : new Date(String(raw).replace(/^'/, "").trim());
+          if (!isNaN(d.getTime())) days = Math.max(0, Math.floor((todayScore - d) / 86400000));
+        }
+        activeScoreSum += (50 + days);
+        activeCount++;
+      } else if (isSorti) {
+        sortiCount++;
+      }
+    }
+    const qualifiedContactCount = contacts.filter(c => {
+      const hasName = !!(c.nom && c.prenom);
+      const hasMail = !!(c.mail && String(c.mail).includes('@'));
+      const hasTel  = !!(c.tel || c.tel2);
+      return hasName && (hasMail || hasTel);
+    }).length;
+    const scoreA = activeScoreSum * activeCount;
+    const scoreB = sortiCount * 50;
+    const scoreC = qualifiedContactCount * 10;
+    const score = scoreA + scoreB + scoreC;
+    const scoreDetails = { A: scoreA, B: scoreB, C: scoreC, activeCount, sortiCount, qualifiedContactCount };
+
+    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants, score, scoreDetails } });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: e.toString() });
   }
 }
 function handleUpdateEnterprise(p, ss) {
@@ -3579,6 +3916,8 @@ function handleUpdateContact(p, ss) {
         if (p.mail !== undefined) sheet.getRange(i + 1, 7).setValue(p.mail);
         if (p.mail2 !== undefined) sheet.getRange(i + 1, 9).setValue(p.mail2);
         if (p.tel2 !== undefined) sheet.getRange(i + 1, 10).setValue(p.tel2);
+        if (p.poste !== undefined) sheet.getRange(i + 1, 14).setValue(p.poste);
+        if (p.is_ma !== undefined) sheet.getRange(i + 1, 15).setValue(p.is_ma);
 
         const logDetail = "Contact " + nomComplet.trim() + (changes.length > 0 ? " | " + changes.join(" | ") : " — coordonnées mises à jour");
         logAction(p.idAuteur, p.roleAuteur, "Modification", "Contact", idCible, logDetail);
@@ -3590,6 +3929,7 @@ function handleUpdateContact(p, ss) {
 }
 
 function handleDeleteContact(p, ss) {
+  if (!String(p.motif || "").trim()) return createJsonResponse({ success: false, message: "Le motif de suppression est obligatoire." });
   try {
     const sheet = getSheetSafe(ss, "PARTENARIAT");
     const data = sheet.getDataRange().getValues();
@@ -3598,9 +3938,10 @@ function handleDeleteContact(p, ss) {
       if (String(data[i][0]).trim() === idCible) {
         const nomContact = (data[i][4] || "") + " " + (data[i][3] || "");
         const nomEnt = data[i][2] || "?";
+        _archiveItem(ss, "Contact", p.emailAuteur || p.idAuteur, p.motif || "", idCible, { row: data[i], nomContact: nomContact.trim(), nomEntreprise: nomEnt });
         sheet.deleteRow(i + 1);
-        logAction(p.idAuteur, p.roleAuteur, "Suppression", "Contact", idCible, "A supprimé le contact " + nomContact.trim() + " (Entreprise : " + nomEnt + ")");
-        notifierSuppression(p.idAuteur, p.roleAuteur, "Contact entreprise supprimé", nomContact.trim() + " — Entreprise : " + nomEnt + " — ID : " + idCible);
+        logAction(p.idAuteur, p.roleAuteur, "Suppression", "Contact", idCible, "A supprimé le contact " + nomContact.trim() + " (Entreprise : " + nomEnt + ") — Motif : " + (p.motif || "Non précisé"));
+        notifierSuppression(p.idAuteur, p.roleAuteur, "Contact entreprise supprimé", nomContact.trim() + " — " + nomEnt + " — Motif : " + (p.motif || "Non précisé"));
         return createJsonResponse({ success: true });
       }
     }
@@ -3624,8 +3965,10 @@ function handlePartagerOffre(p, ss) {
     let cibles = [];
     const now = new Date();
 
+    let isExplicitMode = false;
     if (p.emailsCibles && Array.isArray(p.emailsCibles) && p.emailsCibles.length > 0) {
-      // Mode liste explicite : l'utilisateur a édité les destinataires manuellement
+      // Mode liste explicite : l'utilisateur a sélectionné les destinataires dans le modal
+      isExplicitMode = true;
       p.emailsCibles.forEach(rawMail => {
         const mail = String(rawMail || "").trim().toLowerCase();
         if (!mail.includes('@')) return;
@@ -3664,16 +4007,32 @@ function handlePartagerOffre(p, ss) {
 
     if (cibles.length === 0) return createJsonResponse({ success: false, message: "Aucun étudiant ne correspond aux critères (Inscrit/Préinscrit en recherche de cette classe)." });
 
+    // Mise à jour du statut AVANT l'envoi : si le script time out pendant les emails,
+    // le statut est déjà correct dans le sheet.
+    for (let i = 1; i < dataOffres.length; i++) {
+      if (String(dataOffres[i][0]).trim() === String(p.id_offre).trim()) {
+        sheetOffres.getRange(i + 1, 14).setValue("Partagée"); // Colonne N
+        break;
+      }
+    }
+    SpreadsheetApp.flush();
+
     let nbAjoutes = 0;
     var mailsEnvoyes = [];
     var sujetOffre = "Nouvelle offre ciblée : " + infoMail.poste;
     var corpsOffre = "";
     cibles.forEach(etu => {
       const dejaFait = dataPartages.some(r => String(r[0]).trim() === String(etu.id).trim() && String(r[1]).trim() === String(p.id_offre).trim());
-      if (!dejaFait) {
-        sheetPartages.appendRow([etu.id, p.id_offre, now, "Partagée"]);
+      // En mode explicite, on envoie à tous les destinataires sélectionnés même s'ils ont déjà reçu l'offre.
+      // En mode automatique, on respecte le filtre anti-doublon.
+      const shouldSend = isExplicitMode || !dejaFait;
+      if (shouldSend) {
+        if (!dejaFait) {
+          sheetPartages.appendRow([etu.id, p.id_offre, now, "Partagée"]);
+        }
         try {
-          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p>Une nouvelle offre a été sélectionnée pour ton profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>Tu peux postuler directement depuis ton dossier étudiant HECG.</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a></div>`;
+          const msgCorps = String(p.messagePersonnalise || "").trim() || "Tu peux postuler directement depuis ton dossier étudiant HECG.";
+          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p>Une nouvelle offre a été sélectionnée pour ton profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>${msgCorps}</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a></div>`;
           corpsOffre = corps;
           GmailApp.sendEmail(etu.mail, sujetOffre, "", { htmlBody: corps + getSignatureHTML() });
           mailsEnvoyes.push(etu.mail);
@@ -3681,15 +4040,6 @@ function handlePartagerOffre(p, ss) {
         nbAjoutes++;
       }
     });
-
-    // Mise à jour du statut : toujours écrire "Partagée", quel que soit nbAjoutes
-    for (let i = 1; i < dataOffres.length; i++) {
-      if (String(dataOffres[i][0]).trim() === String(p.id_offre).trim()) {
-        sheetOffres.getRange(i + 1, 14).setValue("Partagée"); // Colonne N
-        break;
-      }
-    }
-    SpreadsheetApp.flush(); // Forcer la validation de l'écriture avant le retour
     logAction(p.idAuteur, p.roleAuteur, "Action", "Offres", p.id_offre, "A partagé l'offre avec " + nbAjoutes + " étudiant(s)");
     if (mailsEnvoyes.length > 0) {
       logMailDetail(ss, {
@@ -3731,13 +4081,16 @@ function nettoyerOffresPerimees() {
     const dateOffre = new Date(data[i][2]);
     const diffJours = (today - dateOffre) / (1000 * 60 * 60 * 24);
     
-    // Si l'offre a plus de 14 jours et n'est pas déjà obsolète ou pourvue
-    if (diffJours > 14 && data[i][13] !== "Obsolète") {
-      sheet.getRange(i + 1, 14).setValue("Obsolète"); // Colonne N
+    // Si l'offre a plus de 14 jours, non partagée, et qualité pas déjà Obsolète/Vérifiée
+    const qualiteActuelle = String(data[i][9] || "").trim();
+    const etatActuel      = String(data[i][13] || "").trim();
+    if (diffJours > 14 && qualiteActuelle !== "Obsolète" && !etatActuel.includes("Partagée")) {
+      sheet.getRange(i + 1, 10).setValue("Obsolète"); // Colonne J : Qualité
     }
   }
 }
 function handleDeleteOffre(p, ss) {
+  if (!String(p.motif || "").trim()) return createJsonResponse({ success: false, message: "Le motif de suppression est obligatoire." });
   try {
     const sheet = getSheetSafe(ss, "OFFRES");
     const data = sheet.getDataRange().getValues();
@@ -3745,13 +4098,14 @@ function handleDeleteOffre(p, ss) {
       if (String(data[i][0]) === String(p.id)) {
         const oldRow = data[i];
         const infoLog = (oldRow[14] || "?") + " chez " + (oldRow[4] || "?") + " (" + (oldRow[9] || "?") + ")";
+        _archiveItem(ss, "Offre", p.emailAuteur || p.idAuteur, p.motif || "", p.id, { row: oldRow, label: infoLog });
         sheet.deleteRow(i + 1);
         const sheetP = getSheetSafe(ss, "PARTAGES");
         const dataP = sheetP.getDataRange().getValues();
         for (let j = dataP.length - 1; j >= 1; j--) {
           if (String(dataP[j][1]) === String(p.id)) sheetP.deleteRow(j + 1);
         }
-        logAction(p.idAuteur, p.roleAuteur, "Suppression", "Offres", p.id, "A supprimé l'offre : " + infoLog);
+        logAction(p.idAuteur, p.roleAuteur, "Suppression", "Offres", p.id, "A supprimé l'offre : " + infoLog + " — Motif : " + (p.motif || "Non précisé"));
         return createJsonResponse({ success: true });
       }
     }
@@ -3857,24 +4211,103 @@ function handleAddPartner(p, ss) {
 }
 
 function handleDeleteEnterprise(p, ss) {
+  if (!String(p.motif || "").trim()) return createJsonResponse({ success: false, message: "Le motif de suppression est obligatoire." });
   try {
     const sheet = getSheetSafe(ss, "PARTENARIAT");
     const data = sheet.getDataRange().getValues();
     const idCible = String(p.id_entreprise).trim().toUpperCase();
     let nomEnt = "";
-    let nbRows = 0;
+    const rowsToArchive = [];
+    const indices = [];
     for (let i = data.length - 1; i >= 1; i--) {
       if (String(data[i][1]).trim().toUpperCase() === idCible) {
         if (!nomEnt) nomEnt = data[i][2];
-        sheet.deleteRow(i + 1);
-        nbRows++;
+        rowsToArchive.push(data[i]);
+        indices.push(i);
       }
     }
-    if (nbRows === 0) return createJsonResponse({ success: false, message: "Entreprise introuvable" });
-    logAction(p.idAuteur, p.roleAuteur, "Suppression", "Entreprise", idCible, "A supprimé l'entreprise «" + nomEnt + "» et ses " + nbRows + " contact(s)");
-    notifierSuppression(p.idAuteur, p.roleAuteur, "Entreprise supprimée", nomEnt + " (ID : " + idCible + ") — " + nbRows + " contact(s) supprimé(s)");
+    if (indices.length === 0) return createJsonResponse({ success: false, message: "Entreprise introuvable" });
+    _archiveItem(ss, "Entreprise", p.emailAuteur || p.idAuteur, p.motif || "", idCible, { rows: rowsToArchive, nomEntreprise: nomEnt });
+    for (let i = 0; i < indices.length; i++) sheet.deleteRow(indices[i] + 1);
+    logAction(p.idAuteur, p.roleAuteur, "Suppression", "Entreprise", idCible, "A supprimé «" + nomEnt + "» et ses " + indices.length + " contact(s) — Motif : " + (p.motif || "Non précisé"));
+    notifierSuppression(p.idAuteur, p.roleAuteur, "Entreprise supprimée", nomEnt + " (ID : " + idCible + ") — Motif : " + (p.motif || "Non précisé"));
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ==========================================
+// SYSTÈME D'ARCHIVAGE
+// ==========================================
+function _archiveItem(ss, type, auteur, motif, idOriginal, donneesObj) {
+  try {
+    var ws = ss.getSheetByName("ARCHIVES");
+    if (!ws) {
+      ws = ss.insertSheet("ARCHIVES");
+      ws.appendRow(["ID_Archive","Type","Date","Heure","Auteur","Motif","ID_Original","Donnees_JSON"]);
+      ws.setFrozenRows(1);
+    }
+    var now = new Date();
+    var idArch = "ARC" + now.getTime();
+    var dateStr = Utilities.formatDate(now, Session.getScriptTimeZone(), "dd/MM/yyyy");
+    var heureStr = Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
+    ws.appendRow([idArch, String(type||""), dateStr, heureStr, String(auteur||""), String(motif||""), String(idOriginal||""), JSON.stringify(donneesObj)]);
+    return idArch;
+  } catch(e) { Logger.log("Archive error: " + e); return null; }
+}
+
+function handleGetArchives(p, ss) {
+  try {
+    var ws = ss.getSheetByName("ARCHIVES");
+    if (!ws || ws.getLastRow() <= 1) return createJsonResponse({ success: true, data: [] });
+    var data = ws.getDataRange().getValues();
+    var list = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var donnees = {};
+      try { donnees = JSON.parse(String(data[i][7] || "{}")); } catch(eP) { donnees = {}; }
+      list.push({
+        id: String(data[i][0]), type: String(data[i][1]),
+        date: String(data[i][2]), heure: String(data[i][3]),
+        auteur: String(data[i][4]), motif: String(data[i][5]),
+        idOriginal: String(data[i][6]), donnees: donnees
+      });
+    }
+    list.reverse();
+    return createJsonResponse({ success: true, data: list });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleRestoreArchive(p, ss) {
+  try {
+    var ws = ss.getSheetByName("ARCHIVES");
+    if (!ws) return createJsonResponse({ success: false, message: "Aucune archive" });
+    var data = ws.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) !== String(p.id_archive)) continue;
+      var type = String(data[i][1]).replace(" (Restauré)", "");
+      var donnees = {};
+      try { donnees = JSON.parse(String(data[i][7])); } catch(eP) {}
+      if (type === "Contact" && donnees.row) {
+        getSheetSafe(ss, "PARTENARIAT").appendRow(donnees.row);
+      } else if (type === "Entreprise" && donnees.rows) {
+        var wsP = getSheetSafe(ss, "PARTENARIAT");
+        donnees.rows.forEach(function(row) { wsP.appendRow(row); });
+      } else if (type === "Etudiant" && donnees.row) {
+        getSheetSafe(ss, "ETUDIANTS").appendRow(donnees.row);
+      } else if (type === "Offre" && donnees.row) {
+        getSheetSafe(ss, "OFFRES").appendRow(donnees.row);
+      } else if (type === "Prospect" && donnees.row) {
+        getSheetSafe(ss, "PROSPECTS").appendRow(donnees.row);
+      } else {
+        return createJsonResponse({ success: false, message: "Données d'archive manquantes ou type non supporté" });
+      }
+      ws.getRange(i + 1, 2).setValue(type + " (Restauré)");
+      var label = donnees.nomContact || donnees.nomEntreprise || donnees.nomEtudiant || data[i][6];
+      logAction(p.idAuteur, p.roleAuteur, "Restauration", "Archives", data[i][6], type + " restauré : " + label);
+      return createJsonResponse({ success: true });
+    }
+    return createJsonResponse({ success: false, message: "Archive introuvable" });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
 function handleLinkMAToStudents(p, ss) {
@@ -4238,20 +4671,32 @@ function envoyerBilanOffres() {
         nbAQualifier++;
       }
 
-      // Offres non partagées
-      if (etat.includes("non") || etat === "") {
+      // Offres non partagées — uniquement les offres vérifiées (exclure "À qualifier" et "Obsolète")
+      if ((qualite.includes("vérifiée") || qualite.includes("verifiee")) && (etat.includes("non") || etat === "")) {
         nbNonPartages++;
       }
     }
   }
-  
+
   const message = "Bonjour l'équipe,\n\nVoici le point actuel sur votre Bourse aux Offres HECG :\n\n" +
                   "" + nbAQualifier + " offres sont en attente d'être qualifiées.\n" +
-                  " " + nbNonPartages + " offres actives n'ont pas encore été partagées aux étudiants.\n\n" +
+                  " " + nbNonPartages + " offres vérifiées n'ont pas encore été partagées aux étudiants.\n\n" +
                   "Connectez-vous sur votre interface pour les traiter.\n\n" +
                   "Passez une excellente journée !";
-                  
-  GmailApp.sendEmail("polepedagogique@hecg.fr", " Point sur vos offres HECG", message);
+
+  const sujet = "Point sur vos offres HECG";
+  GmailApp.sendEmail("polepedagogique@hecg.fr", sujet, message);
+  try {
+    logMailDetail(ss, {
+      auteur: "Système (CRON)",
+      categorie: "Rapport journalier",
+      sousCat: "Point sur vos offres",
+      objet: sujet,
+      destinataires: ["polepedagogique@hecg.fr"],
+      corps: message,
+      sourceId: "BILAN-OFFRES-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd")
+    });
+  } catch(eLog) { Logger.log("Erreur logMailDetail bilan offres : " + eLog.toString()); }
 }
 
 // --- NETTOYEUR AUTOMATIQUE : OFFRES EXPIRÉES ---
@@ -4336,103 +4781,285 @@ function handleTestTemplateRelance(p, ss) {
 }
 
 // --- RELANCE HEBDOMADAIRE DES ÉTUDIANTS ---
+// ==========================================
+// RELANCE HEBDOMADAIRE NOMINATIVE — PRÉINSCRITS EN RECHERCHE
+// ==========================================
+
+// ==========================================
+// RELANCE HEBDO — CRON + HANDLERS + CONFIG
+// ==========================================
+
 function envoyerRelanceHebdomadaire() {
-  const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  const sheetEtu = getSheetSafe(ss, "ETUDIANTS");
-  const sheetOffres = getSheetSafe(ss, "OFFRES");
-  const sheetPartages = getSheetSafe(ss, "PARTAGES");
+  const ss    = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty("RELANCE_ENABLED") === "false") {
+    Logger.log("Relance hebdo suspendue — aucun envoi.");
+    return;
+  }
+  const result = _doRelanceHebdo(ss, "Système (CRON)", false);
+  props.setProperty("RELANCE_LAST_RUN", new Date().toISOString());
+  logExecutionAuto(ss, "envoyerRelanceHebdomadaire", result.nbMailsEnvoyes, result.nbIgnores, result.nbErreurs, result.erreurDetails.join(" | "));
+  Logger.log("Relances terminées : " + result.nbMailsEnvoyes + " mail(s), " + result.nbIgnores + " ignoré(s), " + result.nbErreurs + " erreur(s).");
+}
 
-  const dataEtu = sheetEtu.getDataRange().getValues();
-  const dataOffres = sheetOffres.getDataRange().getValues();
-  const dataPartages = sheetPartages.getDataRange().getValues();
+function handleSendRelanceHebdo(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé au Super-admin." });
+  try {
+    const auteur = p.emailAuteur || p.idAuteur || "Super-admin";
+    const result = _doRelanceHebdo(ss, auteur, false);
+    PropertiesService.getScriptProperties().setProperty("RELANCE_LAST_RUN", new Date().toISOString());
+    return createJsonResponse({ success: true, nbMailsEnvoyes: result.nbMailsEnvoyes, nbIgnores: result.nbIgnores, nbErreurs: result.nbErreurs, message: result.nbMailsEnvoyes + " mail(s) envoyé(s), " + result.nbIgnores + " ignoré(s)." });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
 
-  // 1. Mémoriser toutes les offres pour les retrouver vite
-  const offresMap = {};
-  for (let i = 1; i < dataOffres.length; i++) {
-    offresMap[String(dataOffres[i][0]).trim()] = {
-      url: dataOffres[i][1],
-      entreprise: dataOffres[i][4],
-      qualite: String(dataOffres[i][9]).toLowerCase().trim(), // Colonne J
-      poste: dataOffres[i][14],
-      notesInternes: dataOffres[i][15] // <-- AJOUT : Récupère la Colonne P (Notes)
-    };
+function handlePreviewRelanceHebdo(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé au Super-admin." });
+  try {
+    const result = _doRelanceHebdo(ss, "", true);
+    return createJsonResponse({ success: true, data: result.preview });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleSendOneRelance(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé au Super-admin." });
+  try {
+    const mailDest = String(p.mailDest || "").trim();
+    const sujet    = String(p.sujet    || "Relance alternance HECG").trim();
+    const htmlBody = String(p.htmlBody || "");
+    if (!mailDest.includes("@")) return createJsonResponse({ success: false, message: "Email invalide." });
+    if (!htmlBody)               return createJsonResponse({ success: false, message: "Corps vide." });
+    GmailApp.sendEmail(mailDest, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL });
+    try { logMailDetail(ss, { auteur: p.emailAuteur || "Super-admin", categorie: "Relance auto", sousCat: "Relance hebdo Préinscrit (individuelle)", objet: sujet, destinataires: [mailDest], corps: String(p.nomEtu || "") + " — envoi individuel", sourceId: "RELANCE-" + String(p.idEtu || "") + "-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd") }); } catch(eLog) {}
+    return createJsonResponse({ success: true });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleGetRelanceConfig(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé." });
+  try {
+    const props   = PropertiesService.getScriptProperties();
+    const enabled = props.getProperty("RELANCE_ENABLED") !== "false";
+    const lastRun = props.getProperty("RELANCE_LAST_RUN") || null;
+    const nextRun = _getNextMondayAt830();
+    let filters   = {};
+    try { filters = JSON.parse(props.getProperty("RELANCE_FILTERS_JSON") || "{}"); } catch(e) {}
+    const triggerInstalled = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "envoyerRelanceHebdomadaire");
+    return createJsonResponse({ success: true, enabled: enabled, lastRun: lastRun, nextRun: nextRun, filters: filters, triggerInstalled: triggerInstalled });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleInstallRelanceTrigger(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé au Super-admin." });
+  try {
+    // Supprimer les éventuels doublons
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getHandlerFunction() === "envoyerRelanceHebdomadaire") ScriptApp.deleteTrigger(t);
+    });
+    // Créer le trigger : chaque lundi entre 8h et 9h (Apps Script ne garantit pas les minutes)
+    ScriptApp.newTrigger("envoyerRelanceHebdomadaire")
+      .timeBased()
+      .onWeekDay(ScriptApp.WeekDay.MONDAY)
+      .atHour(8)
+      .create();
+    return createJsonResponse({ success: true, message: "Trigger installé : envoi automatique chaque lundi entre 8h et 9h." });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function _getNextMondayAt830() {
+  var tz  = Session.getScriptTimeZone();
+  var now = new Date();
+  var dow = parseInt(Utilities.formatDate(now, tz, "u")); // 1=Lun … 7=Dim (ISO)
+  var h   = parseInt(Utilities.formatDate(now, tz, "H"));
+  var mn  = parseInt(Utilities.formatDate(now, tz, "m"));
+  // Jours à ajouter pour atteindre le prochain lundi 8h30
+  var add = (dow === 1)
+    ? ((h < 8 || (h === 8 && mn < 30)) ? 0 : 7) // lundi : ce matin si avant 8h30, sinon +7
+    : (8 - dow) % 7;                               // mardi(2)→6, mer(3)→5, …, dim(7)→1
+  var next    = new Date(now.getTime() + add * 86400000);
+  var datePart = Utilities.formatDate(next, tz, "yyyy-MM-dd");
+  var tzRaw    = Utilities.formatDate(now, tz, "Z");          // "+0200"
+  var tzIso    = tzRaw.substring(0, 3) + ":" + tzRaw.substring(3); // "+02:00"
+  return datePart + "T08:30:00" + tzIso; // "2026-06-22T08:30:00+02:00"
+}
+
+function handleSaveRelanceConfig(p, ss) {
+  if (!p.vieScRole || p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès réservé." });
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (typeof p.enabled !== "undefined") props.setProperty("RELANCE_ENABLED", p.enabled ? "true" : "false");
+    if (p.filters) {
+      const f = typeof p.filters === "string" ? JSON.parse(p.filters) : p.filters;
+      props.setProperty("RELANCE_FILTERS_JSON", JSON.stringify(f));
+    }
+    return createJsonResponse({ success: true });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// dryRun=true : génère HTMLs sans envoyer → result.preview[]
+// dryRun=false : envoie + log → result.{nbMailsEnvoyes, nbIgnores, nbErreurs, erreurDetails}
+function _doRelanceHebdo(ss, auteur, dryRun) {
+  // Filtres sauvegardés
+  var filters = {};
+  try { filters = JSON.parse(PropertiesService.getScriptProperties().getProperty("RELANCE_FILTERS_JSON") || "{}"); } catch(e) {}
+  var fClasses = (filters.classes || []).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+  var fCampus  = (filters.campus  || []).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+  var fNoms    = (filters.noms    || []).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+  var fEmails  = (filters.emails  || []).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+
+  const dataEtu      = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+  const dataOffres   = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
+  const dataPartages = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
+  const dataPerso    = getPersonnelDataCached_(ss);
+
+  // Index des référents
+  const persoMap = {};
+  for (let i = 1; i < dataPerso.length; i++) {
+    const ref = String(dataPerso[i][0] || "").trim();
+    if (!ref) continue;
+    persoMap[ref] = { nom: String(dataPerso[i][1] || ""), prenom: String(dataPerso[i][2] || ""), mail: String(dataPerso[i][6] || "") };
   }
 
-  let nbMailsEnvoyes = 0;
-  let nbIgnores = 0;
-  let nbErreurs = 0;
-  const erreurDetails = [];
-  var mailsRelances = [];
+  // Index des offres : qualite col[13] (même logique que handleStudentDetails)
+  const offresQualiteMap = {};
+  for (let i = 1; i < dataOffres.length; i++) {
+    const idOffre = String(dataOffres[i][0] || "").trim();
+    if (!idOffre) continue;
+    offresQualiteMap[idOffre] = String(dataOffres[i][13] || "").trim();
+  }
 
-  // 2. Boucler sur les étudiants
+  // Comptage des offres NON-Obsolètes par étudiant (aligné exactement avec le dossier étudiant)
+  const nbPartagesParEtu = {};
+  for (let i = 1; i < dataPartages.length; i++) {
+    const idEtu   = String(dataPartages[i][0] || "").trim();
+    const idOffre = String(dataPartages[i][1] || "").trim();
+    if (!idEtu || !idOffre) continue;
+    const qualite = offresQualiteMap[idOffre] || "";
+    if (qualite === "Obsolète") continue; // même filtre que le dossier
+    if (!nbPartagesParEtu[idEtu]) nbPartagesParEtu[idEtu] = {};
+    nbPartagesParEtu[idEtu][idOffre] = true; // déduplique au cas où
+  }
+
+  const appUrl = "https://mokhtarimehdipro-bit.github.io/CRMHECG/";
+
+  let nbMailsEnvoyes = 0, nbIgnores = 0, nbErreurs = 0;
+  const erreurDetails = [], preview = [];
+
   for (let i = 1; i < dataEtu.length; i++) {
-    let idEtu = String(dataEtu[i][0]).trim();
-    let prenom = dataEtu[i][3];
-    let mailEtu = dataEtu[i][4];
-    let statut = String(dataEtu[i][13] || "").toLowerCase();
-    let typo = String(dataEtu[i][20] || "").toLowerCase();
+    const row       = dataEtu[i];
+    const idEtu     = String(row[0]  || "").trim();
+    const mdpEtu    = String(row[1]  || "").trim();
+    const nomEtu    = String(row[2]  || "").trim();
+    const prenomEtu = String(row[3]  || "").trim();
+    const mailEtu   = String(row[4]  || "").trim();
+    const refPerso  = String(row[7]  || "").trim();
+    const statut    = String(row[13] || "").toLowerCase();
+    const classeEtu = String(row[14] || "").trim();
+    const typo      = String(row[20] || "").trim().toUpperCase();
+    const campusEtu = String(row[22] || "").trim();
 
-    // Vérifier que l'étudiant est bien "En recherche" et non "Sorti/Refus"
-    if (!statut.includes("recherche") || typo.includes("sorti") || typo.includes("refus") || !mailEtu.includes("@")) {
-      nbIgnores++;
+    // Cible stricte : PRÉINSCRIT + En recherche
+    if (typo !== "PRÉINSCRIT" || !statut.includes("recherche") || !mailEtu.includes("@")) { nbIgnores++; continue; }
+
+    // Filtres enregistrés
+    if (fClasses.length && !fClasses.some(function(c){ return classeEtu.toLowerCase().includes(c); })) { nbIgnores++; continue; }
+    if (fCampus.length  && !fCampus.some(function(c){ return campusEtu.toLowerCase().includes(c); })) { nbIgnores++; continue; }
+    if (fNoms.length    && !fNoms.some(function(n){ return (prenomEtu + " " + nomEtu).toLowerCase().includes(n); })) { nbIgnores++; continue; }
+    if (fEmails.length  && !fEmails.includes(mailEtu.toLowerCase())) { nbIgnores++; continue; }
+
+    // Nombre d'offres distinctes partagées (identique au dossier étudiant)
+    const nbOffres = nbPartagesParEtu[idEtu] ? Object.keys(nbPartagesParEtu[idEtu]).length : 0;
+    if (nbOffres === 0) { nbIgnores++; continue; }
+
+    const referent = (refPerso && persoMap[refPerso]) ? persoMap[refPerso] : null;
+    const htmlBody = _buildRelanceHebdoHtml(prenomEtu, nbOffres, referent, idEtu, mdpEtu, appUrl);
+    const sujet    = "Relance hebdomadaire — " + nbOffres + " offre(s) partagee(s) disponibles dans votre espace";
+
+    if (dryRun) {
+      preview.push({ id: idEtu, nom: nomEtu, prenom: prenomEtu, mail: mailEtu, classe: classeEtu, campus: campusEtu, nbOffres: nbOffres, sujet: sujet, html: htmlBody });
       continue;
     }
-
-    // 3. Trouver les offres partagées mais non postulées
-    let offresEnAttente = [];
-    for (let p = 1; p < dataPartages.length; p++) {
-      let partIdEtu = String(dataPartages[p][0]).trim();
-      let partIdOffre = String(dataPartages[p][1]).trim();
-      let partEtat = String(dataPartages[p][3] || "").toLowerCase();
-
-      if (partIdEtu === idEtu && !partEtat.includes("postul") && !partEtat.includes("refus")) {
-        let offreDetails = offresMap[partIdOffre];
-        if (offreDetails && !offreDetails.qualite.includes("obsolète") && !offreDetails.qualite.includes("obsolete") && !offreDetails.qualite.includes("pourvue")) {
-          offresEnAttente.push(offreDetails);
-        }
-      }
-    }
-
-    if (offresEnAttente.length === 0) { nbIgnores++; continue; }
-
-    // 4. Construction du mail
-    let offresHtml = "";
-    offresEnAttente.forEach(o => {
-      offresHtml += `
-        <div style="background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 4px solid #FF7A00; text-align: left;">
-            <strong style="color: #ffffff; font-size: 16px;">${o.poste} <span style="color: #FF7A00; font-size: 12px;">(missions internes)</span></strong><br>
-            <span style="color: #d1e3ff; font-size: 14px;">🏢 ${o.entreprise}</span><br>
-            <a href="${o.url}" target="_blank" style="display: inline-block; margin-top: 10px; color: #FF7A00; text-decoration: none; font-weight: bold; font-size: 14px;">Voir l'annonce ↗</a>
-        </div>
-      `;
-    });
-
-    let htmlTemplate = PropertiesService.getScriptProperties().getProperty("TEMPLATE_RELANCE");
-    if (!htmlTemplate) htmlTemplate = "Erreur : Modèle non configuré.";
-
-    let htmlBody = htmlTemplate
-      .replace("{{PRENOM}}", prenom)
-      .replace("{{NB_OFFRES}}", offresEnAttente.length)
-      .replace("{{INSERER_VOS_OFFRES_ICI}}", offresHtml);
-
-    // 5. Envoi avec capture d'erreur précise
     try {
-      GmailApp.sendEmail(mailEtu, "🎯 " + offresEnAttente.length + " offre(s) d'alternance en attente !", "", { htmlBody: htmlBody });
+      GmailApp.sendEmail(mailEtu, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL });
       nbMailsEnvoyes++;
-      mailsRelances.push(mailEtu);
-    } catch (e) {
-      nbErreurs++;
-      erreurDetails.push(mailEtu + " → " + e.toString());
-      Logger.log("Erreur d'envoi pour " + mailEtu + " : " + e.toString());
+      try { logMailDetail(ss, { auteur: auteur, categorie: "Relance auto", sousCat: "Relance hebdo Préinscrit", objet: sujet, destinataires: [mailEtu], corps: prenomEtu + " " + nomEtu + " (" + mailEtu + ") — " + nbOffres + " offre(s)", sourceId: "RELANCE-" + idEtu + "-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd") }); } catch(eLog) {}
+    } catch(e) {
+      nbErreurs++; erreurDetails.push(mailEtu + " -> " + e.toString());
+      Logger.log("Erreur relance " + mailEtu + " : " + e.toString());
     }
   }
-
-  Logger.log("Relances terminées : " + nbMailsEnvoyes + " mail(s) envoyé(s), " + nbIgnores + " ignoré(s), " + nbErreurs + " erreur(s).");
-  if (mailsRelances.length > 0) {
-    try { logMailDetail(ss, { auteur: "Système (CRON)", categorie: "Relance auto", sousCat: "Relance étudiant hebdo", objet: "🎯 Offre(s) d'alternance en attente", destinataires: mailsRelances, corps: "Relance hebdomadaire des offres d'alternance en attente. " + nbMailsEnvoyes + " étudiant(s) relancé(s).", sourceId: "RELANCE-HEBDO-" + new Date().toLocaleDateString('fr-FR') }); } catch(eLog) {}
-  }
-  logExecutionAuto(ss, "envoyerRelanceHebdomadaire", nbMailsEnvoyes, nbIgnores, nbErreurs, erreurDetails.join(" | "));
+  return { nbMailsEnvoyes: nbMailsEnvoyes, nbIgnores: nbIgnores, nbErreurs: nbErreurs, erreurDetails: erreurDetails, preview: preview };
 }
+
+// Signature: (prenom, nbOffres, referent, idEtu, mdpEtu, appUrl)
+function _buildRelanceHebdoHtml(prenom, nbOffres, referent, idEtu, mdpEtu, appUrl) {
+  // Bloc offres : quantitatif uniquement + renvoi vers espace étudiant
+  var offresBloc = '<div style="background:rgba(255,255,255,0.06);padding:20px 24px;border-radius:12px;border-left:4px solid #FF7A00;text-align:center;">'
+    + '<p style="color:#FF7A00;font-size:36px;font-weight:900;margin:0 0 4px 0;">' + nbOffres + '</p>'
+    + '<p style="color:#ffffff;font-size:15px;font-weight:700;margin:0 0 10px 0;">offre(s) vous ont ete partagees</p>'
+    + '<p style="color:#a8c4e8;font-size:13px;margin:0 0 16px 0;">Le detail complet (entreprises, postes, liens) est disponible dans votre espace etudiant.</p>'
+    + (appUrl ? '<a href="' + appUrl + '" target="_blank" style="display:inline-block;background:#FF7A00;color:#fff;font-weight:bold;font-size:13px;padding:10px 22px;border-radius:8px;text-decoration:none;">Acceder a mon espace etudiant</a>' : '')
+    + '</div>';
+
+  // Bloc référent
+  var referentHtml = "";
+  if (referent && (referent.nom || referent.prenom)) {
+    referentHtml = '<p style="color:#ffffff;font-size:15px;margin:4px 0;"><strong>' + (referent.prenom + " " + referent.nom).trim() + '</strong></p>';
+    if (referent.mail) referentHtml += '<p style="color:#d1e3ff;font-size:14px;margin:4px 0;">Email : <a href="mailto:' + referent.mail + '" style="color:#FF7A00;">' + referent.mail + '</a></p>';
+  } else {
+    referentHtml = '<p style="color:#d1e3ff;font-size:14px;margin:4px 0;">Votre equipe : <a href="mailto:polepedagogique@hecg.fr" style="color:#FF7A00;">polepedagogique@hecg.fr</a></p>';
+  }
+
+  // Bloc credentials
+  var credHtml = '<p style="color:#001a38;font-size:14px;margin:4px 0;">Identifiant : <strong>' + idEtu + '</strong></p>'
+    + '<p style="color:#001a38;font-size:14px;margin:4px 0;">Mot de passe : <strong>' + mdpEtu + '</strong></p>'
+    + (appUrl ? '<p style="color:#001a38;font-size:14px;margin:12px 0 0 0;"><a href="' + appUrl + '" target="_blank" style="color:#001a38;font-weight:bold;text-decoration:underline;">Acceder a mon espace etudiant</a></p>' : '');
+
+  return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>'
+    + '<body style="margin:0;padding:0;background-color:#001a38;font-family:\'Segoe UI\',Arial,sans-serif;">'
+    + '<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background:linear-gradient(180deg,#004a99 0%,#001a38 100%);min-height:100vh;">'
+    + '<tr><td align="center" style="padding:40px 10px;">'
+    + '<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;">'
+    + '<tr><td align="center" style="padding-bottom:28px;"><a href="https://hecg.fr/" target="_blank"><img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo HECG" width="140" style="display:block;border:0;filter:brightness(0) invert(1);"></a></td></tr>'
+    + '<tr><td align="center" style="padding:0 20px 6px 20px;"><h1 style="color:#ffffff;font-size:24px;font-weight:800;line-height:1.2;margin:0;letter-spacing:-0.5px;text-transform:uppercase;">Votre alternance HECG</h1><div style="width:40px;height:3px;background-color:#FF7A00;margin:12px auto;"></div></td></tr>'
+    // Salutation : prénom uniquement
+    + '<tr><td style="padding:0 20px 20px 20px;">'
+    + '<p style="color:#d1e3ff;font-size:15px;margin:0 0 10px 0;">Bonjour <strong style="color:#ffffff;">' + prenom + '</strong>,</p>'
+    + '<p style="color:#d1e3ff;font-size:15px;margin:0 0 10px 0;line-height:1.7;">Nous revenons vers vous dans le cadre de votre recherche d\'alternance. Des offres ont ete selectionnees pour vous et sont disponibles dans votre espace etudiant. Consultez-les et candidatez au plus vite !</p>'
+    + '<p style="color:#a8c4e8;font-size:14px;margin:0;line-height:1.6;">Toute l\'equipe HECG se tient a votre disposition pour vous accompagner personnellement — n\'hesitez pas a contacter votre referent.</p>'
+    + '</td></tr>'
+    // Bloc offres quantitatif
+    + '<tr><td style="padding:0 20px 0 20px;">' + offresBloc + '</td></tr>'
+    // Conseils
+    + '<tr><td style="padding:22px 20px 0 20px;">'
+    + '<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:16px;"><tr><td style="padding:22px;">'
+    + '<p style="color:#FF7A00;font-weight:bold;margin:0 0 12px 0;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Conseils HECG de la semaine</p>'
+    + '<table border="0" cellpadding="0" cellspacing="0" width="100%">'
+    + '<tr><td style="color:#ffffff;font-size:14px;padding-bottom:10px;line-height:1.5;"><strong style="color:#FF7A00;">CV :</strong> Assurez-vous qu\'il soit a jour et qu\'il mette en valeur votre parcours.</td></tr>'
+    + '<tr><td style="color:#ffffff;font-size:14px;padding-bottom:10px;line-height:1.5;"><strong style="color:#FF7A00;">Visite terrain :</strong> Deplacez-vous en entreprise avec votre CV imprime. Le contact direct est tres apprecie.</td></tr>'
+    + '<tr><td style="color:#ffffff;font-size:14px;padding-bottom:10px;line-height:1.5;"><strong style="color:#FF7A00;">LinkedIn :</strong> Interagissez avec les professionnels de votre secteur. Une connexion personnalisee ouvre des opportunites.</td></tr>'
+    + '<tr><td style="color:#ffffff;font-size:14px;line-height:1.5;"><strong style="color:#FF7A00;">Relance :</strong> Sans reponse apres 7 jours, relancez poliment pour montrer votre determination.</td></tr>'
+    + '</table></td></tr></table></td></tr>'
+    // Référent
+    + '<tr><td style="padding:18px 20px 0 20px;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:14px;"><tr><td style="padding:20px;">'
+    + '<p style="color:#FF7A00;font-weight:bold;margin:0 0 8px 0;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Votre referent HECG</p>'
+    + '<p style="color:#a8c4e8;font-size:13px;margin:0 0 8px 0;">N\'hesitez pas a le contacter pour un accompagnement personnalise (CV, entretien, strategie).</p>'
+    + referentHtml + '</td></tr></table></td></tr>'
+    // Credentials
+    + '<tr><td style="padding:18px 20px 0 20px;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#FF7A00;border-radius:14px;"><tr><td style="padding:20px;">'
+    + '<p style="color:#001a38;font-weight:bold;margin:0 0 8px 0;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Vos identifiants de connexion</p>'
+    + credHtml + '</td></tr></table></td></tr>'
+    // Footer
+    + '<tr><td align="center" style="padding:32px 20px 26px 20px;">'
+    + '<table border="0" cellpadding="0" cellspacing="0"><tr>'
+    + '<td style="padding:0 10px;"><a href="https://linkedin.com/in/hecg-aix-marseille-a21232239" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" alt="LinkedIn" width="22" style="filter:brightness(0) invert(1);"></a></td>'
+    + '<td style="padding:0 10px;"><a href="https://www.instagram.com/hecgecole" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/174/174855.png" alt="Instagram" width="22" style="filter:brightness(0) invert(1);"></a></td>'
+    + '<td style="padding:0 10px;"><a href="https://www.tiktok.com/@hecgmarseille" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/3046/3046121.png" alt="TikTok" width="22" style="filter:brightness(0) invert(1);"></a></td>'
+    + '</tr></table>'
+    + '<div style="margin-top:20px;color:#ffffff;font-size:11px;opacity:0.4;line-height:1.5;">HECG - Hautes Etudes de Comptabilite et de Gestion<br><a href="https://hecg.fr/" style="color:#ffffff;">www.hecg.fr</a></div>'
+    + '</td></tr>'
+    + '</table></td></tr></table></body></html>';
+}
+
 function forcerAutorisations() {
   SpreadsheetApp.getActiveSpreadsheet();
   try { DriveApp.getRootFolder(); } catch(e) {}
@@ -4837,7 +5464,7 @@ function handleGetHistory(p, ss) {
     // Liste des noms du Personnel (format "Prénom Nom" identique aux logs)
     const personnelNames = [];
     try {
-      const dP = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+      const dP = getPersonnelDataCached_(ss);
       for (let i = 1; i < dP.length; i++) {
         if (!dP[i][0]) continue;
         const fullName = (String(dP[i][2] || "").trim() + " " + String(dP[i][1] || "").trim()).trim();
@@ -4889,7 +5516,7 @@ function computeIndicateurs(ss, dateDebut, dateFin) {
   // Personnel set
   var personnelSet = new Set();
   try {
-    var dP = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+    var dP = getPersonnelDataCached_(ss);
     for (var pi = 1; pi < dP.length; pi++) {
       if (!dP[pi][0]) continue;
       var pn = ((dP[pi][2] || "") + " " + (dP[pi][1] || "")).trim();
@@ -5227,7 +5854,7 @@ function sendBilanJournalierAuto() {
     var todayFr= Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
     var data   = computeIndicateurs(ss, today, today);
     var html   = buildBilanJournalierHTML(data, todayFr);
-    GmailApp.sendEmail("m.mokhtari@hecg.fr", "📊 Bilan du jour HECG — " + todayFr, "",
+    GmailApp.sendEmail("m.mokhtari@hecg.fr", "Bilan du jour HECG — " + todayFr, "",
       { htmlBody: html, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
     logAction("Système","Auto","Action","Bilan journalier","Mail","Bilan du " + todayFr + " envoyé");
   } catch(e) { Logger.log("Erreur sendBilanJournalierAuto : " + e.toString()); }
@@ -5250,7 +5877,7 @@ function sendRapportHebdomadaireAuto() {
     var data = computeIndicateurs(ss, debut, fin);
     data.hebdo = computeHebdoKPIs(ss, lundi, dim);
     var html = buildRapportHebdomadaireHTML(data, lundiStr, dimStr);
-    GmailApp.sendEmail("m.mokhtari@hecg.fr", "📈 Rapport Hebdomadaire HECG — Semaine du " + lundiStr, "",
+    GmailApp.sendEmail("m.mokhtari@hecg.fr", "Rapport Hebdomadaire HECG — Semaine du " + lundiStr, "",
       { htmlBody: html, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
     logAction("Système","Auto","Action","Rapport hebdomadaire","Mail","Rapport semaine " + lundiStr + " → " + dimStr + " envoyé");
   } catch(e) { Logger.log("Erreur sendRapportHebdomadaireAuto : " + e.toString()); }
@@ -5277,45 +5904,45 @@ function buildBilanJournalierHTML(data, dateStr) {
   var h = '<table style="width:100%;border-collapse:collapse">';
   return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:680px;margin:auto;background:#f1f5f9;padding:24px">'
   + '<div style="background:#1A4E8A;color:#fff;padding:26px 30px;border-radius:12px 12px 0 0">'
-  + '<h1 style="margin:0;font-size:21px">📊 Bilan du jour — ' + dateStr + '</h1>'
+  + '<h1 style="margin:0;font-size:21px">Bilan du jour — ' + dateStr + '</h1>'
   + '<p style="margin:6px 0 0;opacity:.8;font-size:12px">CRM HECG — Rapport automatique journalier (16h30)</p></div>'
   + '<div style="background:#fff;padding:24px 30px;border-radius:0 0 12px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)">'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px">📈 Activité du jour</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px">Activite du jour</h3>'
   + h
   + _kpiRow('Total actions', data.totalActions, '#1A4E8A', '#f8fafc')
-  + _kpiRow('✅ Offres passées en vérifiées', data.offresVerifiees, '#7c3aed')
-  + _kpiRow('⏳ Offres encore à qualifier (total actuel)', data.offresAQualifier, '#d97706', '#fffbeb')
-  + _kpiRow('📓 Notes carnet étudiants', data.notesCarnetEtu, '#f59e0b')
-  + _kpiRow('🏢 Notes carnet entreprise', data.notesCarnetEnt, '#6366f1', '#f8fafc')
+  + _kpiRow('Offres passees en verifiees', data.offresVerifiees, '#7c3aed')
+  + _kpiRow('Offres encore a qualifier (total actuel)', data.offresAQualifier, '#d97706', '#fffbeb')
+  + _kpiRow('Notes carnet etudiants', data.notesCarnetEtu, '#f59e0b')
+  + _kpiRow('Notes carnet entreprise', data.notesCarnetEnt, '#6366f1', '#f8fafc')
   + '</table>'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">🏢 Contacts Entreprises</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">Contacts Entreprises</h3>'
   + h
-  + _kpiRow('➕ Nouveaux contacts créés', data.contactsEntCreated, '#16a34a', '#f0fdf4')
-  + _kpiRow('🗑️ Contacts supprimés', data.contactsEntDeleted, '#dc2626', '#fef2f2')
+  + _kpiRow('Nouveaux contacts crees', data.contactsEntCreated, '#16a34a', '#f0fdf4')
+  + _kpiRow('Contacts supprimes', data.contactsEntDeleted, '#dc2626', '#fef2f2')
   + '</table>'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">🎓 Étudiants</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">Etudiants</h3>'
   + h
-  + _kpiRow('➕ Nouveaux étudiants créés', data.etuCreated, '#16a34a', '#f0fdf4')
-  + _kpiRow('🗑️ Étudiants supprimés', data.etuDeleted, '#dc2626', '#fef2f2')
-  + _kpiRow('✏️ Informations modifiées (coordonnées)', data.infosModifiees, '#2563eb', '#eff6ff')
+  + _kpiRow('Nouveaux etudiants crees', data.etuCreated, '#16a34a', '#f0fdf4')
+  + _kpiRow('Etudiants supprimes', data.etuDeleted, '#dc2626', '#fef2f2')
+  + _kpiRow('Informations modifiees (coordonnees)', data.infosModifiees, '#2563eb', '#eff6ff')
   + '</table>'
 
   + '<div style="display:flex;gap:20px;margin-top:18px">'
-  + '<div style="flex:1"><h3 style="color:#1A4E8A;font-size:12px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:5px">🏆 Encadrants les plus actifs</h3>'
+  + '<div style="flex:1"><h3 style="color:#1A4E8A;font-size:12px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:5px">Encadrants les plus actifs</h3>'
   + _rankTable(data.encadrantsRanking, '#1A4E8A') + '</div>'
-  + '<div style="flex:1"><h3 style="color:#f59e0b;font-size:12px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:5px">🎓 Étudiants les plus actifs</h3>'
+  + '<div style="flex:1"><h3 style="color:#f59e0b;font-size:12px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:5px">Etudiants les plus actifs</h3>'
   + _rankTable(data.etudiantsRanking, '#f59e0b') + '</div>'
   + '</div>'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">🔍 Situation actuelle — Recherche d\'alternance</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">Situation actuelle — Recherche d\'alternance</h3>'
   + h
-  + _kpiRow('🔴 En recherche SANS alternance (préinscrits + inscrits)', data.etuSansAlternance.count,   '#dc2626', '#fef2f2')
-  + _kpiRow('🟢 En recherche AVEC alternance (préinscrits + inscrits)', data.etuAvecAlternance.count,   '#16a34a', '#f0fdf4')
-  + _kpiRow('📄 En recherche — CV non fait',                            data.etuCVNonFait.count,         '#d97706', '#fffbeb')
-  + _kpiRow('⚠️ Préinscrits en recherche non contactés &gt; 1 mois',   data.etuPreinscritNonContacte.count, '#dc2626', '#fef2f2')
+  + _kpiRow('En recherche SANS alternance (preinscrits + inscrits)', data.etuSansAlternance.count,   '#dc2626', '#fef2f2')
+  + _kpiRow('En recherche AVEC alternance (preinscrits + inscrits)', data.etuAvecAlternance.count,   '#16a34a', '#f0fdf4')
+  + _kpiRow('En recherche — CV non fait',                            data.etuCVNonFait.count,         '#d97706', '#fffbeb')
+  + _kpiRow('Preinscrits en recherche non contactes &gt; 1 mois',   data.etuPreinscritNonContacte.count, '#dc2626', '#fef2f2')
   + '</table>'
 
   + '<p style="margin-top:22px;color:#9ca3af;font-size:10px;text-align:center">Rapport généré automatiquement — CRM HECG — Consultez les détails sur l\'onglet Historique → Indicateurs du quotidien</p>'
@@ -5335,52 +5962,52 @@ function buildRapportHebdomadaireHTML(data, lundiStr, dimStr) {
 
   return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:680px;margin:auto;background:#f1f5f9;padding:24px">'
   + '<div style="background:linear-gradient(135deg,#1A4E8A,#1d4ed8);color:#fff;padding:28px 30px;border-radius:12px 12px 0 0">'
-  + '<h1 style="margin:0;font-size:22px">📈 Rapport Hebdomadaire HECG</h1>'
+  + '<h1 style="margin:0;font-size:22px">Rapport Hebdomadaire HECG</h1>'
   + '<p style="margin:7px 0 0;opacity:.85;font-size:13px">Semaine du ' + lundiStr + ' au ' + dimStr + ' — Envoi automatique vendredi 17h30</p></div>'
   + '<div style="background:#fff;padding:24px 30px;border-radius:0 0 12px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)">'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px">🎯 Indicateurs Majeurs</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px">Indicateurs Majeurs</h3>'
   + h
-  + _kpiRow('📊 Taux de transformation total (offres vérifiées / reçues)',
+  + _kpiRow('Taux de transformation total (offres verifiees / recues)',
       (hb.tauxTransfoTotal||0) + '% (' + (hb.totalOffresVerif||0) + ' / ' + (hb.totalOffresRecu||0) + ')', '#7c3aed', '#f5f3ff')
-  + _kpiRow('📅 Taux de transformation cette semaine',
+  + _kpiRow('Taux de transformation cette semaine',
       (hb.tauxTransfoSemaine||0) + '% (' + (hb.semOffresVerif||0) + ' / ' + (hb.semOffresRecu||0) + ')', '#6366f1', '#eef2ff')
-  + _kpiRow('🎓 Étudiants actifs en recherche (total)',
-      (hb.totalActifsEnRecherche||0) + ' étudiants', '#1A4E8A', '#eff6ff')
-  + _kpiRow('🏆 Objectifs atteints cette semaine',
+  + _kpiRow('Etudiants actifs en recherche (total)',
+      (hb.totalActifsEnRecherche||0) + ' etudiants', '#1A4E8A', '#eff6ff')
+  + _kpiRow('Objectifs atteints cette semaine',
       (hb.tauxObjectifs||0) + '% (' + (hb.objAtteints||0) + '/' + (hb.objTotal||0) + ')', tauxColor, '#f8fafc')
   + '</table>'
 
-  + (campusRows ? '<h4 style="color:#555;font-size:11px;margin-top:12px;text-transform:uppercase">Offres vérifiées / Étudiants en recherche — par campus</h4>'
+  + (campusRows ? '<h4 style="color:#555;font-size:11px;margin-top:12px;text-transform:uppercase">Offres verifiees / Etudiants en recherche — par campus</h4>'
     + h + campusRows + '</table>' : '')
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:20px">📈 Activité de la semaine</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:20px">Activite de la semaine</h3>'
   + h
   + _kpiRow('Total actions', data.totalActions, '#1A4E8A', '#f8fafc')
-  + _kpiRow('✅ Offres passées en vérifiées', data.offresVerifiees, '#7c3aed')
-  + _kpiRow('⏳ Offres encore à qualifier (total actuel)', data.offresAQualifier, '#d97706', '#fffbeb')
-  + _kpiRow('📓 Notes carnet étudiants', data.notesCarnetEtu, '#f59e0b')
-  + _kpiRow('🏢 Notes carnet entreprise', data.notesCarnetEnt, '#6366f1', '#f8fafc')
-  + _kpiRow('➕ Nouveaux contacts entreprises', data.contactsEntCreated, '#16a34a', '#f0fdf4')
-  + _kpiRow('🗑️ Contacts entreprises supprimés', data.contactsEntDeleted, '#dc2626', '#fef2f2')
-  + _kpiRow('➕ Nouveaux étudiants créés', data.etuCreated, '#16a34a', '#f0fdf4')
-  + _kpiRow('🗑️ Étudiants supprimés', data.etuDeleted, '#dc2626', '#fef2f2')
-  + _kpiRow('✏️ Informations modifiées', data.infosModifiees, '#2563eb', '#eff6ff')
+  + _kpiRow('Offres passees en verifiees', data.offresVerifiees, '#7c3aed')
+  + _kpiRow('Offres encore a qualifier (total actuel)', data.offresAQualifier, '#d97706', '#fffbeb')
+  + _kpiRow('Notes carnet etudiants', data.notesCarnetEtu, '#f59e0b')
+  + _kpiRow('Notes carnet entreprise', data.notesCarnetEnt, '#6366f1', '#f8fafc')
+  + _kpiRow('Nouveaux contacts entreprises', data.contactsEntCreated, '#16a34a', '#f0fdf4')
+  + _kpiRow('Contacts entreprises supprimes', data.contactsEntDeleted, '#dc2626', '#fef2f2')
+  + _kpiRow('Nouveaux etudiants crees', data.etuCreated, '#16a34a', '#f0fdf4')
+  + _kpiRow('Etudiants supprimes', data.etuDeleted, '#dc2626', '#fef2f2')
+  + _kpiRow('Informations modifiees', data.infosModifiees, '#2563eb', '#eff6ff')
   + '</table>'
 
   + '<div style="display:flex;gap:20px;margin-top:18px">'
-  + '<div style="flex:1"><h3 style="color:#1A4E8A;font-size:12px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:5px">🏆 Encadrants les plus actifs</h3>'
+  + '<div style="flex:1"><h3 style="color:#1A4E8A;font-size:12px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:5px">Encadrants les plus actifs</h3>'
   + _rankTable(data.encadrantsRanking, '#1A4E8A') + '</div>'
-  + '<div style="flex:1"><h3 style="color:#f59e0b;font-size:12px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:5px">🎓 Étudiants les plus actifs</h3>'
+  + '<div style="flex:1"><h3 style="color:#f59e0b;font-size:12px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:5px">Etudiants les plus actifs</h3>'
   + _rankTable(data.etudiantsRanking, '#f59e0b') + '</div>'
   + '</div>'
 
-  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">🔍 Situation actuelle — Recherche d\'alternance</h3>'
+  + '<h3 style="color:#1A4E8A;font-size:13px;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-top:18px">Situation actuelle — Recherche d\'alternance</h3>'
   + h
-  + _kpiRow('🔴 En recherche SANS alternance', data.etuSansAlternance.count,   '#dc2626', '#fef2f2')
-  + _kpiRow('🟢 En recherche AVEC alternance', data.etuAvecAlternance.count,   '#16a34a', '#f0fdf4')
-  + _kpiRow('📄 En recherche — CV non fait',   data.etuCVNonFait.count,         '#d97706', '#fffbeb')
-  + _kpiRow('⚠️ Préinscrits non contactés &gt; 1 mois', data.etuPreinscritNonContacte.count, '#dc2626', '#fef2f2')
+  + _kpiRow('En recherche SANS alternance', data.etuSansAlternance.count,   '#dc2626', '#fef2f2')
+  + _kpiRow('En recherche AVEC alternance', data.etuAvecAlternance.count,   '#16a34a', '#f0fdf4')
+  + _kpiRow('En recherche — CV non fait',   data.etuCVNonFait.count,         '#d97706', '#fffbeb')
+  + _kpiRow('Preinscrits non contactes &gt; 1 mois', data.etuPreinscritNonContacte.count, '#dc2626', '#fef2f2')
   + '</table>'
 
   + '<p style="margin-top:22px;color:#9ca3af;font-size:10px;text-align:center">Rapport hebdomadaire automatique — CRM HECG — Consultez les détails sur l\'onglet Historique → Indicateurs majeurs</p>'
@@ -5702,120 +6329,93 @@ function cleanupOldBackups(folder, maxFiles) {
     }
   }
 }
- function handleUpdateStudent(p, ss) {
-    const idCherche = String(p.id_etu || "").trim().toUpperCase();
-    let actualIdInSheet = idCherche;
+function handleUpdateStudent(p, ss) {
+  const idCherche = String(p.id_etu || "").trim().toUpperCase();
+  let actualIdInSheet = idCherche;
+  let oldRow = null;
 
-    try {
-      const sheet = getSheetSafe(ss, "ETUDIANTS");
-      const data = sheet.getDataRange().getValues();
-      let rowIndex = -1;
+  try {
+    const sheet = getSheetSafe(ss, "ETUDIANTS");
+    const data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
 
-      for (let i = 1; i < data.length; i++) {
-        if (String(data[i][0]).trim().toUpperCase() === idCherche) {
-          rowIndex = i + 1;
-          break;
-        }
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toUpperCase() === idCherche) {
+        rowIndex = i + 1;
+        break;
       }
-
-      if (rowIndex === -1) return createJsonResponse({ success: false, message: "Élève introuvable" });
-
-      const oldRow = data[rowIndex - 1];
-      actualIdInSheet = String(oldRow[0]);
-
-      const oldIdEnt = String(oldRow[11] || "").trim();
-      const newIdEnt = String(p.id_ent || "").trim();
-      // Enregistrer l'historique dès qu'une entreprise est remplacée ou supprimée (toutes situations)
-      if (oldIdEnt && newIdEnt !== oldIdEnt) {
-        try {
-          _saveAncienLien(ss, {
-            idEtu: actualIdInSheet,
-            nom: String(oldRow[2]||""),
-            prenom: String(oldRow[3]||""),
-            classe: String(oldRow[14]||""),
-            campus: String(oldRow[22]||""),
-            idEnt: oldIdEnt,
-            nomEnt: String(oldRow[21]||""),
-            motif: newIdEnt ? "Changement d'entreprise" : "Entreprise retirée"
-          });
-        } catch(e) {}
-      }
-
-      const typoCalcule = calculerTypoEtu(p.entree, p.sortie, p.classe);
-      const typoFinale = typoCalcule === "SORTIE" ? "SORTIE" : (p.forceTypo || typoCalcule);
-
-      const updatedRow = [
-        oldRow[0],           // A : id_etu
-        p.mdp || oldRow[1],  // B : MDP
-        p.nom,               // C : Nom_etu
-        p.prenom,            // D : Prenom_etu
-        p.mail,              // E : Mail_etu
-        p.tel,               // F : Tel_etu
-        p.cv,                // G : CV
-        p.refPerso,          // H : Ref_Perso
-        oldRow[8]  || "",    // I : (préservé)
-        oldRow[9]  || "",    // J : (préservé)
-        oldRow[10] || "",    // K : (préservé)
-        p.id_ent || "",      // L : id_entreprise
-        p.id_cont || "",     // M : id_contact
-        p.statut,            // N : Statut
-        p.classe,            // O : Classe
-        p.faitCV || "Non",   // P : Atelier_CV
-        p.faitLI || "Non",   // Q : Atelier_LinkedIn
-        "'" + p.entree,      // R : Entree_etu
-        p.sortie,            // S : sortie_etu
-        p.motifSortie !== undefined ? p.motifSortie : (oldRow[19] || ""),  // T : motifsortie
-        typoFinale,          // U : Typo
-        p.entreprise || "",  // V : Nom_entreprise
-        p.campus || "",      // W : Campus
-        oldRow[23] || ""     // X : Identifiant Elève
-      ];
-
-      sheet.getRange(rowIndex, 1, 1, updatedRow.length).setValues([updatedRow]);
-    } catch (erreur) {
-      return createJsonResponse({ success: false, message: erreur.toString() });
     }
 
+    if (rowIndex === -1) return createJsonResponse({ success: false, message: "Élève introuvable" });
+
+    oldRow = data[rowIndex - 1];
+    actualIdInSheet = String(oldRow[0]);
+
+    const oldIdEnt = String(oldRow[11] || "").trim();
+    const newIdEnt = String(p.id_ent || "").trim();
+    if (oldIdEnt && newIdEnt !== oldIdEnt) {
+      try {
+        _saveAncienLien(ss, {
+          idEtu: actualIdInSheet,
+          nom: String(oldRow[2]||""),
+          prenom: String(oldRow[3]||""),
+          classe: String(oldRow[14]||""),
+          campus: String(oldRow[22]||""),
+          idEnt: oldIdEnt,
+          nomEnt: String(oldRow[21]||""),
+          motif: newIdEnt ? "Changement d'entreprise" : "Entreprise retirée"
+        });
+      } catch(e) {}
+    }
+
+    let typoFinale = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
+    // Si une date de sortie est définie, la typo est forcément SORTIE
+    if (p.sortie && String(p.sortie).trim()) typoFinale = "SORTIE";
+
+    const updatedRow = [
+      oldRow[0],           // A : id_etu
+      p.mdp || oldRow[1],  // B : MDP
+      p.nom,               // C : Nom_etu
+      p.prenom,            // D : Prenom_etu
+      p.mail,              // E : Mail_etu
+      p.tel,               // F : Tel_etu
+      p.cv,                // G : CV
+      p.refPerso,          // H : Ref_Perso
+      oldRow[8]  || "",    // I : (préservé)
+      oldRow[9]  || "",    // J : (préservé)
+      oldRow[10] || "",    // K : (préservé)
+      p.id_ent || "",      // L : id_entreprise
+      p.id_cont || "",     // M : id_contact
+      p.statut,            // N : Statut
+      p.classe,            // O : Classe
+      p.faitCV || "Non",   // P : Atelier_CV
+      p.faitLI || "Non",   // Q : Atelier_LinkedIn
+      "'" + p.entree,      // R : Entree_etu
+      p.sortie,            // S : sortie_etu
+      p.motifSortie !== undefined ? p.motifSortie : (oldRow[19] || ""),  // T : motifsortie
+      typoFinale,          // U : Typo
+      p.entreprise || "",  // V : Nom_entreprise
+      p.campus || "",      // W : Campus
+      oldRow[23] || "",    // X : Identifiant Elève
+      p.cvTech || "Non"   // Y : CV Tech
+    ];
+
+    sheet.getRange(rowIndex, 1, 1, updatedRow.length).setValues([updatedRow]);
+    SpreadsheetApp.flush();
+
+    // Log immédiatement après la sauvegarde, pendant que oldRow est accessible
     try {
-      var diffParts = [];
-      var fieldChecks = [
-        [2, "Nom", p.nom], [3, "Prénom", p.prenom], [4, "Email", p.mail], [5, "Tél", p.tel],
-        [13, "Statut", p.statut], [21, "Entreprise", p.entreprise], [14, "Classe", p.classe],
-        [6, "CV", p.cv], [20, "Typo", undefined]
-      ];
-      fieldChecks.forEach(function(fc) {
-        if (fc[2] === undefined) return;
-        var oldVal = String(oldRow[fc[0]] || "").trim();
-        var newVal = String(fc[2] || "").trim();
-        if (oldVal !== newVal) diffParts.push(fc[1] + ": « " + oldVal + " » → « " + newVal + " »");
-      });
-      var texteLog = diffParts.length > 0 ? "Modifié — " + diffParts.join(" | ") : (p.detailsLog && p.detailsLog !== "" ? p.detailsLog : "Mise à jour fiche (aucun changement détecté)");
+      const texteLog = (p.detailsLog && p.detailsLog !== "") ? p.detailsLog : "Mise à jour fiche étudiant";
       logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", actualIdInSheet, texteLog);
-    } catch (logErreur) {
-      console.error("Erreur de journalisation (non bloquante) : " + logErreur.toString());
-    }
+    } catch(eLog) {}
 
-    return createJsonResponse({ success: true, message: "Mise à jour réussie" });
+    return createJsonResponse({ success: true, message: "Mise à jour réussie", typoSaved: typoFinale });
+  } catch (erreur) {
+    return createJsonResponse({ success: false, message: erreur.toString() });
   }
+}
 
 
-
-  function handleChangeStudentMdp(p, ss) {
-    try {
-      const idCherche = String(p.id_etu || "").trim().toUpperCase();
-      const sheet = getSheetSafe(ss, "ETUDIANTS");
-      const data = sheet.getDataRange().getValues();
-      for (let i = 1; i < data.length; i++) {
-        if (String(data[i][0]).trim().toUpperCase() === idCherche) {
-          sheet.getRange(i + 1, 2).setValue(p.mdp);
-          return createJsonResponse({ success: true });
-        }
-      }
-      return createJsonResponse({ success: false, message: "Élève introuvable" });
-    } catch (e) {
-      return createJsonResponse({ success: false, message: e.toString() });
-    }
-  }
 
 function handleChangeStudentMdp(p, ss) {
   try {
@@ -5850,6 +6450,7 @@ function handleSetStudentAlert(p, ss) {
     }
     const newId = "ALE" + Math.floor(1000 + Math.random() * 9000);
     const idEtu = String(p.targetId || p.id_etudiant || "").trim();
+    if (!idEtu) return createJsonResponse({ success: false, message: "Impossible de créer une alerte sans nom d'étudiant. Veuillez sélectionner un étudiant valide." });
     sheet.appendRow([
       newId,
       idEtu,
@@ -6132,7 +6733,7 @@ function aspirerMissionsGmail() {
   if (!label) label = GmailApp.createLabel(LABEL_NAME);
 
   // --- Récupération du référentiel Personnel pour les noms ---
-  const dPerso = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+  const dPerso = getPersonnelDataCached_(ss);
   const emailToNom = {};
   for (let i = 1; i < dPerso.length; i++) {
     const email = String(dPerso[i][6] || "").trim().toLowerCase();
@@ -6465,7 +7066,7 @@ function aspirerMissionsGmailAvecRetour(ss) {
   if (!label) label = GmailApp.createLabel(LABEL_NAME);
 
   // Référentiel Personnel email → Nom
-  const dPerso = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+  const dPerso = getPersonnelDataCached_(ss);
   const emailToNom = {};
   for (let i = 1; i < dPerso.length; i++) {
     const email = String(dPerso[i][6] || "").trim().toLowerCase();
@@ -6491,12 +7092,16 @@ function aspirerMissionsGmailAvecRetour(ss) {
 
   let nbInseres = 0;
   const objetsInseres = [];
+  const START_TIME = Date.now();
+  const MAX_MS = 240000; // 4 min max (limite Apps Script = 6 min)
 
   threads.forEach(function(thread) {
+    if (Date.now() - START_TIME > MAX_MS) return; // stoppe si trop long
     const messages = thread.getMessages();
     let threadHasNew = false;
 
     messages.forEach(function(msg) {
+      if (Date.now() - START_TIME > MAX_MS) return; // stoppe si trop long
       const rawBody = msg.getPlainBody() || "";
 
       // Vérification stricte : le hashtag doit être dans le corps brut (hors citations)
@@ -6584,7 +7189,7 @@ function creerMissionDepuisAlerte(ss, p, typeAlerte, idCible) {
   const emailDest = String(p.destinataire || "m.mokhtari@hecg.fr").trim().toLowerCase();
   let nomCollab = emailDest;
   try {
-    const dPerso = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+    const dPerso = getPersonnelDataCached_(ss);
     for (let i = 1; i < dPerso.length; i++) {
       if (String(dPerso[i][6] || "").trim().toLowerCase() === emailDest) {
         nomCollab = (String(dPerso[i][2] || "") + " " + String(dPerso[i][1] || "")).trim();
@@ -6808,7 +7413,12 @@ function handleGetNotes(p, ss) {
       if (p.annee    && String(row[4]).trim() !== p.annee)     continue;
       // maxAnnee : pour DCG/DSCG cumulatif — inclut toutes les années <= maxAnnee
       if (p.maxAnnee && p.maxAnnee !== '' && String(row[4]).trim() > p.maxAnnee) continue;
-      if (p.diplome  && String(row[3]) !== "" && !String(row[3]).toLowerCase().includes(p.diplome.toLowerCase())) continue;
+      if (p.diplome && String(row[3]) !== "") {
+        const rc = String(row[3]).toUpperCase();
+        const dc = p.diplome.toUpperCase();
+        // Correspondance normale (ex: "BTS CG 1" ⊃ "BTS CG") ou BTS générique ("BTS 1" pour "BTS CG")
+        if (!rc.includes(dc) && !(dc.startsWith('BTS') && rc.startsWith('BTS'))) continue;
+      }
       const rawNote = String(row[6]||"").trim();
       const noteVal = rawNote === "" ? null : (rawNote.toUpperCase() === "NE" ? "NE" : parseFloat(rawNote));
       const classeVal = String(row[3]);
@@ -7014,10 +7624,12 @@ function handleGetStatsNotes(p, ss) {
       var moyGen = tc > 0 ? Math.round(tp/tc*100)/100 : null;
       var moyPro = cp > 0 ? Math.round(pp/cp*100)/100 : null;
       var moyGeneral = tcGen > 0 ? Math.round(tpGen/tcGen*100)/100 : null;
-      // Différentiel DCG : total points obtenus - nb_UE * 10 (toutes UE, pas seulement les validées)
+      // Différentiel DCG : total points obtenus - nb_UE NOTÉES * 10 (les UE en NE/dispense
+      // ne rapportent aucun point et ne doivent donc pas non plus être comptées dans la base,
+      // sinon le différentiel devient incohérent avec la moyenne — cf. tc, même dénominateur que moyGen)
       var diff = null;
       if (isBTS && moyGen !== null) diff = Math.round((moyGen-10)*100)/100;
-      else if ((isDCG||isDSCG) && ueTotal > 0) diff = Math.round((tp - ueTotal*10)*100)/100;
+      else if ((isDCG||isDSCG) && tc > 0) diff = Math.round((tp - tc*10)*100)/100;
       var nbUEObl = isDCG ? 13 : (isDSCG ? 6 : 0);
       // Résultat automatique
       var resultatAuto = "";
@@ -7169,6 +7781,10 @@ function handleSavePersonnel(p, ss) {
     var id = "ADU-"+new Date().getTime().toString().slice(-7);
     row[0]=id;
     ws.appendRow(row);
+    // Attribution immédiate d'un code anonyme (questionnaire Qualiopi formateurs)
+    var existingCodes = new Set();
+    for (var k=1;k<data.length;k++) if (data[k][13]) existingCodes.add(String(data[k][13]));
+    ws.getRange(ws.getLastRow(), 14).setValue(_genCodeFormateur(existingCodes));
     logAction(p.emailAuteur||"?",p.vieScRole||"?","Création","Vie scolaire",id,"Personnel: "+p.nom+" "+p.prenom);
     return createJsonResponse({ success:true, id:id });
   } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
@@ -7286,35 +7902,63 @@ function handleSavePlanningTache(p, ss) {
     ws.appendRow([...row, ""]); // col M (missionId) vide au départ
     logAction(p.emailAuteur||"?", p.vieScRole||"?", "Création", "Vie scolaire", id, "Tâche: "+p.titre);
 
-    // Créer automatiquement une mission pour la personne assignée
+    // Créer ou mettre à jour la mission hebdomadaire consolidée pour cette personne
     var missionId = null;
     var emailDest = String(p.referentEmail || p.referent || "").trim().toLowerCase();
     if (emailDest) {
       try {
+        var tz     = Session.getScriptTimeZone();
         var mSheet = getSheetSafe(ss, "MISSIONS");
+        var mData  = mSheet.getDataRange().getValues();
         var mNow   = new Date();
-        missionId  = "M" + mNow.getTime();
-        mSheet.appendRow([
-          missionId,
-          Utilities.formatDate(mNow, Session.getScriptTimeZone(), "dd/MM/yyyy"),
-          Utilities.formatDate(mNow, Session.getScriptTimeZone(), "HH:mm"),
-          emailDest,
-          String(p.referentNom || ""),
-          "",
-          String(p.titre || ""),
-          String(p.description || ""),
-          "Attribué",
-          "",
-          mNow,
-          Number(p.priorite || 3),
-          "[Planning] " + String(p.titre || ""),
-          String(p.emailAuteur || "")
-        ]);
+        // Calculer le lundi de la semaine de la tâche
+        var taskDateObj = new Date((p.dateDebut || Utilities.formatDate(mNow, tz, "yyyy-MM-dd")) + "T12:00:00");
+        var dow  = taskDateObj.getDay();
+        var diff = dow === 0 ? -6 : 1 - dow;
+        var monday = new Date(taskDateObj); monday.setDate(taskDateObj.getDate() + diff);
+        var mondayISO = Utilities.formatDate(monday, tz, "yyyy-MM-dd");
+        var mondayFr  = Utilities.formatDate(monday, tz, "dd/MM/yyyy");
+        var WEEK_TAG  = "[Sem:" + mondayISO + "]";
+        var taskLine  = "• " + (p.titre||"?") + " — " + Utilities.formatDate(taskDateObj, tz, "dd/MM") + " (" + (p.demiJournee||"Matin") + ")";
+        // Chercher une mission hebdo existante pour cette personne cette semaine
+        var existingRow = -1;
+        for (var ms = 1; ms < mData.length; ms++) {
+          if (String(mData[ms][3]).toLowerCase().trim() === emailDest &&
+              String(mData[ms][12]||"").indexOf(WEEK_TAG) !== -1) {
+            existingRow = ms; break;
+          }
+        }
+        if (existingRow > 0) {
+          // Mission hebdo existante → ajouter la tâche à la description
+          var existDesc = String(mData[existingRow][7]||"");
+          mSheet.getRange(existingRow + 1, 8).setValue(existDesc ? existDesc + "\n" + taskLine : taskLine);
+          missionId = String(mData[existingRow][0]);
+        } else {
+          // Créer la mission hebdo pour cette semaine
+          missionId = "MSW-" + mondayISO.replace(/-/g,"") + "-" + mNow.getTime().toString().slice(-5);
+          var mTitle = "📅 Planning — Semaine du " + mondayFr;
+          mSheet.appendRow([
+            missionId,
+            Utilities.formatDate(mNow, tz, "dd/MM/yyyy"),
+            Utilities.formatDate(mNow, tz, "HH:mm"),
+            emailDest,
+            String(p.referentNom || ""),
+            "",
+            mTitle,
+            taskLine,
+            "Attribué",
+            "",
+            mNow,
+            Number(p.priorite || 3),
+            WEEK_TAG + " " + mTitle,
+            String(p.emailAuteur || "")
+          ]);
+          logAction(p.emailAuteur||"?", p.vieScRole||"?", "Création", "Missions", missionId,
+            "Mission hebdo planning " + mondayFr + " | Pour : " + String(p.referentNom||emailDest));
+        }
         // Stocker missionId dans col M de la tâche planning
         ws.getRange(ws.getLastRow(), 13).setValue(missionId);
-        logAction(p.emailAuteur||"?", p.vieScRole||"?", "Création", "Missions", missionId,
-          "Mission auto (planning) : " + String(p.titre||"").substring(0,80) + " | Pour : " + String(p.referentNom||emailDest));
-      } catch(eMission) {}
+      } catch(eMission) { Logger.log("Erreur mission planning : " + eMission); }
     }
 
     if (p.referentEmail && shouldSendEmailToReferent(p.referentEmail)) {
@@ -7381,8 +8025,13 @@ function getOrCreateObjectifsSheet(ss) {
   var ws = ss.getSheetByName("OBJECTIFS_SEM");
   if (!ws) {
     ws = ss.insertSheet("OBJECTIFS_SEM");
-    ws.getRange(1,1,1,12).setValues([["ID","SemaineDebut","Nom","Quantite","Priorite","Descriptif","EtatMiSemaine","EtatFinSemaine","Valide","CreePar","DateCre","RetourEquipes"]]);
+    ws.getRange(1,1,1,13).setValues([["ID","SemaineDebut","Nom","Quantite","Priorite","Descriptif","EtatMiSemaine","EtatFinSemaine","Valide","CreePar","DateCre","RetourEquipes","Pole"]]);
     ws.setFrozenRows(1);
+  } else {
+    // Migration : ajouter colonne Pole si absente
+    var lastCol = ws.getLastColumn();
+    var headers = ws.getRange(1, 1, 1, lastCol).getValues()[0];
+    if (headers.indexOf("Pole") === -1) ws.getRange(1, lastCol + 1).setValue("Pole");
   }
   return ws;
 }
@@ -7424,6 +8073,7 @@ function handleGetObjectifsSemaine(p, ss) {
         creePar:       String(data[i][9]||""),
         dateCre:       String(data[i][10]||""),
         retourEquipes: String(data[i][11]||""),
+        pole:          String(data[i][12]||""),
       });
     }
     return createJsonResponse({ success: true, data: result });
@@ -7440,6 +8090,7 @@ function handleSaveObjectifSemaine(p, ss) {
       for (var i = 1; i < data.length; i++) {
         if (String(data[i][0]) !== String(p.id)) continue;
         ws.getRange(i+1,3,1,7).setValues([[p.nom, p.quantite||"", Number(p.priorite)||1, p.descriptif||"", data[i][6], data[i][7], data[i][8]]]);
+        ws.getRange(i+1, 13).setValue(p.pole||"");
         logAction(p.emailAuteur||"?", p.vieScRole||p.roleAuteur||"?", "Modification", "Vie scolaire", p.id, "Objectif: "+p.nom);
         return createJsonResponse({ success: true });
       }
@@ -7447,7 +8098,7 @@ function handleSaveObjectifSemaine(p, ss) {
     } else {
       // Création — stocker semaineDebut comme texte (apostrophe) pour éviter la conversion en Date
       var id = "OBJ_" + new Date().getTime();
-      var newRow = [id, p.semaineDebut||"", p.nom, p.quantite||"", Number(p.priorite)||1, p.descriptif||"", "", "", "FALSE", p.emailAuteur||"?", new Date().toISOString(), ""];
+      var newRow = [id, p.semaineDebut||"", p.nom, p.quantite||"", Number(p.priorite)||1, p.descriptif||"", "", "", "FALSE", p.emailAuteur||"?", new Date().toISOString(), "", p.pole||""];
       ws.appendRow(newRow);
       // Forcer colonne B en format texte pour éviter que Sheets convertisse en Date
       var lastRow = ws.getLastRow();
@@ -7910,8 +8561,10 @@ function handleGedUploadFile(p, ss) {
 // ==========================================
 // GED — DOSSIERS ÉTUDIANTS
 // ==========================================
-const GED_ETU_ROOT_ID   = "1VbWpZ-m2puTE1cjdPKaIrqoQScDLGHSb";
-const GED_SCAN_ROOT_ID  = "1oX-eay610TeLfRh8ng25ck2I9pCRp5pS"; // Arborescence Drive étudiants à scanner
+const GED_ETU_ROOT_ID        = "1VbWpZ-m2puTE1cjdPKaIrqoQScDLGHSb";
+const GED_GLOBAL_ROOT_ID     = "1LaCi09POR85Smpz-tBAKMXq9_wb79kBY"; // Racine globale Drive HECG
+const GED_CANDIDATURES_ID    = "19HPsxFlHYJeS-EqVunyo8nuHb6ms6vcs"; // Dossier Candidatures
+const GED_SCAN_ROOT_ID       = "1oX-eay610TeLfRh8ng25ck2I9pCRp5pS"; // Dossier Étudiants (anciens alternants)
 
 function getOrCreateGedEtuSheet(ss) {
   var ws;
@@ -8124,45 +8777,55 @@ function handleGedScanForStudent(p, ss) {
     }
 
     var candidates = [];
-    var root = DriveApp.getFolderById(GED_SCAN_ROOT_ID);
+    var seenIds    = {};
+    var inspected  = 0;
+    var truncated  = false;
 
-    // BFS — parcours en largeur sur TOUTE l'arborescence (profondeur illimitée)
-    // Garde-fous : max 2000 dossiers inspectés ET max 25 secondes (limite Apps Script = 30s)
-    var MAX_INSPECT  = 2000;
-    var MAX_TIME_MS  = 25000;
-    var startTime    = Date.now();
-    var inspected    = 0;
-    var truncated    = false;
-    var queue = [{ folder: root, path: "" }];
+    // BFS sur Candidatures + Dossiers étudiants avec limite de 5 minutes
+    // (les dossiers sont emboîtés sur plusieurs niveaux → BFS obligatoire)
+    var MAX_TIME_MS = 290000; // 290s ≈ 4min50 — dans la limite des 6min Apps Script
+    var startTime   = Date.now();
 
-    outer: while (queue.length > 0) {
-      // Vérification temps restant
-      if (Date.now() - startTime > MAX_TIME_MS) { truncated = true; break outer; }
-      if (inspected >= MAX_INSPECT)              { truncated = true; break outer; }
+    seenIds[GED_CANDIDATURES_ID] = true;
+    seenIds[GED_SCAN_ROOT_ID]    = true;
+
+    var queue = [];
+    try { queue.push({ folder: DriveApp.getFolderById(GED_CANDIDATURES_ID), path: "Candidatures" }); }     catch(e1) {}
+    try { queue.push({ folder: DriveApp.getFolderById(GED_SCAN_ROOT_ID),    path: "Dossiers étudiants" }); } catch(e2) {}
+
+    while (queue.length > 0) {
+      if (Date.now() - startTime > MAX_TIME_MS) { truncated = true; break; }
 
       var current = queue.shift();
       inspected++;
 
       try {
         var children = current.folder.getFolders();
+        var toAppend = [];
         while (children.hasNext()) {
           var child     = children.next();
-          var childPath = current.path ? current.path + " / " + child.getName() : child.getName();
+          var childId   = child.getId();
+          var childPath = current.path + " / " + child.getName();
           if (match(child.getName())) {
-            // Correspondance → candidat proposé, on n'inspecte pas ses sous-dossiers
-            candidates.push({ id: child.getId(), name: child.getName(), url: child.getUrl(), path: childPath });
-          } else {
-            // Pas de correspondance → on descend pour chercher plus profond
-            queue.push({ folder: child, path: childPath });
+            if (!seenIds[childId]) {
+              seenIds[childId] = true;
+              candidates.push({ id: childId, name: child.getName(), url: child.getUrl(), path: childPath });
+            }
+          } else if (!seenIds[childId]) {
+            seenIds[childId] = true;
+            toAppend.push({ folder: child, path: childPath });
           }
         }
+        // DFS à l'intérieur de chaque branche (finit Candidatures avant Dossiers étudiants)
+        queue = toAppend.concat(queue);
       } catch(eChild) {}
     }
 
     return createJsonResponse({
       success: true, candidates: candidates,
       nom: nom, prenom: prenom,
-      inspected: inspected, truncated: truncated
+      inspected: inspected, truncated: truncated,
+      scanRoots: ["Candidatures", "Dossiers étudiants"]
     });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -8217,14 +8880,166 @@ function normMatiere(s) {
   return m ? m[1].toLowerCase().replace(/\s+/g,'') : String(s||'').trim().toLowerCase();
 }
 
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script (après avoir, si besoin,
+ * ajusté les intitulés dans Referentiel_matieres — ex: seederReferentielMatieres()).
+ *
+ * Réécrit, dans NOTES_EXAMENS, l'intitulé de chaque note DCG/DSCG (ex: "UE 1",
+ * "UE 1 - Introduction au droit"...) pour qu'il corresponde EXACTEMENT à l'intitulé
+ * canonique actuellement défini dans Referentiel_matieres pour ce numéro d'UE
+ * (ex: "UE 1 - Fondamentaux du droit"). Le rapprochement UE par UE est déjà robuste
+ * aux variantes de titre (normMatiere/matKey ne regardent que le numéro d'UE), donc
+ * ceci n'affecte ni les moyennes ni les mises à jour — c'est un nettoyage cosmétique
+ * pour un affichage et des exports homogènes.
+ * Ne fusionne pas les doublons éventuels (deux lignes pour la même UE/année) :
+ * ceux-ci sont juste signalés dans le Logger pour vérification manuelle.
+ */
+function harmoniserMatieresNotesExamens() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const wsRef = getSheetSafe(ss, "Referentiel_matieres");
+  const dataRef = wsRef.getDataRange().getValues();
+  // Table de correspondance "dcg|ue1" -> "UE 1 - Fondamentaux du droit"
+  const canon = {};
+  for (let i = 1; i < dataRef.length; i++) {
+    const diplome = String(dataRef[i][0]||"").trim().toLowerCase();
+    if (diplome !== "dcg" && diplome !== "dscg") continue;
+    const label = String(dataRef[i][1]||"").trim();
+    const key = diplome + "|" + normMatiere(label);
+    canon[key] = label;
+  }
+
+  const ws = getSheetSafe(ss, "NOTES_EXAMENS");
+  const data = ws.getDataRange().getValues();
+  const seen = {}; // "idEtu|annee|ue1" -> nb occurrences (détection doublons)
+  let nbRenamed = 0;
+  const newMatiereCol = data.map(function(row){ return [row[5]]; }); // copie de la colonne F
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i]; if (!row[0]) continue;
+    const classeStr = String(row[3]||"").toLowerCase();
+    const isDCG  = /dcg/i.test(classeStr) && !/dscg/i.test(classeStr);
+    const isDSCG = /dscg/i.test(classeStr);
+    if (!isDCG && !isDSCG) continue;
+    const diplome = isDSCG ? "dscg" : "dcg";
+    const kue = normMatiere(row[5]);
+    const canonLabel = canon[diplome + "|" + kue];
+    if (canonLabel && String(row[5]).trim() !== canonLabel) {
+      newMatiereCol[i][0] = canonLabel;
+      nbRenamed++;
+    }
+    const dupKey = String(row[1]) + "|" + String(row[4]).trim() + "|" + kue;
+    seen[dupKey] = (seen[dupKey]||0) + 1;
+  }
+
+  if (nbRenamed > 0) ws.getRange(1, 6, newMatiereCol.length, 1).setValues(newMatiereCol);
+
+  const doublons = Object.keys(seen).filter(function(k){ return seen[k] > 1; });
+  Logger.log(nbRenamed + " intitulé(s) harmonisé(s) dans NOTES_EXAMENS.");
+  if (doublons.length) {
+    Logger.log(doublons.length + " doublon(s) détecté(s) (même étudiant/année/UE en plusieurs lignes) — à vérifier manuellement :");
+    doublons.forEach(function(k){ Logger.log(" - " + k); });
+  } else {
+    Logger.log("Aucun doublon idEtu/année/UE détecté.");
+  }
+}
+
+// ==========================================
+// AUDIT / NETTOYAGE — Doublons de notes DCG/DSCG entre années
+// Cas typique repéré : la même UE saisie deux fois pour le même étudiant, à deux années
+// différentes (ex: 2024-2025 puis 2025-2026), avec EXACTEMENT la même note — signe d'un
+// ré-import accidentel plutôt que d'un vrai redoublement (où la note change généralement).
+// ==========================================
+
+function _detecterDoublonsNotesDCG(ss) {
+  const ws = getSheetSafe(ss, "NOTES_EXAMENS");
+  const data = ws.getDataRange().getValues();
+  const groups = {}; // "idEtu|ue1" -> [{rowIndex, id, nomPrenom, annee, note, matiere}, ...]
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i]; if (!row[0]) continue;
+    const classeStr = String(row[3]||"").toLowerCase();
+    const isDCG  = /dcg/i.test(classeStr) && !/dscg/i.test(classeStr);
+    const isDSCG = /dscg/i.test(classeStr);
+    if (!isDCG && !isDSCG) continue;
+    const rawNote = String(row[6]||"").trim();
+    if (!rawNote || rawNote.toUpperCase() === "NE") continue; // NE non concerné (pas de valeur à comparer)
+    const noteNum = parseFloat(rawNote);
+    if (isNaN(noteNum)) continue;
+    const idEtu = String(row[1]||"").trim();
+    const key = idEtu + "|" + normMatiere(row[5]);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ rowIndex: i, id: String(row[0]), nomPrenom: String(row[2]||""),
+      annee: String(row[4]||"").trim(), note: noteNum, matiere: String(row[5]||"") });
+  }
+  const doublons = []; // { idEtu, nomPrenom, matiere, note, keep, toDelete: [...] }
+  Object.keys(groups).forEach(function(key) {
+    const entries = groups[key];
+    if (entries.length < 2) return;
+    const byNote = {};
+    entries.forEach(function(e) {
+      const nk = e.note.toFixed(2);
+      if (!byNote[nk]) byNote[nk] = [];
+      byNote[nk].push(e);
+    });
+    Object.keys(byNote).forEach(function(nk) {
+      const sameNote = byNote[nk];
+      const distinctAnnees = sameNote.map(function(e){ return e.annee; })
+        .filter(function(a, idx, arr){ return arr.indexOf(a) === idx; });
+      if (sameNote.length < 2 || distinctAnnees.length < 2) return; // pas un doublon inter-année
+      sameNote.sort(function(a,b){ return (a.annee||"").localeCompare(b.annee||""); });
+      doublons.push({ idEtu: key.split("|")[0], nomPrenom: sameNote[0].nomPrenom,
+        matiere: sameNote[0].matiere, note: sameNote[0].note,
+        keep: sameNote[0], toDelete: sameNote.slice(1) });
+    });
+  });
+  return doublons;
+}
+
+/**
+ * ÉTAPE 1 — À exécuter depuis l'éditeur Apps Script. N'écrit rien, journalise seulement
+ * (Affichage > Journaux d'exécution) le détail des doublons trouvés, pour vérification avant
+ * suppression via nettoyerDoublonsNotesDCG().
+ */
+function auditDoublonsNotesDCG() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const doublons = _detecterDoublonsNotesDCG(ss);
+  if (!doublons.length) { Logger.log("Aucun doublon détecté."); return; }
+  Logger.log(doublons.length + " doublon(s) détecté(s) — même UE, même note, années différentes :");
+  doublons.forEach(function(d) {
+    Logger.log(" - " + d.nomPrenom + " (" + d.idEtu + ") — " + d.matiere + " = " + d.note.toFixed(2) +
+      " | À CONSERVER : " + d.keep.annee + " (ligne " + (d.keep.rowIndex + 1) + ")" +
+      " | À SUPPRIMER : " + d.toDelete.map(function(x){ return x.annee + " (ligne " + (x.rowIndex + 1) + ")"; }).join(", "));
+  });
+}
+
+/**
+ * ÉTAPE 2 — À exécuter APRÈS avoir vérifié le résultat de auditDoublonsNotesDCG(). Supprime les
+ * doublons identifiés en ne conservant que la ligne de l'année la plus ancienne pour chaque
+ * couple (étudiant, UE, note).
+ */
+function nettoyerDoublonsNotesDCG() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const doublons = _detecterDoublonsNotesDCG(ss);
+  if (!doublons.length) { Logger.log("Aucun doublon détecté — rien à supprimer."); return; }
+  const ws = getSheetSafe(ss, "NOTES_EXAMENS");
+  const rowsToDelete = [];
+  doublons.forEach(function(d) { d.toDelete.forEach(function(x){ rowsToDelete.push(x.rowIndex + 1); }); });
+  const uniqueRows = rowsToDelete.filter(function(r, idx, arr){ return arr.indexOf(r) === idx; })
+    .sort(function(a,b){ return b - a; }); // décroissant : supprimer du bas vers le haut sans décaler les lignes restantes
+  uniqueRows.forEach(function(r) { ws.deleteRow(r); });
+  Logger.log(uniqueRows.length + " ligne(s) supprimée(s) (" + doublons.length + " doublon(s) nettoyé(s), plus ancienne année conservée à chaque fois).");
+}
+
 function handleSaveNotesBulk(p, ss) {
   try {
-    if (p.vieScRole !== "Super-admin" && p.vieScRole !== "Pédagogie")
+    if (!['Super-admin','Pédagogie','Administratif'].includes(p.vieScRole))
       return createJsonResponse({ success: false, message: "Accès refusé." });
     const ws   = getSheetSafe(ss, "NOTES_EXAMENS");
     const data = ws.getDataRange().getValues();
-    const notes = p.notes || [];  // [{matiere, note, coeff}]
-    let nbInsert = 0, nbUpdate = 0;
+    const notes = p.notes || [];
+    const toDeleteIds = p.toDelete || [];
+    let nbInsert = 0, nbUpdate = 0, nbDelete = 0;
+
+    // 1. Mises à jour et créations
     for (const n of notes) {
       if (n.note === "" || n.note === null || n.note === undefined) continue;
       const rawN = String(n.note).trim();
@@ -8232,7 +9047,6 @@ function handleSaveNotesBulk(p, ss) {
       const note   = isNE ? "NE" : parseFloat(rawN);
       const coeff  = parseFloat(n.coeff) || 0;
       const points = isNE ? 0 : Math.round(parseFloat(note) * coeff * 100) / 100;
-      // Cherche note existante : même idEtu + annee + matiere (matching normalisé sur nom UE)
       let found = false;
       for (let i = 1; i < data.length; i++) {
         if (String(data[i][1]) !== String(p.idEtu)) continue;
@@ -8241,10 +9055,12 @@ function handleSaveNotesBulk(p, ss) {
         ws.getRange(i+1,7).setValue(note);
         ws.getRange(i+1,8).setValue(coeff);
         ws.getRange(i+1,9).setValue(isNE ? 0 : points);
-        if (!String(data[i][3]).trim() && (p.classe || p.diplome)) ws.getRange(i+1,4).setValue(p.classe||p.diplome||"");
+        // La classe saisie/corrigée dans le formulaire (p.classe) fait toujours foi — permet de
+        // rectifier une classe erronée juste avant l'enregistrement, même sur des lignes déjà saisies.
+        if (p.classe || p.diplome) ws.getRange(i+1,4).setValue(p.classe||p.diplome||"");
         if (n.sujetMemoire)    ws.getRange(i+1,11).setValue(n.sujetMemoire);
         if (n.referentMemoire) ws.getRange(i+1,12).setValue(n.referentMemoire);
-        data[i][6]=note; data[i][7]=coeff; data[i][8]=points; // maj mémoire
+        data[i][6]=note; data[i][7]=coeff; data[i][8]=points;
         found = true; nbUpdate++;
         break;
       }
@@ -8255,9 +9071,102 @@ function handleSaveNotesBulk(p, ss) {
         nbInsert++;
       }
     }
+
+    // 2. Suppressions (notes vidées manuellement) — relire les données après les updates
+    if (toDeleteIds.length > 0) {
+      const freshData = ws.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < freshData.length; i++) {
+        if (toDeleteIds.includes(String(freshData[i][0]))) rowsToDelete.push(i + 1);
+      }
+      rowsToDelete.sort((a, b) => b - a).forEach(r => { ws.deleteRow(r); nbDelete++; });
+    }
+
     logAction(p.emailAuteur||"?", p.vieScRole||"?", "Modification", "Vie scolaire", p.idEtu,
-      "Saisie notes: "+p.nomPrenom+" — "+p.annee+" — "+nbInsert+" créées, "+nbUpdate+" mises à jour");
-    return createJsonResponse({ success: true, nbInsert: nbInsert, nbUpdate: nbUpdate });
+      "Saisie notes: "+p.nomPrenom+" — "+p.annee+" — "+nbInsert+" créées, "+nbUpdate+" maj, "+nbDelete+" supp.");
+    return createJsonResponse({ success: true, nbInsert, nbUpdate, nbDelete });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// Correction "après la saisie" : rectifie la classe déjà enregistrée sur les notes existantes
+// d'un étudiant pour une année précise (sans toucher aux autres années — un même étudiant DCG
+// peut légitimement avoir une classe différente d'une année sur l'autre : DCG1 puis DCG2...).
+function handleUpdateNotesClasse(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie','Administratif'].includes(p.vieScRole))
+      return createJsonResponse({ success: false, message: "Accès refusé." });
+    if (!p.idEtu || !p.annee || !p.classe)
+      return createJsonResponse({ success: false, message: "Paramètres manquants." });
+    const ws = getSheetSafe(ss, "NOTES_EXAMENS");
+    const data = ws.getDataRange().getValues();
+    let nb = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]).trim() !== String(p.idEtu).trim()) continue;
+      if (String(data[i][4]).trim() !== String(p.annee).trim()) continue;
+      ws.getRange(i+1, 4).setValue(p.classe);
+      nb++;
+    }
+    logAction(p.emailAuteur||"?", p.vieScRole||"?", "Modification", "Vie scolaire", p.idEtu,
+      "Correction classe (" + p.annee + ") → " + p.classe + " — " + nb + " ligne(s)");
+    return createJsonResponse({ success: true, nb: nb });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ==========================================
+// STATISTIQUES PROMOTION — EXCLUSIONS MANUELLES (cas par cas, avec commentaire)
+// Permet d'écarter ponctuellement un étudiant du taux de réussite/échec (litige, dossier en
+// cours de régularisation...) sans toucher à ses notes ni à son résultat.
+// ==========================================
+
+function _getStatsExclusionsSheet(ss) {
+  var ws;
+  try { ws = getSheetSafe(ss, "NOTES_STATS_EXCLUSIONS"); }
+  catch (e) {
+    ws = ss.insertSheet("NOTES_STATS_EXCLUSIONS");
+    ws.appendRow(["idEtu","diplome","annee","exclu","commentaire","dateModif","auteur"]);
+    ws.setFrozenRows(1);
+  }
+  return ws;
+}
+
+function handleGetStatsExclusions(p, ss) {
+  try {
+    const ws = _getStatsExclusionsSheet(ss);
+    const data = ws.getDataRange().getValues();
+    const list = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      list.push({ idEtu: String(data[i][0]), diplome: String(data[i][1]||""), annee: String(data[i][2]||""),
+        exclu: String(data[i][3]||"").toUpperCase()==="OUI", commentaire: String(data[i][4]||"") });
+    }
+    return createJsonResponse({ success: true, data: list });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleSaveStatsExclusion(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie','Administratif'].includes(p.vieScRole))
+      return createJsonResponse({ success: false, message: "Accès refusé." });
+    if (!p.idEtu || !p.diplome || !p.annee)
+      return createJsonResponse({ success: false, message: "Paramètres manquants." });
+    const ws = _getStatsExclusionsSheet(ss);
+    const data = ws.getDataRange().getValues();
+    const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+    const exclu = p.exclu ? "OUI" : "NON";
+    const commentaire = p.commentaire || "";
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim()===String(p.idEtu).trim() && String(data[i][1])===String(p.diplome) && String(data[i][2])===String(p.annee)) {
+        // Ligne devenue inutile (non exclu + pas de commentaire) : on la supprime pour garder la feuille propre
+        if (exclu==="NON" && !commentaire.trim()) { ws.deleteRow(i+1); return createJsonResponse({ success:true }); }
+        ws.getRange(i+1,4,1,4).setValues([[exclu, commentaire, dateStr, p.emailAuteur||"?"]]);
+        return createJsonResponse({ success: true });
+      }
+    }
+    if (exclu==="NON" && !commentaire.trim()) return createJsonResponse({ success: true }); // rien à créer
+    ws.appendRow([p.idEtu, p.diplome, p.annee, exclu, commentaire, dateStr, p.emailAuteur||"?"]);
+    logAction(p.emailAuteur||"?", p.vieScRole||"?", "Modification", "Vie scolaire", p.idEtu,
+      "Exclusion stats (" + p.diplome + " " + p.annee + ") : " + exclu + (commentaire?" — "+commentaire:""));
+    return createJsonResponse({ success: true });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
@@ -8265,7 +9174,7 @@ const RELEVE_ROOT_ID = "1UGf647KDLmzbn8uZPn8xLnzxmchFAgl-";
 
 function handleUploadReleveNote(p, ss) {
   try {
-    if (p.vieScRole !== "Super-admin" && p.vieScRole !== "Pédagogie")
+    if (!['Super-admin','Pédagogie','Administratif'].includes(p.vieScRole))
       return createJsonResponse({ success: false, message: "Accès refusé." });
     if (!p.base64Data || !p.fileName || !p.mimeType)
       return createJsonResponse({ success: false, message: "Paramètres manquants." });
@@ -8291,7 +9200,56 @@ function handleUploadReleveNote(p, ss) {
     const file  = annFolder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     logAction(p.emailAuteur||"?", p.vieScRole||"?", "Création","Vie scolaire",file.getId(),"Relevé de notes: "+newName);
+    // Persistance du relevé en base (feuille RELEVES_NOTES)
+    try {
+      let wsR; try { wsR = getSheetSafe(ss, "RELEVES_NOTES"); } catch(e2) { wsR = ss.insertSheet("RELEVES_NOTES"); wsR.appendRow(["id","idEtu","nomPrenom","annee","diplome","classe","fileName","fileUrl","fileId","dateUpload"]); }
+      const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+      const rid = "REL-" + new Date().getTime();
+      wsR.appendRow([rid, p.idEtu||"", p.nomPrenom||"", p.annee||"", p.diplome||"", p.classe||"", newName, file.getUrl(), file.getId(), dateStr]);
+    } catch(e2) { Logger.log("RELEVES_NOTES non maj : " + e2); }
     return createJsonResponse({ success: true, id: file.getId(), url: file.getUrl(), name: newName });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleGetReleveNotes(p, ss) {
+  try {
+    let ws; try { ws = getSheetSafe(ss, "RELEVES_NOTES"); } catch(e) { return createJsonResponse({ success: true, data: [] }); }
+    const data = ws.getDataRange().getValues();
+    const list = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      if (p.idEtu && String(data[i][1]).trim() !== String(p.idEtu).trim()) continue;
+      if (p.diplome) {
+        const rc = String(data[i][4]).toUpperCase();
+        const dc = p.diplome.toUpperCase();
+        if (!rc.includes(dc) && !(dc.startsWith('BTS') && rc.startsWith('BTS'))) continue;
+      }
+      list.push({ id: String(data[i][0]), idEtu: String(data[i][1]), nomPrenom: String(data[i][2]),
+        annee: String(data[i][3]), diplome: String(data[i][4]), classe: String(data[i][5]),
+        fileName: String(data[i][6]), fileUrl: String(data[i][7]), fileId: String(data[i][8]),
+        dateUpload: String(data[i][9]) });
+    }
+    return createJsonResponse({ success: true, data: list });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleDeleteReleveNote(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie','Administratif'].includes(p.vieScRole))
+      return createJsonResponse({ success: false, message: "Accès refusé." });
+    if (!p.id) return createJsonResponse({ success: false, message: "Identifiant manquant." });
+    const ws = getSheetSafe(ss, "RELEVES_NOTES");
+    const data = ws.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) !== String(p.id)) continue;
+      const fileId = String(data[i][8]||"");
+      const fileName = String(data[i][6]||"");
+      if (fileId) { try { DriveApp.getFileById(fileId).setTrashed(true); } catch(eDrive) {} }
+      ws.deleteRow(i+1);
+      logAction(p.emailAuteur||"?", p.vieScRole||"?", "Suppression", "Vie scolaire", p.id, "Relevé supprimé : " + fileName);
+      return createJsonResponse({ success: true });
+    }
+    return createJsonResponse({ success: false, message: "Relevé introuvable." });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
@@ -8301,7 +9259,7 @@ function handleUploadReleveNote(p, ss) {
 
 function handleGetPersonnelList(p, ss) {
   try {
-    const data = getSheetSafe(ss, "Personnel").getDataRange().getValues();
+    const data = getPersonnelDataCached_(ss);
     const list = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
@@ -8353,6 +9311,177 @@ function handleGetQualiopiDossierUrl(p, ss) {
 }
 
 // ==========================================
+// VIE SCOLAIRE — QUALIOPI : ENQUÊTE FORMATEURS (Indicateurs 14 & 17)
+// Chaque formateur en poste dispose d'un code anonyme fixe (colonne 14 de
+// l'onglet Adultes/FORMATEURS). Le lien envoyé manuellement par mail ne
+// contient que ce code : le formateur ne voit jamais son nom sur le
+// formulaire, mais le code permet en interne de savoir qui a répondu
+// (relance) tout en gardant les réponses détaillées non-nominatives dans
+// les statistiques agrégées.
+// ==========================================
+
+function _getFormateursSheet(ss) {
+  try { return getSheetSafe(ss, "Adultes"); } catch(e) { return getSheetSafe(ss, "FORMATEURS"); }
+}
+
+function _genCodeFormateur(existingCodes) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sans caractères ambigus (0/O, 1/I)
+  let code;
+  do {
+    code = "FMT-";
+    for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  } while (existingCodes.has(code));
+  existingCodes.add(code);
+  return code;
+}
+
+function _findFormateurByCode(ss, code) {
+  if (!code) return null;
+  const ws = _getFormateursSheet(ss);
+  const data = ws.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][13] || "").trim() === String(code).trim()) {
+      return { id: String(data[i][0]), nom: String(data[i][1]||""), prenom: String(data[i][2]||"") };
+    }
+  }
+  return null;
+}
+
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script.
+ * Attribue un code anonyme fixe à chaque formateur qui n'en a pas encore.
+ * (Les codes se génèrent aussi automatiquement à la volée sur les nouveaux
+ * formateurs et lors de la génération des liens d'envoi.)
+ */
+function seedCodesAnonymesFormateurs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ws = _getFormateursSheet(ss);
+  const data = ws.getDataRange().getValues();
+  const existing = new Set();
+  for (let i = 1; i < data.length; i++) if (data[i][13]) existing.add(String(data[i][13]));
+  let nb = 0;
+  for (let j = 1; j < data.length; j++) {
+    if (!data[j][0] || data[j][13]) continue;
+    ws.getRange(j + 1, 14).setValue(_genCodeFormateur(existing));
+    nb++;
+  }
+  Logger.log(nb + " code(s) anonyme(s) attribué(s).");
+}
+
+/**
+ * Point d'entrée public appelé directement depuis questionnaire_qualiopi.html
+ * via google.script.run (page HtmlService servie par doGet — pas d'appel
+ * HTTP, donc pas de session à valider).
+ */
+function submitQuestionnaireQualiopi(json) {
+  try {
+    const p  = JSON.parse(json);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const formateur = _findFormateurByCode(ss, p.code);
+    if (!formateur) throw new Error("Lien invalide ou expiré.");
+    let ws;
+    try { ws = getSheetSafe(ss, "QUESTIONNAIRES_QUALIOPI"); }
+    catch (e) {
+      ws = ss.insertSheet("QUESTIONNAIRES_QUALIOPI");
+      ws.appendRow(["id","code","dateReponse","reponsesJson"]);
+      ws.hideSheet();
+    }
+    const id = "QST-" + new Date().getTime();
+    const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+    ws.appendRow([id, String(p.code), dateStr, JSON.stringify(p.reponses || {})]);
+    return "SUCCESS";
+  } catch (e) {
+    throw new Error("Erreur lors de l'enregistrement : " + e.toString());
+  }
+}
+
+// Traitement statistique automatique : moyenne par question (clés numériques,
+// ex. q14_1) et regroupement des commentaires libres (clés textuelles).
+function handleGetQuestionnaireQualiopiStats(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie'].includes(p.vieScRole)) return createJsonResponse({ success:false, message:"Accès refusé." });
+    let ws; try { ws = getSheetSafe(ss, "QUESTIONNAIRES_QUALIOPI"); }
+    catch(e) { return createJsonResponse({ success:true, data:{ nbReponses:0, stats:{}, comments:{} } }); }
+    const data = ws.getDataRange().getValues();
+    const stats = {}, comments = {};
+    let nbReponses = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      nbReponses++;
+      let reps; try { reps = JSON.parse(data[i][3] || "{}"); } catch(eJ) { reps = {}; }
+      Object.keys(reps).forEach(function(k) {
+        const v = reps[k], num = parseFloat(v);
+        if (v !== "" && v !== null && v !== undefined && !isNaN(num) && String(v).trim() === String(num)) {
+          if (!stats[k]) stats[k] = { sum:0, n:0 };
+          stats[k].sum += num; stats[k].n++;
+        } else if (v) {
+          if (!comments[k]) comments[k] = [];
+          comments[k].push(String(v));
+        }
+      });
+    }
+    const avgStats = {};
+    Object.keys(stats).forEach(function(k) { avgStats[k] = { avg: Math.round((stats[k].sum/stats[k].n)*100)/100, n: stats[k].n }; });
+    return createJsonResponse({ success:true, data:{ nbReponses: nbReponses, stats: avgStats, comments: comments } });
+  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
+}
+
+// Suivi nominatif (interne) : qui a répondu, pour relance des formateurs silencieux.
+function handleGetQuestionnaireQualiopiSuivi(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie'].includes(p.vieScRole)) return createJsonResponse({ success:false, message:"Accès refusé." });
+    const wsP = _getFormateursSheet(ss);
+    const dataP = wsP.getDataRange().getValues();
+    const repondants = {};
+    try {
+      const wsQ = getSheetSafe(ss, "QUESTIONNAIRES_QUALIOPI");
+      const dataQ = wsQ.getDataRange().getValues();
+      for (let i = 1; i < dataQ.length; i++) { if (dataQ[i][0]) repondants[String(dataQ[i][1])] = String(dataQ[i][2]); }
+    } catch(e2) {}
+    const list = [];
+    for (let j = 1; j < dataP.length; j++) {
+      if (!dataP[j][0]) continue;
+      if (String(dataP[j][12]||"").trim().toUpperCase() !== "OUI") continue; // formateurs actifs uniquement
+      if (String(dataP[j][10]||"").trim() !== "") continue; // exclure les sortis
+      const code = String(dataP[j][13]||"");
+      if (!code) continue;
+      list.push({
+        nom: String(dataP[j][1]||""), prenom: String(dataP[j][2]||""),
+        email: String(dataP[j][4]||dataP[j][3]||""), code: code,
+        aRepondu: !!repondants[code], dateReponse: repondants[code]||""
+      });
+    }
+    return createJsonResponse({ success:true, data:list });
+  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
+}
+
+// Génère (et attribue si besoin) les liens individuels à copier dans le mail manuel.
+function handleGetQuestionnaireLinks(p, ss) {
+  try {
+    if (!['Super-admin','Pédagogie'].includes(p.vieScRole)) return createJsonResponse({ success:false, message:"Accès refusé." });
+    const wsP = _getFormateursSheet(ss);
+    const dataP = wsP.getDataRange().getValues();
+    const existing = new Set();
+    for (let k = 1; k < dataP.length; k++) if (dataP[k][13]) existing.add(String(dataP[k][13]));
+    const baseUrl = ScriptApp.getService().getUrl();
+    const list = [];
+    for (let j = 1; j < dataP.length; j++) {
+      if (!dataP[j][0]) continue;
+      if (String(dataP[j][12]||"").trim().toUpperCase() !== "OUI") continue;
+      if (String(dataP[j][10]||"").trim() !== "") continue;
+      let code = String(dataP[j][13]||"");
+      if (!code) { code = _genCodeFormateur(existing); wsP.getRange(j+1, 14).setValue(code); }
+      list.push({
+        nom: String(dataP[j][1]||""), prenom: String(dataP[j][2]||""),
+        email: String(dataP[j][4]||dataP[j][3]||""),
+        lien: baseUrl + "?page=questionnaire&code=" + code
+      });
+    }
+    return createJsonResponse({ success:true, data:list });
+  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
+}
+
+// ==========================================
 // SEEDER ONE-SHOT — RÉFÉRENTIEL MATIÈRES
 // ==========================================
 /**
@@ -8386,7 +9515,7 @@ function seederReferentielMatieres() {
     ["BTS CG","EF3",        "facultative",2],
     ["BTS CG","Autre",      "autre",      1],
     // DCG — 14 UE, coeff = 1 pour toutes, UE14 facultative
-    ["DCG","UE 1 - Introduction au droit",                      "principale",1],
+    ["DCG","UE 1 - Fondamentaux du droit",                      "principale",1],
     ["DCG","UE 2 - Droit des sociétés et des groupements",      "principale",1],
     ["DCG","UE 3 - Droit social",                               "principale",1],
     ["DCG","UE 4 - Droit fiscal",                               "principale",1],
@@ -8399,7 +9528,7 @@ function seederReferentielMatieres() {
     ["DCG","UE 11 - Contrôle de gestion",                       "principale",1],
     ["DCG","UE 12 - Anglais des affaires",                      "principale",1],
     ["DCG","UE 13 - Relations professionnelles",                "principale",1],
-    ["DCG","UE 14 - Espagnol des affaires",                     "facultative",1],
+    ["DCG","UE 14 - LV2",                                       "facultative",1],
     // DSCG — 6 UE obligatoires + UE7 facultative
     ["DSCG","UE 1 - Gestion juridique, fiscale et sociale",     "principale",1],
     ["DSCG","UE 2 - Finance",                                   "principale",1],
@@ -8551,8 +9680,7 @@ function handleGetTropheeData(p, ss) {
     var personnelRow = -1;
     var userRef = "";
     try {
-      var persWs = getSheetSafe(ss, "Personnel");
-      var persData = persWs.getDataRange().getValues();
+      var persData = getPersonnelDataCached_(ss);
       for (var pr = 1; pr < persData.length; pr++) {
         if (String(persData[pr][6]||"").trim().toLowerCase() === emailUser) {
           personnelRow = pr + 1;
@@ -8677,8 +9805,7 @@ function handleSaveTropheePrefs(p, ss) {
   try {
     const emailUser = String(p.emailUser || "").trim().toLowerCase();
     if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
-    var persWs = getSheetSafe(ss, "Personnel");
-    var persData = persWs.getDataRange().getValues();
+    var persData = getPersonnelDataCached_(ss);
     for (var i = 1; i < persData.length; i++) {
       if (String(persData[i][6]||"").trim().toLowerCase() === emailUser) {
         var row = i + 1;
@@ -8700,8 +9827,7 @@ function handleMarkTropheesVus(p, ss) {
   try {
     const emailUser = String(p.emailUser || "").trim().toLowerCase();
     if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
-    var persWs = getSheetSafe(ss, "Personnel");
-    var persData = persWs.getDataRange().getValues();
+    var persData = getPersonnelDataCached_(ss);
     for (var i = 1; i < persData.length; i++) {
       if (String(persData[i][6]||"").trim().toLowerCase() === emailUser) {
         persWs.getRange(i + 1, 12).setValue(new Date().toISOString()); // col L
@@ -9231,14 +10357,17 @@ function handleGetMMOK(p, ss) {
       var dp = data[i][3], dr = data[i][6];
       rows.push({
         id: "MMOK-" + i,
-        refpost: String(data[i][0]||"").trim(),
+        refpost:    String(data[i][0]||"").trim(),
         plateforme: String(data[i][1]||"").trim(),
-        theme: String(data[i][2]||"").trim(),
+        sujet:      String(data[i][2]||"").trim(),
         datePrevue: dp instanceof Date ? Utilities.formatDate(dp, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(dp||"").trim(),
-        ideeContenu: String(data[i][4]||"").trim(),
-        contenu: String(data[i][5]||"").trim(),
+        ideeContenu:String(data[i][4]||"").trim(),
+        contenu:    String(data[i][5]||"").trim(),
         dateReelle: dr instanceof Date ? Utilities.formatDate(dr, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(dr||"").trim(),
-        etat: String(data[i][7]||"").trim(),
+        etat:       String(data[i][7]||"").trim(),
+        theme:      String(data[i][8]||"").trim(),
+        lien:       String(data[i][9]||"").trim(),
+        visuals:    String(data[i][10]||"").trim(),
         _row: i + 1
       });
     }
@@ -9253,12 +10382,12 @@ function handleSaveMMOK(p, ss) {
     var ws = _getMMOKSheet(ss);
     var data = ws.getDataRange().getValues();
     var refpost = String(p.refpost||"").trim() || ("MMOK-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss"));
-    var row = [refpost, String(p.plateforme||""), String(p.theme||""), String(p.datePrevue||""), String(p.ideeContenu||""), String(p.contenu||""), String(p.dateReelle||""), String(p.etat||"Planifié")];
+    var row = [refpost, String(p.plateforme||""), String(p.sujet||""), String(p.datePrevue||""), String(p.ideeContenu||""), String(p.contenu||""), String(p.dateReelle||""), String(p.etat||"Planifié"), String(p.theme||""), String(p.lien||""), String(p.visuals||"")];
     var idStr = String(p.id||"");
     if (idStr.startsWith("MMOK-")) {
       var rowIdx = parseInt(idStr.slice(5));
       if (rowIdx >= 1 && rowIdx < data.length) {
-        ws.getRange(rowIdx+1, 1, 1, 8).setValues([row]);
+        ws.getRange(rowIdx+1, 1, 1, 11).setValues([row]);
         return createJsonResponse({ success: true });
       }
     }
@@ -9282,4 +10411,312 @@ function handleDeleteMMOK(p, ss) {
     }
     return createJsonResponse({ success: false, message: "Post introuvable." });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ==========================================
+// MMOK — RAPPELS AUTOMATIQUES J-1 ET JOUR J
+// ==========================================
+
+function sendMMOKReminders() {
+  try {
+    var ss   = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+    var ws   = _getMMOKSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var tz   = Session.getScriptTimeZone();
+    var now  = new Date();
+    var today    = Utilities.formatDate(now, tz, "yyyy-MM-dd");
+    var tomorrow = Utilities.formatDate(new Date(now.getTime() + 86400000), tz, "yyyy-MM-dd");
+
+    var postsToday = [], postsTomorrow = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0] && !data[i][1]) continue;
+      var dp = data[i][3];
+      var dpStr = dp instanceof Date ? Utilities.formatDate(dp, tz, "yyyy-MM-dd") : String(dp||"").trim();
+      var etat = String(data[i][7]||"").trim();
+      if (etat === "Publié" || etat === "Annulé") continue;
+      var item = {
+        refpost:    String(data[i][0]||"").trim(),
+        plateforme: String(data[i][1]||"").trim(),
+        sujet:      String(data[i][2]||"").trim(),
+        theme:      String(data[i][8]||"").trim(),
+        etat:       etat
+      };
+      if (dpStr === today)    postsToday.push(item);
+      if (dpStr === tomorrow) postsTomorrow.push(item);
+    }
+
+    if (postsTomorrow.length > 0) {
+      var lignes = postsTomorrow.map(function(it) {
+        return '- ' + it.refpost + ' | ' + it.plateforme + (it.sujet ? ' | Sujet : ' + it.sujet : '') + (it.theme ? ' | Theme : ' + it.theme : '');
+      }).join('\n');
+      var html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px">'
+        + '<div style="background:#1A4E8A;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">'
+        + '<h2 style="margin:0;font-size:18px">Rappel J-1 — Publication prevue demain</h2>'
+        + '<p style="margin:6px 0 0;font-size:12px;opacity:.8">CRM HECG — Rappel automatique</p></div>'
+        + '<div style="background:#fff;border:1px solid #e5e7eb;padding:20px 24px;border-radius:0 0 8px 8px">'
+        + '<p style="font-size:14px">Les posts suivants sont prevus pour demain :</p>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<tr style="background:#f8fafc"><th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">REFPOST</th><th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">Plateforme</th><th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">Sujet</th><th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">Theme</th></tr>'
+        + postsTomorrow.map(function(it) {
+            return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:8px;font-weight:700">' + it.refpost + '</td><td style="padding:8px">' + it.plateforme + '</td><td style="padding:8px">' + (it.sujet||'—') + '</td><td style="padding:8px;font-weight:700;color:#1A4E8A">' + (it.theme||'—') + '</td></tr>';
+          }).join('')
+        + '</table>'
+        + '<p style="margin-top:16px;font-size:12px;color:#9ca3af">Rappel automatique envoye la veille de chaque date previsionnelle — CRM HECG</p>'
+        + '</div></div>';
+      GmailApp.sendEmail(SENDER_EMAIL, "Rappel J-1 — " + postsTomorrow.length + " post(s) a publier demain", "", { htmlBody: html, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
+    }
+
+    if (postsToday.length > 0) {
+      var html2 = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px">'
+        + '<div style="background:#dc2626;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">'
+        + '<h2 style="margin:0;font-size:18px">Rappel Jour J — Publication prevue aujourd\'hui</h2>'
+        + '<p style="margin:6px 0 0;font-size:12px;opacity:.8">CRM HECG — Rappel automatique</p></div>'
+        + '<div style="background:#fff;border:1px solid #e5e7eb;padding:20px 24px;border-radius:0 0 8px 8px">'
+        + '<p style="font-size:14px">Les posts suivants sont prevus pour <strong>aujourd\'hui</strong> :</p>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<tr style="background:#fef2f2"><th style="padding:8px;text-align:left;border-bottom:1px solid #fecaca">REFPOST</th><th style="padding:8px;text-align:left;border-bottom:1px solid #fecaca">Plateforme</th><th style="padding:8px;text-align:left;border-bottom:1px solid #fecaca">Sujet</th><th style="padding:8px;text-align:left;border-bottom:1px solid #fecaca">Theme</th></tr>'
+        + postsToday.map(function(it) {
+            return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:8px;font-weight:700">' + it.refpost + '</td><td style="padding:8px">' + it.plateforme + '</td><td style="padding:8px">' + (it.sujet||'—') + '</td><td style="padding:8px;font-weight:700;color:#dc2626">' + (it.theme||'—') + '</td></tr>';
+          }).join('')
+        + '</table>'
+        + '<p style="margin-top:16px;font-size:12px;color:#9ca3af">Rappel automatique envoye le jour J de chaque date previsionnelle — CRM HECG</p>'
+        + '</div></div>';
+      GmailApp.sendEmail(SENDER_EMAIL, "Rappel Jour J — " + postsToday.length + " post(s) a publier aujourd'hui", "", { htmlBody: html2, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
+    }
+  } catch(e) { Logger.log("Erreur sendMMOKReminders : " + e.toString()); }
+}
+
+function setupMMOKReminderTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendMMOKReminders') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendMMOKReminders').timeBased().everyDays(1).atHour(8).create();
+  Logger.log("Trigger sendMMOKReminders cree : tous les jours a 8h");
+}
+
+// ==========================================
+// SUIVI POST COM — RÉSEAUX SOCIAUX COM & ÉVÉNEMENT
+// ==========================================
+
+function _getSuiviPostComSheet(ss) {
+  var ws = ss.getSheetByName("suivipostcom");
+  if (!ws) throw new Error("Onglet 'suivipostcom' introuvable.");
+  return ws;
+}
+
+function _parseSPCJson(raw) {
+  try { return JSON.parse(String(raw||'[]')); } catch(e) { return []; }
+}
+
+function handleGetSuiviPostCom(p, ss) {
+  try {
+    var ws = _getSuiviPostComSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var rows = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0] && !data[i][1] && !data[i][4]) continue;
+      var dp = data[i][3], dr = data[i][6], db = data[i][10];
+      rows.push({
+        id:               "SPC-" + i,
+        refpost:          String(data[i][0]||"").trim(),
+        plateforme:       String(data[i][1]||"").trim(),
+        theme:            String(data[i][2]||"").trim(),
+        datePrevue:       dp instanceof Date ? Utilities.formatDate(dp, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(dp||"").trim(),
+        ideeContenu:      String(data[i][4]||"").trim(),
+        contenu:          String(data[i][5]||"").trim(),
+        dateReelle:       dr instanceof Date ? Utilities.formatDate(dr, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(dr||"").trim(),
+        etat:             String(data[i][7]||"").trim(),
+        themeProg:        String(data[i][8]||"").trim(),
+        visuals:          String(data[i][9]||"").trim(),
+        dateButoir:       db instanceof Date ? Utilities.formatDate(db, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(db||"").trim(),
+        validationEtat:   String(data[i][11]||"En attente").trim(),
+        carnetEchanges:   _parseSPCJson(data[i][12]),
+        historiqueStatuts:_parseSPCJson(data[i][13]),
+        _row: i + 1
+      });
+    }
+    return createJsonResponse({ success: true, data: rows });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleSaveSuiviPostCom(p, ss) {
+  try {
+    var ws = _getSuiviPostComSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var refpost = String(p.refpost||"").trim() || ("SPC-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss"));
+    var newValidationEtat = String(p.validationEtat||"En attente").trim();
+    var isNew = true;
+    var existingCarnet = "[]";
+    var existingHistorique = "[]";
+    var oldValidationEtat = "";
+
+    var idStr = String(p.id||"");
+    var rowIdx = -1;
+    if (idStr.startsWith("SPC-")) {
+      rowIdx = parseInt(idStr.slice(4));
+      if (rowIdx >= 1 && rowIdx < data.length) {
+        isNew = false;
+        oldValidationEtat = String(data[rowIdx][11]||"En attente").trim();
+        existingCarnet    = String(data[rowIdx][12]||"[]");
+        existingHistorique= String(data[rowIdx][13]||"[]");
+      }
+    }
+
+    // Historique des statuts de validation
+    var historiqueStatuts = _parseSPCJson(existingHistorique);
+    if (isNew || oldValidationEtat !== newValidationEtat) {
+      historiqueStatuts.push({
+        date:       Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"),
+        auteur:     String(p.nomAuteur || p.idAuteur || "Inconnu"),
+        ancienEtat: isNew ? "" : oldValidationEtat,
+        nouvelEtat: newValidationEtat
+      });
+    }
+
+    var row = [
+      refpost,
+      String(p.plateforme||""),
+      String(p.theme||""),
+      String(p.datePrevue||""),
+      String(p.ideeContenu||""),
+      String(p.contenu||""),
+      String(p.dateReelle||""),
+      String(p.etat||"Planifié"),
+      String(p.themeProg||""),
+      String(p.visuals||""),
+      String(p.dateButoir||""),
+      newValidationEtat,
+      existingCarnet,
+      JSON.stringify(historiqueStatuts)
+    ];
+
+    if (!isNew && rowIdx >= 1 && rowIdx < data.length) {
+      ws.getRange(rowIdx+1, 1, 1, 14).setValues([row]);
+    } else {
+      ws.appendRow(row);
+      // Notification email à la direction pour tout nouveau post
+      try {
+        MailApp.sendEmail({
+          to: "m.mokhtari@hecg.fr",
+          subject: "[HECG Com] Nouveau post créé : " + refpost,
+          htmlBody: "<h3 style='color:#1A4E8A'>Nouveau post créé dans le suivi Com</h3>" +
+            "<table style='font-family:sans-serif;font-size:13px;border-collapse:collapse'>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Référence</td><td>" + refpost + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Plateforme</td><td>" + String(p.plateforme||"—") + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Thème</td><td>" + String(p.theme||"—") + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Idée de contenu</td><td>" + String(p.ideeContenu||"—") + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Date prévisionnelle</td><td>" + String(p.datePrevue||"—") + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Date butoir direction</td><td>" + String(p.dateButoir||"—") + "</td></tr>" +
+            "<tr><td style='padding:4px 12px 4px 0;font-weight:700'>Créé par</td><td>" + String(p.nomAuteur||p.idAuteur||"Inconnu") + "</td></tr>" +
+            "</table>"
+        });
+      } catch(eNotif) { Logger.log("Erreur notif SPC : " + eNotif); }
+    }
+    return createJsonResponse({ success: true });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleDeleteSuiviPostCom(p, ss) {
+  try {
+    var ws = _getSuiviPostComSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var idStr = String(p.id||"");
+    if (idStr.startsWith("SPC-")) {
+      var rowIdx = parseInt(idStr.slice(4));
+      if (rowIdx >= 1 && rowIdx < data.length) {
+        ws.deleteRow(rowIdx+1); return createJsonResponse({ success: true });
+      }
+    }
+    return createJsonResponse({ success: false, message: "Post introuvable." });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleAddSPCEchange(p, ss) {
+  try {
+    var ws = _getSuiviPostComSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var idStr = String(p.id||"");
+    if (!idStr.startsWith("SPC-")) return createJsonResponse({ success: false, message: "ID invalide." });
+    var rowIdx = parseInt(idStr.slice(4));
+    if (rowIdx < 1 || rowIdx >= data.length) return createJsonResponse({ success: false, message: "Post introuvable." });
+    var carnet = _parseSPCJson(data[rowIdx][12]);
+    carnet.push({
+      date:    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"),
+      auteur:  String(p.nomAuteur || p.idAuteur || "Inconnu"),
+      message: String(p.message||"").trim()
+    });
+    ws.getRange(rowIdx+1, 13).setValue(JSON.stringify(carnet));
+    return createJsonResponse({ success: true, carnetEchanges: carnet });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function _uploadVisualToFolder(p, folderId) {
+  var base64   = String(p.base64||"");
+  var mimeType = String(p.mimeType||"image/jpeg");
+  var filename = String(p.filename||"visuel.jpg");
+  if (!base64) return createJsonResponse({ success: false, message: "Aucune donnee recue." });
+  var folder   = DriveApp.getFolderById(folderId);
+  var blob     = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, filename);
+  var file     = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return createJsonResponse({ success: true, fileId: file.getId(), filename: file.getName() });
+}
+
+function handleUploadSPCVisual(p, ss) {
+  try { return _uploadVisualToFolder(p, "1qbOS58i09FIdNThwsHIxEdnrXsdK2icM"); }
+  catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function handleUploadMMOKVisual(p, ss) {
+  try {
+    if (p.vieScRole !== "Super-admin")
+      return createJsonResponse({ success: false, message: "Acces Super-admin requis." });
+    return _uploadVisualToFolder(p, "1qbOS58i09FIdNThwsHIxEdnrXsdK2icM");
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// Le moteur de synchronisation Google Contacts est dans synchrocontacts.gs (fichier séparé).
+
+// ==========================================
+// ONE-SHOT — CORRECTION COEFFICIENTS BTS CG
+// ==========================================
+// Exécuter UNE SEULE FOIS depuis l'éditeur Apps Script pour corriger les coefficients BTS CG.
+function corrigerCoefficientsBTSCG() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ws  = ss.getSheetByName("Referentiel_matieres");
+  if (!ws) { Logger.log("❌ Feuille 'Referentiel_matieres' introuvable."); return; }
+  const data = ws.getDataRange().getValues();
+
+  // Mapping pattern → nouveau coefficient (priorité décroissante — les patterns E5..E8 passent en premier)
+  const FIXES = [
+    { test: m => /^E5(\s|$|-)/i.test(m.trim()) || /^e5$/i.test(m.trim()), coeff: 9 },
+    { test: m => /^E6(\s|$|-)/i.test(m.trim()) || /^e6$/i.test(m.trim()), coeff: 5 },
+    { test: m => /^E7(\s|$|-)/i.test(m.trim()) || /^e7$/i.test(m.trim()), coeff: 5 },
+    { test: m => /^E8(\s|$|-)/i.test(m.trim()) || /^e8$/i.test(m.trim()), coeff: 5 },
+    // CEJM : sigle ou nom complet
+    { test: m => /\bcejm\b/i.test(m) || /culture\s+.*(économique|juridique|managérial)/i.test(m), coeff: 6 },
+    // CGE : sigle ou nom commençant par "Comptabilité"
+    { test: m => /\bcge\b/i.test(m) || /^comptabilit/i.test(m.trim()), coeff: 4 },
+    // Anglais / Langue vivante (avant Math pour éviter tout conflit)
+    { test: m => /anglais/i.test(m) || /langue\s+vivante/i.test(m) || /\blv[12]\b/i.test(m), coeff: 3 },
+    // Math / Statistiques
+    { test: m => /math/i.test(m) || /statistique/i.test(m), coeff: 3 },
+  ];
+
+  let changed = 0;
+  for (let i = 1; i < data.length; i++) {
+    const dip = String(data[i][0] || "").trim().toUpperCase();
+    if (dip !== 'BTS CG' && dip !== 'BTS') continue;
+    const matiere = String(data[i][1] || "").trim();
+    for (const fix of FIXES) {
+      if (fix.test(matiere)) {
+        const ancien = data[i][3];
+        ws.getRange(i + 1, 4).setValue(fix.coeff);
+        Logger.log(`✅ BTS CG — "${matiere}" : coeff ${ancien} → ${fix.coeff}`);
+        changed++;
+        break;
+      }
+    }
+  }
+  Logger.log(`Terminé : ${changed} coefficient(s) mis à jour.`);
 }
