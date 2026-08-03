@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -376,21 +376,50 @@
             loadPartners();
         };
 
-        // --- 1. CHARGEMENT & AFFICHAGE ---
-        async function loadPartners() {
+        // --- 1. CHARGEMENT & AFFICHAGE (cache local + rafraîchissement silencieux) ---
+        const PARTNERS_CACHE_KEY = 'hecg_cache_partners_v1';
+        const PARTNERS_CACHE_TTL_MS = 90 * 1000;
+
+        function _persistPartnersCache() {
             try {
+                const existing = JSON.parse(sessionStorage.getItem(PARTNERS_CACHE_KEY) || 'null');
+                const ts = existing ? existing.ts : Date.now();
+                sessionStorage.setItem(PARTNERS_CACHE_KEY, JSON.stringify({ ts, data: allPartners }));
+            } catch(e) {}
+        }
+
+        async function _fetchPartnersFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartners' }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(PARTNERS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data.data })); } catch(eStore) {}
+                allPartners = data.data;
+                filterPartners();
+            }
+            return data;
+        }
+
+        async function loadPartners(forceRefresh) {
+            try {
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(PARTNERS_CACHE_KEY) || 'null');
+                        if (cached && (Date.now() - cached.ts) < PARTNERS_CACHE_TTL_MS) {
+                            allPartners = cached.data;
+                            filterPartners();
+                            document.getElementById('loader').classList.add('hidden');
+                            document.getElementById('partnersGrid').classList.remove('hidden');
+                            _fetchPartnersFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
+                }
+
                 document.getElementById('loader').classList.remove('hidden');
                 document.getElementById('partnersGrid').classList.add('hidden');
 
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartners' }) });
-                const data = await res.json();
-                
-                if(data.success) {
-                    allPartners = data.data;
-                    filterPartners(); // applique les filtres actifs et initialise lastFilteredPartners
-                } else {
-                    alert("Erreur Serveur : " + data.message);
-                }
+                const data = await _fetchPartnersFresh();
+                if (!data.success) alert("Erreur Serveur : " + data.message);
             } catch(e) {
                 console.error("Erreur chargement partenaires : ", e);
                 alert("Erreur lors du chargement des entreprises.\n\nDétail : " + e.message);
@@ -399,6 +428,13 @@
                 document.getElementById('partnersGrid').classList.remove('hidden');
             }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchPartnersFresh().catch(function(e){ console.error(e); });
+            }
+        }, PARTNERS_CACHE_TTL_MS);
 
         function renderPartners(data) {
             const grid = document.getElementById('partnersGrid');
@@ -511,6 +547,7 @@
                 const a = (ent.anciensAlternants || []).find(x => x.id === id);
                 if (a) a.status = 'Confirmé';
             }
+            _persistPartnersCache();
             openDossier(currentId);
         }
 
@@ -519,6 +556,7 @@
             await apiPost({ action: 'removeFormerAlternant', id });
             const ent = allPartners.find(p => p.id === currentId);
             if (ent) ent.anciensAlternants = (ent.anciensAlternants || []).filter(x => x.id !== id);
+            _persistPartnersCache();
             openDossier(currentId);
         }
 
@@ -534,6 +572,7 @@
                 ent.anciensAlternants = ent.anciensAlternants || [];
                 ent.anciensAlternants.push({ id: 'ANC-' + Date.now(), nom: nomEtu.split(' ')[1] || '', prenom: nomEtu.split(' ')[0] || '', date: new Date().toISOString(), status: 'À_confirmer' });
             }
+            _persistPartnersCache();
             openDossier(currentId);
         }
 
@@ -647,7 +686,7 @@
             }
             closeContactEdit();
             openDossier(currentId);
-            loadPartners();
+            loadPartners(true);
         }
 
         function closeContactEdit() { document.getElementById('contactEditModal').classList.remove('modal-active'); }
@@ -769,7 +808,7 @@
                 alert("✅ " + result.message);
                 closeAddContact();
                 if(currentId) openDossier(currentId);
-                loadPartners();
+                loadPartners(true);
             } else {
                 alert("❌ ERREUR : " + result.message);
             }
@@ -804,7 +843,7 @@
             
             alert("⏰ Relance programmée avec succès !");
             closeDossier();
-            loadPartners();
+            loadPartners(true);
         }
 
         // --- 7. FILTRES & EXPORT (NOUVELLE LOGIQUE) ---
@@ -898,8 +937,8 @@
             if(!newName) return alert("Le nom ne peut pas être vide.");
             
             await apiPost({ action: 'updateEnterprise', id_entreprise: currentId, nouveauNom: newName });
-            
-            loadPartners(); 
+
+            loadPartners(true);
             alert("✅ Nom de l'entreprise mis à jour.");
         }
 
@@ -909,7 +948,7 @@
             askMotif(`Supprimer définitivement l'entreprise "${nomEnt}" et TOUS ses contacts ?`, async (motif) => {
                 await apiPost({ action: 'deleteEnterprise', id_entreprise: currentId, motif });
                 closeDossier();
-                loadPartners();
+                loadPartners(true);
             });
         }
 
@@ -920,7 +959,7 @@
             askMotif(`Supprimer le contact "${nomC}" ?`, async (motif) => {
                 await apiPost({ action: 'deleteContact', id_contact, motif });
                 openDossier(currentId);
-                loadPartners();
+                loadPartners(true);
             });
         }
 
