@@ -438,40 +438,79 @@ async function apiPost(payload) {
                 window.location.href = 'index.html'; 
             }
         };
-        // --- 1. CHARGEMENT DONNÉES ---
-        async function loadDashboardData() {
-            try {
-                const [resE, resP] = await Promise.all([
-    fetch(API_URL, { 
-        method: 'POST', 
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: 'getDashboardData', role: user.role, userId: user.ref }) 
-    }),
-    fetch(API_URL, { 
-        method: 'POST', 
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: 'getPartners' }) 
-    })
-]);
+        // --- 1. CHARGEMENT DONNÉES (cache local + rafraîchissement silencieux) ---
+        const DASHBOARD_CACHE_TTL_MS = 90 * 1000; // 90s : compromis fraîcheur / fluidité
+        function _dashCacheKey() { return 'hecg_cache_dashboard_v1_' + (user.role || ''); }
 
-                const dataE = await resE.json();
-                const dataP = await resP.json();
-                
-                if (dataE.success) {
-                    fullData = dataE.data;
-                    catalogueReferents = dataE.referents || [];
-                    catalogueTuteurs = dataP.success ? dataP.data : [];
-                    
-                    setupSelectors();
-                    renderTable();
-                    document.getElementById('loader').classList.add('hidden');
-                    document.getElementById('tableContainer').classList.remove('hidden');
+        function _applyDashboardPayload(dataE, dataP) {
+            fullData = dataE.data;
+            catalogueReferents = dataE.referents || [];
+            catalogueTuteurs = (dataP && dataP.success) ? dataP.data : [];
+            setupSelectors();
+            renderTable();
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('tableContainer').classList.remove('hidden');
+        }
+
+        // Réécrit le cache avec l'état courant de fullData (utilisé après une mise à jour optimiste)
+        function _persistDashboardCache() {
+            try {
+                const existing = JSON.parse(sessionStorage.getItem(_dashCacheKey()) || 'null');
+                const ts = existing ? existing.ts : Date.now();
+                sessionStorage.setItem(_dashCacheKey(), JSON.stringify({
+                    ts,
+                    dataE: { success: true, data: fullData, referents: catalogueReferents },
+                    dataP: { success: true, data: catalogueTuteurs }
+                }));
+            } catch(e) {}
+        }
+
+        async function _fetchDashboardFresh() {
+            const [resE, resP] = await Promise.all([
+                fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getDashboardData', role: user.role, userId: user.ref })
+                }),
+                fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getPartners' })
+                })
+            ]);
+            const dataE = await resE.json();
+            const dataP = await resP.json();
+            if (dataE.success) {
+                try { sessionStorage.setItem(_dashCacheKey(), JSON.stringify({ ts: Date.now(), dataE, dataP })); } catch(eStore) {}
+                _applyDashboardPayload(dataE, dataP);
+            }
+        }
+
+        async function loadDashboardData(forceRefresh) {
+            try {
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(_dashCacheKey()) || 'null');
+                        if (cached && (Date.now() - cached.ts) < DASHBOARD_CACHE_TTL_MS) {
+                            _applyDashboardPayload(cached.dataE, cached.dataP);
+                            _fetchDashboardFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
                 }
-            } catch (e) { 
+                await _fetchDashboardFresh();
+            } catch (e) {
                 console.error(e);
                 document.getElementById('loader').innerText = "Erreur de connexion serveur.";
             }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible et ouvert
+        setInterval(function() {
+            if (document.visibilityState === 'visible' && user) {
+                _fetchDashboardFresh().catch(function(e){ console.error(e); });
+            }
+        }, DASHBOARD_CACHE_TTL_MS);
 
         // --- 2. GESTION DES MENUS ---
         function setupSelectors() {
@@ -885,15 +924,22 @@ async function apiPost(payload) {
             askMotif('Supprimer l\'étudiant "' + nom + '" définitivement ?', async (motif) => {
                 const btnConf = document.querySelector('#motifModal button[onclick="confirmMotifDelete()"]');
                 if (btnConf) { btnConf.textContent = 'Suppression...'; btnConf.disabled = true; }
+
+                // Mise à jour optimiste : on retire l'étudiant immédiatement de l'affichage
+                const idx = fullData.findIndex(x => x.id === id);
+                const backup = idx > -1 ? fullData[idx] : null;
+                if (idx > -1) { fullData.splice(idx, 1); renderTable(); _persistDashboardCache(); }
+
                 try {
                     const res = await apiPost({ action: 'deleteStudent', id, motif });
                     if (res.success) {
                         showToast('Étudiant supprimé avec succès.', false);
-                        loadDashboardData();
                     } else {
+                        if (backup) { fullData.splice(idx, 0, backup); renderTable(); _persistDashboardCache(); }
                         showToast('Erreur : ' + (res.message || 'Échec inconnu'), true);
                     }
                 } catch(e) {
+                    if (backup) { fullData.splice(idx, 0, backup); renderTable(); _persistDashboardCache(); }
                     showToast('Erreur réseau : ' + e.message, true);
                 }
             });
@@ -1039,14 +1085,35 @@ async function envoyerSaveEtu(finalCvUrl) {
     };
 
     const res = await apiPost(payload);
-    
+
     const btn = document.getElementById('btnSave');
-    btn.disabled = false; 
+    btn.disabled = false;
     btn.innerText = "Enregistrer";
-    
+
     if (res.success) {
         closeModal();
-        loadDashboardData();
+        if (idValue) {
+            // Mise à jour optimiste : on patche l'étudiant existant sans recharger toute la base
+            const idx = fullData.findIndex(x => x.id === idValue);
+            if (idx > -1) {
+                fullData[idx] = Object.assign({}, fullData[idx], {
+                    nom: payload.nom, prenom: payload.prenom, mail: payload.mail, tel: payload.tel,
+                    refPerso: payload.refPerso, id_ent: payload.id_ent, id_cont: payload.id_cont,
+                    entreprise: payload.entreprise, statut: payload.statut, classe: payload.classe,
+                    campus: payload.campus, faitCV: payload.faitCV, faitLI: payload.faitLI,
+                    cvTech: payload.cvTech, cv: payload.cv, entree: payload.entree, sortie: payload.sortie,
+                    motif: payload.motifSortie, typo: payload.forceTypo
+                });
+                renderTable();
+                _persistDashboardCache();
+            } else {
+                loadDashboardData(true); // filet de sécurité si l'étudiant n'était pas dans le cache local
+            }
+        } else {
+            // Nouvel étudiant : l'ID généré côté serveur n'est pas encore connu, on recharge une fois
+            try { sessionStorage.removeItem(_dashCacheKey()); } catch(e) {}
+            loadDashboardData(true);
+        }
     } else {
         showToast('Erreur sauvegarde : ' + (res.message || 'Échec inconnu'), true);
     }
