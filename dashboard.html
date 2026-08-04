@@ -447,6 +447,7 @@ async function apiPost(payload) {
             catalogueReferents = dataE.referents || [];
             catalogueTuteurs = (dataP && dataP.success) ? dataP.data : [];
             setupSelectors();
+            restoreFiltersState(); // réapplique les filtres sauvegardés (navigation, rechargement...)
             renderTable();
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('tableContainer').classList.remove('hidden');
@@ -516,26 +517,34 @@ async function apiPost(payload) {
         function setupSelectors() {
             const classes = [...new Set(fullData.map(e => e.classe).filter(Boolean))].sort();
 
+            // Préserve les filtres actifs : cette fonction est aussi appelée lors des
+            // rafraîchissements silencieux en arrière-plan (cache, interval périodique),
+            // qui ne doivent jamais réinitialiser ce que l'utilisateur a coché/sélectionné.
+            const previousClasseChecked = new Set(getCheckedValues('fClasse'));
+            const previousReferent = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
+
             const fClDropdown = document.getElementById('fClasse-dropdown');
             if(fClDropdown) {
-                fClDropdown.innerHTML = classes.map(c => `<label class="ms-item"><input type="checkbox" data-filter="fClasse" value="${c}" onchange="onMsChange('fClasse')"> ${c}</label>`).join('');
+                fClDropdown.innerHTML = classes.map(c => `<label class="ms-item"><input type="checkbox" data-filter="fClasse" value="${c}" ${previousClasseChecked.has(c) ? 'checked' : ''} onchange="onMsChange('fClasse')"> ${c}</label>`).join('');
+                updateMsLabel('fClasse');
             }
-            
+
             const formCl = document.getElementById('formClasse');
             if(formCl) formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
 
             // Remplissage du select de Création/Modif étudiant
             const refSelect = document.getElementById('formReferent');
             if(refSelect) {
-                refSelect.innerHTML = '<option value="">-- Non assigné --</option>' + 
+                refSelect.innerHTML = '<option value="">-- Non assigné --</option>' +
                     catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
             }
 
-            // Remplissage du filtre rapide par Référent
+            // Remplissage du filtre rapide par Référent (en conservant la sélection active)
             const filterRef = document.getElementById('filterReferent');
             if(filterRef) {
-                filterRef.innerHTML = '<option value="">Tous les référents</option>' + 
+                filterRef.innerHTML = '<option value="">Tous les référents</option>' +
                     catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+                if (previousReferent) filterRef.value = previousReferent;
             }
 
             let listHtml = '';
@@ -630,8 +639,61 @@ async function apiPost(payload) {
             }
         });
 
+        // --- PERSISTANCE DES FILTRES (survit aux rafraîchissements et aux changements de page) ---
+        const DASH_FILTERS_KEY = 'hecg_dashboard_filters_v1';
+
+        function saveFiltersState() {
+            try {
+                sessionStorage.setItem(DASH_FILTERS_KEY, JSON.stringify({
+                    search: document.getElementById('fSearch').value,
+                    typo: getCheckedValues('fTypo'),
+                    classe: getCheckedValues('fClasse'),
+                    statut: getCheckedValues('fStatut'),
+                    campus: getCheckedValues('fCampus'),
+                    atelier: document.getElementById('fAtelier').value,
+                    cvTech: document.getElementById('fCvTech').value,
+                    periode: document.getElementById('fPeriode').value,
+                    referent: document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "",
+                    alumni: showAlumniOnly
+                }));
+            } catch(e) {}
+        }
+
+        function _setCheckedValues(filterId, values) {
+            const set = new Set(values || []);
+            document.querySelectorAll(`input[data-filter="${filterId}"]`).forEach(cb => { cb.checked = set.has(cb.value); });
+        }
+
+        // Ré-applique les filtres sauvegardés (appelé après chaque (re)chargement des données,
+        // avant le premier renderTable() — idempotent : sans effet si déjà à jour).
+        function restoreFiltersState() {
+            try {
+                const raw = sessionStorage.getItem(DASH_FILTERS_KEY);
+                if (!raw) return;
+                const st = JSON.parse(raw);
+                document.getElementById('fSearch').value = st.search || "";
+                _setCheckedValues('fTypo', st.typo);
+                _setCheckedValues('fClasse', st.classe);
+                _setCheckedValues('fStatut', st.statut);
+                _setCheckedValues('fCampus', st.campus);
+                document.getElementById('fAtelier').value = st.atelier || "";
+                document.getElementById('fCvTech').value = st.cvTech || "";
+                document.getElementById('fPeriode').value = st.periode || "";
+                if (document.getElementById('filterReferent') && st.referent) document.getElementById('filterReferent').value = st.referent;
+                MS_FILTER_IDS.forEach(f => updateMsLabel(f));
+                if (st.alumni && !showAlumniOnly) {
+                    showAlumniOnly = true;
+                    const btn = document.getElementById('btnAlumni');
+                    btn.classList.replace('border-slate-200', 'border-[#1A4E8A]');
+                    btn.classList.replace('text-slate-500', 'text-[#1A4E8A]');
+                    btn.classList.add('bg-blue-50');
+                }
+            } catch(e) {}
+        }
+
         // --- 3. FILTRES & TABLEAU & KPI ---
         function getFilteredData() {
+            saveFiltersState();
             const fSeRaw = document.getElementById('fSearch').value.toLowerCase().trim();
             const fSeTerms = fSeRaw.split(/\s+/).filter(t => t.length > 0);
             const selTypos = getCheckedValues('fTypo');
