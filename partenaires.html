@@ -43,6 +43,7 @@
             <div class="space-y-1">
                 <h1 class="text-3xl font-black text-slate-800 tracking-tight italic">Partenaires B2B</h1>
                 <p class="text-slate-400 text-sm font-medium">Gestion du portefeuille, relances et carnet de bord.</p>
+                <p class="text-xs font-black text-[#1A4E8A]" id="partnersCounter">— entreprises</p>
             </div>
             
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
@@ -902,8 +903,18 @@
             if (scoreMax !== null) data = data.filter(p => (p.score || 0) <= scoreMax);
 
             lastFilteredPartners = data;
+            updatePartnersCounter(data.length, allPartners.length);
             renderPartners(data);
             refreshMapMarkers(true);
+        }
+
+        function updatePartnersCounter(nbAffiche, nbTotal) {
+            const el = document.getElementById('partnersCounter');
+            if (!el) return;
+            const pluriel = n => n > 1 ? 's' : '';
+            el.textContent = (nbAffiche === nbTotal)
+                ? `${nbTotal} entreprise${pluriel(nbTotal)} référencée${pluriel(nbTotal)}`
+                : `${nbAffiche} entreprise${pluriel(nbAffiche)} affichée${pluriel(nbAffiche)} sur ${nbTotal} au total`;
         }
 
         function exportFilteredView() {
