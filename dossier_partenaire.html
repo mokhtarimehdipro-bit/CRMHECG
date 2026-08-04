@@ -291,16 +291,13 @@
                     const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
                     document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
 
-                    // Badge score
+                    // Badge score — +1 pt/jour tant que l'entreprise a un étudiant Inscrit/Préinscrit
                     const score = d.score || 0;
-                    const sd = d.scoreDetails || {};
                     const scoreCol = score >= 200 ? 'text-amber-600' : score >= 50 ? 'text-blue-600' : 'text-slate-400';
                     document.getElementById('scoreBadge').innerHTML = `
                       <div class="flex items-center gap-3 flex-wrap py-2">
                         <span class="text-2xl font-black ${scoreCol}">⭐ ${score} pts</span>
-                        <span class="text-[10px] bg-green-50 text-green-700 px-3 py-1 rounded-full font-black">A : ${sd.A||0} pts — ${sd.activeCount||0} alternant${(sd.activeCount||0)>1?'s':''} actif${(sd.activeCount||0)>1?'s':''}</span>
-                        <span class="text-[10px] bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-black">B : ${sd.B||0} pts — ${sd.sortiCount||0} ancien${(sd.sortiCount||0)>1?'s':''}</span>
-                        <span class="text-[10px] bg-purple-50 text-purple-700 px-3 py-1 rounded-full font-black">C : ${sd.C||0} pts — ${sd.qualifiedContactCount||0} contact${(sd.qualifiedContactCount||0)>1?'s':''} qualifié${(sd.qualifiedContactCount||0)>1?'s':''}</span>
+                        <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-black">+1 pt/jour avec un étudiant Inscrit ou Préinscrit actif</span>
                       </div>`;
 
                     // Bouton supprimer entreprise (RP uniquement)
