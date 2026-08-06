@@ -346,11 +346,46 @@
             if (currentUser.role !== 'Etudiant') loadStudentAlerts();
         };
 
-        async function loadDossier() {
+        // Cache local (90s, par étudiant) + rafraîchissement silencieux en arrière-plan —
+        // même pattern que dashboard.html/offres.html/missions.html.
+        const DOSSIER_CACHE_TTL_MS = 90 * 1000;
+        function _dossierCacheKey() { return 'hecg_cache_dossier_v1_' + studentId; }
+
+        async function _fetchDossierFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId, requesterRole: currentUser.role }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(_dossierCacheKey(), JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                _renderDossierPayload(data);
+            }
+            return data;
+        }
+
+        async function loadDossier(forceRefresh) {
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStudentDetails', targetId: studentId, requesterRole: currentUser.role }) });
-                const data = await res.json();
-                
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(_dossierCacheKey()) || 'null');
+                        if (cached && (Date.now() - cached.ts) < DOSSIER_CACHE_TTL_MS) {
+                            _renderDossierPayload(cached.data);
+                            _fetchDossierFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
+                }
+                await _fetchDossierFresh();
+            } catch (err) { alert("Erreur réseau"); }
+        }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible' && studentId) {
+                _fetchDossierFresh().catch(function(e){ console.error(e); });
+            }
+        }, DOSSIER_CACHE_TTL_MS);
+
+        function _renderDossierPayload(data) {
+            try {
                 if (data.success) {
                     document.getElementById('loader').classList.add('hidden');
                     document.getElementById('content').classList.remove('hidden');
@@ -432,7 +467,7 @@
             await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, visibleEtudiant: visible });
             document.getElementById('noteTexte').value = "";
             btn.innerText = "Noter"; btn.disabled = false;
-            loadDossier();
+            loadDossier(true);
         }
 
         async function addNoteEtu() {
@@ -442,7 +477,7 @@
             await apiPost({ action: 'addNote', targetId: studentId, contenu: txt, isStudentNote: true });
             document.getElementById('noteTexteEtu').value = "";
             btn.innerText = "Envoyer"; btn.disabled = false;
-            loadDossier();
+            loadDossier(true);
         }
 
         async function saveStudentAlert() {
@@ -493,7 +528,7 @@
             if(!confirm("En cliquant, vous confirmez votre intérêt. Accéder à l'offre ?")) return;
             await apiPost({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre });
             window.open(url, '_blank');
-            loadDossier(); // Correction : appelle bien loadDossier()
+            loadDossier(true); // Correction : appelle bien loadDossier()
         }
         async function updateProfile() {
             const btn = event.target;
@@ -731,7 +766,7 @@
             if (!id) { alert('Sélectionnez une entreprise dans la liste.'); return; }
             const type = document.getElementById('linkEntType').value;
             const res = await apiPost({ action: 'attachStudentToEnterprise', idEtu: studentId, idEntreprise: id, nomEntreprise: nom, type });
-            if (res.success) { closeLinkEntModal(); loadDossier(); }
+            if (res.success) { closeLinkEntModal(); loadDossier(true); }
             else alert('Erreur : ' + res.message);
         }
 
@@ -742,7 +777,7 @@
             const r = await apiPost({ action: 'detachStudentFromEnterprise', idEtu: studentId });
             if (!r.success) return alert('Erreur : ' + r.message);
             alert('Entreprise retirée. Un mouvement "Ancien alternant — À confirmer" a été créé dans le dossier entreprise.');
-            loadDossier();
+            loadDossier(true);
         }
 
         // ══ GED sous-dossiers (Update 5) ══
