@@ -211,12 +211,24 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         // Fiabilise les appels au backend Apps Script : retente automatiquement en cas
         // d'erreur transitoire (quota/concurrence) avant de remonter l'erreur à l'appelant.
+        // IMPORTANT : seules les actions de LECTURE (get*/check*) sont rejouées — une écriture
+        // (add/update/delete/save/...) ne doit jamais être renvoyée automatiquement, car le
+        // serveur peut déjà avoir traité la 1ère tentative (risque de doublon, ex: notes/commentaires).
         (function() {
             var _nativeFetch = window.fetch;
             var RETRY_DELAYS_MS = [700, 1800];
+            function isSafeToRetry(init) {
+                try {
+                    var body = init && init.body;
+                    if (!body) return true;
+                    var action = String(JSON.parse(body).action || '');
+                    return /^(get|check)/i.test(action);
+                } catch (e) { return false; }
+            }
             window.fetch = function(input, init) {
                 var url = typeof input === 'string' ? input : (input && input.url) || '';
                 if (url.indexOf('script.google.com/macros/s/') === -1) return _nativeFetch(input, init);
+                if (!isSafeToRetry(init)) return _nativeFetch(input, init);
                 var attempt = 0;
                 function tryOnce() {
                     return _nativeFetch(input, init).then(function(res) {
@@ -237,6 +249,7 @@
             };
         })();
 
+        const API_TIMEOUT_MS = 25000;
         async function apiPost(payload) {
             const userSession = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -245,19 +258,25 @@
             payload.auteur = userSession.nom || "Inconnu";      // Pour l'onglet SUIVI_PARTENARIAT
             payload.roleAuteur = userSession.role || "N/A";     // Pour le filtrage des droits
             payload.sessionToken = userSession.sessionToken || "";
-            
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
                 });
                 const result = await response.json();
                 if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
                 return result;
             } catch (e) {
                 console.error("Erreur API :", e);
+                if (e.name === 'AbortError') return { success: false, message: "Le serveur met trop de temps à répondre. Réessayez." };
                 return { success: false, message: "Erreur de connexion" };
+            } finally {
+                clearTimeout(timeoutId);
             }
         }
 
@@ -275,11 +294,49 @@
         try { currentUser = JSON.parse(localStorage.getItem('user')); } catch(e) {}
         if(!currentUser) currentUser = { nom: "Utilisateur" };
 
-        async function loadDetails() {
+        // Cache local (90s, par partenaire) + rafraîchissement silencieux en arrière-plan —
+        // même pattern que dashboard.html/offres.html/missions.html.
+        const DOSSIER_PART_CACHE_TTL_MS = 90 * 1000;
+        function _dossierPartCacheKey() { return 'hecg_cache_dossier_partenaire_v1_' + partId; }
+
+        async function _fetchDetailsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartnerDetails', targetId: partId }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(_dossierPartCacheKey(), JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                _renderDetailsPayload(data);
+            }
+            return data;
+        }
+
+        async function loadDetails(forceRefresh) {
+            if (!forceRefresh) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem(_dossierPartCacheKey()) || 'null');
+                    if (cached && (Date.now() - cached.ts) < DOSSIER_PART_CACHE_TTL_MS) {
+                        _renderDetailsPayload(cached.data);
+                        _fetchDetailsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                        return;
+                    }
+                } catch(eCache) {}
+            }
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPartnerDetails', targetId: partId }) });
-                const data = await res.json();
-                
+                await _fetchDetailsFresh();
+            } catch(e) {
+                console.error("Erreur chargement dossier partenaire:", e);
+                document.getElementById('loader').innerText = "Erreur de chargement : " + e.message;
+            }
+        }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible' && partId) {
+                _fetchDetailsFresh().catch(function(e){ console.error(e); });
+            }
+        }, DOSSIER_PART_CACHE_TTL_MS);
+
+        function _renderDetailsPayload(data) {
+            try {
                 if(data.success) {
                     document.getElementById('loader').classList.add('hidden');
                     document.getElementById('content').classList.remove('hidden');
@@ -389,22 +446,32 @@
         async function addNote() {
     const txt = document.getElementById('noteTexte').value;
     if(!txt.trim()) return;
-    
+
     const btn = event.target;
     btn.disabled = true; btn.innerText = "⏳";
 
-    // ON ENVOIE LES ÉTIQUETTES QUE LE SERVEUR ATTEND
-    await apiPost({ 
-        action: 'addPartnerNote', 
-        targetId: partId,    // Va dans 'ID_Partenaire'
-        texte: txt           // Va dans 'Compte_rendu'
-    });
+    try {
+        // ON ENVOIE LES ÉTIQUETTES QUE LE SERVEUR ATTEND
+        const result = await apiPost({
+            action: 'addPartnerNote',
+            targetId: partId,    // Va dans 'ID_Partenaire'
+            texte: txt           // Va dans 'Compte_rendu'
+        });
 
-    document.getElementById('noteTexte').value = ""; 
-    btn.disabled = false; btn.innerText = "Ajouter";
-    
-    // On attend un peu que le Sheet s'actualise avant de recharger l'affichage
-    setTimeout(loadDetails, 3000);
+        if (!result || !result.success) {
+            alert("Erreur lors de l'enregistrement de la note : " + (result && result.message ? result.message : "réponse invalide du serveur."));
+            return;
+        }
+
+        document.getElementById('noteTexte').value = "";
+        // L'écriture est confirmée par le serveur avant de recharger : plus besoin d'attendre à l'aveugle.
+        loadDetails(true);
+    } catch (e) {
+        console.error("Erreur ajout note :", e);
+        alert("Erreur de connexion. Le commentaire n'a pas pu être envoyé, réessayez.");
+    } finally {
+        btn.disabled = false; btn.innerText = "Ajouter";
+    }
 }
 
         async function saveAlert() {
@@ -428,7 +495,7 @@
             
             alert("Alerte programmée !"); 
             btn.innerText = "Activer l'alerte"; btn.disabled = false;
-            loadDetails();
+            loadDetails(true);
         }
 
         function renderContacts() {
@@ -476,7 +543,7 @@
                 const nomC = ((c.prenom || '') + ' ' + (c.nom || '')).trim();
                 askMotif('Supprimer le contact "' + nomC + '" ?', async (motif) => {
                     const res = await apiPost({ action: 'deleteContact', id_contact: c.id_contact, motif });
-                    if (res.success) loadDetails(); else alert('Erreur : ' + res.message);
+                    if (res.success) loadDetails(true); else alert('Erreur : ' + res.message);
                 });
                 return;
             }
@@ -582,7 +649,7 @@
                 document.getElementById('newIsMA').checked = false;
                 document.getElementById('dpMABlock').classList.add('hidden');
                 document.getElementById('addContactForm').classList.add('hidden');
-                loadDetails();
+                loadDetails(true);
             } else {
                 alert("Erreur : " + res.message);
             }
@@ -593,7 +660,7 @@
             const newName = prompt("Nouveau nom de l'entreprise :", current);
             if (!newName || newName === current) return;
             const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, nouveauNom: newName });
-            if (res.success) { nomEntrepriseActuelle = newName; loadDetails(); }
+            if (res.success) { nomEntrepriseActuelle = newName; loadDetails(true); }
             else alert("Erreur : " + res.message);
         }
 
@@ -602,7 +669,7 @@
             const newCp = prompt("Code postal :", adresseData.cp); if (newCp === null) return;
             const newVille = prompt("Ville :", adresseData.ville); if (newVille === null) return;
             const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: newAdresse, cp: newCp, ville: newVille });
-            if (res.success) loadDetails(); else alert("Erreur : " + res.message);
+            if (res.success) loadDetails(true); else alert("Erreur : " + res.message);
         }
 
         async function signalFormerAlternant(idEtudiant, prenom, nomFamille) {
@@ -610,7 +677,7 @@
             const btn = event.target;
             btn.disabled = true; btn.innerText = "⏳";
             const res = await apiPost({ action: 'signalFormerAlternant', idEntreprise: partId, idEtudiant, prenom, nom: nomFamille });
-            if (res.success) { loadDetails(); }
+            if (res.success) { loadDetails(true); }
             else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "↪ Départ"; }
         }
 
@@ -618,7 +685,7 @@
             const btn = event.target;
             btn.disabled = true; btn.innerText = "⏳";
             const res = await apiPost({ action: 'confirmFormerAlternant', id });
-            if (res.success) loadDetails();
+            if (res.success) loadDetails(true);
             else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✓ Confirmer le départ"; }
         }
 
@@ -627,7 +694,7 @@
             const btn = event.target;
             btn.disabled = true; btn.innerText = "⏳";
             const res = await apiPost({ action: 'removeFormerAlternant', id });
-            if (res.success) loadDetails();
+            if (res.success) loadDetails(true);
             else { alert("Erreur : " + res.message); btn.disabled = false; btn.innerText = "✗ Erreur de saisie"; }
         }
 
@@ -694,7 +761,7 @@
                 }
             }
             closeEditContactDPModal();
-            loadDetails();
+            loadDetails(true);
         }
 
         // ══ LIER UN ÉTUDIANT MANUELLEMENT ══
@@ -747,7 +814,7 @@
             if (!id) { alert('Sélectionnez un étudiant dans la liste.'); return; }
             const type = document.getElementById('linkStuType').value;
             const res = await apiPost({ action: 'attachStudentToEnterprise', idEtu: id, idEntreprise: partId, nomEntreprise: nomEntrepriseActuelle, type });
-            if (res.success) { closeLinkStudentModal(); loadDetails(); }
+            if (res.success) { closeLinkStudentModal(); loadDetails(true); }
             else alert('Erreur : ' + res.message);
         }
 
@@ -757,7 +824,7 @@
             const poste = prompt("Titre du poste :");
             if(!poste) return;
             await apiPost({ action: 'addOffre', url: url, entreprise: nomEntrepriseActuelle, poste: poste, plateforme: "Direct Partenaire", type: "Alternance", missions: "À définir", etat: "Reçue", qualite: "Vérifiée" });
-            loadDetails();
+            loadDetails(true);
         }
         
         loadDetails();
