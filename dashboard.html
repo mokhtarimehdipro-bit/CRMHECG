@@ -343,12 +343,24 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         // Fiabilise les appels au backend Apps Script : retente automatiquement en cas
         // d'erreur transitoire (quota/concurrence) avant de remonter l'erreur à l'appelant.
+        // IMPORTANT : seules les actions de LECTURE (get*/check*) sont rejouées — une écriture
+        // (add/update/delete/save/...) ne doit jamais être renvoyée automatiquement, car le
+        // serveur peut déjà avoir traité la 1ère tentative (risque de doublon, ex: notes/commentaires).
         (function() {
             var _nativeFetch = window.fetch;
             var RETRY_DELAYS_MS = [700, 1800];
+            function isSafeToRetry(init) {
+                try {
+                    var body = init && init.body;
+                    if (!body) return true;
+                    var action = String(JSON.parse(body).action || '');
+                    return /^(get|check)/i.test(action);
+                } catch (e) { return false; }
+            }
             window.fetch = function(input, init) {
                 var url = typeof input === 'string' ? input : (input && input.url) || '';
                 if (url.indexOf('script.google.com/macros/s/') === -1) return _nativeFetch(input, init);
+                if (!isSafeToRetry(init)) return _nativeFetch(input, init);
                 var attempt = 0;
                 function tryOnce() {
                     return _nativeFetch(input, init).then(function(res) {
@@ -369,6 +381,7 @@
             };
         })();
         // LA STATION D'EXPÉDITION CENTRALE
+        const API_TIMEOUT_MS = 25000;
 async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
     payload.idAuteur = userSession.nom || "Utilisateur Inconnu";
@@ -376,14 +389,17 @@ async function apiPost(payload) {
     payload.sessionToken = userSession.sessionToken || "";
 
     // 3. On envoie le colis au script Google
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
         const result = await response.json();
-        
+
         if (!result.success) {
             console.error("Erreur API:", result.message);
             if (result.sessionExpired) {
@@ -396,7 +412,10 @@ async function apiPost(payload) {
         return result;
     } catch (e) {
         console.error("Erreur de connexion au serveur:", e);
-        return { success: false, message: "Erreur réseau" };
+        const message = e.name === 'AbortError' ? "Le serveur met trop de temps à répondre. Réessayez." : "Erreur réseau";
+        return { success: false, message };
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
         let fullData = [];
