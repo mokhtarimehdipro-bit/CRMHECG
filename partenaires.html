@@ -313,12 +313,24 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
         // Fiabilise les appels au backend Apps Script : retente automatiquement en cas
         // d'erreur transitoire (quota/concurrence) avant de remonter l'erreur à l'appelant.
+        // IMPORTANT : seules les actions de LECTURE (get*/check*) sont rejouées — une écriture
+        // (add/update/delete/save/...) ne doit jamais être renvoyée automatiquement, car le
+        // serveur peut déjà avoir traité la 1ère tentative (risque de doublon, ex: notes/commentaires).
         (function() {
             var _nativeFetch = window.fetch;
             var RETRY_DELAYS_MS = [700, 1800];
+            function isSafeToRetry(init) {
+                try {
+                    var body = init && init.body;
+                    if (!body) return true;
+                    var action = String(JSON.parse(body).action || '');
+                    return /^(get|check)/i.test(action);
+                } catch (e) { return false; }
+            }
             window.fetch = function(input, init) {
                 var url = typeof input === 'string' ? input : (input && input.url) || '';
                 if (url.indexOf('script.google.com/macros/s/') === -1) return _nativeFetch(input, init);
+                if (!isSafeToRetry(init)) return _nativeFetch(input, init);
                 var attempt = 0;
                 function tryOnce() {
                     return _nativeFetch(input, init).then(function(res) {
@@ -338,6 +350,7 @@
                 return tryOnce();
             };
         })();
+        const API_TIMEOUT_MS = 25000;
         async function apiPost(payload) {
     const userSession = JSON.parse(localStorage.getItem('user') || '{}');
     payload.idAuteur     = userSession.nom   || "Inconnu";
@@ -345,18 +358,24 @@
     payload.emailAuteur  = userSession.email || "";
     payload.sessionToken = userSession.sessionToken || "";
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
         const result = await response.json();
         if (result.sessionExpired) { localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
         return result;
     } catch (e) {
         console.error("Erreur API :", e);
-        return { success: false, message: "Erreur de connexion" };
+        const message = e.name === 'AbortError' ? "Le serveur met trop de temps à répondre. Réessayez." : "Erreur de connexion";
+        return { success: false, message };
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
         let allPartners = [];
@@ -601,19 +620,24 @@
         async function addNote() {
             const txt = document.getElementById('newNote').value.trim();
             if(!txt) return;
-            const author = localStorage.getItem('user_nom') || "Utilisateur";
-            
+
             const btn = event.target;
             btn.disabled = true; btn.innerText = "...";
 
-            await fetch(API_URL, { 
-                method: 'POST', 
-                body: JSON.stringify({ action: 'addPartnerNote', id_entreprise: currentId, texte: txt, auteur: author }) 
-            });
-            
-            document.getElementById('newNote').value = "";
-            btn.disabled = false; btn.innerText = "ENREGISTRER";
-            loadHistory(currentId);
+            try {
+                const result = await apiPost({ action: 'addPartnerNote', id_entreprise: currentId, texte: txt });
+                if (!result || !result.success) {
+                    alert("Erreur lors de l'enregistrement de la note : " + (result && result.message ? result.message : "réponse invalide du serveur."));
+                    return;
+                }
+                document.getElementById('newNote').value = "";
+                loadHistory(currentId);
+            } catch (e) {
+                console.error("Erreur ajout note :", e);
+                alert("Erreur de connexion. Le commentaire n'a pas pu être envoyé, réessayez.");
+            } finally {
+                btn.disabled = false; btn.innerText = "ENREGISTRER";
+            }
         }
 
         // --- 4. ÉDITION CONTACTS ---
