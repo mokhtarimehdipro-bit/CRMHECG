@@ -3004,8 +3004,11 @@ function exportNotesCSV(){
   rows.push([stats.total, stats.admis, stats.ratt, stats.recale, stats.enCours, stats.moyGlobal, stats.tauxReussite!==null?stats.tauxReussite+'%':'—']);
 
   const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const fileName=_notesExportFilename(d,'csv');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download=_notesExportFilename(d,'csv'); a.click();
+  a.download=fileName; a.click();
+
+  api('logExport', { exportType: 'Notes', fileName, mimeType: 'text/csv', content: csv, rowCount: rows.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 // Export "Excel mis en forme" : table HTML stylée (ouvrable directement dans Excel avec ses
@@ -3212,12 +3215,15 @@ function exportNotesExcel(){
     + _buildSheetAnneeCourante(d)
     + '</Workbook>';
 
+  const fileName = _notesExportFilename(d,'xls');
   const blob = new Blob(['﻿', xml], { type: 'application/vnd.ms-excel' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = _notesExportFilename(d,'xls');
+  a.download = fileName;
   a.click();
   toast('Export Excel généré (2 onglets) ✓');
+
+  api('logExport', { exportType: 'Notes (Excel)', fileName, mimeType: 'application/vnd.ms-excel', content: xml }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 async function showStats(){
@@ -3397,6 +3403,8 @@ function exportSaisieXLSX(){
   a.download = filename;
   a.click();
   toast(`Export généré : ${nbSaisi}/${rows.length} saisis ✓`);
+
+  api('logExport', { exportType: 'Saisie notes', fileName: filename, mimeType: 'application/vnd.ms-excel', content: html, rowCount: rows.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 function hasAllMandatoryUE(g){
@@ -4034,8 +4042,12 @@ async function deleteFormateur(id){
 function exportPersonnel(){
   const header='ID,Nom,Prénom,Mail pro,Mail perso,Tél,Adresse,CP,Ville,Matières,Date entrée,Date sortie,Formateur';
   const rows=allFormateurs.map(f=>[f.id,f.nom,f.prenom,f.mailPro,f.mailPerso,f.tel,f.adresse,f.cp,f.ville,f.matieres,f.dateEntree,f.dateSortie,f.etatFormateur].map(v=>'"'+(v||'')+'"').join(','));
-  const blob=new Blob(['﻿'+header+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='personnel_encadrant.csv'; a.click();
+  const csv = header+'\n'+rows.join('\n');
+  const fileName='personnel_encadrant.csv';
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fileName; a.click();
+
+  api('logExport', { exportType: 'Personnel encadrant', fileName, mimeType: 'text/csv', content: csv, rowCount: allFormateurs.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 // Alias pour compatibilité (appel existant depuis initData)
 async function exportFormateurs(){ exportPersonnel(); }
@@ -4531,9 +4543,12 @@ function exportListingTaches(){
   const header = ['Date','Créneau','Personne','Tâche','Description','Statut','Priorité'];
   const csvRows = [header, ...rows.map(t=>[t.dateDebut||'',t.demiJournee||'',t.referentNom||t.referent||'',t.titre||'',t.description||'',t.statut||'',t.priorite||1])];
   const csv = csvRows.map(r=>r.map(v=>'"'+(String(v).replace(/"/g,'""'))+'"').join(',')).join('\n');
+  const fileName='listing_taches.csv';
   const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='listing_taches.csv'; a.click();
+  a.download=fileName; a.click();
+
+  api('logExport', { exportType: 'Listing tâches', fileName, mimeType: 'text/csv', content: csv, rowCount: rows.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -6151,10 +6166,13 @@ function exportObjectifs(){
     if (currentSyntheseData.bulletinSFLIFLA)   rows.push(['Bulletin SFLIFLA', currentSyntheseData.bulletinSFLIFLA]);
   }
   const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const fileName=`Objectifs_S${semNum}_${dates[0].getFullYear()}.csv`;
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download=`Objectifs_S${semNum}_${dates[0].getFullYear()}.csv`; a.click();
+  a.href=url; a.download=fileName; a.click();
   URL.revokeObjectURL(url);
+
+  api('logExport', { exportType: 'Objectifs (semaine)', fileName, mimeType: 'text/csv', content: csv, rowCount: allObjectifs.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 function openExportPeriodeModal(){
@@ -6241,10 +6259,13 @@ async function exportObjectifsPeriode(){
     }
   }
   const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const fileName=`Objectifs_${dateDebut}_${dateFin}.csv`;
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download=`Objectifs_${dateDebut}_${dateFin}.csv`; a.click();
+  a.href=url; a.download=fileName; a.click();
   URL.revokeObjectURL(url); closeExportPeriodeModal();
+
+  api('logExport', { exportType: 'Objectifs (période)', fileName, mimeType: 'text/csv', content: csv, rowCount: data.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7566,8 +7587,11 @@ function exportSuiviEXB(){
   const rows=[['REFEXB','Classe','Matière','Formateur','Sujet','Corrigé','Impression','Commentaire']];
   allSuiviEXB.forEach(e=>rows.push([e.refexb||'',e.classe||'',e.matiere||'',e.formateur||'',e.sujet||'',e.corrige||'',e.impression||'',e.commentaire||'']));
   const csv=rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const fileName='SuiviEXB.csv';
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
-  a.download='SuiviEXB.csv';a.click();
+  a.download=fileName;a.click();
+
+  api('logExport', { exportType: 'Suivi EXB', fileName, mimeType: 'text/csv', content: csv, rowCount: allSuiviEXB.length }).catch(e=>console.error("Erreur envoi mail export :",e));
 }
 
 // ══════════════════════════════════════════════════════════════════
