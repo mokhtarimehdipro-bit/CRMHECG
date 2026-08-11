@@ -959,6 +959,8 @@
                 const contenuEchange = (p.contenuEchange || '').replace(/"/g, '""');
                 csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dateEchange}";"${contenuEchange}"\n`;
             });
+            apiPost({ action: 'logExport', exportType: 'Partenaires', fileName: filename, mimeType: 'text/csv', content: csv, rowCount: data.length })
+                .catch(e => console.error("Erreur envoi mail export :", e));
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
