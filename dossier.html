@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -526,8 +526,12 @@
 
         async function postuler(idOffre, url) {
             if(!confirm("En cliquant, vous confirmez votre intérêt. Accéder à l'offre ?")) return;
+            // Ouvre le lien EN PREMIER, dans le même tick que le clic, pour que le navigateur
+            // ne bloque pas le popup (le "geste de confiance" expire après un await) et pour
+            // ne jamais enregistrer "Postulée" si l'offre n'a pas pu être ouverte.
+            const w = window.open(url, '_blank');
+            if (!w) { alert("Le navigateur a bloqué l'ouverture de l'offre. Autorisez les pop-ups pour ce site puis réessayez."); return; }
             await apiPost({ action: 'postulerOffre', id_etu: studentId, id_offre: idOffre });
-            window.open(url, '_blank');
             loadDossier(true); // Correction : appelle bien loadDossier()
         }
         async function updateProfile() {
