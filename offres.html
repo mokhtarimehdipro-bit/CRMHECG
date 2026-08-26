@@ -74,7 +74,11 @@
                 <option value="">🏢 Toutes les entreprises</option>
             </select>
 
-            <input type="date" id="fOffreDate" onchange="filterOffres()" title="Filtrer par date de parution" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A] text-gray-500">
+            <div class="flex items-center gap-2 col-span-1 md:col-span-2">
+                <input type="date" id="fOffreDateDebut" onchange="filterOffres()" title="Parues à partir du" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A] text-gray-500">
+                <span class="text-gray-300 font-black">→</span>
+                <input type="date" id="fOffreDateFin" onchange="filterOffres()" title="Parues jusqu'au" class="w-full border-2 border-gray-100 p-3 rounded-2xl text-sm font-bold outline-none focus:border-[#1A4E8A] text-gray-500">
+            </div>
         </div>
 
         <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des annonces...</div>
@@ -386,7 +390,8 @@
             const partage = document.getElementById('fOffrePartage').value.toLowerCase();
             const villeFilter = (document.getElementById('fOffreVille').value || "").trim();
             const entrepriseFilter = (document.getElementById('fOffreEntreprise').value || "").trim();
-            const dateFilter = document.getElementById('fOffreDate').value; // "YYYY-MM-DD" ou ""
+            const dateDebutFilter = document.getElementById('fOffreDateDebut').value; // "YYYY-MM-DD" ou ""
+            const dateFinFilter = document.getElementById('fOffreDateFin').value; // "YYYY-MM-DD" ou ""
 
             let filteredData = currentOffres.filter(o => {
                 const textGlobal = `${o.id || ''} ${o.poste || ''} ${o.entreprise || ''} ${o.ville || ''}`.toLowerCase();
@@ -406,13 +411,13 @@
                 const matchEntreprise = !entrepriseFilter || String(o.entreprise || "").trim() === entrepriseFilter;
 
                 let matchDate = true;
-                if (dateFilter) {
+                if (dateDebutFilter || dateFinFilter) {
                     const d = new Date(o.date);
                     if (isNaN(d)) {
                         matchDate = false;
                     } else {
-                        const [y, m, day] = dateFilter.split('-').map(Number);
-                        matchDate = d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() === day;
+                        if (dateDebutFilter && d < new Date(dateDebutFilter + 'T00:00:00')) matchDate = false;
+                        if (matchDate && dateFinFilter && d > new Date(dateFinFilter + 'T23:59:59')) matchDate = false;
                     }
                 }
 
