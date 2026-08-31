@@ -548,14 +548,31 @@ async function apiPost(payload) {
                 updateMsLabel('fClasse');
             }
 
+            // Préserve la sélection en cours : setupSelectors() est rejoué à chaque
+            // rafraîchissement silencieux (cache + interval 90s). Sans ça, reconstruire
+            // le innerHTML remet ces <select> sur la 1re option et efface la classe /
+            // le référent pré-remplis dans la modale ouverte → ils "sautent" à la sauvegarde.
             const formCl = document.getElementById('formClasse');
-            if(formCl) formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+            if(formCl) {
+                const prevFormClasse = formCl.value;
+                formCl.innerHTML = '<option value="">-- Sélectionner --</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
+                if (prevFormClasse) {
+                    if (![...formCl.options].some(o => o.value === prevFormClasse)) {
+                        formCl.insertAdjacentHTML('beforeend', `<option value="${prevFormClasse}">${prevFormClasse}</option>`);
+                    }
+                    formCl.value = prevFormClasse;
+                }
+            }
 
             // Remplissage du select de Création/Modif étudiant
             const refSelect = document.getElementById('formReferent');
             if(refSelect) {
+                const prevFormRef = refSelect.value;
                 refSelect.innerHTML = '<option value="">-- Non assigné --</option>' +
                     catalogueReferents.map(r => `<option value="${r.ref}">${r.nom}</option>`).join('');
+                if (prevFormRef && [...refSelect.options].some(o => o.value === prevFormRef)) {
+                    refSelect.value = prevFormRef;
+                }
             }
 
             // Remplissage du filtre rapide par Référent (en conservant la sélection active)
