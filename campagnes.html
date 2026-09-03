@@ -327,20 +327,22 @@
             });
 
             grid.innerHTML = campagnesVisibles.map(c => {
-                // CORRECTION DU BOUTON GRISÉ : On utilise l'égalité stricte (===)
                 const statut = c.statut || "À lancer";
-                const estDejaLancee = (statut === "Active" || statut === "Terminée");
-                
-                const btnStyle = estDejaLancee 
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" 
+                // Le bouton reste actif tant que la campagne n'est pas archivée / terminée :
+                // "Active" (récurrente) peut être renvoyée à la main.
+                const estArchivee = (statut === "Terminée" || statut === "Archivé");
+                const dejaEnvoyee = (statut === "Active");
+
+                const btnStyle = estArchivee
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
                     : "bg-green-500 text-white hover:bg-green-600 shadow-md hover:scale-105";
+                const btnLabel = estArchivee ? '✓ TERMINÉE' : (dejaEnvoyee ? '🔁 RENVOYER MAINTENANT' : '🚀 LANCER MAINTENANT');
 
-                // Design spécifique pour l'Admin si la campagne est archivée
-                const badgeStatut = statut === "Terminée" 
+                const badgeStatut = estArchivee
                     ? `<span class="px-2 py-1 bg-gray-200 text-gray-600 text-[10px] font-black uppercase rounded">🗄️ ARCHIVÉE</span>`
-                    : `<span class="px-2 py-1 ${estDejaLancee ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} text-[10px] font-black uppercase rounded">${statut}</span>`;
+                    : `<span class="px-2 py-1 ${dejaEnvoyee ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} text-[10px] font-black uppercase rounded">${statut}</span>`;
 
-                const opaciteCarte = statut === "Terminée" ? "opacity-75 grayscale-[30%]" : "";
+                const opaciteCarte = estArchivee ? "opacity-75 grayscale-[30%]" : "";
 
                 return `
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-lg transition duration-200 ${opaciteCarte}">
@@ -350,14 +352,14 @@
                             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">${c.frequence}</span>
                         </div>
                         <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2">${c.nom || "Campagne sans nom"}</h3>
-                        <p class="text-[10px] text-gray-400 font-bold uppercase truncate">Cibles : ${c.cible || 'Manuelle'}</p>
+                        <p class="text-[10px] text-gray-400 font-bold uppercase truncate">Cibles : ${c.cibles || 'Manuelle'}</p>
                     </div>
-                    
+
                     <div class="mt-6 flex flex-wrap gap-2 border-t pt-4">
-                        <button onclick="${estDejaLancee ? '' : `runCampagne('${c.id}')`}" 
+                        <button onclick="${estArchivee ? '' : `runCampagne('${c.id}')`}"
                                 class="flex-1 py-3 rounded-xl text-[10px] font-black transition ${btnStyle}"
-                                ${estDejaLancee ? 'disabled' : ''}>
-                            ${estDejaLancee ? '✓ DÉJÀ LANCÉE' : '🚀 LANCER MAINTENANT'}
+                                ${estArchivee ? 'disabled' : ''}>
+                            ${btnLabel}
                         </button>
                         
                         <div class="flex w-full gap-2 mt-2">
@@ -436,16 +438,17 @@
 
         // --- 5. ACTIONS SUR LES CARTES ---
         async function runCampagne(id) {
-            if(!confirm("Confirmer le lancement immédiat ?")) return;
+            const c = listCampagnes.find(x => x.id === id);
+            if (!confirm("Lancer l'envoi maintenant" + (c && c.nom ? " — « " + c.nom + " »" : "") + " ?\nLes destinataires sont ceux configurés dans la campagne.")) return;
             const data = await apiPost({ action: 'runCampagne', id: id });
-            alert(data.message); loadCampagnes(true);
+            alert((data.success ? "✅ " : "⚠️ ") + (data.message || (data.success ? "Campagne lancée." : "Échec du lancement.")));
+            loadCampagnes(true);
         }
 
         async function testCamp(id) {
             if(!confirm("Envoyer un test à votre adresse email ?")) return;
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testCampaign', campaignId: id }) });
-            const data = await res.json(); 
-            alert(data.message);
+            const data = await apiPost({ action: 'testCampaign', campaignId: id });
+            alert((data.success ? "✅ " : "⚠️ ") + (data.message || ''));
         }
 
         async function deleteCampagne(id) {
@@ -456,9 +459,9 @@
 
         async function duplicateCampaign(id) {
             if(!confirm("Dupliquer cette campagne ?")) return;
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'duplicateCampaign', campaignId: id }) });
-            const data = await res.json();
+            const data = await apiPost({ action: 'duplicateCampaign', campaignId: id });
             if(data.success) loadCampagnes(true);
+            else alert("⚠️ " + (data.message || "Échec de la duplication."));
         }
 
         // --- 6. ÉDITION ---
