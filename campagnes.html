@@ -56,8 +56,9 @@
 
     <div id="cmpModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-4xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <h2 class="text-3xl font-black text-[#1A4E8A] mb-8">🚀 Configurer ma Campagne</h2>
-            
+            <h2 id="cmpModalTitle" class="text-3xl font-black text-[#1A4E8A] mb-8">🚀 Configurer ma Campagne</h2>
+            <input type="hidden" id="cmpEditId">
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="space-y-6">
                     <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100">
@@ -152,58 +153,7 @@
         </div>
     </div>
 
-    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h2 class="text-2xl font-black text-[#1A4E8A] mb-6">✏️ Modifier la Campagne</h2>
-            <input type="hidden" id="editId">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Nom</label>
-                    <input type="text" id="editNom" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none focus:border-[#1A4E8A]">
-                </div>
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Fréquence</label>
-                    <select id="editFreq" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
-                        <option value="Une fois">Une fois</option>
-                        <option value="Hebdomadaire">Hebdomadaire</option>
-                        <option value="Mensuelle">Mensuelle</option>
-                        <option value="Compte à rebours">Compte à rebours</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Statut</label>
-                    <select id="editStatut" class="w-full border-2 p-3 rounded-xl bg-gray-50 font-bold outline-none">
-                        <option value="À lancer">À lancer 🕒</option>
-                        <option value="Active">Active ✅</option>
-                        <option value="Suspendue">Suspendue ⏸️</option>
-                        <option value="Terminée">Terminée 🏁</option>
-                    </select>
-                </div>
-            </div>
-            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-100">
-    <div class="flex justify-between items-center mb-2">
-        <h4 class="text-[10px] font-black uppercase text-blue-400">👥 Destinataires ciblés (Simulation)</h4>
-        <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
-    </div>
-    <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
-        Sélectionnez des cibles pour voir la liste...
-    </div>
-</div>
-            <div class="mt-6 p-4 bg-blue-50/50 rounded-2xl border-2 border-dashed border-blue-200">
-                <div class="flex justify-between items-center mb-2">
-                    <h4 class="text-[10px] font-black uppercase text-blue-500">👥 Destinataires détectés en temps réel</h4>
-                    <span id="liveCount" class="bg-[#1A4E8A] text-white text-[10px] px-2 py-1 rounded-full font-bold">0</span>
-                </div>
-                <div id="livePreviewList" class="max-h-32 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-1 custom-scrollbar">
-                    Sélectionnez des critères pour voir la liste...
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-8">
-                <button onclick="closeEditModal()" class="px-6 py-2 text-gray-400 font-bold hover:bg-gray-100 rounded-xl transition">Annuler</button>
-                <button onclick="saveEdit()" class="bg-[#1A4E8A] text-white px-6 py-3 rounded-xl font-black hover:bg-blue-800 transition">Enregistrer</button>
-            </div>
-        </div>
-    </div>
+    <!-- L'édition d'une campagne rouvre le formulaire complet ci-dessus (cmpModal), pré-rempli. -->
 
     <script>
         // ⚠️ REMPLACE PAR TON VRAI LIEN API ⚠️
@@ -380,18 +330,84 @@
             document.getElementById('countdownBox').classList.toggle('hidden', !isCountdown);
         }
 
-        function openModal() { document.getElementById('cmpModal').classList.replace('hidden', 'flex'); }
+        // Jetons "cible" stockés  ⇄  cases à cocher du formulaire
+        const CMP_CIBLE_MAP = {
+            recherche: 'cbRecherche', preinscrit: 'cbPreinscrit', prospect: 'cbProspect',
+            inscrit: 'cbInscrit', ent_avec: 'cbEntAvec', ent_sans: 'cbEntSans', sortis: 'cbSortis'
+        };
+
+        function _resetCmpForm() {
+            document.getElementById('cmpEditId').value = '';
+            document.getElementById('cmpNom').value = '';
+            document.getElementById('cmpObjet').value = '';
+            document.getElementById('cmpCorps').value = '';
+            document.getElementById('cmpFreq').value = 'Une fois';
+            if (document.getElementById('nbJours')) document.getElementById('nbJours').value = 5;
+            document.getElementById('manualEmails').value = '';
+            if (document.getElementById('cmpPJ')) document.getElementById('cmpPJ').value = '';
+            Object.values(CMP_CIBLE_MAP).forEach(cbId => {
+                const cb = document.getElementById(cbId);
+                if (cb) cb.checked = (cbId === 'cbRecherche' || cbId === 'cbPreinscrit');
+            });
+            const dm = document.getElementById('divMotifSortie'); if (dm) dm.classList.add('hidden');
+            toggleCountdown();
+        }
+
+        function _fillCmpForm(c) {
+            _resetCmpForm();
+            document.getElementById('cmpEditId').value = c.id;
+            document.getElementById('cmpNom').value = c.nom || '';
+            document.getElementById('cmpObjet').value = c.objet || '';
+            document.getElementById('cmpCorps').value = c.message || '';
+            if (c.frequence) document.getElementById('cmpFreq').value = c.frequence;
+            document.getElementById('manualEmails').value = c.emailsManuels || '';
+            Object.values(CMP_CIBLE_MAP).forEach(cbId => { const cb = document.getElementById(cbId); if (cb) cb.checked = false; });
+            String(c.cibles || '').split(/[\s,;]+/).forEach(tok => {
+                const cbId = CMP_CIBLE_MAP[String(tok).trim().toLowerCase()];
+                if (cbId && document.getElementById(cbId)) document.getElementById(cbId).checked = true;
+            });
+            // Pré-remplit les emails déjà retirés à la main
+            _removedEmails.clear();
+            String(c.emailsExclus || '').split(/[\s,;]+/).forEach(e => { e = e.trim().toLowerCase(); if (e) _removedEmails.add(e); });
+            toggleCountdown();
+        }
+
+        function openModal() {
+            _resetCmpForm();
+            _removedEmails.clear();
+            _previewContacts = [];
+            document.getElementById('cmpModalTitle').textContent = '🚀 Configurer ma Campagne';
+            document.getElementById('btnSaveCmp').textContent = '🚀 Créer la Campagne';
+            document.getElementById('cmpModal').classList.replace('hidden', 'flex');
+            setTimeout(updateLivePreview, 200);
+        }
+
+        function openEditModal(id) {
+            const c = listCampagnes.find(x => x.id === id);
+            if (!c) return;
+            _fillCmpForm(c);
+            _previewContacts = [];
+            document.getElementById('cmpModalTitle').textContent = '✏️ Modifier la Campagne';
+            document.getElementById('btnSaveCmp').textContent = '💾 Enregistrer les modifications';
+            document.getElementById('cmpModal').classList.replace('hidden', 'flex');
+            setTimeout(updateLivePreview, 200);
+        }
+
         function closeModal() { document.getElementById('cmpModal').classList.replace('flex', 'hidden'); }
 
         async function saveCampagne() {
             const btn = document.getElementById('btnSaveCmp');
+            const editId = document.getElementById('cmpEditId').value;
+            const labelDefaut = editId ? '💾 Enregistrer les modifications' : '🚀 Créer la Campagne';
             try {
-                btn.innerText = "Création en cours..."; 
+                btn.innerText = editId ? "Enregistrement..." : "Création en cours...";
                 btn.disabled = true;
 
                 const cibles = Array.from(document.querySelectorAll('#audienceChecks input:checked')).map(i => i.value);
                 const emailsManuels = document.getElementById('manualEmails')?.value || "";
-                
+                const corps = document.getElementById('cmpCorps')?.value || "";
+
+                if (!corps.trim()) throw new Error("Le message de la campagne est vide.");
                 if (cibles.length === 0 && emailsManuels.trim() === "") {
                     throw new Error("Veuillez choisir au moins une cible ou ajouter des emails manuels.");
                 }
@@ -399,7 +415,7 @@
                 let pjUrl = "";
                 const pjInput = document.getElementById('cmpPJ');
                 const file = pjInput ? pjInput.files[0] : null;
-                
+
                 if (file) {
                     btn.innerText = "Upload de la pièce jointe...";
                     const base64 = await new Promise((resolve) => {
@@ -407,32 +423,41 @@
                         reader.onload = (e) => resolve(e.target.result.split(',')[1]);
                         reader.readAsDataURL(file);
                     });
-
-                    const uploadRes = await fetch(API_URL, { 
-                        method: 'POST', body: JSON.stringify({ action: 'uploadCV', fileName: "PJ_" + file.name, mimeType: file.type, base64Data: base64 }) 
-                    });
-                    const uploadData = await uploadRes.json();
-                    if (uploadData.success) pjUrl = uploadData.url;
+                    const up = await apiPost({ action: 'uploadCV', userId: 'PJ', fileName: "PJ_" + file.name, mimeType: file.type, base64Data: base64 });
+                    if (up.success) pjUrl = up.url;
                 }
 
                 btn.innerText = "Enregistrement...";
                 const payload = {
-                    action: 'addCampagne',
+                    action: editId ? 'updateCampaign' : 'addCampagne',
+                    id: editId || undefined,
                     nom: document.getElementById('cmpNom')?.value || "Sans nom",
-                    cible: cibles, frequence: document.getElementById('cmpFreq')?.value || "Une fois",
-                    nbJours: document.getElementById('nbJours')?.value || 0, emailsManuels: emailsManuels,
+                    cible: cibles,
+                    frequence: document.getElementById('cmpFreq')?.value || "Une fois",
+                    nbJours: document.getElementById('nbJours')?.value || 0,
+                    emailsManuels: emailsManuels,
                     emailsExclus: getExcludedEmails(),
-                    objet: document.getElementById('cmpObjet')?.value || "Sans objet", corps: document.getElementById('cmpCorps')?.value || "", pjUrl: pjUrl
+                    objet: document.getElementById('cmpObjet')?.value || "Sans objet",
+                    corps: corps,
+                    message: corps
                 };
+                // On ne réécrit la PJ que si une nouvelle a été choisie
+                if (pjUrl) payload.pjUrl = pjUrl;
+
+                // Modifier une campagne déjà terminée/archivée la remet en file d'attente
+                if (editId) {
+                    const cur = listCampagnes.find(x => x.id === editId);
+                    if (cur && (cur.statut === 'Terminée' || cur.statut === 'Archivé')) payload.statut = 'À lancer';
+                }
 
                 const data = await apiPost(payload);
                 if (data.success) {
                     closeModal(); loadCampagnes(true);
-                } else throw new Error("Erreur serveur");
+                } else throw new Error(data.message || "Erreur serveur");
             } catch (error) {
                 alert("⚠️ Erreur : " + error.message);
             } finally {
-                btn.innerText = "🚀 Créer la Campagne"; btn.disabled = false;
+                btn.innerText = labelDefaut; btn.disabled = false;
             }
         }
 
@@ -464,27 +489,8 @@
             else alert("⚠️ " + (data.message || "Échec de la duplication."));
         }
 
-        // --- 6. ÉDITION ---
-        function openEditModal(id) {
-            const c = listCampagnes.find(x => x.id === id);
-            if(!c) return;
-            document.getElementById('editId').value = c.id;
-            document.getElementById('editNom').value = c.nom;
-            document.getElementById('editFreq').value = c.frequence;
-            document.getElementById('editStatut').value = c.statut;
-            document.getElementById('editModal').classList.replace('hidden', 'flex');
-        }
-
-        function closeEditModal() { document.getElementById('editModal').classList.replace('flex', 'hidden'); }
-
-        async function saveEdit() {
-            await apiPost({ 
-                action: 'updateCampaign', id: document.getElementById('editId').value, nom: document.getElementById('editNom').value, 
-                frequence: document.getElementById('editFreq').value, statut: document.getElementById('editStatut').value 
-            });
-                
-            closeEditModal(); loadCampagnes(true);
-        }
+        // --- 6. ÉDITION : gérée par openEditModal() qui rouvre le formulaire complet
+        //     (cmpModal) pré-rempli ; saveCampagne() bascule en 'updateCampaign'.
 
         loadCampagnes();
        // ==========================================
@@ -495,10 +501,9 @@
         const _removedEmails = new Set();
 
         function _previewTargets() {
-            const isEdit = !document.getElementById('editModal').classList.contains('hidden');
             return {
-                listDiv: document.getElementById(isEdit ? 'livePreviewList' : 'livePreviewListCmp'),
-                countSpan: document.getElementById(isEdit ? 'liveCount' : 'liveCountCmp')
+                listDiv: document.getElementById('livePreviewListCmp'),
+                countSpan: document.getElementById('liveCountCmp')
             };
         }
 
@@ -605,7 +610,7 @@
         }
 
         // Clics sur les boutons ✕ / ↺ dans les deux zones d'aperçu (délégation).
-        ['livePreviewListCmp', 'livePreviewList'].forEach(zoneId => {
+        ['livePreviewListCmp'].forEach(zoneId => {
             const zone = document.getElementById(zoneId);
             if (!zone) return;
             zone.addEventListener('click', (e) => {
@@ -631,23 +636,15 @@
             _manualEmailsTimer = setTimeout(updateLivePreview, 500);
         });
 
-        // Calculer automatiquement à l'ouverture de la modale
-        const originalOpenModal = openModal;
-        openModal = function() {
-            _removedEmails.clear();          // on repart d'une liste d'exclusions vierge
-            _previewContacts = [];
-            originalOpenModal();             // Ouvre la fenêtre normalement
-            setTimeout(updateLivePreview, 200); // Lance le calcul 0.2s plus tard
-        };
+        // (openModal / openEditModal gèrent eux-mêmes le reset + le calcul de l'aperçu)
 
-   
+
 // ==========================================
         // GESTION DU TEMPLATE RELANCE HEBDO
         // ==========================================
         async function loadTemplate() {
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTemplateRelance' }) });
-                const data = await res.json();
+                const data = await apiPost({ action: 'getTemplateRelance' });
                 if (data.success) {
                     document.getElementById('htmlEditor').value = data.template;
                 }
@@ -659,12 +656,11 @@
         async function saveTemplate() {
             const btn = document.getElementById('btnSaveTemplate');
             const htmlCode = document.getElementById('htmlEditor').value;
-            
+
             btn.innerText = "⏳ Sauvegarde..."; btn.disabled = true;
             try {
                 const res = await apiPost({ action: 'saveTemplateRelance', template: htmlCode });
-                
-                alert(data.message);
+                alert((res.success ? "✅ " : "⚠️ ") + (res.message || (res.success ? "Template sauvegardé." : "Échec de la sauvegarde.")));
             } catch (err) {
                 alert("Erreur lors de la sauvegarde.");
             } finally {
@@ -674,14 +670,11 @@
 
         async function testTemplate() {
             const emailTest = prompt("À quelle adresse email voulez-vous envoyer le test ?");
-            if (!emailTest || !emailTest.includes('@')) return; 
+            if (!emailTest || !emailTest.includes('@')) return;
 
             try {
-                // On met une petite alerte car l'envoi peut prendre 1 ou 2 secondes
-                console.log("Envoi du test en cours...");
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'testTemplateRelance', email: emailTest }) });
-                const data = await res.json();
-                alert(data.message);
+                const data = await apiPost({ action: 'testTemplateRelance', email: emailTest });
+                alert((data.success ? "✅ " : "⚠️ ") + (data.message || ''));
             } catch (err) {
                 alert("Erreur lors de l'envoi du test.");
             }
