@@ -263,25 +263,55 @@
         const userRole = user ? user.role : 'Utilisateur';
 
         // --- 2. CHARGEMENT ---
-        async function loadCampagnes() {
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const CAMPAGNES_CACHE_KEY = 'hecg_cache_campagnes_v1';
+        const CAMPAGNES_CACHE_TTL_MS = 90 * 1000;
+
+        async function _fetchCampagnesFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getCampagnes' }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(CAMPAGNES_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                listCampagnes = data.data;
+                renderCampagnes();
+            }
+            return data;
+        }
+
+        async function loadCampagnes(forceRefresh) {
+            if (!forceRefresh) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem(CAMPAGNES_CACHE_KEY) || 'null');
+                    if (cached && (Date.now() - cached.ts) < CAMPAGNES_CACHE_TTL_MS) {
+                        listCampagnes = cached.data.data;
+                        renderCampagnes();
+                        document.getElementById('loader').classList.add('hidden');
+                        document.getElementById('campGrid').classList.remove('hidden');
+                        _fetchCampagnesFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                        return;
+                    }
+                } catch(eCache) {}
+            }
+
             try {
                 document.getElementById('loader').classList.remove('hidden');
                 document.getElementById('campGrid').classList.add('hidden');
-                
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getCampagnes' }) });
-                const data = await res.json();
-                
-                if(data.success) {
-                    listCampagnes = data.data;
-                    renderCampagnes();
-                }
-            } catch(e) { 
-                console.error("Erreur chargement:", e); 
+                await _fetchCampagnesFresh();
+            } catch(e) {
+                console.error("Erreur chargement:", e);
             } finally {
                 document.getElementById('loader').classList.add('hidden');
                 document.getElementById('campGrid').classList.remove('hidden');
             }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchCampagnesFresh().catch(function(e){ console.error(e); });
+            }
+        }, CAMPAGNES_CACHE_TTL_MS);
 
         // --- 3. AFFICHAGE DES CARTES (Avec filtre d'Archivage et correction du bouton) ---
         function renderCampagnes() {
@@ -394,7 +424,7 @@
 
                 const data = await apiPost(payload);
                 if (data.success) {
-                    closeModal(); loadCampagnes();
+                    closeModal(); loadCampagnes(true);
                 } else throw new Error("Erreur serveur");
             } catch (error) {
                 alert("⚠️ Erreur : " + error.message);
@@ -407,7 +437,7 @@
         async function runCampagne(id) {
             if(!confirm("Confirmer le lancement immédiat ?")) return;
             const data = await apiPost({ action: 'runCampagne', id: id });
-            alert(data.message); loadCampagnes();
+            alert(data.message); loadCampagnes(true);
         }
 
         async function testCamp(id) {
@@ -420,14 +450,14 @@
         async function deleteCampagne(id) {
             if(!confirm("Supprimer cette campagne définitivement ?")) return;
             await apiPost({ action: 'deleteCampagne', campaignId: id });
-            loadCampagnes();
+            loadCampagnes(true);
         }
 
         async function duplicateCampaign(id) {
             if(!confirm("Dupliquer cette campagne ?")) return;
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'duplicateCampaign', campaignId: id }) });
             const data = await res.json();
-            if(data.success) loadCampagnes();
+            if(data.success) loadCampagnes(true);
         }
 
         // --- 6. ÉDITION ---
@@ -449,7 +479,7 @@
                 frequence: document.getElementById('editFreq').value, statut: document.getElementById('editStatut').value 
             });
                 
-            closeEditModal(); loadCampagnes();
+            closeEditModal(); loadCampagnes(true);
         }
 
         loadCampagnes();
@@ -474,23 +504,43 @@
         b2b_avec: document.getElementById('cbEntAvec')?.checked || false,
         b2b_sans: document.getElementById('cbEntSans')?.checked || false
     };
+    const emailsManuels = document.getElementById('manualEmails')?.value || "";
+
+    listDiv.innerHTML = "<div class='text-center text-blue-400 italic py-4 text-[10px] animate-pulse'>Calcul des destinataires...</div>";
 
     try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'previewComMail', cible: ciblesSelectionnees })
-        });
-        const d = await res.json();
-        if (d.success) {
-            countSpan.innerText = d.data.length;
-            listDiv.innerHTML = d.data.slice(0, 50).map(c => `
-                <div class="flex justify-between border-b border-blue-50 py-1 px-1">
-                    <span class="truncate pr-2 text-[10px]">${c.nom}</span>
+        // apiPost() ajoute l'authentification (previewComMail n'est pas une action publique) :
+        // un fetch() brut renvoyait "Accès refusé" et la liste restait vide.
+        const d = await apiPost({ action: 'previewComMail', cible: ciblesSelectionnees, emailsLibres: emailsManuels });
+
+        if (!d || !d.success) {
+            countSpan.innerText = '0';
+            listDiv.innerHTML = "<div class='text-center text-red-400 italic py-4 text-[10px]'>⚠️ " + ((d && d.message) || 'Erreur serveur') + "</div>";
+            return;
+        }
+
+        const contacts = d.data || [];
+        countSpan.innerText = contacts.length;
+
+        if (contacts.length === 0) {
+            listDiv.innerHTML = "<div class='text-center text-gray-400 italic py-4 text-[10px]'>Aucun destinataire pour ces critères.</div>";
+            return;
+        }
+
+        listDiv.innerHTML = contacts.slice(0, 200).map(c => {
+            const isManuel = c.source === 'Ajouté';
+            return `
+                <div class="flex justify-between border-b border-blue-50 py-1 px-1 ${isManuel ? 'bg-amber-50 rounded' : ''}">
+                    <span class="truncate pr-2 text-[10px]">${isManuel ? '➕ ' : ''}${c.nom}${c.source && !isManuel ? ` <span class="text-slate-300">· ${c.source}</span>` : ''}</span>
                     <span class="text-blue-400 font-mono text-[9px]">${c.email}</span>
                 </div>
-            `).join('') || "<div class='text-center text-gray-400 italic py-4 text-[10px]'>Aucun destinataire...</div>";
-        }
-    } catch(e) { console.error("Erreur prévisualisation"); }
+            `;
+        }).join('') + (contacts.length > 200 ? `<div class="text-center text-gray-400 italic py-2 text-[9px]">… +${contacts.length - 200} autres destinataires</div>` : '');
+    } catch(e) {
+        console.error("Erreur prévisualisation", e);
+        countSpan.innerText = '0';
+        listDiv.innerHTML = "<div class='text-center text-red-400 italic py-4 text-[10px]'>⚠️ Erreur de connexion. <button onclick='updateLivePreview()' class='underline font-black'>Réessayer</button></div>";
+    }
 }
 
 
@@ -499,6 +549,13 @@
             if (e.target.type === 'checkbox' && e.target.id.startsWith('cb')) {
                 updateLivePreview();
             }
+        });
+
+        // Recalcul quand on ajoute / retire des emails manuellement (anti-rebond 500 ms)
+        let _manualEmailsTimer = null;
+        document.getElementById('manualEmails')?.addEventListener('input', () => {
+            clearTimeout(_manualEmailsTimer);
+            _manualEmailsTimer = setTimeout(updateLivePreview, 500);
         });
 
         // Calculer automatiquement à l'ouverture de la modale
