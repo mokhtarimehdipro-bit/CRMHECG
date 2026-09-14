@@ -226,6 +226,7 @@
                     <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Prénom *</label><input type="text" id="formPrenom" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-gray-50 font-bold outline-none"></div>
                     <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Email</label><input type="email" id="formMail" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
                     <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Téléphone</label><input type="text" id="formTel" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
+                    <div class="col-span-2"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-2">Adresse mail domaine (HECG)</label><input type="email" id="formMailHecg" placeholder="prenom.nom@hecg.fr" class="w-full border-2 border-gray-100 p-3 rounded-2xl bg-white font-bold text-sm outline-none"></div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -917,6 +918,7 @@ async function apiPost(payload) {
                 document.getElementById('formPrenom').value = e.prenom;
                 document.getElementById('formMail').value = e.mail || "";
                 document.getElementById('formTel').value = e.tel || "";
+                document.getElementById('formMailHecg').value = e.mailHecg || "";
                 
                 document.getElementById('formReferent').value = e.refPerso || "";
                 if(e.entreprise) {
@@ -969,6 +971,7 @@ async function apiPost(payload) {
                 document.getElementById('formPrenom').value = "";
                 document.getElementById('formMail').value = "";
                 document.getElementById('formTel').value = "";
+                document.getElementById('formMailHecg').value = "";
                 document.getElementById('formReferent').value = user.ref || ""; 
                 document.getElementById('formTuteurSelect').value = ""; updateEnterpriseInfo();
                 document.getElementById('formClasse').value = ""; document.getElementById('formNewClasse').value = "";
@@ -1164,6 +1167,7 @@ async function envoyerSaveEtu(finalCvUrl) {
         prenom: document.getElementById('formPrenom').value,
         mail: document.getElementById('formMail').value,
         tel: document.getElementById('formTel').value,
+        mailHecg: document.getElementById('formMailHecg').value.trim(),
         refPerso: document.getElementById('formReferent').value,
         id_ent: finalIdEnt,
         id_cont: finalIdCont,
@@ -1196,6 +1200,7 @@ async function envoyerSaveEtu(finalCvUrl) {
             if (idx > -1) {
                 fullData[idx] = Object.assign({}, fullData[idx], {
                     nom: payload.nom, prenom: payload.prenom, mail: payload.mail, tel: payload.tel,
+                    mailHecg: payload.mailHecg,
                     refPerso: payload.refPerso, id_ent: payload.id_ent, id_cont: payload.id_cont,
                     entreprise: payload.entreprise, statut: payload.statut, classe: payload.classe,
                     campus: payload.campus, faitCV: payload.faitCV, faitLI: payload.faitLI,
