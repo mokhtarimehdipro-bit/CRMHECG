@@ -52,7 +52,11 @@
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <h3 class="font-black text-gray-800 mb-6 border-b pb-2">📞 Coordonnées</h3>
                         <p class="text-sm font-bold text-gray-600 mb-2">✉️ <a href="" id="etuMail" class="font-normal text-blue-500 hover:underline">...</a></p>
-                        <p class="text-sm font-bold text-gray-600 mb-4">📱 <span id="etuTel" class="font-normal">...</span></p>
+                        <p class="text-sm font-bold text-gray-600 mb-2">📱 <span id="etuTel" class="font-normal">...</span></p>
+                        <div class="mb-4">
+                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Adresse mail domaine</label>
+                            <p class="text-sm font-bold text-gray-600"><span id="etuMailHecg" class="font-normal">...</span></p>
+                        </div>
                         
                         <div class="mb-6">
                             <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Consultation)</label>
@@ -470,6 +474,7 @@
                     document.getElementById('etuMail').innerText = p.mail || 'Non renseigné';
                     document.getElementById('etuMail').href = "mailto:" + p.mail;
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
+                    document.getElementById('etuMailHecg').innerText = p.mailHecg || 'Non renseigné';
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
                     const btnRet = document.getElementById('btnRetirerEnt');
