@@ -1232,7 +1232,7 @@ async function envoyerSaveEtu(finalCvUrl) {
 
         async function exportEtudiantsCSV() {
             const NB_ECHANGES = 3;
-            let header = "Nom;Prenom;Mail Etudiant;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Nombre Echanges";
+            let header = "Nom;Prenom;Mail Etudiant;Mail HECG;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Nombre Echanges";
             for (let i = 1; i <= NB_ECHANGES; i++) header += ";Echange " + i + " Date;Echange " + i + " Auteur;Echange " + i + " Contenu";
             let csv = header + "\n";
 
@@ -1256,7 +1256,7 @@ async function envoyerSaveEtu(finalCvUrl) {
                     }
                 }
                 const echanges = carnetMap[e.id] || [];
-                let row = [e.nom, e.prenom, e.mail, e.tel, e.classe, e.statut, e.typo, e.entreprise, mail1, tel1, mail2, tel2, echanges.length]
+                let row = [e.nom, e.prenom, e.mail, e.mailHecg, e.tel, e.classe, e.statut, e.typo, e.entreprise, mail1, tel1, mail2, tel2, echanges.length]
                     .map(csvField).join(";");
                 for (let i = 0; i < NB_ECHANGES; i++) {
                     const ech = echanges[i];
