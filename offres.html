@@ -44,8 +44,29 @@
                 <button id="btnTogglePartagee" onclick="togglePartagee()" class="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Voir les partagées (0)</button>
                 <button id="btnToggleObsolete" onclick="toggleObsolete()" class="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Voir les obsolètes (0)</button>
                 <button onclick="toggleMap()" id="btnToggleMap" class="px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition">🗺️ Carte</button>
+                <button id="btnSelectMode" onclick="toggleSelectionMode()" class="px-4 py-3 bg-white border-2 border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition">☑️ Sélection multiple</button>
                 <button onclick="openModal()" class="bg-[#F26522] text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition">+ Ajouter une offre</button>
             </div>
+        </div>
+
+        <!-- BARRE D'ACTION GROUPÉE (sélection multiple) -->
+        <div id="bulkBar" class="hidden sticky top-[76px] z-40 mb-6 bg-[#1A4E8A] text-white rounded-2xl shadow-lg p-4 flex flex-wrap items-center gap-3">
+            <span id="bulkCount" class="font-black text-sm whitespace-nowrap">0 offre sélectionnée</span>
+            <button onclick="selectAllVisibleOffres()" class="px-3 py-2 bg-white/10 rounded-xl text-xs font-bold hover:bg-white/20 transition whitespace-nowrap">Tout sélectionner (visible)</button>
+            <button onclick="clearSelectionOffres()" class="px-3 py-2 bg-white/10 rounded-xl text-xs font-bold hover:bg-white/20 transition whitespace-nowrap">Aucune</button>
+            <span class="flex-1"></span>
+            <select id="bulkQualite" class="border-none rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none">
+                <option value="">Qualité →</option>
+                <option value="Vérifiée">✅ Vérifiée</option>
+                <option value="À Qualifier">❓ À Qualifier</option>
+                <option value="Obsolète">❌ Obsolète</option>
+            </select>
+            <select id="bulkEtat" class="border-none rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none">
+                <option value="">Statut partage →</option>
+                <option value="Partagée">📡 Partagée</option>
+                <option value="Non partagée">📭 Non partagée</option>
+            </select>
+            <button onclick="applyBulkOffres()" id="btnApplyBulk" class="px-5 py-2 bg-[#F26522] rounded-xl text-sm font-black hover:scale-105 transition whitespace-nowrap">Appliquer</button>
         </div>
 
         <div id="statsSection" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6"></div>
@@ -269,6 +290,75 @@
         let showObsolete = false;
         let showPartagee = false;
         let _statsClickData = [];
+
+        // --- SÉLECTION MULTIPLE / ACTION GROUPÉE ---
+        let selectionMode = false;
+        let selectedOffres = new Set();
+
+        function toggleSelectionMode() {
+            selectionMode = !selectionMode;
+            if (!selectionMode) selectedOffres.clear();
+            document.getElementById('btnSelectMode').classList.toggle('bg-[#1A4E8A]', selectionMode);
+            document.getElementById('btnSelectMode').classList.toggle('text-white', selectionMode);
+            document.getElementById('btnSelectMode').classList.toggle('border-[#1A4E8A]', selectionMode);
+            updateBulkBar();
+            renderOffres(_lastRendered);
+        }
+
+        function toggleSelectOffre(id) {
+            if (selectedOffres.has(id)) selectedOffres.delete(id); else selectedOffres.add(id);
+            updateBulkBar();
+            renderOffres(_lastRendered);
+        }
+
+        function selectAllVisibleOffres() {
+            (_lastRendered || []).forEach(o => selectedOffres.add(o.id));
+            updateBulkBar();
+            renderOffres(_lastRendered);
+        }
+
+        function clearSelectionOffres() {
+            selectedOffres.clear();
+            updateBulkBar();
+            renderOffres(_lastRendered);
+        }
+
+        function updateBulkBar() {
+            const bar = document.getElementById('bulkBar');
+            const n = selectedOffres.size;
+            bar.classList.toggle('hidden', !selectionMode);
+            document.getElementById('bulkCount').innerText = n + (n > 1 ? ' offres sélectionnées' : ' offre sélectionnée');
+        }
+
+        async function applyBulkOffres() {
+            const qualite = document.getElementById('bulkQualite').value;
+            const etat = document.getElementById('bulkEtat').value;
+            if (!qualite && !etat) { alert('Choisissez au moins une valeur à appliquer (qualité ou statut de partage).'); return; }
+            const ids = [...selectedOffres];
+            if (!ids.length) { alert('Aucune offre sélectionnée.'); return; }
+            if (!confirm('Appliquer ce changement à ' + ids.length + ' offre(s) ?')) return;
+
+            const btn = document.getElementById('btnApplyBulk');
+            btn.disabled = true; btn.innerText = 'Application...';
+            const res = await apiPost({ action: 'bulkUpdateOffres', ids, qualite: qualite || undefined, etat: etat || undefined });
+            btn.disabled = false; btn.innerText = 'Appliquer';
+
+            if (!res.success) { alert('Erreur : ' + (res.message || 'Échec inconnu')); return; }
+
+            // Mise à jour optimiste locale, sans recharger toute la liste
+            currentOffres.forEach(o => {
+                if (!selectedOffres.has(o.id)) return;
+                if (qualite) o.qualite = qualite;
+                if (etat) o.etat = etat;
+            });
+            _persistOffresCache();
+            clearSelectionOffres();
+            document.getElementById('bulkQualite').value = '';
+            document.getElementById('bulkEtat').value = '';
+            renderStats(computeStats());
+            updateToggleBtns();
+            filterOffres();
+        }
 
         // --- POSTIER CENTRAL ---
         async function apiPost(payload) {
@@ -501,9 +591,19 @@
                        </div>`
                     : '';
 
+                const isSelected = selectedOffres.has(o.id);
+                const selectionRing = selectionMode && isSelected ? 'ring-4 ring-[#1A4E8A] ring-offset-2' : '';
+                const checkboxHTML = selectionMode
+                    ? `<label class="flex items-center gap-2 mb-3 cursor-pointer select-none">
+                         <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectOffre('${o.id}')" class="w-4 h-4 accent-[#1A4E8A] cursor-pointer">
+                         <span class="text-[10px] font-black uppercase text-[#1A4E8A]">Sélectionner</span>
+                       </label>`
+                    : '';
+
                 return `
-                <div class="${bgCarte} rounded-[2rem] shadow-sm border p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group">
+                <div class="${bgCarte} ${selectionRing} rounded-[2rem] shadow-sm border p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group">
                     <div>
+                        ${checkboxHTML}
                         <div class="flex justify-between items-center mb-4">
                             <div class="flex gap-2">
                                 <span class="px-2 py-1 text-[10px] font-black uppercase rounded border shadow-sm ${badgeQualite}">${brutQualite}</span>
