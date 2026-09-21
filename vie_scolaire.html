@@ -289,7 +289,7 @@
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table>
-          <thead><tr><th>Statut</th><th>Nom</th><th>Prénom</th><th>Mail pro</th><th>Tél</th><th>Ville</th><th>Matières</th><th>Entrée</th><th>Sortie</th><th></th></tr></thead>
+          <thead><tr><th>Statut</th><th>Nom</th><th>Prénom</th><th>Mail pro</th><th>Tél</th><th>Ville</th><th>Matières</th><th>Classes</th><th>Entrée</th><th>Sortie</th><th></th></tr></thead>
           <tbody id="formateursTbody"></tbody>
         </table>
       </div>
@@ -1070,6 +1070,12 @@
       <div><label>Date d'entrée</label><input type="date" id="fDateEntree"></div>
       <div><label>Date de sortie (laisser vide si en poste)</label><input type="date" id="fDateSortie"></div>
       <div class="col-span-2 md:col-span-3"><label>Matières enseignées (séparées par virgule)</label><input type="text" id="fMatieres" placeholder="Comptabilité, Fiscalité, Droit…"></div>
+      <div class="col-span-2 md:col-span-3">
+        <label>Classes où il/elle intervient</label>
+        <div id="fClassesCheckboxes" style="max-height:180px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:0.75rem;padding:0.5rem 0.75rem;display:flex;flex-wrap:wrap;gap:0.35rem 1rem;background:#fff">
+          <span class="text-xs text-gray-400 italic">Chargement des classes…</span>
+        </div>
+      </div>
     </div>
     <div class="flex justify-between gap-3 mt-6">
       <button id="btnDeleteFormateur" onclick="deleteFormateur(document.getElementById('formateurId').value)" class="btn-danger hidden">Supprimer</button>
@@ -3971,6 +3977,7 @@ function renderFormateurs(){
       : `<span style="background:#fef9c3;color:#a16207;font-size:0.65rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:9999px">Encadrant</span>`;
     const matieresList = (f.matieres||'').split(',').map(m=>m.trim()).filter(Boolean);
     const matieresBadges = matieresList.map(m=>`<span style="font-size:0.7rem;background:#f3f4f6;padding:0.1rem 0.4rem;border-radius:0.4rem;display:inline-block;margin:0.1rem">${m}</span>`).join('');
+    const classesBadges = (f.classes||[]).map(c=>`<span style="font-size:0.7rem;background:#dbeafe;color:#1d4ed8;padding:0.1rem 0.4rem;border-radius:0.4rem;display:inline-block;margin:0.1rem">${c}</span>`).join('');
     return `<tr style="${rowBg}">
       <td>${statutHtml}<br>${typeBadge}</td>
       <td class="font-bold">${f.nom}</td><td>${f.prenom}</td>
@@ -3978,13 +3985,14 @@ function renderFormateurs(){
       <td class="text-xs">${f.tel||'—'}</td>
       <td class="text-xs">${f.ville||'—'}</td>
       <td class="text-xs" style="max-width:220px">${matieresBadges||'—'}</td>
+      <td class="text-xs" style="max-width:220px">${classesBadges||'—'}</td>
       <td class="text-xs">${f.dateEntree||'—'}</td>
       <td class="text-xs">${f.dateSortie||'—'}</td>
       <td class="flex gap-1">
         <button onclick='openFormateurModal(${JSON.stringify(f).replace(/'/g,"&#39;")})' class="btn-ghost py-1 text-xs">✏</button>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="10" class="text-center text-gray-400 py-8">Aucun résultat.</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="text-center text-gray-400 py-8">Aucun résultat.</td></tr>';
 }
 
 function openFormateurModal(f){
@@ -4005,8 +4013,25 @@ function openFormateurModal(f){
   document.getElementById('fDateEntree').value       = toInput(f?.dateEntree||'');
   document.getElementById('fDateSortie').value       = toInput(f?.dateSortie||'');
   document.getElementById('fMatieres').value         = f?.matieres||'';
+  renderClassesCheckboxes(f?.classes||[]);
   const btnDel=document.getElementById('btnDeleteFormateur');
   if (f?.id) btnDel.classList.remove('hidden'); else btnDel.classList.add('hidden');
+}
+// Classes où intervient le formateur : mêmes noms que la feuille ETUDIANTS (allEtudiantsRoster),
+// jamais de nomenclature séparée.
+function renderClassesCheckboxes(selectedClasses){
+  const box = document.getElementById('fClassesCheckboxes');
+  const classes = [...new Set((allEtudiantsRoster||[]).map(e=>e.classe).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  if (!classes.length){ box.innerHTML = '<span class="text-xs text-gray-400 italic">Aucune classe trouvée (effectif étudiants vide).</span>'; return; }
+  const selected = new Set(selectedClasses||[]);
+  box.innerHTML = classes.map(c=>`
+    <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none">
+      <input type="checkbox" value="${c}" class="fClasseCheckbox" ${selected.has(c)?'checked':''}>
+      ${c}
+    </label>`).join('');
+}
+function getCheckedClasses(){
+  return [...document.querySelectorAll('.fClasseCheckbox:checked')].map(el=>el.value);
 }
 function closeFormateurModal(){ document.getElementById('formateurModal').classList.add('hidden'); }
 async function saveFormateur(){
@@ -4026,6 +4051,7 @@ async function saveFormateur(){
     dateEntree:    toStore(document.getElementById('fDateEntree').value),
     dateSortie:    toStore(document.getElementById('fDateSortie').value),
     matieres:      document.getElementById('fMatieres').value,
+    classes:       getCheckedClasses(),
   });
   if (!r.success){toast('Erreur : '+r.message,false);return;}
   toast('Enregistré ✓'); closeFormateurModal();
@@ -4040,8 +4066,8 @@ async function deleteFormateur(id){
   const r2 = await api('getPersonnel'); if (r2.success){ allFormateurs=r2.data; renderFormateurs(); }
 }
 function exportPersonnel(){
-  const header='ID,Nom,Prénom,Mail pro,Mail perso,Tél,Adresse,CP,Ville,Matières,Date entrée,Date sortie,Formateur';
-  const rows=allFormateurs.map(f=>[f.id,f.nom,f.prenom,f.mailPro,f.mailPerso,f.tel,f.adresse,f.cp,f.ville,f.matieres,f.dateEntree,f.dateSortie,f.etatFormateur].map(v=>'"'+(v||'')+'"').join(','));
+  const header='ID,Nom,Prénom,Mail pro,Mail perso,Tél,Adresse,CP,Ville,Matières,Classes,Date entrée,Date sortie,Formateur';
+  const rows=allFormateurs.map(f=>[f.id,f.nom,f.prenom,f.mailPro,f.mailPerso,f.tel,f.adresse,f.cp,f.ville,f.matieres,(f.classes||[]).join(' | '),f.dateEntree,f.dateSortie,f.etatFormateur].map(v=>'"'+(v||'')+'"').join(','));
   const csv = header+'\n'+rows.join('\n');
   const fileName='personnel_encadrant.csv';
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
