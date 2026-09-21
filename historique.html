@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -39,8 +39,9 @@
                 <p class="text-sm text-gray-400 font-bold mt-1">Traçabilité complète des actions</p>
             </div>
             <div class="flex space-x-3 flex-wrap gap-2">
-                <button onclick="loadHistory()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
+                <button onclick="loadHistory(true)" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition">🔄 Rafraîchir</button>
                 <button onclick="showSuppCritiques()" class="bg-red-100 text-red-700 px-5 py-2 rounded-xl font-bold shadow-sm hover:bg-red-200 transition">⚠️ Suppressions</button>
+                <button onclick="toggleActiviteEtudiants()" class="bg-amber-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-amber-600 transition">🎓 Activité étudiants</button>
                 <button id="btnArchivage" onclick="toggleArchivage()" class="hidden bg-orange-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-orange-600 transition">📦 Archivage</button>
                 <button id="btnRapport" onclick="toggleRapport()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition">📊 Rapport</button>
                 <button onclick="exportCSV()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-green-700 transition">📥 Exporter CSV</button>
@@ -71,7 +72,7 @@
                 <p class="text-3xl font-black text-orange-700 mt-1" id="kpi-action">0</p>
             </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
             <div class="bg-purple-50 p-5 rounded-2xl shadow-sm border border-purple-100">
                 <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">✅ Offres vérifiées</p>
                 <p class="text-3xl font-black text-purple-700 mt-1" id="kpi-offres-verifiees">0</p>
@@ -92,6 +93,22 @@
                 <p class="text-[10px] font-black text-teal-600 uppercase tracking-widest">📋 Notes offres</p>
                 <p class="text-3xl font-black text-teal-700 mt-1" id="kpi-notes-offres">0</p>
             </div>
+            <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border-2 border-amber-300 cursor-pointer hover:border-amber-500 transition" onclick="toggleActiviteEtudiants()">
+                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">📝 Écritures étudiants (dossier)</p>
+                <p class="text-3xl font-black text-amber-700 mt-1" id="kpi-actions-etudiants">0</p>
+            </div>
+        </div>
+
+        <!-- PANEL ACTIVITÉ ÉTUDIANTS DANS LEUR DOSSIER -->
+        <div id="panelActiviteEtudiants" class="hidden mb-6 bg-amber-50 border-2 border-amber-200 rounded-3xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="font-black text-amber-700 flex items-center gap-2">🎓 Activité des étudiants dans leur dossier</h2>
+                    <p class="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-0.5">Écritures faites par les étudiants eux-mêmes (carnet de route, suivi de candidatures...) — période filtrée · plus d'alerte mail, tout est ici</p>
+                </div>
+                <button onclick="document.getElementById('panelActiviteEtudiants').classList.add('hidden')" class="text-amber-300 hover:text-amber-600 font-bold text-xl">✕</button>
+            </div>
+            <div id="activiteEtudiantsBody" class="space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar"></div>
         </div>
 
         <!-- PANEL ARCHIVAGE -->
@@ -356,24 +373,58 @@
             return "";
         }
 
-        async function loadHistory() {
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const HISTORY_CACHE_KEY = 'hecg_cache_history_v1';
+        const HISTORY_CACHE_TTL_MS = 90 * 1000;
+
+        function _applyHistoryPayload(result) {
+            if (result.success) {
+                allLogs = result.logs;
+                studentsMap = result.studentsMap || {};
+                personnelSet = new Set((result.personnelNames || []).map(n => n.toLowerCase()));
+                populateFilters();
+                applyFilters();
+            }
+        }
+
+        async function _fetchHistoryFresh() {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
+            });
+            const result = await response.json();
+            if (result.success) {
+                try { sessionStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify({ ts: Date.now(), result })); } catch(eStore) {}
+                _applyHistoryPayload(result);
+            }
+            return result;
+        }
+
+        async function loadHistory(forceRefresh) {
             document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="5" class="p-10 text-center font-bold text-[#1A4E8A] animate-pulse">Lecture du Sheet...</td></tr>';
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    allLogs = result.logs;
-                    studentsMap = result.studentsMap || {};
-                    personnelSet = new Set((result.personnelNames || []).map(n => n.toLowerCase()));
-                    populateFilters();
-                    applyFilters();
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(HISTORY_CACHE_KEY) || 'null');
+                        if (cached && (Date.now() - cached.ts) < HISTORY_CACHE_TTL_MS) {
+                            _applyHistoryPayload(cached.result);
+                            _fetchHistoryFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
                 }
+                await _fetchHistoryFresh();
             } catch (e) { console.error(e); }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchHistoryFresh().catch(function(e){ console.error(e); });
+            }
+        }, HISTORY_CACHE_TTL_MS);
 
         function populateFilters() {
             // Auteurs
@@ -449,8 +500,63 @@
 
             updateKPIs(filteredLogs);
             updateLeaders(filteredLogs);
+            updateActiviteEtudiants(filteredLogs);
             renderLogs(filteredLogs);
             updateRapportCharts();
+        }
+
+        // Activité des étudiants dans leur propre dossier — remplace l'ancienne alerte
+        // mail à chaque écriture (carnet de route, suivi de candidatures...). Un log est
+        // une écriture étudiant quand roleAuteur === "Etudiant" (fiable, indépendant de
+        // la fonctionnalité utilisée), peu importe qui l'a consulté ensuite.
+        function updateActiviteEtudiants(logs) {
+            const byStudent = {};
+            let total = 0;
+            logs.forEach(log => {
+                const role = String(getSafeValue(log, ['rôle', 'role']) || '').trim().toLowerCase();
+                if (role !== 'etudiant') return;
+                const cible = getSafeValue(log, ['cible']) || '';
+                if (!cible) return;
+                const nom = studentsMap[cible] || cible;
+                if (!byStudent[nom]) byStudent[nom] = { count: 0, items: [] };
+                byStudent[nom].count++;
+                byStudent[nom].items.push({
+                    date: getSafeValue(log, ['date']),
+                    categorie: getSafeValue(log, ['catégorie', 'categorie']) || '',
+                    details: getSafeValue(log, ['détail', 'detail']) || ''
+                });
+                total++;
+            });
+            document.getElementById('kpi-actions-etudiants').innerText = total;
+
+            const body = document.getElementById('activiteEtudiantsBody');
+            const entries = Object.entries(byStudent).sort((a, b) => b[1].count - a[1].count);
+            if (!entries.length) {
+                body.innerHTML = '<p class="text-sm text-amber-400 italic text-center py-4">Aucune écriture étudiante sur cette période.</p>';
+                return;
+            }
+            body.innerHTML = entries.map(([nom, info], i) => {
+                const detailId = `etuActDetail_${i}`;
+                const items = info.items.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+                const itemsHtml = items.map(it => {
+                    const d = it.date ? new Date(it.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '';
+                    return `<div class="text-xs text-gray-600 py-1.5 border-b border-amber-100 last:border-0">
+                        <span class="font-bold text-amber-700">${d}</span> — <span class="font-semibold">${it.categorie}</span>
+                        <div class="text-gray-500 mt-0.5">${it.details}</div>
+                    </div>`;
+                }).join('');
+                return `<div class="bg-white rounded-2xl p-4 border border-amber-100">
+                    <button onclick="document.getElementById('${detailId}').classList.toggle('hidden')" class="w-full flex items-center justify-between text-left">
+                        <span class="font-black text-sm text-gray-800">${nom}</span>
+                        <span class="text-xs font-black text-amber-600">${info.count} action${info.count > 1 ? 's' : ''} ▾</span>
+                    </button>
+                    <div id="${detailId}" class="hidden mt-3 pt-3 border-t border-amber-100">${itemsHtml}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleActiviteEtudiants() {
+            document.getElementById('panelActiviteEtudiants').classList.toggle('hidden');
         }
 
         function updateLeaders(logs) {
@@ -1307,11 +1413,15 @@
                 const details = String(getSafeValue(log, ['détail', 'detail']) || "").replace(/;/g, ',').replace(/\n/g, ' ');
                 csv += `"${dateStr}";"${getSafeValue(log, ['auteur'])}";"${getSafeValue(log, ['role'])}";"${getSafeValue(log, ['type'])}";"${getSafeValue(log, ['catégorie'])}";"${getSafeValue(log, ['cible'])}";"${details}"\n`;
             });
+            const fileName = `Audit_HECG_${new Date().toISOString().split('T')[0]}.csv`;
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = `Audit_HECG_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = fileName;
             link.click();
+
+            apiPostH({ action: 'logExport', exportType: 'Historique / Audit', fileName, mimeType: 'text/csv', content: csv, rowCount: filteredLogs.length })
+                .catch(e => console.error("Erreur envoi mail export :", e));
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
