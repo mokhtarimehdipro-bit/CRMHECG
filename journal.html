@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HECG - Journal Intime</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <style>
+        :root {
+            --brand: #1A4E8A;
+            --accent: #F26522;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; }
+        #toastMsg { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); z-index:9999;
+            padding:1rem 2rem; border-radius:1rem; font-weight:800; font-size:.95rem;
+            box-shadow:0 8px 32px rgba(0,0,0,.18); transition:opacity .4s; pointer-events:none; }
+        .journal-card { transition: all .2s; }
+        .journal-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.1); }
+        .mood-btn { cursor:pointer; font-size:1.6rem; padding:4px 8px; border-radius:8px;
+            border:2px solid transparent; transition:all .2s; }
+        .mood-btn.active { border-color: var(--brand); background:#EFF6FF; transform:scale(1.2); }
+        .prose-content h2 { font-size:1.5rem; font-weight:800; color:var(--brand); margin-bottom:.5rem; }
+        .prose-content h3 { font-size:1.1rem; font-weight:700; color:#374151; margin:1rem 0 .4rem; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
+        .prose-content ul { list-style:disc; padding-left:1.5rem; }
+        .prose-content li { margin:.25rem 0; font-size:.95rem; line-height:1.6; }
+        .prose-content p { margin:.5rem 0; line-height:1.7; color:#374151; }
+        .prose-content strong { color:#111827; }
+        .prose-content em { color:#6B7280; }
+        textarea { font-family: 'Segoe UI', system-ui, sans-serif; }
+        .calendar-nav button:hover { background:#EFF6FF; color:var(--brand); }
+        .entry-dot { width:8px; height:8px; background:var(--brand); border-radius:50%; display:inline-block; margin-left:4px; vertical-align:middle; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="alertes.html" class="font-bold text-orange-500 hover:text-orange-600">Alertes 🔔</a>
+                <a href="journal.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">📓 Journal</a>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="userLabel" class="text-sm text-gray-500 font-medium"></span>
+            <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <!-- En-tête -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-[#1A4E8A]">📓 Mon Journal Intime</h1>
+                <p class="text-gray-400 text-sm font-semibold mt-1">Généré automatiquement depuis votre agenda, emails et activités</p>
+            </div>
+            <div class="flex gap-3 flex-wrap">
+                <button onclick="openGenerateModal()" class="bg-[#1A4E8A] text-white px-5 py-2.5 rounded-xl font-bold shadow-md hover:bg-blue-800 transition flex items-center gap-2">
+                    ✨ Générer aujourd'hui
+                </button>
+                <button onclick="openDatePicker()" class="bg-white border-2 border-[#1A4E8A] text-[#1A4E8A] px-5 py-2.5 rounded-xl font-bold hover:bg-blue-50 transition flex items-center gap-2">
+                    📅 Autre date
+                </button>
+                <button onclick="installTrigger()" title="Génération automatique chaque soir à 20h" class="bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-md hover:bg-green-700 transition flex items-center gap-2">
+                    ⚡ Auto-mode
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Liste des entrées -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+                        <h2 class="font-black text-gray-700">Mes entrées</h2>
+                        <span id="entriesCount" class="text-xs text-gray-400 font-semibold bg-gray-100 px-2 py-1 rounded-full">0</span>
+                    </div>
+                    <div id="entriesList" class="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+                        <div class="text-center text-gray-400 text-sm py-8">Chargement...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenu de l'entrée -->
+            <div class="lg:col-span-2">
+                <div id="emptyState" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                    <div class="text-6xl mb-4">📓</div>
+                    <h3 class="text-xl font-black text-gray-700 mb-2">Commencez votre journal</h3>
+                    <p class="text-gray-400 text-sm">Cliquez sur <strong>"Générer aujourd'hui"</strong> pour créer automatiquement votre première entrée à partir de votre agenda et vos emails.</p>
+                    <button onclick="openGenerateModal()" class="mt-6 bg-[#1A4E8A] text-white px-6 py-3 rounded-xl font-bold shadow hover:bg-blue-800 transition">
+                        ✨ Générer mon journal
+                    </button>
+                </div>
+
+                <div id="entryView" class="hidden">
+                    <!-- Header de l'entrée -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 id="entryTitle" class="text-2xl font-black text-[#1A4E8A]"></h2>
+                                <p id="entryMeta" class="text-gray-400 text-sm mt-1"></p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="editEntry()" class="bg-blue-50 text-[#1A4E8A] px-4 py-2 rounded-xl font-bold hover:bg-blue-100 transition text-sm">✏️ Éditer</button>
+                                <button onclick="deleteEntry()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl font-bold hover:bg-red-100 transition text-sm">🗑️</button>
+                            </div>
+                        </div>
+                        <!-- Humeur -->
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-bold text-gray-500">Humeur :</span>
+                            <div class="flex gap-1">
+                                <span class="mood-btn" data-score="1" onclick="setMood(1)">😞</span>
+                                <span class="mood-btn" data-score="2" onclick="setMood(2)">😐</span>
+                                <span class="mood-btn" data-score="3" onclick="setMood(3)">🙂</span>
+                                <span class="mood-btn" data-score="4" onclick="setMood(4)">😊</span>
+                                <span class="mood-btn" data-score="5" onclick="setMood(5)">🤩</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contenu (vue) -->
+                    <div id="viewMode" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div id="entryContent" class="prose-content"></div>
+                    </div>
+
+                    <!-- Contenu (édition) -->
+                    <div id="editMode" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <textarea id="editTextarea" class="w-full h-96 p-4 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1A4E8A] resize-y" placeholder="Écrivez votre journal ici (Markdown supporté)..."></textarea>
+                        <div class="flex gap-3 mt-4">
+                            <button onclick="saveEdit()" class="bg-[#1A4E8A] text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-800 transition">💾 Sauvegarder</button>
+                            <button onclick="cancelEdit()" class="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition">Annuler</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal génération -->
+    <div id="generateModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 class="text-xl font-black text-[#1A4E8A] mb-4">✨ Générer une entrée</h3>
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Date à analyser :</label>
+                <input type="date" id="generateDate" class="w-full border border-gray-200 rounded-xl px-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+            </div>
+            <div id="generateStats" class="hidden bg-blue-50 rounded-xl p-4 mb-4 text-sm">
+                <p class="font-bold text-[#1A4E8A] mb-2">Données collectées :</p>
+                <div id="statsContent"></div>
+            </div>
+            <div id="generateLoader" class="hidden text-center py-4">
+                <div class="inline-block w-8 h-8 border-4 border-[#1A4E8A] border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm text-gray-500 mt-2 font-semibold">Analyse de votre agenda et emails...</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="generateEntry()" id="btnGenerate" class="flex-1 bg-[#1A4E8A] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-800 transition">✨ Générer</button>
+                <button onclick="closeModal('generateModal')" class="bg-gray-100 text-gray-700 px-5 py-3 rounded-xl font-bold hover:bg-gray-200 transition">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastMsg" style="opacity:0;"></div>
+
+    <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbzQHIc0b7rfzXqnAXnLZoYUqfQ3kv4bBIa9gqK-qMo9K1j5pvHSTHJMiEjBBrGmm9s/exec";
+
+    let currentEntryId = null;
+    let entries = [];
+    let currentMood = 3;
+
+    function getSession() {
+        return {
+            token: localStorage.getItem("sessionToken") || "",
+            nom: localStorage.getItem("userNom") || "",
+            role: localStorage.getItem("userRole") || ""
+        };
+    }
+
+    async function api(data) {
+        const s = getSession();
+        data.sessionToken = s.token;
+        data.nomAuteur = s.nom;
+        const r = await fetch(API_URL, { method:"POST", body: JSON.stringify(data) });
+        return r.json();
+    }
+
+    function toast(msg, ok=true) {
+        const el = document.getElementById("toastMsg");
+        el.textContent = msg;
+        el.style.background = ok ? "#22c55e" : "#ef4444";
+        el.style.color = "#fff";
+        el.style.opacity = "1";
+        setTimeout(()=>{ el.style.opacity="0"; }, 3000);
+    }
+
+    function formatDate(dateStr) {
+        const JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+        const MOIS  = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+        const d = new Date(dateStr + "T12:00:00");
+        return JOURS[d.getDay()] + " " + d.getDate() + " " + MOIS[d.getMonth()] + " " + d.getFullYear();
+    }
+
+    function moodEmoji(score) {
+        const m = ["","😞","😐","🙂","😊","🤩"];
+        return m[score] || "🙂";
+    }
+
+    async function loadEntries() {
+        const s = getSession();
+        const res = await api({ action:"getJournalEntries", auteur: s.nom });
+        if (!res.success) { toast("Erreur chargement", false); return; }
+        entries = res.entries || [];
+        renderList();
+        document.getElementById("entriesCount").textContent = entries.length;
+        if (entries.length > 0 && !currentEntryId) showEntry(entries[0]);
+    }
+
+    function renderList() {
+        const el = document.getElementById("entriesList");
+        if (entries.length === 0) {
+            el.innerHTML = `<div class="text-center text-gray-400 text-sm py-8">Aucune entrée.<br>Générez votre premier journal !</div>`;
+            return;
+        }
+        el.innerHTML = entries.map(e => {
+            const isActive = e.id === currentEntryId;
+            const mood = moodEmoji(e.humeur);
+            const dateLabel = formatDate(e.date);
+            return `<div onclick="showEntry(${JSON.stringify(e).replace(/"/g,'&quot;')})"
+                class="journal-card p-3 rounded-xl cursor-pointer border-2 ${isActive ? 'border-[#1A4E8A] bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1 min-w-0">
+                        <p class="font-black text-sm text-gray-800 truncate">${mood} ${e.titre || dateLabel}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">${e.date}</p>
+                    </div>
+                </div>
+                ${e.tags === 'auto' ? '<span class="text-xs text-blue-400 font-bold">⚡ Auto</span>' : ''}
+            </div>`;
+        }).join("");
+    }
+
+    function showEntry(entry) {
+        currentEntryId = entry.id;
+        currentMood = entry.humeur || 3;
+        renderList();
+
+        document.getElementById("emptyState").classList.add("hidden");
+        document.getElementById("entryView").classList.remove("hidden");
+        document.getElementById("viewMode").classList.remove("hidden");
+        document.getElementById("editMode").classList.add("hidden");
+
+        document.getElementById("entryTitle").textContent = entry.titre || formatDate(entry.date);
+        const metaParts = [];
+        if (entry.editedAt && entry.editedAt !== "") metaParts.push("Modifié le " + new Date(entry.editedAt).toLocaleDateString("fr-FR"));
+        else if (entry.generatedAt) metaParts.push("Généré le " + new Date(entry.generatedAt).toLocaleDateString("fr-FR"));
+        if (entry.auteur) metaParts.push("par " + entry.auteur);
+        document.getElementById("entryMeta").textContent = metaParts.join(" · ");
+
+        document.querySelectorAll(".mood-btn").forEach(btn => {
+            btn.classList.toggle("active", parseInt(btn.dataset.score) === currentMood);
+        });
+
+        const html = marked.parse(entry.contenu || "");
+        document.getElementById("entryContent").innerHTML = html;
+    }
+
+    function editEntry() {
+        const entry = entries.find(e => e.id === currentEntryId);
+        if (!entry) return;
+        document.getElementById("editTextarea").value = entry.contenu || "";
+        document.getElementById("viewMode").classList.add("hidden");
+        document.getElementById("editMode").classList.remove("hidden");
+    }
+
+    function cancelEdit() {
+        document.getElementById("editMode").classList.add("hidden");
+        document.getElementById("viewMode").classList.remove("hidden");
+    }
+
+    async function saveEdit() {
+        const entry = entries.find(e => e.id === currentEntryId);
+        if (!entry) return;
+        const contenu = document.getElementById("editTextarea").value;
+        const res = await api({ action:"saveJournalEntry", id: entry.id, date: entry.date, titre: entry.titre, contenu, humeur: currentMood, tags: entry.tags || "" });
+        if (res.success) {
+            entry.contenu = contenu;
+            entry.humeur = currentMood;
+            showEntry(entry);
+            cancelEdit();
+            toast("Entrée sauvegardée ✓");
+        } else {
+            toast("Erreur sauvegarde", false);
+        }
+    }
+
+    async function setMood(score) {
+        currentMood = score;
+        document.querySelectorAll(".mood-btn").forEach(btn => {
+            btn.classList.toggle("active", parseInt(btn.dataset.score) === score);
+        });
+        const entry = entries.find(e => e.id === currentEntryId);
+        if (!entry) return;
+        await api({ action:"saveJournalEntry", id: entry.id, date: entry.date, titre: entry.titre, contenu: entry.contenu, humeur: score, tags: entry.tags || "" });
+        entry.humeur = score;
+        toast("Humeur mise à jour");
+    }
+
+    async function deleteEntry() {
+        if (!confirm("Supprimer cette entrée ?")) return;
+        const res = await api({ action:"deleteJournalEntry", id: currentEntryId });
+        if (res.success) {
+            entries = entries.filter(e => e.id !== currentEntryId);
+            currentEntryId = null;
+            renderList();
+            document.getElementById("entryView").classList.add("hidden");
+            document.getElementById("emptyState").classList.remove("hidden");
+            document.getElementById("entriesCount").textContent = entries.length;
+            toast("Entrée supprimée");
+        } else {
+            toast("Erreur suppression", false);
+        }
+    }
+
+    function openGenerateModal() {
+        const today = new Date().toISOString().split("T")[0];
+        document.getElementById("generateDate").value = today;
+        document.getElementById("generateStats").classList.add("hidden");
+        document.getElementById("generateLoader").classList.add("hidden");
+        document.getElementById("btnGenerate").disabled = false;
+        document.getElementById("generateModal").classList.remove("hidden");
+    }
+
+    function openDatePicker() { openGenerateModal(); }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.add("hidden");
+    }
+
+    async function generateEntry() {
+        const date = document.getElementById("generateDate").value;
+        if (!date) { toast("Sélectionnez une date", false); return; }
+
+        document.getElementById("btnGenerate").disabled = true;
+        document.getElementById("generateLoader").classList.remove("hidden");
+        document.getElementById("generateStats").classList.add("hidden");
+
+        try {
+            const res = await api({ action:"generateJournalEntry", date });
+            document.getElementById("generateLoader").classList.add("hidden");
+
+            if (!res.success) { toast("Erreur génération", false); document.getElementById("btnGenerate").disabled = false; return; }
+
+            // Afficher les stats
+            const s = res.stats || {};
+            document.getElementById("statsContent").innerHTML = `
+                <p>📅 ${s.events || 0} événement(s) agenda</p>
+                <p>📧 ${s.mails || 0} email(s) analysé(s)</p>
+                <p>📁 ${s.files || 0} fichier(s) Drive</p>
+                <p>🗒️ ${s.crm || 0} action(s) CRM</p>`;
+            document.getElementById("generateStats").classList.remove("hidden");
+
+            // Sauvegarder automatiquement
+            const session = getSession();
+            const existingEntry = entries.find(e => e.date === date);
+            const saveRes = await api({
+                action: "saveJournalEntry",
+                id: existingEntry ? existingEntry.id : "",
+                date: res.date, titre: res.titre, contenu: res.contenu,
+                humeur: 3, tags: "auto", auteur: session.nom
+            });
+
+            if (saveRes.success) {
+                closeModal("generateModal");
+                await loadEntries();
+                const newEntry = entries.find(e => e.id === saveRes.id || e.date === date);
+                if (newEntry) showEntry(newEntry);
+                toast("Journal généré avec succès ! ✨");
+            }
+        } catch(err) {
+            document.getElementById("generateLoader").classList.add("hidden");
+            document.getElementById("btnGenerate").disabled = false;
+            toast("Erreur : " + err.message, false);
+        }
+    }
+
+    async function installTrigger() {
+        if (!confirm("Activer la génération automatique chaque soir à 20h ?")) return;
+        const res = await api({ action:"installJournalTrigger" });
+        if (res.success) toast("Auto-mode activé ! Journal généré chaque soir à 20h ⚡");
+        else toast("Erreur activation", false);
+    }
+
+    // Init
+    const session = getSession();
+    if (!session.token) { window.location.href = "index.html"; }
+    document.getElementById("userLabel").textContent = session.nom || "";
+    loadEntries();
+    </script>
+</body>
+</html>

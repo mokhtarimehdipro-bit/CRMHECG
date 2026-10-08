@@ -405,6 +405,14 @@ function doPost(e) {
       case 'uploadMMOKVisual':   return handleUploadMMOKVisual(p, ss);
       case 'addSPCEchange':      return handleAddSPCEchange(p, ss);
 
+      // --- ROUTES JOURNAL INTIME ---
+      case 'getJournalEntries':    return handleGetJournalEntries(p, ss);
+      case 'getJournalEntry':      return handleGetJournalEntry(p, ss);
+      case 'generateJournalEntry': return handleGenerateJournalEntry(p, ss);
+      case 'saveJournalEntry':     return handleSaveJournalEntry(p, ss);
+      case 'deleteJournalEntry':   return handleDeleteJournalEntry(p, ss);
+      case 'installJournalTrigger': return handleInstallJournalTrigger(p, ss);
+
       default:
         return createJsonResponse({ success: false, message: "Action inconnue : " + action });
     } // <--- CETTE ACCOLADE FERME LE SWITCH
@@ -10719,4 +10727,333 @@ function corrigerCoefficientsBTSCG() {
     }
   }
   Logger.log(`Terminé : ${changed} coefficient(s) mis à jour.`);
+}
+
+// ==========================================
+// JOURNAL INTIME QUOTIDIEN
+// ==========================================
+
+function _getJournalSheet(ss) {
+  var ws = ss.getSheetByName("Journal");
+  if (!ws) {
+    ws = ss.insertSheet("Journal");
+    ws.appendRow(["ID","Date","Titre","Contenu","HumeurScore","Tags","GeneratedAt","EditedAt","Auteur"]);
+    ws.setFrozenRows(1);
+  }
+  return ws;
+}
+
+function handleGetJournalEntries(p, ss) {
+  var ws = _getJournalSheet(ss);
+  var data = ws.getDataRange().getValues();
+  var entries = [];
+  var auteurFilter = String(p.auteur || "").trim().toLowerCase();
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (!row[0]) continue;
+    var rowAuteur = String(row[8] || "").trim().toLowerCase();
+    if (auteurFilter && rowAuteur && rowAuteur !== auteurFilter) continue;
+    entries.push({
+      id: row[0],
+      date: row[1] instanceof Date ? Utilities.formatDate(row[1], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(row[1]),
+      titre: row[2], contenu: row[3], humeur: row[4], tags: row[5],
+      generatedAt: row[6] instanceof Date ? row[6].toISOString() : String(row[6] || ""),
+      editedAt: row[7] instanceof Date ? row[7].toISOString() : String(row[7] || ""),
+      auteur: row[8]
+    });
+  }
+  entries.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  return createJsonResponse({ success: true, entries: entries });
+}
+
+function handleGetJournalEntry(p, ss) {
+  var ws = _getJournalSheet(ss);
+  var data = ws.getDataRange().getValues();
+  var id = String(p.id || "");
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      var row = data[i];
+      return createJsonResponse({ success: true, entry: {
+        id: row[0],
+        date: row[1] instanceof Date ? Utilities.formatDate(row[1], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(row[1]),
+        titre: row[2], contenu: row[3], humeur: row[4], tags: row[5],
+        generatedAt: row[6] instanceof Date ? row[6].toISOString() : String(row[6] || ""),
+        editedAt: row[7] instanceof Date ? row[7].toISOString() : String(row[7] || ""),
+        auteur: row[8]
+      }});
+    }
+  }
+  return createJsonResponse({ success: false, message: "Entree introuvable." });
+}
+
+function _collectCalendarData(dateStr) {
+  var events = [];
+  try {
+    var d = new Date(dateStr);
+    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+    var end   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+    var cals = CalendarApp.getAllCalendars();
+    for (var c = 0; c < cals.length; c++) {
+      var calEvents = cals[c].getEvents(start, end);
+      for (var ei = 0; ei < calEvents.length; ei++) {
+        var ev = calEvents[ei];
+        var loc = ev.getLocation() || "";
+        events.push({
+          titre: ev.getTitle(),
+          debut: Utilities.formatDate(ev.getStartTime(), Session.getScriptTimeZone(), "HH:mm"),
+          fin:   Utilities.formatDate(ev.getEndTime(),   Session.getScriptTimeZone(), "HH:mm"),
+          lieu:  loc,
+          desc:  (ev.getDescription() || "").substring(0, 200)
+        });
+      }
+    }
+  } catch(err) { Logger.log("Calendar error: " + err); }
+  return events;
+}
+
+function _collectGmailData(dateStr) {
+  var mails = [];
+  try {
+    var after  = dateStr.replace(/-/g,"/");
+    var dNext  = new Date(new Date(dateStr).getTime() + 86400000);
+    var before = Utilities.formatDate(dNext, Session.getScriptTimeZone(), "yyyy/MM/dd");
+    var query  = "after:" + after + " before:" + before;
+    var threads = GmailApp.search(query, 0, 20);
+    var myEmail = Session.getEffectiveUser().getEmail();
+    for (var t = 0; t < threads.length; t++) {
+      var msgs = threads[t].getMessages();
+      for (var m = 0; m < msgs.length; m++) {
+        var msg = msgs[m];
+        var msgDate = msg.getDate();
+        if (msgDate < new Date(dateStr + "T00:00:00") || msgDate > new Date(dateStr + "T23:59:59")) continue;
+        mails.push({
+          sujet: msg.getSubject(),
+          de: msg.getFrom(),
+          a: msg.getTo(),
+          envoye: msg.getFrom().indexOf(myEmail) !== -1
+        });
+        if (mails.length >= 15) break;
+      }
+      if (mails.length >= 15) break;
+    }
+  } catch(err) { Logger.log("Gmail error: " + err); }
+  return mails;
+}
+
+function _collectDriveData(dateStr) {
+  var files = [];
+  try {
+    var result = DriveApp.searchFiles("modifiedDate > '" + dateStr + "T00:00:00'");
+    var limitDate = new Date(dateStr + "T23:59:59");
+    var count = 0;
+    while (result.hasNext() && count < 10) {
+      var f = result.next();
+      if (f.getLastUpdated() <= limitDate) {
+        files.push({ nom: f.getName(), type: f.getMimeType().split("/").pop() });
+        count++;
+      }
+    }
+  } catch(err) { Logger.log("Drive error: " + err); }
+  return files;
+}
+
+function _collectCRMData(dateStr, ss) {
+  var actions = [];
+  try {
+    var ws = ss.getSheetByName("Carnet_route");
+    if (ws) {
+      var data = ws.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var d = data[i][2];
+        if (!d) continue;
+        var dStr = d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d).substring(0,10);
+        if (dStr === dateStr) {
+          actions.push({ type: String(data[i][3]||""), note: String(data[i][4]||"").substring(0,150), auteur: String(data[i][5]||"") });
+        }
+      }
+    }
+  } catch(err) {}
+  return actions;
+}
+
+function _buildJournalNarrative(dateStr, calEvents, gmailMails, driveFiles, crmActions) {
+  var d = new Date(dateStr);
+  var JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  var MOIS  = ["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
+  var MOIS_FR = ["janvier","évrier","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  var nomJour = JOURS[d.getDay()];
+  var jour    = d.getDate();
+  var mois    = MOIS_FR[d.getMonth()];
+  var annee   = d.getFullYear();
+
+  var lines = [];
+  lines.push("## " + nomJour + " " + jour + " " + mois + " " + annee);
+  lines.push("");
+
+  if (calEvents.length > 0) {
+    lines.push("### Agenda du jour");
+    var lieuxPrincipaux = [];
+    for (var ei = 0; ei < calEvents.length; ei++) {
+      var ev = calEvents[ei];
+      var ligne = "- **" + ev.debut + " – " + ev.fin + "** : " + ev.titre;
+      if (ev.lieu) { ligne += " *(📍 " + ev.lieu + ")*"; lieuxPrincipaux.push(ev.lieu); }
+      lines.push(ligne);
+    }
+    lines.push("");
+    if (lieuxPrincipaux.length > 0) {
+      var lieuxUniques = [];
+      for (var li = 0; li < lieuxPrincipaux.length; li++) {
+        if (lieuxUniques.indexOf(lieuxPrincipaux[li]) === -1) lieuxUniques.push(lieuxPrincipaux[li]);
+      }
+      lines.push("Aujourd'hui j'étais " + lieuxUniques.map(function(l){ return "à **" + l + "**"; }).join(", ") + ".");
+      lines.push("");
+    }
+  } else {
+    lines.push("*Aucun événement agenda enregistré pour cette journée.*");
+    lines.push("");
+  }
+
+  if (gmailMails.length > 0) {
+    var envoyes = [], recus = [];
+    for (var mi = 0; mi < gmailMails.length; mi++) {
+      if (gmailMails[mi].envoye) envoyes.push(gmailMails[mi]); else recus.push(gmailMails[mi]);
+    }
+    lines.push("### Activité email");
+    if (envoyes.length > 0) {
+      lines.push("**Emails envoyés (" + envoyes.length + ") :**");
+      for (var ei2 = 0; ei2 < Math.min(5, envoyes.length); ei2++) {
+        lines.push("- " + envoyes[ei2].sujet + (envoyes[ei2].a ? " → *" + envoyes[ei2].a.split(",")[0] + "*" : ""));
+      }
+    }
+    if (recus.length > 0) {
+      lines.push("**Emails reçus (" + recus.length + ") :**");
+      for (var ri = 0; ri < Math.min(5, recus.length); ri++) {
+        lines.push("- " + recus[ri].sujet + " *(de " + recus[ri].de.replace(/<.*>/,"").trim() + ")*");
+      }
+    }
+    lines.push("");
+  }
+
+  if (driveFiles.length > 0) {
+    lines.push("### Fichiers travaillés");
+    for (var fi = 0; fi < Math.min(8, driveFiles.length); fi++) {
+      lines.push("- " + driveFiles[fi].nom);
+    }
+    lines.push("");
+  }
+
+  if (crmActions.length > 0) {
+    lines.push("### Actions CRM");
+    for (var ci = 0; ci < crmActions.length; ci++) {
+      lines.push("- **" + (crmActions[ci].type||"Action") + "** : " + (crmActions[ci].note||"(sans note)"));
+    }
+    lines.push("");
+  }
+
+  lines.push("### Ma note personnelle");
+  lines.push("*Ajoute ici tes pensées, ressentis ou observations de la journée...*");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function handleGenerateJournalEntry(p, ss) {
+  var dateStr = String(p.date || "").trim();
+  if (!dateStr) dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  var calEvents  = _collectCalendarData(dateStr);
+  var gmailMails = _collectGmailData(dateStr);
+  var driveFiles = _collectDriveData(dateStr);
+  var crmActions = _collectCRMData(dateStr, ss);
+  var contenu    = _buildJournalNarrative(dateStr, calEvents, gmailMails, driveFiles, crmActions);
+
+  var d = new Date(dateStr);
+  var JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  var MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  var titre = JOURS[d.getDay()] + " " + d.getDate() + " " + MOIS_FR[d.getMonth()] + " " + d.getFullYear();
+
+  return createJsonResponse({
+    success: true, date: dateStr, titre: titre, contenu: contenu,
+    stats: { events: calEvents.length, mails: gmailMails.length, files: driveFiles.length, crm: crmActions.length }
+  });
+}
+
+function handleSaveJournalEntry(p, ss) {
+  var ws = _getJournalSheet(ss);
+  var id      = String(p.id || "").trim();
+  var date    = String(p.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"));
+  var titre   = String(p.titre || "");
+  var contenu = String(p.contenu || "");
+  var humeur  = p.humeur || 3;
+  var tags    = String(p.tags || "");
+  var auteur  = String(p.auteur || p.nomAuteur || "");
+  var now     = new Date();
+
+  if (id) {
+    var data = ws.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        ws.getRange(i+1, 3).setValue(titre);
+        ws.getRange(i+1, 4).setValue(contenu);
+        ws.getRange(i+1, 5).setValue(humeur);
+        ws.getRange(i+1, 6).setValue(tags);
+        ws.getRange(i+1, 8).setValue(now);
+        return createJsonResponse({ success: true, id: id });
+      }
+    }
+  }
+
+  var newId = "JNL-" + Utilities.getUuid().substring(0,8).toUpperCase();
+  ws.appendRow([newId, date, titre, contenu, humeur, tags, now, "", auteur]);
+  return createJsonResponse({ success: true, id: newId });
+}
+
+function handleDeleteJournalEntry(p, ss) {
+  var ws   = _getJournalSheet(ss);
+  var data = ws.getDataRange().getValues();
+  var id   = String(p.id || "");
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      ws.deleteRow(i + 1);
+      return createJsonResponse({ success: true });
+    }
+  }
+  return createJsonResponse({ success: false, message: "Entree introuvable." });
+}
+
+function handleInstallJournalTrigger(p, ss) {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var t = 0; t < triggers.length; t++) {
+    if (triggers[t].getHandlerFunction() === "autoGenerateDailyJournal") {
+      ScriptApp.deleteTrigger(triggers[t]);
+    }
+  }
+  ScriptApp.newTrigger("autoGenerateDailyJournal")
+    .timeBased().everyDays(1).atHour(20).create();
+  return createJsonResponse({ success: true, message: "Declencheur installe : generation automatique chaque jour a 20h." });
+}
+
+function autoGenerateDailyJournal() {
+  var ss      = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  var ws      = _getJournalSheet(ss);
+  var data    = ws.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var rowDate = data[i][1] instanceof Date
+      ? Utilities.formatDate(data[i][1], Session.getScriptTimeZone(), "yyyy-MM-dd")
+      : String(data[i][1]).substring(0,10);
+    if (rowDate === dateStr) return;
+  }
+  var calEvents  = _collectCalendarData(dateStr);
+  var gmailMails = _collectGmailData(dateStr);
+  var driveFiles = _collectDriveData(dateStr);
+  var crmActions = _collectCRMData(dateStr, ss);
+  var contenu    = _buildJournalNarrative(dateStr, calEvents, gmailMails, driveFiles, crmActions);
+  var d = new Date(dateStr);
+  var JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  var MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  var titre = JOURS[d.getDay()] + " " + d.getDate() + " " + MOIS_FR[d.getMonth()] + " " + d.getFullYear();
+  var newId = "JNL-" + Utilities.getUuid().substring(0,8).toUpperCase();
+  ws.appendRow([newId, dateStr, titre, contenu, 3, "auto", new Date(), "", "Systeme"]);
+  Logger.log("Journal genere automatiquement pour " + dateStr);
 }
