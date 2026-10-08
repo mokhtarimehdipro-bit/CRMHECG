@@ -21,6 +21,7 @@
                             <p id="entAdresse" class="text-sm text-gray-400 font-medium"></p>
                             <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse">✏️</button>
                         </div>
+                        <p id="entDateCrea" class="text-xs text-gray-400 font-medium mt-1 hidden"></p>
                     </div>
                     <div class="flex items-center gap-2">
                         <button onclick="window.close()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200">Fermer la fiche</button>
@@ -347,6 +348,9 @@
                     adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
                     const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
                     document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
+                    const elDateCrea = document.getElementById('entDateCrea');
+                    elDateCrea.innerText = d.info.dateCreation ? '🗓️ Entreprise créée le ' + d.info.dateCreation : '';
+                    elDateCrea.classList.toggle('hidden', !d.info.dateCreation);
 
                     // Badge score — +1 pt/jour tant que l'entreprise a un étudiant Inscrit/Préinscrit
                     const score = d.score || 0;
@@ -522,6 +526,7 @@
                     + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge + '</div>'
                     + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
                     + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
+                    + (c.dateCreation ? '<p class="text-[10px] text-gray-400">🗓️ Contact créé le ' + c.dateCreation + '</p>' : '')
                     + '</div>'
                     + '<div class="flex gap-1 shrink-0">'
                     + '<button data-idx="' + idx + '" data-action="edit" class="text-xs text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50" title="Modifier">✏️</button>'
