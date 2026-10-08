@@ -57,6 +57,10 @@
                             <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Adresse mail domaine</label>
                             <p class="text-sm font-bold text-gray-600"><span id="etuMailHecg" class="font-normal">...</span></p>
                         </div>
+                        <div id="etuDateCreaWrap" class="mb-4 hidden">
+                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Dossier créé le</label>
+                            <p class="text-sm font-bold text-gray-600"><span id="etuDateCrea" class="font-normal"></span></p>
+                        </div>
                         
                         <div class="mb-6">
                             <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Consultation)</label>
@@ -475,6 +479,8 @@
                     document.getElementById('etuMail').href = "mailto:" + p.mail;
                     document.getElementById('etuTel').innerText = p.tel || 'Non renseigné';
                     document.getElementById('etuMailHecg').innerText = p.mailHecg || 'Non renseigné';
+                    document.getElementById('etuDateCrea').innerText = p.dateCreation || '';
+                    document.getElementById('etuDateCreaWrap').classList.toggle('hidden', !p.dateCreation);
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
                     const btnRet = document.getElementById('btnRetirerEnt');
