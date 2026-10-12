@@ -69,6 +69,13 @@
                     <span class="text-[10px] font-bold text-slate-400">pts</span>
                 </div>
 
+                <div class="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm" title="Date de création de l'entreprise (seules les entreprises créées depuis la mise en place de la date en ont une)">
+                    <span class="text-[11px] font-black text-slate-400 whitespace-nowrap">🗓️ Créée du</span>
+                    <input type="date" id="filterCreaDu" onchange="filterPartners()" class="text-xs font-black text-slate-600 outline-none bg-transparent">
+                    <span class="text-[10px] font-bold text-slate-400">au</span>
+                    <input type="date" id="filterCreaAu" onchange="filterPartners()" class="text-xs font-black text-slate-600 outline-none bg-transparent">
+                </div>
+
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
                 <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
@@ -891,6 +898,8 @@
             const scoreMaxVal = document.getElementById('filterScoreMax').value;
             const scoreMin = scoreMinVal !== "" ? parseInt(scoreMinVal, 10) : null;
             const scoreMax = scoreMaxVal !== "" ? parseInt(scoreMaxVal, 10) : null;
+            const creaDu = document.getElementById('filterCreaDu').value; // aaaa-mm-jj
+            const creaAu = document.getElementById('filterCreaAu').value;
 
             let data = allPartners.filter(p => {
                 const nomEntreprise = (p.nom || "").toLowerCase();
@@ -926,6 +935,9 @@
             if (scoreMin !== null) data = data.filter(p => (p.score || 0) >= scoreMin);
             if (scoreMax !== null) data = data.filter(p => (p.score || 0) <= scoreMax);
 
+            // Filtre par période de création (entreprise sans date = antérieure à la fonctionnalité → exclue)
+            if (creaDu || creaAu) data = data.filter(p => !!p.dateCreationKey && (!creaDu || p.dateCreationKey >= creaDu) && (!creaAu || p.dateCreationKey <= creaAu));
+
             lastFilteredPartners = data;
             updatePartnersCounter(data.length, allPartners.length);
             renderPartners(data);
@@ -951,13 +963,13 @@
         }
 
         function downloadCSV(data, filename) {
-            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Date dernier échange;Contenu dernier échange\n";
+            let csv = "ID;Entreprise;Adresse;CP;Ville;Contact Principal;Email;Tel;Email2;Tel2;Alternants;Date création;Date dernier échange;Contenu dernier échange\n";
             data.forEach(p => {
                 const c = p.contacts[0] || {};
                 const altNames = (p.alternants || []).map(a => a.prenom + ' ' + a.nom).join(' / ');
                 const dateEchange = (p.dateEchange || '').replace(/"/g, '""');
                 const contenuEchange = (p.contenuEchange || '').replace(/"/g, '""');
-                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${dateEchange}";"${contenuEchange}"\n`;
+                csv += `"${p.id}";"${p.nom}";"${p.adresse || ""}";"${p.cp || ""}";"${p.ville || ""}";"${c.prenom || ""} ${c.nom || ""}";"${c.email || ""}";"${c.tel || ""}";"${c.mail2 || ""}";"${c.tel2 || ""}";"${altNames}";"${String(p.dateCreation || '').replace(' à ', ' ')}";"${dateEchange}";"${contenuEchange}"\n`;
             });
             apiPost({ action: 'logExport', exportType: 'Partenaires', fileName: filename, mimeType: 'text/csv', content: csv, rowCount: data.length })
                 .catch(e => console.error("Erreur envoi mail export :", e));
