@@ -167,6 +167,14 @@
                 <option value="NEVER">⚪ Jamais</option>
             </select>
 
+            <!-- Date de création de la fiche (période) -->
+            <div class="flex items-center gap-1 px-3 py-2 border-2 border-gray-100 rounded-2xl bg-white" title="Date de création de la fiche (seules les fiches créées depuis la mise en place de la date ont une date)">
+                <span class="text-[11px] font-black text-gray-400 whitespace-nowrap">🗓️ Créé du</span>
+                <input type="date" id="fCreaDu" onchange="renderTable()" class="text-xs font-bold text-gray-600 outline-none bg-transparent">
+                <span class="text-[11px] font-black text-gray-400">au</span>
+                <input type="date" id="fCreaAu" onchange="renderTable()" class="text-xs font-bold text-gray-600 outline-none bg-transparent">
+            </div>
+
             <button onclick="resetFilters()" class="bg-gray-100 text-gray-500 py-3 px-5 rounded-2xl font-black text-[10px] hover:bg-gray-200 transition uppercase tracking-widest">
                 🔄 Reset
             </button>
@@ -690,6 +698,8 @@ async function apiPost(payload) {
                     atelier: document.getElementById('fAtelier').value,
                     cvTech: document.getElementById('fCvTech').value,
                     periode: document.getElementById('fPeriode').value,
+                    creaDu: document.getElementById('fCreaDu').value,
+                    creaAu: document.getElementById('fCreaAu').value,
                     referent: document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "",
                     alumni: showAlumniOnly
                 }));
@@ -716,6 +726,8 @@ async function apiPost(payload) {
                 document.getElementById('fAtelier').value = st.atelier || "";
                 document.getElementById('fCvTech').value = st.cvTech || "";
                 document.getElementById('fPeriode').value = st.periode || "";
+                document.getElementById('fCreaDu').value = st.creaDu || "";
+                document.getElementById('fCreaAu').value = st.creaAu || "";
                 if (document.getElementById('filterReferent') && st.referent) document.getElementById('filterReferent').value = st.referent;
                 MS_FILTER_IDS.forEach(f => updateMsLabel(f));
                 if (st.alumni && !showAlumniOnly) {
@@ -741,6 +753,10 @@ async function apiPost(payload) {
             const fCvTech = document.getElementById('fCvTech').value;
             const fPe = document.getElementById('fPeriode').value;
             const fRef = document.getElementById('filterReferent') ? document.getElementById('filterReferent').value : "";
+            const fCreaDu = document.getElementById('fCreaDu').value; // aaaa-mm-jj
+            const fCreaAu = document.getElementById('fCreaAu').value;
+            // Fiche sans date de création (antérieure à la fonctionnalité) : exclue dès qu'une période est choisie
+            const matchCrea = e => (!fCreaDu && !fCreaAu) || (!!e.dateCreationKey && (!fCreaDu || e.dateCreationKey >= fCreaDu) && (!fCreaAu || e.dateCreationKey <= fCreaAu));
             const now = new Date();
 
             return fullData.filter(e => {
@@ -759,7 +775,7 @@ async function apiPost(payload) {
                     const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                     const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
                     
-                    return isAlumni && matchName && matchCampus && matchReferent;
+                    return isAlumni && matchName && matchCampus && matchReferent && matchCrea(e);
                 }
 
                 // 2. LOGIQUE CLASSIQUE (Quand le bouton Alumni est éteint)
@@ -808,7 +824,7 @@ async function apiPost(payload) {
                 const matchCampus = selCampus.length === 0 || selCampus.includes(e.campus || '');
                 const matchReferent = !fRef || (String(e.refPerso).trim() === fRef.trim());
 
-                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchCvTech && matchPe && matchCampus && matchReferent;
+                return matchTypo && matchName && matchClass && matchStatut && matchAt && matchCvTech && matchPe && matchCampus && matchReferent && matchCrea(e);
             });
         }
         function renderTable() {
@@ -896,6 +912,8 @@ async function apiPost(payload) {
             document.getElementById('fAtelier').value = "";
             document.getElementById('fCvTech').value = "";
             document.getElementById('fPeriode').value = "";
+            document.getElementById('fCreaDu').value = "";
+            document.getElementById('fCreaAu').value = "";
             if(document.getElementById('filterReferent')) document.getElementById('filterReferent').value = "";
 
             if (showAlumniOnly) {
@@ -1232,7 +1250,7 @@ async function envoyerSaveEtu(finalCvUrl) {
 
         async function exportEtudiantsCSV() {
             const NB_ECHANGES = 3;
-            let header = "Nom;Prenom;Mail Etudiant;Mail HECG;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Nombre Echanges";
+            let header = "Nom;Prenom;Mail Etudiant;Mail HECG;Tel Etudiant;Classe;Statut;Typologie;Entreprise;Mail Pro 1;Tel Pro 1;Mail Pro 2;Tel Pro 2;Date creation;Nombre Echanges";
             for (let i = 1; i <= NB_ECHANGES; i++) header += ";Echange " + i + " Date;Echange " + i + " Auteur;Echange " + i + " Contenu";
             let csv = header + "\n";
 
@@ -1256,7 +1274,7 @@ async function envoyerSaveEtu(finalCvUrl) {
                     }
                 }
                 const echanges = carnetMap[e.id] || [];
-                let row = [e.nom, e.prenom, e.mail, e.mailHecg, e.tel, e.classe, e.statut, e.typo, e.entreprise, mail1, tel1, mail2, tel2, echanges.length]
+                let row = [e.nom, e.prenom, e.mail, e.mailHecg, e.tel, e.classe, e.statut, e.typo, e.entreprise, mail1, tel1, mail2, tel2, String(e.dateCreation || "").replace(" à ", " "), echanges.length]
                     .map(csvField).join(";");
                 for (let i = 0; i < NB_ECHANGES; i++) {
                     const ech = echanges[i];
