@@ -516,24 +516,32 @@
                     // AFFICHAGE DES OFFRES PARTAGÉES (Déplacé au bon endroit)
                     const offres = data.offres || [];
                     const postulees = offres.filter(o => o.etat === 'Postulée');
-                    document.getElementById('countPartagees').innerText = `Partagées : ${offres.length}`;
+                    const nbExpirees = offres.filter(o => o.expiree).length;
+                    document.getElementById('countPartagees').innerText = `Partagées : ${offres.length}` + (nbExpirees ? ` (dont ${nbExpirees} expirée${nbExpirees > 1 ? 's' : ''})` : '');
                     document.getElementById('countPostulees').innerText = `Postulées : ${postulees.length}`;
 
                     // Historique alternance
                     renderAlternanceHistory(data.alternanceHistory || []);
 
-                    document.getElementById('listOffresPartagees').innerHTML = offres.map(o => `
-                        <div class="p-5 border border-slate-100 rounded-2xl bg-slate-50 flex justify-between items-center group">
+                    // Toutes les offres partagées sont listées ; celles devenues obsolètes (ou retirées)
+                    // restent visibles, grisées avec un badge « Expirée ».
+                    document.getElementById('listOffresPartagees').innerHTML = offres.map(o => {
+                        let action;
+                        if (o.etat === 'Postulée') action = `<a href="${o.url || '#'}" target="_blank" class="px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black shadow-md hover:bg-green-600 transition">POSTULÉE ✔</a>`;
+                        else if (o.expiree) action = o.url
+                            ? `<a href="${o.url}" target="_blank" class="px-4 py-2 bg-slate-200 text-slate-500 rounded-xl text-[10px] font-black hover:bg-slate-300 transition" title="Cette offre n'est probablement plus disponible">VOIR L'ANNONCE</a>`
+                            : '';
+                        else action = `<button onclick="postuler('${o.id}', '${o.url}')" class="px-4 py-2 bg-[#F26522] text-white rounded-xl text-[10px] font-black shadow-md hover:scale-105 transition">POSTULER</button>`;
+                        return `
+                        <div class="p-5 border border-slate-100 rounded-2xl ${o.expiree ? 'bg-slate-100 opacity-70' : 'bg-slate-50'} flex justify-between items-center group">
                             <div>
-                                <p class="text-sm font-black text-[#1A4E8A]">${o.poste}</p>
-                                <p class="text-[10px] font-bold text-slate-400 uppercase">${o.entreprise}</p>
+                                <p class="text-sm font-black ${o.expiree ? 'text-slate-500' : 'text-[#1A4E8A]'}">${o.poste}
+                                    ${o.expiree ? '<span class="ml-2 px-2 py-0.5 bg-slate-300 text-slate-600 text-[9px] font-black rounded-full uppercase align-middle">Expirée</span>' : ''}</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">${o.entreprise}${o.datePartage ? ' · partagée le ' + o.datePartage : ''}</p>
                             </div>
-                            ${o.etat === 'Postulée' 
-                                ? `<a href="${o.url}" target="_blank" class="px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black shadow-md hover:bg-green-600 transition">POSTULÉE ✔</a>`
-                                : `<button onclick="postuler('${o.id}', '${o.url}')" class="px-4 py-2 bg-[#F26522] text-white rounded-xl text-[10px] font-black shadow-md hover:scale-105 transition">POSTULER</button>`
-                            }
-                        </div>
-                    `).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
+                            ${action}
+                        </div>`;
+                    }).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
                     // GED - chargement documents
                     loadGedEtu();
 
