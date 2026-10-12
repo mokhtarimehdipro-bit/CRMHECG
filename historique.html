@@ -560,7 +560,10 @@
         }
 
         function updateLeaders(logs) {
-            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant'];
+            // Un log compte pour l'étudiant ciblé s'il relève de son suivi (catégories ci-dessous,
+            // y compris candidatures) OU s'il a été écrit par l'étudiant lui-même dans son espace
+            // (rôle "Etudiant" : carnet, création/modif de candidature, clic POSTULER...).
+            const STU_CATS = ['dossier étudiant','carnet de route','note étudiant','note etudiant','suivi candidatures','candidature'];
             const byPerson = {}, byStudent = {};
             logs.forEach(log => {
                 const a = getSafeValue(log, ['auteur']) || 'Inconnu';
@@ -569,10 +572,11 @@
                     byPerson[a] = (byPerson[a] || 0) + 1;
                 }
                 const cat = String(getSafeValue(log, ['catégorie','categorie']) || '').toLowerCase();
-                if (STU_CATS.some(c => cat.includes(c))) {
-                    const cible = getSafeValue(log, ['cible']) || '';
+                const role = String(getSafeValue(log, ['rôle', 'role']) || '').trim().toLowerCase();
+                if (role === 'etudiant' || STU_CATS.some(c => cat.includes(c))) {
+                    const cible = String(getSafeValue(log, ['cible']) || '').trim();
                     if (cible) {
-                        const nom = studentsMap[cible] || cible;
+                        const nom = studentsMap[cible] || studentsMap[cible.toUpperCase()] || cible;
                         byStudent[nom] = (byStudent[nom] || 0) + 1;
                     }
                 }
