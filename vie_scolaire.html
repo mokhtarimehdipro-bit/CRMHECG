@@ -250,7 +250,10 @@
     <div id="section-delegues" class="section">
       <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-black text-[#1A4E8A]">Délégués, PP et Conseils de classe</h1>
-        <button id="btnAddClasse" onclick="openClasseModal(null)" class="btn-orange hidden">+ Ajouter une classe</button>
+        <div class="flex gap-3">
+          <button id="btnRazClasses" onclick="razClasseInfo(null)" class="btn-danger hidden" style="font-size:0.875rem;padding:0.625rem 1rem" title="Vide PP, délégués, suppléants et dates de conseil de toutes les classes (les classes restent dans la liste)">🧹 RAZ toutes les classes</button>
+          <button id="btnAddClasse" onclick="openClasseModal(null)" class="btn-orange hidden">+ Ajouter une classe</button>
+        </div>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table>
@@ -3935,7 +3938,7 @@ async function deleteNote(id){
 // DÉLÉGUÉS & PP
 // ══════════════════════════════════════════════════════════════════
 async function loadDelegues(){
-  if (canWrite('delegues')) show('btnAddClasse');
+  if (canWrite('delegues')) { show('btnAddClasse'); show('btnRazClasses'); }
   loading('deleguesTbody',11);
   const r = await api('getClassesInfo');
   if (!r.success){document.getElementById('deleguesTbody').innerHTML='<tr><td colspan="13" class="text-center text-red-400 py-8">Erreur chargement.</td></tr>';return;}
@@ -3949,8 +3952,23 @@ async function loadDelegues(){
     <td class="text-xs">${fmtDateFr(c.arretS2)}</td>
     <td class="text-xs">${fmtDateFr(c.conseilS2)}</td>
     <td class="text-xs font-bold text-[#1A4E8A]">${c.heureConseilS2||'—'}</td>
-    <td><button onclick='openClasseModal(${JSON.stringify(c)})' class="btn-ghost py-1 text-xs">✏</button></td>
+    <td style="white-space:nowrap"><button onclick='openClasseModal(${JSON.stringify(c)})' class="btn-ghost py-1 text-xs">✏</button>
+      ${canWrite('delegues')?`<button onclick='razClasseInfo(${JSON.stringify(c.classe)})' class="btn-danger py-1 text-xs" title="RAZ de cette classe">🧹</button>`:''}</td>
   </tr>`).join('') || '<tr><td colspan="13" class="text-center text-gray-400 py-8">Aucune classe.</td></tr>';
+}
+
+// RAZ : classe = null → toutes les classes. Vide PP, délégués, suppléants, dates/heures de conseil ;
+// la classe reste dans la liste et les anciennes valeurs sont archivées côté serveur (onglet ARCHIVES).
+async function razClasseInfo(classe){
+  const msg = classe
+    ? `Remettre à zéro la classe « ${classe} » ?\n\nPP, délégués, suppléants et dates/heures de conseil seront vidés (la classe reste dans la liste, les anciennes valeurs sont archivées).`
+    : `Remettre à zéro TOUTES les classes ?\n\nPP, délégués, suppléants et dates/heures de conseil seront vidés pour chaque classe (les classes restent dans la liste, les anciennes valeurs sont archivées).`;
+  if (!confirm(msg)) return;
+  if (!classe && prompt('Pour confirmer la RAZ de toutes les classes, tapez RAZ :') !== 'RAZ') { toast('RAZ annulée', false); return; }
+  const r = await api('razClasseInfo', classe ? { classe } : { toutes: true });
+  if (!r.success){ toast('Erreur : '+r.message,false); return; }
+  toast(classe ? `Classe « ${classe} » remise à zéro ✓` : `${r.nb} classe(s) remise(s) à zéro ✓`);
+  loadDelegues();
 }
 
 function openClasseModal(c){
