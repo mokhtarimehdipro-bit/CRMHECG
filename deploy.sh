@@ -58,8 +58,15 @@ fi
 if [ "$ONLY" != "front" ]; then
   # 5. Apps Script
   clasp push -f
-  clasp deploy -i "$PROD_DEPLOYMENT_ID" -d "$MSG"
-  log "Apps Script : déploiement de production mis à jour"
+  VERSION=$(clasp create-version "$MSG" 2>&1 | grep -o '[0-9]\+' | tail -1)
+  log "Apps Script : version $VERSION créée"
+  if ! OUT=$(clasp update-deployment "$PROD_DEPLOYMENT_ID" -V "$VERSION" -d "$MSG" 2>&1) || echo "$OUT" | grep -qi "only users\|error"; then
+    echo "$OUT"
+    echo "❌ Mise en production refusée par Google : clasp n'est pas connecté avec le compte propriétaire du script."
+    echo "   → une seule fois : clasp login (choisir le compte propriétaire), puis relancer : bash deploy.sh \"$MSG\" back"
+    exit 3
+  fi
+  log "Apps Script : déploiement de production → version $VERSION"
 fi
 
 log "✅ Terminé"
