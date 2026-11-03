@@ -5,6 +5,7 @@
     <title>HECG - Suivi des Alertes</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
     
@@ -132,19 +133,42 @@ async function apiPost(payload) {
         return { success: false, message: "Erreur de connexion" };
     }
 }
-        async function loadAlerts() {
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const ALERTS_PARTNERS_CACHE_KEY = 'hecg_cache_alerts_partners_v1';
+        const ALERTS_STUDENTS_CACHE_KEY = 'hecg_cache_alerts_students_v1';
+        const ALERTS_CACHE_TTL_MS = 90 * 1000;
+
+        async function _fetchAlertsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllAlerts' }) });
+            const d = await res.json();
+            if (d.success) {
+                try { sessionStorage.setItem(ALERTS_PARTNERS_CACHE_KEY, JSON.stringify({ ts: Date.now(), d })); } catch(eStore) {}
+                renderAlerts(d.data);
+            } else {
+                alert("Erreur lors du chargement : " + d.message);
+            }
+            return d;
+        }
+
+        async function loadAlerts(forceRefresh) {
+            if (!forceRefresh) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem(ALERTS_PARTNERS_CACHE_KEY) || 'null');
+                    if (cached && (Date.now() - cached.ts) < ALERTS_CACHE_TTL_MS) {
+                        renderAlerts(cached.d.data);
+                        document.getElementById('loader').classList.add('hidden');
+                        document.getElementById('alertGrid').classList.remove('hidden');
+                        _fetchAlertsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                        return;
+                    }
+                } catch(eCache) {}
+            }
+
             document.getElementById('loader').classList.remove('hidden');
             document.getElementById('alertGrid').classList.add('hidden');
-
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllAlerts' }) });
-                const d = await res.json();
-                
-                if (d.success) {
-                    renderAlerts(d.data);
-                } else {
-                    alert("Erreur lors du chargement : " + d.message);
-                }
+                await _fetchAlertsFresh();
             } catch (e) {
                 console.error(e);
             } finally {
@@ -152,6 +176,14 @@ async function apiPost(payload) {
                 document.getElementById('alertGrid').classList.remove('hidden');
             }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchAlertsFresh().catch(function(e){ console.error(e); });
+                _fetchStudentAlertsFresh().catch(function(e){ console.error(e); });
+            }
+        }, ALERTS_CACHE_TTL_MS);
 
         function renderAlerts(data) {
             const grid = document.getElementById('alertGrid');
@@ -207,7 +239,7 @@ async function apiPost(payload) {
         async function completeAlert(alertId) {
             if(!confirm("Avez-vous bien traité cette alerte ?")) return;
             await apiPost({ action: 'completeAlert', id: alertId });
-            loadAlerts();
+            loadAlerts(true);
         }
 
         async function testAlert(alertId) {
@@ -219,7 +251,7 @@ async function apiPost(payload) {
         async function cancelAlert(alertId) {
             if(!confirm("Voulez-vous vraiment annuler cette alerte de manière définitive ?")) return;
             await apiPost({ action: 'cancelAlert', id: alertId });
-            loadAlerts();
+            loadAlerts(true);
         }
 
         // --- MODIFICATION ---
@@ -251,10 +283,10 @@ async function apiPost(payload) {
             };
 
             await apiPost(payload);
-            
+
             btn.innerText = "Enregistrer"; btn.disabled = false;
             closeEditAlert();
-            loadAlerts();
+            loadAlerts(true);
         }
 
         // ==========================================
@@ -359,11 +391,29 @@ async function apiPost(payload) {
         // ==========================================
         // ALERTES ÉTUDIANTS
         // ==========================================
-        async function loadStudentAlerts() {
+        async function _fetchStudentAlertsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllStudentAlerts' }) });
+            const d = await res.json();
+            if (d.success) {
+                try { sessionStorage.setItem(ALERTS_STUDENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), d })); } catch(eStore) {}
+                renderStudentAlerts(d.data);
+            }
+            return d;
+        }
+
+        async function loadStudentAlerts(forceRefresh) {
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getAllStudentAlerts' }) });
-                const d = await res.json();
-                if (d.success) renderStudentAlerts(d.data);
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(ALERTS_STUDENTS_CACHE_KEY) || 'null');
+                        if (cached && (Date.now() - cached.ts) < ALERTS_CACHE_TTL_MS) {
+                            renderStudentAlerts(cached.d.data);
+                            _fetchStudentAlertsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
+                }
+                await _fetchStudentAlertsFresh();
             } catch(e) { console.error(e); }
         }
 
@@ -408,13 +458,13 @@ async function apiPost(payload) {
         async function completeStudentAlert(id) {
             if(!confirm("Alerte traitée ?")) return;
             await apiPost({ action: 'completeStudentAlert', id: id });
-            loadStudentAlerts();
+            loadStudentAlerts(true);
         }
 
         async function cancelStudentAlert(id) {
             if(!confirm("Annuler cette alerte étudiant ?")) return;
             await apiPost({ action: 'cancelStudentAlert', id: id });
-            loadStudentAlerts();
+            loadStudentAlerts(true);
         }
 
         function openEditStudentAlert(id, date, msg, freq, destinataire) {
@@ -445,7 +495,7 @@ async function apiPost(payload) {
             await apiPost(payload);
             btn.innerText = "Enregistrer"; btn.disabled = false;
             closeEditAlert();
-            if (isStudentAlert) loadStudentAlerts(); else loadAlerts();
+            if (isStudentAlert) loadStudentAlerts(true); else loadAlerts(true);
         };
 
         // Afficher l'onglet Historique pour m.mokhtari@hecg.fr

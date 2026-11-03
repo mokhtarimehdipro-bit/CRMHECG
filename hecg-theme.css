@@ -1,0 +1,297 @@
+/* =============================================================================
+   HECG — Thème global « épuré & moderne »  (v1 — novembre 2026)
+   -----------------------------------------------------------------------------
+   Chargé APRÈS Tailwind dans chaque page. Il ne change PAS le code couleur
+   (bleu #1A4E8A, orange #F26522, sémantiques vert/rouge/ambre/violet) : il
+   affine la typographie, les espacements, les ombres, les rayons, les états
+   (hover / focus / actif) et les transitions.
+   Les sélecteurs sont préfixés par « html body » pour passer devant les
+   utilitaires Tailwind injectés dynamiquement par le CDN.
+   Pour désactiver d'un coup : retirer la balise <link> ou ajouter
+   class="no-theme" sur <body>.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --hecg-blue: #1A4E8A;
+  --hecg-blue-600: #164378;
+  --hecg-blue-700: #123865;
+  --hecg-blue-50: #eef3fa;
+  --hecg-blue-100: #dce7f5;
+  --hecg-orange: #F26522;
+  --hecg-orange-600: #dc5714;
+  --hecg-orange-50: #fff4ed;
+
+  --hecg-ink: #0f1b2d;
+  --hecg-text: #334155;
+  --hecg-muted: #64748b;
+  --hecg-line: #e6ebf2;
+  --hecg-line-soft: #eef2f7;
+  --hecg-bg: #f5f7fb;
+  --hecg-surface: #ffffff;
+
+  --hecg-radius-sm: 10px;
+  --hecg-radius: 14px;
+  --hecg-radius-lg: 20px;
+
+  --hecg-shadow-xs: 0 1px 2px rgba(15, 27, 45, .04);
+  --hecg-shadow-sm: 0 1px 2px rgba(15, 27, 45, .04), 0 2px 8px -2px rgba(15, 27, 45, .06);
+  --hecg-shadow-md: 0 2px 4px rgba(15, 27, 45, .04), 0 8px 24px -6px rgba(15, 27, 45, .10);
+  --hecg-shadow-lg: 0 4px 8px rgba(15, 27, 45, .04), 0 20px 48px -12px rgba(15, 27, 45, .18);
+  --hecg-ring: 0 0 0 4px rgba(26, 78, 138, .14);
+
+  --hecg-ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+/* ---------- Base --------------------------------------------------------- */
+html body:not(.no-theme) {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--hecg-text);
+  text-rendering: optimizeLegibility;
+}
+html body.bg-gray-50:not(.no-theme),
+html body.bg-gray-100:not(.no-theme),
+html body.bg-\[\#F8FAFC\]:not(.no-theme) {
+  background:
+    radial-gradient(1200px 500px at 100% -10%, rgba(26, 78, 138, .05), transparent 60%),
+    radial-gradient(900px 400px at -10% 0%, rgba(242, 101, 34, .035), transparent 60%),
+    var(--hecg-bg);
+  background-attachment: fixed;
+}
+html body:not(.no-theme) main { animation: hecgFadeUp .45s var(--hecg-ease) both; }
+@keyframes hecgFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+html body:not(.no-theme) ::selection { background: rgba(26, 78, 138, .16); color: var(--hecg-ink); }
+
+/* Titres : un peu moins massifs, plus nets */
+html body:not(.no-theme) h1 { letter-spacing: -.025em; }
+html body:not(.no-theme) h2, html body:not(.no-theme) h3 { letter-spacing: -.015em; }
+html body:not(.no-theme) .font-black { font-weight: 800; }
+html body:not(.no-theme) h1.font-black { font-weight: 850; }
+html body:not(.no-theme) .tracking-widest { letter-spacing: .12em; }
+
+/* ---------- Barre de navigation ----------------------------------------- */
+html body:not(.no-theme) > nav:first-of-type,
+html body:not(.no-theme) > nav.sticky {
+  background: rgba(255, 255, 255, .82);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: 0 1px 0 var(--hecg-line), 0 6px 20px -14px rgba(15, 27, 45, .25);
+  padding-top: .65rem;
+  padding-bottom: .65rem;
+}
+html body:not(.no-theme) > nav img.h-10 { height: 2.25rem; transition: transform .2s var(--hecg-ease); }
+html body:not(.no-theme) > nav img.h-10:hover { transform: scale(1.03); }
+html body:not(.no-theme) > nav .border-l-2 {
+  border-left-width: 1px;
+  border-color: var(--hecg-line);
+  gap: .25rem;
+  scrollbar-width: none;
+}
+html body:not(.no-theme) > nav .border-l-2 > * + * { margin-left: 0 !important; }
+html body:not(.no-theme) > nav .border-l-2::-webkit-scrollbar { display: none; }
+html body:not(.no-theme) > nav .border-l-2 > a {
+  padding: .45rem .8rem;
+  border-radius: 999px;
+  border-bottom: 0 !important;
+  white-space: nowrap;
+  font-size: .82rem;
+  transition: background-color .18s var(--hecg-ease), color .18s var(--hecg-ease);
+}
+html body:not(.no-theme) > nav .border-l-2 > a:hover { background: var(--hecg-blue-50); }
+html body:not(.no-theme) > nav .border-l-2 > a.border-b-2 {
+  background: var(--hecg-blue);
+  color: #fff !important;
+  box-shadow: 0 4px 12px -4px rgba(26, 78, 138, .55);
+  padding-bottom: .45rem;
+}
+html body:not(.no-theme) > nav button.border-red-500 {
+  border-width: 1px;
+  border-color: rgba(239, 68, 68, .35);
+  border-radius: 999px;
+  padding: .4rem .95rem;
+  font-size: .8rem;
+  transition: all .18s var(--hecg-ease);
+}
+html body:not(.no-theme) > nav button.border-red-500:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+
+/* ---------- Surfaces / cartes ------------------------------------------- */
+html body:not(.no-theme) .shadow-sm { box-shadow: var(--hecg-shadow-sm); }
+html body:not(.no-theme) .shadow,
+html body:not(.no-theme) .shadow-md { box-shadow: var(--hecg-shadow-md); }
+html body:not(.no-theme) .shadow-lg,
+html body:not(.no-theme) .shadow-xl { box-shadow: var(--hecg-shadow-lg); }
+html body:not(.no-theme) .shadow-2xl { box-shadow: 0 30px 70px -20px rgba(15, 27, 45, .35); }
+
+html body:not(.no-theme) .border-gray-100 { border-color: var(--hecg-line-soft); }
+html body:not(.no-theme) .border-gray-200 { border-color: var(--hecg-line); }
+
+html body:not(.no-theme) .rounded-\[2rem\],
+html body:not(.no-theme) .rounded-\[2\.5rem\],
+html body:not(.no-theme) .rounded-3xl { border-radius: var(--hecg-radius-lg); }
+html body:not(.no-theme) .rounded-2xl { border-radius: 16px; }
+
+/* Cartes KPI / blocs blancs : léger relief au survol */
+html body:not(.no-theme) main .bg-white.rounded-2xl.border,
+html body:not(.no-theme) main .bg-white.rounded-\[2rem\].border,
+html body:not(.no-theme) main .bg-white.rounded-3xl.border {
+  transition: box-shadow .25s var(--hecg-ease), transform .25s var(--hecg-ease), border-color .25s;
+}
+html body:not(.no-theme) main .grid > .rounded-2xl.border:hover {
+  box-shadow: var(--hecg-shadow-md);
+  transform: translateY(-1px);
+}
+
+/* ---------- Boutons ------------------------------------------------------ */
+html body:not(.no-theme) button,
+html body:not(.no-theme) a[class*="bg-"],
+html body:not(.no-theme) .btn-primary,
+html body:not(.no-theme) .btn-ghost {
+  transition: background-color .18s var(--hecg-ease), border-color .18s var(--hecg-ease),
+              color .18s var(--hecg-ease), box-shadow .2s var(--hecg-ease), transform .15s var(--hecg-ease);
+}
+html body:not(.no-theme) button:not(:disabled):active { transform: scale(.98); }
+html body:not(.no-theme) button:focus-visible,
+html body:not(.no-theme) a:focus-visible { outline: none; box-shadow: var(--hecg-ring); }
+html body:not(.no-theme) button:disabled { cursor: not-allowed; opacity: .55; }
+
+/* Boutons « plein » bleu / orange : relief doux + reflet */
+html body:not(.no-theme) button.bg-\[\#1A4E8A\],
+html body:not(.no-theme) a.bg-\[\#1A4E8A\] {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .15) inset, 0 6px 16px -8px rgba(26, 78, 138, .7);
+}
+html body:not(.no-theme) button.bg-\[\#1A4E8A\]:hover,
+html body:not(.no-theme) a.bg-\[\#1A4E8A\]:hover { background-color: var(--hecg-blue-600); }
+html body:not(.no-theme) button.bg-\[\#F26522\],
+html body:not(.no-theme) a.bg-\[\#F26522\] {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 6px 16px -8px rgba(242, 101, 34, .75);
+}
+html body:not(.no-theme) button.bg-\[\#F26522\]:hover,
+html body:not(.no-theme) a.bg-\[\#F26522\]:hover { background-color: var(--hecg-orange-600); }
+/* « hover:scale-105 » trop sautillant → micro-élévation */
+html body:not(.no-theme) .hover\:scale-105:hover { transform: translateY(-1px) scale(1.01); }
+
+/* ---------- Champs de formulaire ---------------------------------------- */
+html body:not(.no-theme) input[type="text"],
+html body:not(.no-theme) input[type="email"],
+html body:not(.no-theme) input[type="tel"],
+html body:not(.no-theme) input[type="number"],
+html body:not(.no-theme) input[type="date"],
+html body:not(.no-theme) input[type="datetime-local"],
+html body:not(.no-theme) input[type="time"],
+html body:not(.no-theme) input[type="month"],
+html body:not(.no-theme) input[type="search"],
+html body:not(.no-theme) input[type="password"],
+html body:not(.no-theme) input[type="url"],
+html body:not(.no-theme) select,
+html body:not(.no-theme) textarea {
+  border-color: var(--hecg-line);
+  transition: border-color .18s var(--hecg-ease), box-shadow .18s var(--hecg-ease), background-color .18s;
+}
+html body:not(.no-theme) input.border-2,
+html body:not(.no-theme) select.border-2,
+html body:not(.no-theme) textarea.border-2 { border-width: 1.5px; }
+html body:not(.no-theme) input:hover:not(:focus):not(:disabled),
+html body:not(.no-theme) select:hover:not(:focus):not(:disabled),
+html body:not(.no-theme) textarea:hover:not(:focus):not(:disabled) { border-color: #cfd8e3; }
+html body:not(.no-theme) input:focus,
+html body:not(.no-theme) select:focus,
+html body:not(.no-theme) textarea:focus {
+  outline: none;
+  border-color: var(--hecg-blue) !important;
+  box-shadow: var(--hecg-ring);
+  background-color: #fff;
+}
+html body:not(.no-theme) ::placeholder { color: #9aa6b6; font-weight: 500; }
+html body:not(.no-theme) select:not([multiple]) {
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .8rem center;
+  padding-right: 2.2rem !important;
+}
+html body:not(.no-theme) input[type="checkbox"],
+html body:not(.no-theme) input[type="radio"] { accent-color: var(--hecg-blue); }
+
+/* Filtres multi-sélection (ms-btn) */
+html body:not(.no-theme) .ms-btn { border-width: 1.5px; border-color: var(--hecg-line); border-radius: 12px; }
+html body:not(.no-theme) .ms-btn:hover { border-color: var(--hecg-blue); background: var(--hecg-blue-50); }
+html body:not(.no-theme) .ms-dropdown {
+  border-color: var(--hecg-line); border-radius: 14px; box-shadow: var(--hecg-shadow-lg);
+  animation: hecgPop .16s var(--hecg-ease) both;
+}
+html body:not(.no-theme) .ms-item:hover { background: var(--hecg-blue-50); }
+@keyframes hecgPop { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ---------- Tableaux ----------------------------------------------------- */
+html body:not(.no-theme) table { border-collapse: separate; border-spacing: 0; }
+html body:not(.no-theme) thead th {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  color: #7b8798;
+  border-bottom: 1px solid var(--hecg-line);
+}
+html body:not(.no-theme) thead.bg-gray-50,
+html body:not(.no-theme) thead tr.bg-gray-50 { background: #f8fafc; }
+html body:not(.no-theme) tbody tr { transition: background-color .15s; }
+html body:not(.no-theme) tbody tr:hover > td { background-color: rgba(26, 78, 138, .035); }
+html body:not(.no-theme) tbody td { border-bottom: 1px solid var(--hecg-line-soft); }
+html body:not(.no-theme) tbody tr:last-child td { border-bottom: 0; }
+html body:not(.no-theme) .divide-y > :not([hidden]) ~ :not([hidden]) { border-color: var(--hecg-line-soft); }
+
+/* ---------- Modales ------------------------------------------------------ */
+html body:not(.no-theme) .fixed.inset-0.bg-black,
+html body:not(.no-theme) .modal-overlay {
+  background-color: rgba(15, 27, 45, .45) !important;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+html body:not(.no-theme) .fixed.inset-0.bg-black > div,
+html body:not(.no-theme) .modal-overlay > .modal-box {
+  box-shadow: 0 30px 80px -20px rgba(15, 27, 45, .45);
+  animation: hecgModal .22s var(--hecg-ease) both;
+}
+@keyframes hecgModal { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* ---------- Badges / pastilles ------------------------------------------ */
+html body:not(.no-theme) .rounded-full.text-\[10px\],
+html body:not(.no-theme) .rounded-full.text-xs { letter-spacing: .01em; }
+
+/* ---------- Toasts ------------------------------------------------------- */
+html body:not(.no-theme) #toastMsg,
+html body:not(.no-theme) #toast {
+  border-radius: 14px;
+  font-weight: 700;
+  box-shadow: 0 18px 40px -12px rgba(15, 27, 45, .35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* ---------- Barres de défilement ---------------------------------------- */
+html body:not(.no-theme) * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+html body:not(.no-theme) ::-webkit-scrollbar { width: 8px; height: 8px; }
+html body:not(.no-theme) ::-webkit-scrollbar-thumb { background: #cfd8e3; border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+html body:not(.no-theme) ::-webkit-scrollbar-thumb:hover { background: #aab6c6; background-clip: padding-box; border: 2px solid transparent; }
+html body:not(.no-theme) ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Liens ------------------------------------------------------- */
+html body:not(.no-theme) main a:not([class]) { color: var(--hecg-blue); text-underline-offset: 3px; }
+
+/* ---------- Accessibilité : mouvement réduit ---------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html body:not(.no-theme) *, html body:not(.no-theme) *::before, html body:not(.no-theme) *::after {
+    animation-duration: .001ms !important; transition-duration: .001ms !important;
+  }
+}
+
+/* ---------- Impression -------------------------------------------------- */
+@media print {
+  html body:not(.no-theme) { background: #fff !important; }
+  html body:not(.no-theme) > nav { display: none !important; }
+}

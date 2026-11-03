@@ -10,6 +10,7 @@
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     </style>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
     
@@ -221,20 +222,52 @@ let chartSortiesInst = null;
 
         const colors = ['#1A4E8A', '#F26522', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
 
-        async function initDashboard() {
-            try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStats' }) });
-                const result = await res.json();
-                
-                document.getElementById('loader').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const STATS_CACHE_KEY = 'hecg_cache_stats_v1';
+        const STATS_CACHE_TTL_MS = 90 * 1000;
 
-                if(result.success) {
-                    rawData = result.data;
-                    applyCampusFilter();
+        function _applyStatsPayload(result) {
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            if(result.success) {
+                rawData = result.data;
+                applyCampusFilter();
+            }
+        }
+
+        async function _fetchStatsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getStats' }) });
+            const result = await res.json();
+            if (result.success) {
+                try { sessionStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ ts: Date.now(), result })); } catch(eStore) {}
+                _applyStatsPayload(result);
+            }
+            return result;
+        }
+
+        async function initDashboard(forceRefresh) {
+            try {
+                if (!forceRefresh) {
+                    try {
+                        const cached = JSON.parse(sessionStorage.getItem(STATS_CACHE_KEY) || 'null');
+                        if (cached && (Date.now() - cached.ts) < STATS_CACHE_TTL_MS) {
+                            _applyStatsPayload(cached.result);
+                            _fetchStatsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                            return;
+                        }
+                    } catch(eCache) {}
                 }
+                await _fetchStatsFresh();
             } catch(e) { console.error("Erreur Stats:", e); }
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchStatsFresh().catch(function(e){ console.error(e); });
+            }
+        }, STATS_CACHE_TTL_MS);
 function applyCampusFilter() {
             const campus = document.getElementById('globalCampusFilter').value;
             const filterByCamp = (arr) => campus === 'all' ? arr : arr.filter(e => String(e.campus).trim() === campus);

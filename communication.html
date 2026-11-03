@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HECG - Communication & Événements</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
     
@@ -378,20 +379,52 @@
             document.getElementById('settingsModal').classList.add('flex');
         }
 
-        async function loadCampaigns() {
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const COM_EVENTS_CACHE_KEY = 'hecg_cache_com_events_v1';
+        const COM_EVENTS_CACHE_TTL_MS = 90 * 1000;
+
+        async function _fetchCampaignsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getComEvents' }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(COM_EVENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                campaigns = data.data;
+                renderCampaigns();
+            }
+            return data;
+        }
+
+        async function loadCampaigns(forceRefresh) {
+            if (!forceRefresh) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem(COM_EVENTS_CACHE_KEY) || 'null');
+                    if (cached && (Date.now() - cached.ts) < COM_EVENTS_CACHE_TTL_MS) {
+                        campaigns = cached.data.data;
+                        renderCampaigns();
+                        document.getElementById('loader').classList.add('hidden');
+                        document.getElementById('campaignsGrid').classList.remove('hidden');
+                        _fetchCampaignsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                        return;
+                    }
+                } catch(eCache) {}
+            }
+
             document.getElementById('loader').classList.remove('hidden');
             document.getElementById('campaignsGrid').classList.add('hidden');
             try {
-                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getComEvents' }) });
-                const data = await res.json();
-                if(data.success) {
-                    campaigns = data.data;
-                    renderCampaigns();
-                }
+                await _fetchCampaignsFresh();
             } catch(e) {}
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('campaignsGrid').classList.remove('hidden');
         }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchCampaignsFresh().catch(function(e){ console.error(e); });
+            }
+        }, COM_EVENTS_CACHE_TTL_MS);
 
         function renderCampaigns() {
     const grid = document.getElementById('campaignsGrid');
@@ -653,7 +686,7 @@
                 const result = await apiPost(payload);
                 if (result.success) {
                     closeModal();
-                    loadCampaigns(); // Recharge la liste
+                    loadCampaigns(true); // Recharge la liste
                 } else {
                     alert("Erreur : " + result.message);
                 }
@@ -671,7 +704,7 @@
     try {
         const result = await apiPost({ action: 'deleteComEvent', id: id });
         if (result.success) {
-            loadCampaigns(); // On recharge la liste pour voir le changement
+            loadCampaigns(true); // On recharge la liste pour voir le changement
         }
     } catch (e) {
         alert("Erreur lors de l'archivage.");
@@ -804,7 +837,7 @@ async function executeFinalSend(cmpId, isTest, emailList) {
         if (!isTest && (res.success || res.partialSuccess)) {
             cmp.statut = "Diffusé";
             renderCampaigns();
-            setTimeout(loadCampaigns, 1000);
+            setTimeout(function(){ loadCampaigns(true); }, 1000);
         }
     } catch(e) {
         alert("Erreur serveur lors de l'envoi : " + (e.message || e));
@@ -922,9 +955,13 @@ async function executeFinalSend(cmpId, isTest, emailList) {
                 const statut = p.isEtudiant ? "Étudiant HECG" : "Prospect";
                 csv += `"${p.nom}";"${p.prenom}";"${p.email}";"${p.tel || ''}";"${statut}";"${p.presence || 'Inscrit'}"\n`;
             });
+            const fileName = "Inscrits_Evenement_" + currentEventId + ".csv";
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
-            link.download = "Inscrits_Evenement_" + currentEventId + ".csv"; link.click();
+            link.download = fileName; link.click();
+
+            apiPost({ action: 'logExport', exportType: 'Participants événement', fileName, mimeType: 'text/csv', content: csv, rowCount: currentParticipants.length })
+                .catch(e => console.error("Erreur envoi mail export :", e));
         }
         function cancelManualMatch(email) {
             document.getElementById('actionBox_' + email).classList.remove('hidden');

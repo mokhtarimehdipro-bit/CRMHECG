@@ -33,7 +33,7 @@ function getPersonnelDataCached_(ss) {
     if (hit) return JSON.parse(hit);
   } catch(e) {}
   var data = getSheetSafe(ss, "Personnel").getDataRange().getValues();
-  try { cache.put(key, JSON.stringify(data), 300); } catch(e) {}
+  try { cache.put(key, JSON.stringify(data), 300); } catch(e) { console.error('cache.put failed (' + key + '): ' + e); }
   return data;
 }
 
@@ -49,8 +49,29 @@ function getCachedJsonResponse_(cacheKey, ttlSeconds, buildFn) {
     if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
   } catch(e) {}
   var response = buildFn();
-  try { cache.put(cacheKey, response.getContent(), ttlSeconds); } catch(e) {}
+  try { cache.put(cacheKey, response.getContent(), ttlSeconds); } catch(e) { console.error('cache.put failed (' + cacheKey + '): ' + e); }
   return response;
+}
+
+/**
+ * Variante "par identifiant" (fiche étudiant, fiche entreprise...) : chaque ID a sa
+ * propre clé de cache versionnée, invalidée individuellement via bumpEntityCacheVersion_
+ * quand cet ID précis est modifié — sans affecter le cache des autres fiches.
+ */
+function getEntityCachedJsonResponse_(namespace, entityId, ttlSeconds, buildFn) {
+  var cache = CacheService.getScriptCache();
+  var verKey = 'everv_' + namespace + '_' + entityId;
+  var ver = cache.get(verKey) || '0';
+  return getCachedJsonResponse_(namespace + '_' + entityId + '_v' + ver, ttlSeconds, buildFn);
+}
+function bumpEntityCacheVersion_(namespace, entityId) {
+  if (!entityId) return;
+  try {
+    var cache = CacheService.getScriptCache();
+    var verKey = 'everv_' + namespace + '_' + entityId;
+    var ver = parseInt(cache.get(verKey) || '0', 10) + 1;
+    cache.put(verKey, String(ver), 21600);
+  } catch(e) {}
 }
 
 // ==========================================
@@ -141,6 +162,8 @@ function doPost(e) {
   try {
     const params = JSON.parse(e.postData.contents);
     const action = params.action;
+    const _t0 = Date.now();
+    console.log('doPost start: ' + action);
     const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
     var p = JSON.parse(e.postData.contents);
 
@@ -148,7 +171,7 @@ function doPost(e) {
     // Actions publiques (lecture / login) qui ne nécessitent pas de token
     var PUBLIC_ACTIONS = new Set([
       'login','publicRegister','getDashboardData','getStats','getPartners','getPartnerHistory',
-      'getPartnerDetails','getAllAlerts','getStudentDetails','getComEvents','getCampagnes',
+      'getPartnerDetails','getAllAlerts','getStudentDetails','getCarnetHistorique','getComEvents','getCampagnes',
       'getEvents','getParticipants','getProspects','getOffres','getHistory','getBilanJournalier',
       'getRapportHebdomadaire','getFormateurs','getPersonnel','getPersonnelList','getPersonnelStaff',
       'getReferentielMatieres','getNotes','getStatsNotes','getClassesInfo','getPlanningTaches','getReleveNotes',
@@ -199,6 +222,12 @@ function doPost(e) {
       params.nomAuteur   = session.nom;
       p.emailAuteur      = session.email;
       p.nomAuteur        = session.nom;
+      // Identité de confiance (issue du token, non falsifiable côté client) —
+      // utilisée par les modules où un étudiant ne doit agir que sur ses propres données.
+      params.refAuteur       = session.ref  || "";
+      p.refAuteur            = session.ref  || "";
+      params.roleAuteurValide = session.role || "";
+      p.roleAuteurValide      = session.role || "";
       if (!params.vieScRole && session.vieScRole) params.vieScRole = session.vieScRole;
       if (!p.vieScRole   && session.vieScRole) p.vieScRole = session.vieScRole;
     }
@@ -208,12 +237,32 @@ function doPost(e) {
       case "login": return handleLogin(params, ss);
       case "getDashboardData": return handleDashboardData(params, ss);
       case "getStats": return handleGetStats(params, ss);
+      // --- TABLEAUX DE SUIVI (Vie scolaire, voir tableaux_suivi.gs) ---
+      case "getTableauxSuivi":        return handleGetTableauxSuivi(params, ss);
+      case "createTableauSuivi":      return handleCreateTableauSuivi(params, ss);
+      case "masquerTableauSuivi":     return handleMasquerTableauSuivi(params, ss);
+      case "getSuiviImportOptions":   return handleGetSuiviImportOptions(params, ss);
+      case "previewSuiviImport":      return handlePreviewSuiviImport(params, ss);
+      case "importSuiviData":         return handleImportSuiviData(params, ss);
+      case "syncTableauSuivi":        return handleSyncTableauSuivi(params, ss);
+      // --- CUBE (analyse croisée dynamique, voir cube.gs) ---
+      case "getCubeData":             return handleGetCubeData(params, ss);
+      case "exportCubeToSheet":       return handleExportCubeToSheet(params, ss);
+
       case "addStudent": return handleAddStudent(params, ss);
       case "updateStudent": return handleUpdateStudent(params, ss);
       case "changeStudentMdp": return handleChangeStudentMdp(params, ss);
       case "deleteStudent": return handleDeleteStudent(params, ss);
       case "getStudentDetails": return handleStudentDetails(params, ss);
+      case "getCarnetHistorique": return handleGetCarnetHistorique(params, ss);
       case "addNote": return handleAddNote(params, ss);
+
+      // --- SUIVI DES CANDIDATURES (onglet TSUIVI, tableau par étudiant) ---
+      case "getSuiviCandidatures":    return handleGetSuiviCandidatures(params, ss);
+      case "addSuiviCandidature":     return handleAddSuiviCandidature(params, ss);
+      case "updateSuiviCandidature":  return handleUpdateSuiviCandidature(params, ss);
+      case "deleteSuiviCandidature":  return handleDeleteSuiviCandidature(params, ss);
+      case "addSuiviCandidatureNote": return handleAddSuiviCandidatureNote(params, ss);
       case "uploadCV": return handleUploadCV(params, ss);
       case "getPartners": return handleGetPartners(params, ss);
       case "getPartnerHistory": return handleGetPartnerHistory(params, ss);
@@ -251,6 +300,7 @@ function doPost(e) {
       case "getOffreNotes": return handleGetOffreNotes(params, ss);
       case "addOffre": return handleAddOffre(params, ss);
       case "updateOffre": return handleUpdateOffre(params, ss);
+      case "bulkUpdateOffres": return handleBulkUpdateOffres(params, ss);
       case "deleteOffre": return handleDeleteOffre(params, ss);
       case "partagerOffre": return handlePartagerOffre(params, ss);
       case "postulerOffre": return handlePostulerOffre(params, ss);
@@ -299,6 +349,7 @@ function doPost(e) {
       case 'getHistory': return handleGetHistory(p, ss);
       case 'getBilanJournalier': return handleGetBilanJournalier(p, ss);
       case 'getRapportHebdomadaire': return handleGetRapportHebdomadaire(p, ss);
+      case 'getActiviteEtudiants': return handleGetActiviteEtudiants(p, ss);
 
       // --- ROUTES MISSIONS ---
       case 'getMissions': return handleGetMissions(params, ss);
@@ -318,6 +369,7 @@ function doPost(e) {
       case 'getHistoriqueStatutNotes':   return handleGetHistoriqueStatutNotes(p, ss);
       case 'getClassesInfo':             return handleGetClassesInfo(p, ss);
       case 'saveClasseInfo':             return handleSaveClasseInfo(p, ss);
+      case 'razClasseInfo':              return handleRazClasseInfo(p, ss);
       case 'getFormateurs':              return handleGetFormateurs(p, ss);
       case 'saveFormateur':              return handleSaveFormateur(p, ss);
       case 'deleteFormateur':            return handleDeleteFormateur(p, ss);
@@ -405,6 +457,9 @@ function doPost(e) {
       case 'uploadMMOKVisual':   return handleUploadMMOKVisual(p, ss);
       case 'addSPCEchange':      return handleAddSPCEchange(p, ss);
 
+      // --- ROUTES EXPORT ---
+      case 'logExport': return handleLogExport(params, ss);
+
       default:
         return createJsonResponse({ success: false, message: "Action inconnue : " + action });
     } // <--- CETTE ACCOLADE FERME LE SWITCH
@@ -484,15 +539,19 @@ function handleDashboardData(params, ss) {
       if (!dernierEchangeMap[etuId] || dateEch > dernierEchangeMap[etuId]) dernierEchangeMap[etuId] = dateEch;
     }
     const list = [];
+    const colDateCrea = (dE[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
     for (let k = 1; k < dE.length; k++) {
       if (role === "Administrateur" || role === "Communication" || role === "Superviseur") {
+        const vCrea = colDateCrea >= 0 ? dE[k][colDateCrea] : "";
         list.push({
           id: dE[k][0], nom: dE[k][2], prenom: dE[k][3], mail: dE[k][4], tel: dE[k][5], cv: dE[k][6], id_ent: dE[k][11], id_cont: dE[k][12],
           statut: dE[k][13], classe: dE[k][14], faitCV: dE[k][15], faitLI: dE[k][16], entree: dE[k][17], sortie: dE[k][18],
           motif: dE[k][19], typo: dE[k][20], entreprise: dE[k][21],
           campus: dE[k][22],
           cvTech: String(dE[k][24] || ""),  // Col Y
-          refPerso: dE[k][7], dernierEchange: dernierEchangeMap[dE[k][0]] || null
+          mailHecg: String(dE[k][26] || ""),  // Col AA
+          refPerso: dE[k][7], dernierEchange: dernierEchangeMap[dE[k][0]] || null,
+          dateCreation: _formatDateCreation_(vCrea), dateCreationKey: _dateCreationKey_(vCrea)
         });
       }
     }
@@ -500,6 +559,115 @@ function handleDashboardData(params, ss) {
     for(let r=1; r<dP.length; r++) if(dP[r][0]) referents.push({ ref: dP[r][0], nom: dP[r][2] + " " + dP[r][1] });
     return createJsonResponse({ success: true, data: list, referents: referents });
   });
+}
+
+/**
+ * Historique complet du carnet d'échange, groupé par étudiant (le plus récent en premier).
+ * Utilisé notamment par l'export étudiants pour joindre les derniers échanges.
+ */
+function handleGetCarnetHistorique(params, ss) {
+  return getCachedJsonResponse_('carnet_hist_v1', 20, function() {
+    const dC = getSheetSafe(ss, "Carnet_route").getDataRange().getValues();
+    const map = {};
+    for (let i = 1; i < dC.length; i++) {
+      const etuId = String(dC[i][0] || "").trim();
+      if (!etuId) continue;
+      if (!map[etuId]) map[etuId] = [];
+      map[etuId].push({ auteur: String(dC[i][1] || ""), date: dC[i][2], texte: String(dC[i][3] || "") });
+    }
+    for (const id in map) map[id].sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+    return createJsonResponse({ success: true, data: map });
+  });
+}
+
+/**
+ * Point d'entrée générique appelé par toutes les fonctions d'export du front (CSV/Excel) :
+ * envoie une copie du fichier exporté à m.mokhtari@hecg.fr avec l'identité de l'auteur.
+ * L'action n'est pas publique afin que emailAuteur/nomAuteur proviennent de la session validée.
+ */
+function handleLogExport(params, ss) {
+  try {
+    const exportType = String(params.exportType || "Export").trim();
+    const fileName = String(params.fileName || (exportType.replace(/\s+/g, '_') + '.csv')).trim();
+    const mimeType = String(params.mimeType || "text/csv");
+    const content = String(params.content || "");
+    const rowCount = params.rowCount ? String(params.rowCount) : "";
+    const auteur = String(params.nomAuteur || params.idAuteur || "Utilisateur inconnu").trim();
+    const emailAuteur = String(params.emailAuteur || "").trim();
+    const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+
+    const blob = Utilities.newBlob(content, mimeType, fileName);
+
+    const htmlBody = `
+      <p>Un export a été effectué sur le CRM HECG.</p>
+      <ul>
+        <li><b>Type d'export :</b> ${exportType}</li>
+        <li><b>Effectué par :</b> ${auteur}${emailAuteur ? " (" + emailAuteur + ")" : ""}</li>
+        <li><b>Date :</b> ${dateStr}</li>
+        ${rowCount ? "<li><b>Nombre de lignes :</b> " + rowCount + "</li>" : ""}
+        <li><b>Fichier :</b> ${fileName}</li>
+      </ul>
+      <p>Le fichier exporté est joint à cet e-mail.</p>`;
+
+    MailApp.sendEmail({
+      to: "m.mokhtari@hecg.fr",
+      subject: "[CRM HECG] Export " + exportType + " — " + auteur,
+      htmlBody: htmlBody,
+      attachments: [blob]
+    });
+
+    return createJsonResponse({ success: true });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur envoi export : " + e.toString() });
+  }
+}
+
+// --- DATE DE CRÉATION (ETUDIANTS / PARTENARIAT) ---
+// Colonne repérée par son en-tête (créée en fin de feuille si absente) : la date est
+// posée une seule fois à la création, jamais réécrite par le CRM (modifiable sur Sheet).
+const DATE_CREATION_HEADER = "Date création";
+const DATE_CREATION_FORMAT = "dd/MM/yyyy HH:mm:ss";
+
+function _getDateCreationCol_(ws) {
+  const lastCol = Math.max(ws.getLastColumn(), 1);
+  const headers = ws.getRange(1, 1, 1, lastCol).getValues()[0];
+  for (let c = 0; c < headers.length; c++) {
+    if (String(headers[c] || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase()) return c + 1;
+  }
+  const col = lastCol + 1;
+  if (ws.getMaxColumns() < col) ws.insertColumnsAfter(ws.getMaxColumns(), col - ws.getMaxColumns());
+  ws.getRange(1, col).setValue(DATE_CREATION_HEADER);
+  ws.getRange(2, col, Math.max(ws.getMaxRows() - 1, 1), 1).setNumberFormat(DATE_CREATION_FORMAT);
+  return col;
+}
+
+// Place la date de création dans la ligne avant appendRow (écriture atomique, pas de setValue après coup)
+function _withDateCreation_(ws, row, date) {
+  const col = _getDateCreationCol_(ws);
+  while (row.length < col) row.push("");
+  row[col - 1] = date || new Date();
+  return row;
+}
+
+// Date de création → objet Date (accepte aussi un texte « jj/mm/aaaa [hh:mm[:ss]] » saisi sur Sheet)
+function _dateCreationToDate_(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+}
+
+// Clé « aaaa-mm-jj » pour filtrer par période côté front (comparaison de chaînes)
+function _dateCreationKey_(v) {
+  const d = _dateCreationToDate_(v);
+  return d ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : "";
+}
+
+function _formatDateCreation_(v) {
+  if (!v) return "";
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "dd/MM/yyyy 'à' HH:mm:ss");
+  return String(v).trim();
 }
 
 function handleAddStudent(p, ss) {
@@ -528,12 +696,17 @@ function handleAddStudent(p, ss) {
     p.sortie, 
     p.motifSortie, 
     typoAAppliquer,    // Typologie propre
-    p.entreprise || "", 
-    p.campus || ""
+    p.entreprise || "",
+    p.campus || "",
+    "",                // X : (non utilisé)
+    "",                // Y : CV Tech (non géré à la création)
+    "",                // Z : (non utilisé)
+    p.mailHecg || ""   // AA : Mail HECG (adresse mail domaine)
   ];
-  ws.appendRow(newRow); 
+  ws.appendRow(_withDateCreation_(ws, newRow));
 
   logAction(p.idAuteur, p.roleAuteur, "Création", "Dossier étudiant", id, "A créé la fiche de " + p.prenom);
+  if (p.id_ent) { _invalidatePartnersCache_(); _invalidatePartnerDetailsCache_(p.id_ent); } // affecte le compteur d'alternants de l'entreprise
 
   return createJsonResponse({ success: true });
 }
@@ -561,6 +734,8 @@ function handleDeleteStudent(p, ss) {
           logAction(p.idAuteur, p.roleAuteur, "Suppression", "Dossier étudiant", targetId, logDetail);
           notifierSuppression(p.idAuteur, p.roleAuteur, "Étudiant supprimé", nomEtu.trim() + " — Classe : " + classeEtu + " — Motif : " + (p.motif || "Non précisé"));
         } catch(eLog) {}
+        _invalidatePartnersCache_();
+        if (d[i][11]) _invalidatePartnerDetailsCache_(d[i][11]);
         return createJsonResponse({ success: true });
       }
     }
@@ -570,13 +745,19 @@ function handleDeleteStudent(p, ss) {
   }
 }
 
-function handleStudentDetails(params, ss) { 
-  const id = params.targetId; 
-  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues(); 
+function handleStudentDetails(params, ss) {
+  const id = params.targetId;
+  const isEtudiant = params.requesterRole === "Etudiant";
+  // Cache par étudiant (20s) : cette fiche lit ~6 feuilles complètes à chaque ouverture,
+  // ce qui rendait l'ouverture directe d'un dossier lente. Clé incluant le rôle demandeur
+  // car la visibilité des notes diffère (isEtudiant filtre les notes non visibles).
+  return getEntityCachedJsonResponse_('student_details', id + '_' + (isEtudiant ? 'etu' : 'staff'), 20, function() {
+  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
   let prof = null;
+  const colDateCrea = (dE[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
   for (let i = 1; i < dE.length; i++) {
     if (String(dE[i][0]).trim() === id) { 
-      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || "") };
+      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || ""), mailHecg: String(dE[i][26] || "").trim(), dateCreation: colDateCrea >= 0 ? _formatDateCreation_(dE[i][colDateCrea]) : "" };
       break;
     }
   }
@@ -592,23 +773,40 @@ function handleStudentDetails(params, ss) {
     } catch(eRef) {}
   }
   const idUpper = String(id).trim().toUpperCase();
-  const isEtudiant = params.requesterRole === "Etudiant";
   const allNotes = getSheetSafe(ss, "Carnet_route").getDataRange().getValues().filter(r => String(r[0]).trim().toUpperCase() === idUpper);
   const notes = allNotes
     .filter(r => !isEtudiant || r[4] !== false)
     .map(r => ({ auteur: r[1], date: r[2], texte: r[3], visible: r[4] !== false }));
 
-  // --- NOUVEAU : RÉCUPÉRATION DES OFFRES PARTAGÉES ---
+  // --- RÉCUPÉRATION DES OFFRES PARTAGÉES ---
   const dP = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
   const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
   const offersMap = {};
   for(let j=1; j<dO.length; j++) {
-    offersMap[String(dO[j][0])] = { poste: dO[j][14], ent: dO[j][4], url: dO[j][1], qualite: dO[j][13] };
+    // Colonne J (index 9) = Qualité (Vérifiée/À qualifier/Obsolète) ; colonne B = lien à jour.
+    offersMap[String(dO[j][0]).trim()] = { poste: dO[j][14], ent: dO[j][4], url: dO[j][1], qualite: dO[j][9] };
   }
-  const studentOffers = dP.filter(r => String(r[0]) === id).map(r => {
-    const info = offersMap[String(r[1])] || {};
-    return { id: r[1], poste: info.poste || "Inconnu", entreprise: info.ent || "-", url: info.url, etat: r[3], qualite: info.qualite };
-  }).filter(o => o.qualite !== "Obsolète"); // Cache les périmées
+  // Toutes les offres partagées sont affichées (y compris obsolètes, signalées « expirées ») :
+  // les masquer faisait disparaître du dossier des offres annoncées dans la relance hebdo.
+  // Le rattachement passe par _resoudreEtuPartage_ (ID insensible à la casse + partages « EXT-mail »).
+  const idxEtu = _indexEtudiantsPourPartages_(dE);
+  const idNorm = String(id).trim().toUpperCase();
+  const vus = {};
+  const studentOffers = [];
+  for (let s = 1; s < dP.length; s++) {
+    if (String(_resoudreEtuPartage_(idxEtu, dP[s][0]) || "").toUpperCase() !== idNorm) continue;
+    const idOffre = String(dP[s][1] || "").trim();
+    if (!idOffre || vus[idOffre]) continue;
+    vus[idOffre] = true;
+    const info = offersMap[idOffre];
+    studentOffers.push({
+      id: idOffre, poste: info ? (info.poste || "Offre sans intitulé") : "Offre retirée", entreprise: info ? (info.ent || "-") : "-",
+      url: info ? info.url : "", etat: dP[s][3], qualite: info ? info.qualite : "",
+      expiree: !info || String(info.qualite || "").trim() === "Obsolète",
+      datePartage: dP[s][2] instanceof Date ? Utilities.formatDate(dP[s][2], Session.getScriptTimeZone(), "dd/MM/yyyy") : ""
+    });
+  }
+  studentOffers.sort((a, b) => (a.expiree === b.expiree) ? 0 : (a.expiree ? 1 : -1)); // offres actives en premier
 
   // Historique entreprises depuis ANCIENS_ALTERNANTS
   const alternanceHistory = [];
@@ -659,52 +857,162 @@ function handleStudentDetails(params, ss) {
     }
   } catch(eH) {}
 
-  return createJsonResponse({ success: true, profil: prof, notes: notes.reverse(), offres: studentOffers, alternanceHistory: alternanceHistory });
+  // --- Suivi des candidatures (onglet TSUIVI) ---
+  let suiviCandidatures = [];
+  try {
+    const dTS = _getTsuiviSheet(ss).getDataRange().getValues();
+    for (let t = 1; t < dTS.length; t++) {
+      if (String(dTS[t][0] || "").trim() !== String(id).trim()) continue;
+      suiviCandidatures.push(_tsRowToObj(dTS[t], t + 1));
+    }
+    suiviCandidatures.sort((a, b) => {
+      const da = a.priseContact || "0", db = b.priseContact || "0";
+      if (da !== db) return da < db ? 1 : -1;
+      return b._row - a._row;
+    });
+  } catch (eTS) { /* onglet TSUIVI absent : section masquée côté front */ }
+
+  return createJsonResponse({ success: true, profil: prof, notes: notes.reverse(), offres: studentOffers, alternanceHistory: alternanceHistory, suiviCandidatures: suiviCandidatures, suiviTypes: TSUIVI_TYPES_CANDIDATURE });
+  });
 }
+
+// --- RATTACHEMENT DES PARTAGES D'OFFRES (onglet PARTAGES, col A) À UN ÉTUDIANT ---
+// La col A contient normalement l'ID étudiant, mais un partage « liste de mails » enregistre
+// « EXT-<mail> » quand le mail n'a pas été reconnu au moment du partage (mail modifié depuis,
+// mail HECG utilisé, casse différente...). On résout donc : ID (insensible à la casse), puis mail.
+function _indexEtudiantsPourPartages_(dataEtu) {
+  const idx = { byId: {}, byMail: {} };
+  for (let i = 1; i < dataEtu.length; i++) {
+    const id = String(dataEtu[i][0] || "").trim();
+    if (!id) continue;
+    idx.byId[id.toUpperCase()] = id;
+    [dataEtu[i][4], dataEtu[i][26]].forEach(function(m) {
+      const mail = String(m || "").trim().toLowerCase();
+      if (mail.indexOf("@") > 0 && !idx.byMail[mail]) idx.byMail[mail] = id;
+    });
+  }
+  return idx;
+}
+
+// Retourne l'ID étudiant réel d'une valeur de la col A de PARTAGES, ou null si orphelin
+function _resoudreEtuPartage_(idx, raw) {
+  const v = String(raw || "").trim();
+  if (!v) return null;
+  if (idx.byId[v.toUpperCase()]) return idx.byId[v.toUpperCase()];
+  const mail = v.replace(/^EXT-/i, "").trim().toLowerCase();
+  if (mail.indexOf("@") > 0 && idx.byMail[mail]) return idx.byMail[mail];
+  return null;
+}
+
+/**
+ * CONTRÔLE + RÉPARATION RÉTROACTIVE DES PARTAGES D'OFFRES
+ * À exécuter depuis l'éditeur Apps Script (▶ Exécuter). Par défaut : contrôle seul (aucune écriture).
+ *   reparerPartagesOffres()       → rapport dans les journaux d'exécution + mail à m.mokhtari@hecg.fr
+ *   reparerPartagesOffresAppliquer() → applique les corrections :
+ *     - col A « EXT-mail » / casse différente → remplacée par le vrai ID étudiant ;
+ *     - doublons (même étudiant + même offre) supprimés (on garde « Postulée » si présent) ;
+ *     - col N (État) des offres partagées remise à « Partagée » si elle avait été écrasée.
+ * Les partages orphelins (étudiant ou offre introuvable) ne sont jamais supprimés : ils sont listés.
+ */
+function reparerPartagesOffres(appliquer) {
+  appliquer = appliquer === true;
+  const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  const wsP = getSheetSafe(ss, "PARTAGES");
+  const dP = wsP.getDataRange().getValues();
+  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+  const wsO = getSheetSafe(ss, "OFFRES");
+  const dO = wsO.getDataRange().getValues();
+  const idx = _indexEtudiantsPourPartages_(dE);
+  const offreRow = {};
+  for (let j = 1; j < dO.length; j++) { const k = String(dO[j][0] || "").trim(); if (k) offreRow[k] = j; }
+
+  const rapport = { total: 0, ok: 0, idCorrige: [], doublons: 0, etuOrphelin: [], offreOrpheline: [], expirees: 0, etatRemis: 0 };
+  const garde = {};          // "ID|offre" → index de la ligne conservée
+  const aSupprimer = [];     // index de lignes (doublons)
+  const nouveauxIds = {};    // index ligne → ID corrigé
+  const etudiantsTouches = {};
+
+  for (let i = 1; i < dP.length; i++) {
+    const raw = String(dP[i][0] || "").trim(), idOffre = String(dP[i][1] || "").trim();
+    if (!raw && !idOffre) continue;
+    rapport.total++;
+    const idEtu = _resoudreEtuPartage_(idx, raw);
+    if (!idEtu) { rapport.etuOrphelin.push("Ligne " + (i + 1) + " : « " + raw + " » → offre " + idOffre); continue; }
+    if (offreRow[idOffre] === undefined) rapport.offreOrpheline.push("Ligne " + (i + 1) + " : " + idEtu + " → offre " + idOffre + " (introuvable dans OFFRES)");
+    else if (String(dO[offreRow[idOffre]][9] || "").trim() === "Obsolète") rapport.expirees++;
+    if (raw !== idEtu) { nouveauxIds[i] = idEtu; rapport.idCorrige.push("Ligne " + (i + 1) + " : « " + raw + " » → " + idEtu); }
+    etudiantsTouches[idEtu] = true;
+    const key = idEtu.toUpperCase() + "|" + idOffre;
+    if (garde[key] !== undefined) {
+      rapport.doublons++;
+      // On garde la ligne « Postulée » si l'une des deux l'est
+      if (String(dP[i][3]).trim() === "Postulée" && String(dP[garde[key]][3]).trim() !== "Postulée") { aSupprimer.push(garde[key]); garde[key] = i; }
+      else aSupprimer.push(i);
+      continue;
+    }
+    garde[key] = i;
+    rapport.ok++;
+  }
+
+  // Offres partagées dont l'État (col N) n'est plus « Partagée »
+  const offresAvecPartage = {};
+  Object.keys(garde).forEach(function(k) { offresAvecPartage[k.split("|")[1]] = true; });
+  const etatsARemettre = Object.keys(offresAvecPartage).filter(function(o) {
+    return offreRow[o] !== undefined && String(dO[offreRow[o]][13] || "").indexOf("Partagée") === -1;
+  });
+  rapport.etatRemis = etatsARemettre.length;
+
+  if (appliquer) {
+    Object.keys(nouveauxIds).forEach(function(i) { wsP.getRange(+i + 1, 1).setValue(nouveauxIds[i]); });
+    aSupprimer.sort(function(a, b) { return b - a; }).forEach(function(i) { wsP.deleteRow(i + 1); });
+    etatsARemettre.forEach(function(o) { wsO.getRange(offreRow[o] + 1, 14).setValue("Partagée"); });
+    Object.keys(etudiantsTouches).forEach(function(id) { _invalidateStudentDetailsCache_(id); });
+    _invalidateOffresCache_();
+  }
+
+  const lignes = [
+    (appliquer ? "RÉPARATION APPLIQUÉE" : "CONTRÔLE (aucune modification)") + " — partages d'offres",
+    "Partages analysés : " + rapport.total,
+    "Partages valides (affichés dans un dossier étudiant) : " + rapport.ok + " — dont " + rapport.expirees + " sur des offres obsolètes (affichées « expirées »)",
+    "IDs étudiants " + (appliquer ? "corrigés" : "à corriger") + " (EXT-mail / casse) : " + rapport.idCorrige.length,
+    "Doublons " + (appliquer ? "supprimés" : "à supprimer") + " : " + rapport.doublons,
+    "Offres partagées dont l'État " + (appliquer ? "a été remis" : "est à remettre") + " à « Partagée » : " + rapport.etatRemis,
+    "Partages orphelins — étudiant introuvable : " + rapport.etuOrphelin.length,
+    "Partages orphelins — offre introuvable : " + rapport.offreOrpheline.length,
+    ""
+  ].concat(rapport.idCorrige.length ? ["— IDs corrigés —"].concat(rapport.idCorrige) : [])
+   .concat(rapport.etuOrphelin.length ? ["— Étudiant introuvable (non modifiés) —"].concat(rapport.etuOrphelin) : [])
+   .concat(rapport.offreOrpheline.length ? ["— Offre introuvable (non modifiés) —"].concat(rapport.offreOrpheline) : []);
+  const texte = lignes.join("\n");
+  Logger.log(texte);
+  try { MailApp.sendEmail("m.mokhtari@hecg.fr", "[CRM] " + (appliquer ? "Réparation" : "Contrôle") + " des partages d'offres", texte); } catch (eMail) { Logger.log("Mail rapport non envoyé : " + eMail); }
+  return rapport;
+}
+function reparerPartagesOffresAppliquer() { return reparerPartagesOffres(true); }
+
+// Invalide le cache de handleStudentDetails pour un étudiant précis (les deux variantes
+// de clé, vue staff et vue étudiant, puisqu'on ne sait pas laquelle est en cache).
+function _invalidateStudentDetailsCache_(id) {
+  if (!id) return;
+  bumpEntityCacheVersion_('student_details', id + '_etu');
+  bumpEntityCacheVersion_('student_details', id + '_staff');
+}
+
+// NB : les écritures d'un étudiant dans son propre dossier (carnet de route, suivi de
+// candidatures...) ne déclenchent plus d'alerte mail (décision direction — trop de bruit).
+// Chaque écriture reste tracée via logAction() dans HISTORIQUE ; elle est visible dans
+// l'onglet Historique (panneau "Activité étudiants") et resynthétisée chaque jour dans
+// le rapport Top 10 envoyé à polepedagogique@hecg.fr — voir sendRapportActiviteEtudiantsAuto().
 
 function handleAddNote(p, ss) {
   const visibleEtudiant = p.visibleEtudiant !== false;
   getSheetSafe(ss, "Carnet_route").appendRow([p.targetId, p.idAuteur || "Inconnu", new Date(), p.contenu, visibleEtudiant]);
   const apercu = p.contenu ? String(p.contenu).substring(0, 80) + (p.contenu.length > 80 ? "…" : "") : "";
   logAction(p.idAuteur, p.roleAuteur, "Création", "Carnet de route", p.targetId, "Note ajoutée : « " + apercu + " »");
+  _invalidateStudentDetailsCache_(p.targetId);
 
-  // Si c'est l'étudiant lui-même qui écrit, on notifie son référent par mail
-  if (p.isStudentNote) {
-    try {
-      const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-      const dP = getPersonnelDataCached_(ss);
-      let etuRow = null;
-      for (let i = 1; i < dE.length; i++) {
-        if (String(dE[i][0]).trim() === String(p.targetId).trim()) { etuRow = dE[i]; break; }
-      }
-      if (etuRow) {
-        const prenomEtu = etuRow[3], nomEtu = etuRow[2];
-        const refPerso = String(etuRow[7] || "").trim();
-        let mailRef = null;
-        for (let j = 1; j < dP.length; j++) {
-          const staffId = String(dP[j][0] || "").trim();
-          const staffNom = (String(dP[j][2] || "") + " " + String(dP[j][1] || "")).trim();
-          const staffEmail = String(dP[j][6] || "").trim();
-          if ((staffId === refPerso || staffNom.toLowerCase() === refPerso.toLowerCase()) && staffEmail.includes("@")) {
-            mailRef = staffEmail; break;
-          }
-        }
-        if (mailRef) {
-          const subject = "[CRM HECG] Nouvelle mise à jour de " + prenomEtu + " " + nomEtu;
-          const body = `<div style="font-family:Arial,sans-serif;padding:20px;border:1px solid #eee;border-radius:10px;">
-            <h2 style="color:#1A4E8A;">📝 Mise à jour étudiant</h2>
-            <p><b>${prenomEtu} ${nomEtu}</b> a ajouté une note dans son carnet de route :</p>
-            <div style="background:#f9f9f9;padding:15px;border-left:4px solid #F26522;border-radius:5px;margin:15px 0;">
-              ${String(p.contenu).replace(/\n/g,'<br>')}
-            </div>
-            <p style="font-size:11px;color:#999;">Consultez le dossier étudiant dans le CRM HECG pour plus de détails.</p>
-          </div>`;
-          GmailApp.sendEmail(mailRef, subject, "", { htmlBody: body });
-          try { logMailDetail(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), { auteur: p.idAuteur || "Étudiant", categorie: "Échange étudiant", sousCat: "Carnet de route — notif. référent", objet: subject, destinataires: [mailRef], corps: body, sourceId: p.targetId || "" }); } catch(eLog) {}
-        }
-      }
-    } catch(eNotif) { console.error("Erreur notif référent : " + eNotif.toString()); }
-  }
+  // Note : plus d'alerte mail au référent quand c'est l'étudiant qui écrit (voir
+  // logAction ci-dessus + panneau "Activité étudiants" de l'Historique).
 
   // Si c'est un responsable qui écrit ET que la note est visible par l'étudiant, on notifie l'étudiant
   if (!p.isStudentNote && visibleEtudiant) {
@@ -755,7 +1063,276 @@ function handleAddNote(p, ss) {
   return createJsonResponse({ success: true });
 }
 
-function handleUploadCV(p, ss) { 
+// ==========================================
+// SUIVI DES CANDIDATURES — onglet TSUIVI
+// Un tableau de suivi de recherche d'alternance par étudiant.
+// L'étudiant remplit / met à jour ses lignes ; les référents suivent.
+// Colonnes : A id_etu | B prise de contact | C type candidature | D société
+//   | E activité | F interlocuteur | G fonction/poste | H coordonnées
+//   | I suivi & relances (journal JSON) | J réponses/remarques (journal JSON)
+//   | K déplacement physique (Oui/Non) | L id_ligne | M créée le | N MAJ le | O créée par
+// ==========================================
+var TSUIVI_TYPES_CANDIDATURE = ["Spontanée", "Offre reçu HECG", "Offre internet", "Bouche à oreille"];
+
+function _getTsuiviSheet(ss) {
+  var ws = ss.getSheetByName("TSUIVI") || ss.getSheetByName("Tsuivi") || ss.getSheetByName("tsuivi");
+  if (!ws) throw new Error("Onglet 'TSUIVI' introuvable.");
+  // Garantit les colonnes techniques L–O (id_ligne, dates, auteur) même si le
+  // tableau créé à la main s'arrête à la colonne K.
+  if (ws.getMaxColumns() < 15) ws.insertColumnsAfter(ws.getMaxColumns(), 15 - ws.getMaxColumns());
+  if (ws.getLastRow() === 0) {
+    ws.getRange(1, 1, 1, 15).setValues([[
+      "id_etu", "PRISE DE CONTACT", "TYPE DE CANDIDATURE", "NOM DE LA SOCIÉTÉ", "ACTIVITÉ",
+      "INTERLOCUTEUR", "FONCTION / POSTE", "COORDONNÉES", "SUIVI ET RELANCES", "RÉPONSES / REMARQUES",
+      "DÉPLACEMENT PHYSIQUE", "id_ligne", "Créée le", "Dernière MAJ", "Créée par"
+    ]]);
+    ws.setFrozenRows(1);
+  }
+  return ws;
+}
+
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script.
+ * Pose l'en-tête, fige la 1re ligne et installe les menus déroulants
+ * de l'onglet TSUIVI (colonne C : type de candidature, colonne K : Oui/Non).
+ */
+function setupTsuiviSheet() {
+  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var ws = ss.getSheetByName("TSUIVI") || ss.insertSheet("TSUIVI");
+  ws.getRange(1, 1, 1, 15).setValues([[
+    "id_etu", "PRISE DE CONTACT", "TYPE DE CANDIDATURE", "NOM DE LA SOCIÉTÉ", "ACTIVITÉ",
+    "INTERLOCUTEUR", "FONCTION / POSTE", "COORDONNÉES", "SUIVI ET RELANCES", "RÉPONSES / REMARQUES",
+    "DÉPLACEMENT PHYSIQUE", "id_ligne", "Créée le", "Dernière MAJ", "Créée par"
+  ]]);
+  ws.setFrozenRows(1);
+  ws.getRange(1, 1, 1, 15).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  var maxRows = Math.max(ws.getMaxRows() - 1, 1);
+  ws.getRange(2, 3, maxRows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(TSUIVI_TYPES_CANDIDATURE, true).setAllowInvalid(false).build()
+  );
+  ws.getRange(2, 11, maxRows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(["Non", "Oui"], true).setAllowInvalid(false).build()
+  );
+  Logger.log("Onglet TSUIVI prêt.");
+}
+
+function _tsParseJournal(raw) {
+  var s = String(raw == null ? "" : raw).trim();
+  if (!s) return [];
+  try {
+    var v = JSON.parse(s);
+    if (Array.isArray(v)) return v.filter(function(e) { return e && (e.texte || e.message); })
+      .map(function(e) { return { date: String(e.date || ""), auteur: String(e.auteur || ""), texte: String(e.texte || e.message || "") }; });
+  } catch (e) {}
+  // Cellule remplie à la main (texte libre) → une entrée "historique"
+  return [{ date: "", auteur: "", texte: s }];
+}
+
+function _tsFmtDate(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return String(v == null ? "" : v).trim();
+}
+
+function _tsNormDeplacement(v) {
+  return String(v || "").trim().toLowerCase().indexOf("oui") === 0 ? "Oui" : "Non";
+}
+
+function _tsRowToObj(row, rowNumber) {
+  return {
+    id:            String(row[11] || "").trim() || ("TSR-" + rowNumber),
+    id_etu:        String(row[0] || "").trim(),
+    priseContact:  _tsFmtDate(row[1]),
+    type:          String(row[2] || "").trim(),
+    societe:       String(row[3] || "").trim(),
+    activite:      String(row[4] || "").trim(),
+    interlocuteur: String(row[5] || "").trim(),
+    fonction:      String(row[6] || "").trim(),
+    coordonnees:   String(row[7] || "").trim(),
+    suivi:         _tsParseJournal(row[8]),
+    reponses:      _tsParseJournal(row[9]),
+    deplacement:   _tsNormDeplacement(row[10]),
+    creeLe:        _tsFmtDate(row[12]),
+    majLe:         row[13] instanceof Date ? Utilities.formatDate(row[13], Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm") : String(row[13] || ""),
+    _row:          rowNumber
+  };
+}
+
+// Un étudiant (rôle validé par token) ne peut agir que sur SES lignes ; tout le staff peut tout.
+// Ces routes ne sont pas publiques : l'appelant est donc déjà authentifié (session ou
+// personnel connu). Tout ce qui n'est pas explicitement "Etudiant" est du staff.
+function _tsIsStaff(p) {
+  var role = String(p.roleAuteurValide || p.roleAuteur || "").trim();
+  return role !== "Etudiant";
+}
+function _tsCanAccess(p, idEtu) {
+  if (_tsIsStaff(p)) return true;
+  var mine = String(p.refAuteur || "").trim();
+  return mine !== "" && mine === String(idEtu || "").trim();
+}
+
+function _tsAuteurLabel(p) {
+  if (_tsIsStaff(p)) return String(p.nomAuteur || p.idAuteur || "Référent");
+  return String(p.nomAuteur || p.idAuteur || "Étudiant");
+}
+
+function handleGetSuiviCandidatures(p, ss) {
+  try {
+    var targetId = String(p.targetId || p.refAuteur || "").trim();
+    if (!targetId) return createJsonResponse({ success: false, message: "Étudiant non précisé." });
+    if (!_tsCanAccess(p, targetId)) return createJsonResponse({ success: false, message: "Accès refusé." });
+
+    var ws = _getTsuiviSheet(ss);
+    var data = ws.getDataRange().getValues();
+    var rows = [];
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0] || "").trim() !== targetId) continue;
+      rows.push(_tsRowToObj(data[i], i + 1));
+    }
+    // Plus récentes en premier (par date de prise de contact puis ligne)
+    rows.sort(function(a, b) {
+      var da = a.priseContact || "0", db = b.priseContact || "0";
+      if (da !== db) return da < db ? 1 : -1;
+      return b._row - a._row;
+    });
+    return createJsonResponse({ success: true, data: rows, types: TSUIVI_TYPES_CANDIDATURE });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
+  }
+}
+
+function handleAddSuiviCandidature(p, ss) {
+  try {
+    var targetId = String(p.targetId || p.refAuteur || "").trim();
+    if (!targetId) return createJsonResponse({ success: false, message: "Étudiant non précisé." });
+    if (!_tsCanAccess(p, targetId)) return createJsonResponse({ success: false, message: "Accès refusé." });
+
+    var ws = _getTsuiviSheet(ss);
+    var idLigne = "TS-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + "-" + Math.floor(Math.random() * 900 + 100);
+    var type = TSUIVI_TYPES_CANDIDATURE.indexOf(String(p.type || "").trim()) >= 0 ? String(p.type).trim() : "";
+    var now = new Date();
+
+    ws.appendRow([
+      targetId,
+      String(p.priseContact || ""),
+      type,
+      String(p.societe || "").trim(),
+      String(p.activite || "").trim(),
+      String(p.interlocuteur || "").trim(),
+      String(p.fonction || "").trim(),
+      String(p.coordonnees || "").trim(),
+      "[]",
+      "[]",
+      _tsNormDeplacement(p.deplacement),
+      idLigne,
+      now,
+      now,
+      _tsAuteurLabel(p)
+    ]);
+
+    _invalidateStudentDetailsCache_(targetId);
+    logAction(p.idAuteur, p.roleAuteur, "Création", "Suivi candidatures", targetId,
+      "Nouvelle candidature : " + (String(p.societe || "").trim() || "sans société"));
+    return createJsonResponse({ success: true, id: idLigne });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
+  }
+}
+
+function _tsFindRowByIdLigne(ws, idLigne) {
+  var data = ws.getDataRange().getValues();
+  var needle = String(idLigne || "").trim();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][11] || "").trim() === needle) return { rowNumber: i + 1, row: data[i] };
+  }
+  return null;
+}
+
+function handleUpdateSuiviCandidature(p, ss) {
+  try {
+    var ws = _getTsuiviSheet(ss);
+    var found = _tsFindRowByIdLigne(ws, p.id);
+    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
+    var idEtu = String(found.row[0] || "").trim();
+    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
+
+    // Champs structurés modifiables (les deux journaux ont leur propre route).
+    var map = {
+      priseContact: 2, type: 3, societe: 4, activite: 5,
+      interlocuteur: 6, fonction: 7, coordonnees: 8, deplacement: 11
+    };
+    var changed = [];
+    Object.keys(map).forEach(function(k) {
+      if (!(k in p)) return;
+      var col = map[k];
+      var val = p[k];
+      if (k === "type") val = TSUIVI_TYPES_CANDIDATURE.indexOf(String(val || "").trim()) >= 0 ? String(val).trim() : "";
+      if (k === "deplacement") val = _tsNormDeplacement(val);
+      ws.getRange(found.rowNumber, col).setValue(val);
+      changed.push(k);
+    });
+    if (changed.length === 0) return createJsonResponse({ success: false, message: "Rien à mettre à jour." });
+
+    ws.getRange(found.rowNumber, 14).setValue(new Date()); // Dernière MAJ
+    _invalidateStudentDetailsCache_(idEtu);
+    logAction(p.idAuteur, p.roleAuteur, "Modification", "Suivi candidatures", idEtu,
+      "Candidature « " + (String(found.row[3] || "").trim() || p.id) + " » — champs : " + changed.join(", "));
+    return createJsonResponse({ success: true });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
+  }
+}
+
+function handleDeleteSuiviCandidature(p, ss) {
+  try {
+    var ws = _getTsuiviSheet(ss);
+    var found = _tsFindRowByIdLigne(ws, p.id);
+    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
+    var idEtu = String(found.row[0] || "").trim();
+    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
+
+    var nomSoc = String(found.row[3] || "").trim();
+    ws.deleteRow(found.rowNumber);
+    _invalidateStudentDetailsCache_(idEtu);
+    logAction(p.idAuteur, p.roleAuteur, "Suppression", "Suivi candidatures", idEtu,
+      "Candidature supprimée : " + (nomSoc || p.id));
+    return createJsonResponse({ success: true });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
+  }
+}
+
+// Ajoute une entrée horodatée dans l'un des deux journaux (colonne I ou J).
+function handleAddSuiviCandidatureNote(p, ss) {
+  try {
+    var ws = _getTsuiviSheet(ss);
+    var found = _tsFindRowByIdLigne(ws, p.id);
+    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
+    var idEtu = String(found.row[0] || "").trim();
+    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
+
+    var texte = String(p.texte || "").trim();
+    if (!texte) return createJsonResponse({ success: false, message: "Message vide." });
+
+    var champ = String(p.champ || "suivi").trim().toLowerCase();
+    var col = (champ === "reponses" || champ === "réponses") ? 10 : 9; // J ou I
+    var journal = _tsParseJournal(found.row[col - 1]);
+    journal.push({
+      date:   Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
+      auteur: _tsAuteurLabel(p),
+      texte:  texte
+    });
+    ws.getRange(found.rowNumber, col).setValue(JSON.stringify(journal));
+    ws.getRange(found.rowNumber, 14).setValue(new Date());
+    _invalidateStudentDetailsCache_(idEtu);
+    logAction(p.idAuteur, p.roleAuteur, "Création", "Suivi candidatures", idEtu,
+      (col === 10 ? "Réponse/remarque" : "Relance") + " sur « " + (String(found.row[3] || "").trim() || p.id) + " »");
+    return createJsonResponse({ success: true, journal: journal });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
+  }
+}
+
+function handleUploadCV(p, ss) {
   const folderId = (p.userId === 'FLYER' || p.userId === 'PJ') ? FOLDER_ID_COM : FOLDER_ID_CV;
   const file = DriveApp.getFolderById(folderId).createFile(Utilities.newBlob(Utilities.base64Decode(p.base64Data), p.mimeType, p.fileName)); 
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
@@ -765,6 +1342,7 @@ function handleUploadCV(p, ss) {
   }
   const typeDoc = (p.userId === 'FLYER' || p.userId === 'PJ') ? "Document com" : "CV";
   logAction(p.idAuteur, p.roleAuteur, "Création", "Documents", p.userId || p.targetId, "Fichier uploadé : " + p.fileName + " (" + typeDoc + ")");
+  if (p.userId !== 'FLYER' && p.userId !== 'PJ') _invalidateStudentDetailsCache_(p.userId);
   return createJsonResponse({ success: true, url: file.getUrl() });
 }
 
@@ -803,58 +1381,58 @@ function handleGetStats(params, ss) {
   });
 }
 
+// Invalide le cache de handleGetPartners après toute écriture affectant Partenariat/
+// contacts/alternants (entreprises, contacts, liens étudiant↔entreprise, échanges, alertes).
+function _invalidatePartnersCache_() {
+  try { CacheService.getScriptCache().remove('partners_v1'); } catch(e) {}
+}
+
 function handleGetPartners(params, ss) {
+  // Réponse identique pour tout le monde : mise en cache 20s. Cet endpoint n'avait
+  // aucun cache alors qu'il recalcule scores/alternants/échanges sur 4 feuilles à
+  // chaque appel — cause probable de la lenteur de chargement de la base entreprise.
+  return getCachedJsonResponse_('partners_v1', 20, function() {
   const wsP = getSheetSafe(ss, "Partenariat"); const wsE = getSheetSafe(ss, "ETUDIANTS");
   const dP = wsP.getDataRange().getValues(); const dE = wsE.getDataRange().getValues();
   const entreprises = {};
+  // Date de création de l'entreprise = plus ancienne date de ses contacts, seulement si tous
+  // ses contacts en ont une (même règle que handleGetPartnerDetails)
+  const colDateCrea = (dP[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
+  const creaMin = {}, creaIncomplete = {};
   for (let i = 1; i < dP.length; i++) {
     const idEnt = String(dP[i][1] || "").trim(); if (!idEnt) continue;
     if (!entreprises[idEnt]) entreprises[idEnt] = { id: idEnt, nom: String(dP[i][2] || "").trim(), adresse: String(dP[i][10] || "").trim(), cp: String(dP[i][11] || "").trim(), ville: String(dP[i][12] || "").trim(), contacts: [], alternants: [], anciensAlternants: [] };
-    entreprises[idEnt].contacts.push({ id_contact: dP[i][0], nom: String(dP[i][3] || "").trim(), prenom: String(dP[i][4] || "").trim(), tel: dP[i][5], email: dP[i][6], tel2: dP[i][9], mail2: dP[i][8], poste: String(dP[i][13] || "").trim(), is_ma: String(dP[i][14] || "Non").trim() });
+    const vCrea = colDateCrea >= 0 ? dP[i][colDateCrea] : "";
+    const dCrea = _dateCreationToDate_(vCrea);
+    if (!dCrea) creaIncomplete[idEnt] = true;
+    else if (!creaMin[idEnt] || dCrea < creaMin[idEnt]) creaMin[idEnt] = dCrea;
+    entreprises[idEnt].contacts.push({ id_contact: dP[i][0], nom: String(dP[i][3] || "").trim(), prenom: String(dP[i][4] || "").trim(), tel: dP[i][5], email: dP[i][6], tel2: dP[i][9], mail2: dP[i][8], poste: String(dP[i][13] || "").trim(), is_ma: String(dP[i][14] || "Non").trim(), dateCreation: _formatDateCreation_(vCrea) });
   }
+  Object.keys(entreprises).forEach(function(idEnt) {
+    const d = creaIncomplete[idEnt] ? null : creaMin[idEnt];
+    entreprises[idEnt].dateCreation = d ? _formatDateCreation_(d) : "";
+    entreprises[idEnt].dateCreationKey = d ? _dateCreationKey_(d) : "";
+  });
   // Index insensible à la casse pour matcher les IDs entreprise
   const entUpperIndex = {};
   Object.keys(entreprises).forEach(k => { entUpperIndex[k.toUpperCase()] = k; });
-  // Score A : somme (50 + jours présence) par alternant actif × nb actifs ; B : 50 × nb sortis ; C : 10 × nb contacts complets
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const scoreData = {};
+  // Liste des alternants actifs par entreprise (affichage dossier). Le score, lui, n'est
+  // plus recalculé à la volée : voir calculerScoreQuotidienEntreprises() plus bas, qui
+  // ajoute 1 point/jour par entreprise ayant au moins un étudiant Inscrit/Préinscrit,
+  // via un trigger quotidien automatique. On se contente ici de lire le score accumulé.
   for (let j = 1; j < dE.length; j++) {
     const idEntEtu = String(dE[j][11] || "").trim();
     const realKey = entreprises[idEntEtu] ? idEntEtu : (entUpperIndex[idEntEtu.toUpperCase()] || null);
     if (!realKey) continue;
     const statut = String(dE[j][13] || "").toLowerCase();
-    const typo   = String(dE[j][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     const isActiveAlt = statut.includes("altern") || statut.includes("apprenti");
-    const isSorti     = typo.includes("sorti");
     if (isActiveAlt) {
       entreprises[realKey].alternants.push({ nom: String(dE[j][2] || ""), prenom: String(dE[j][3] || "") });
     }
-    if (!scoreData[realKey]) scoreData[realKey] = { activeScoreSum: 0, activeCount: 0, sortiCount: 0 };
-    if (isActiveAlt) {
-      const raw = dE[j][17];
-      let days = 0;
-      if (raw) {
-        const d = raw instanceof Date ? raw : new Date(String(raw).replace(/^'/, '').trim());
-        if (!isNaN(d.getTime())) days = Math.max(0, Math.floor((today - d) / 86400000));
-      }
-      scoreData[realKey].activeScoreSum += 50 + days;
-      scoreData[realKey].activeCount++;
-    } else if (isSorti) {
-      scoreData[realKey].sortiCount++;
-    }
   }
+  const scoreMap = _getScoreEntreprisesMap_(ss);
   Object.values(entreprises).forEach(ent => {
-    const sd = scoreData[ent.id] || { activeScoreSum: 0, activeCount: 0, sortiCount: 0 };
-    const scoreA = sd.activeScoreSum * sd.activeCount;
-    const scoreB = sd.sortiCount * 50;
-    const scoreC = ent.contacts.filter(c => {
-      const hasName = !!(c.nom && c.prenom);
-      const hasMail = !!(c.email && String(c.email).includes('@'));
-      const hasTel  = !!(c.tel || c.tel2);
-      return hasName && (hasMail || hasTel);
-    }).length * 10;
-    ent.score = scoreA + scoreB + scoreC;
-    ent.scoreDetails = { A: scoreA, B: scoreB, C: scoreC };
+    ent.score = scoreMap[ent.id.toUpperCase()] || 0;
   });
   // Anciens alternants (changements d'entreprise détectés)
   const wsA = ss.getSheetByName("ANCIENS_ALTERNANTS");
@@ -897,6 +1475,94 @@ function handleGetPartners(params, ss) {
     }
   } catch(eSuivi) {}
   return createJsonResponse({ success: true, data: Object.values(entreprises) });
+  });
+}
+
+// ==========================================
+// SCORE QUOTIDIEN DES ENTREPRISES
+// Toute entreprise ayant au moins un étudiant Inscrit ou Préinscrit gagne 1 point par
+// jour. Le score est stocké (pas recalculé à la volée) et incrémenté une fois par jour
+// par un trigger automatique — voir creerTriggerScoreEntreprises() à exécuter une fois
+// depuis l'éditeur pour l'installer.
+// ==========================================
+function _getOrCreateScoreEntreprisesSheet(ss) {
+  let s = ss.getSheetByName("SCORE_ENTREPRISES");
+  if (!s) {
+    s = ss.insertSheet("SCORE_ENTREPRISES");
+    s.appendRow(["ID_Entreprise", "Score", "DernierCalcul"]);
+    s.setFrozenRows(1);
+  }
+  return s;
+}
+
+// Lit le score accumulé de chaque entreprise sous forme de map { ID_EN_MAJUSCULES: score }
+function _getScoreEntreprisesMap_(ss) {
+  const s = _getOrCreateScoreEntreprisesSheet(ss);
+  const data = s.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0] || "").trim().toUpperCase();
+    if (id) map[id] = Number(data[i][1]) || 0;
+  }
+  return map;
+}
+
+/**
+ * Calcul quotidien : +1 point pour chaque entreprise ayant au moins un étudiant dont la
+ * typologie contient "inscrit" (couvre "Inscrit" ET "Préinscrit", "préinscrit" se
+ * terminant par "inscrit"). Protégé contre les doubles incréments le même jour via la
+ * colonne DernierCalcul. Appelé une fois par jour par le trigger installé via
+ * creerTriggerScoreEntreprises().
+ */
+function calculerScoreQuotidienEntreprises() {
+  const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  const wsScore = _getOrCreateScoreEntreprisesSheet(ss);
+  const dataScore = wsScore.getDataRange().getValues();
+  const scoreMap = {}; // idEnt (majuscules) -> { row1Based, score, dernierCalcul }
+  for (let i = 1; i < dataScore.length; i++) {
+    const id = String(dataScore[i][0] || "").trim().toUpperCase();
+    if (id) scoreMap[id] = { row: i + 1, score: Number(dataScore[i][1]) || 0, dernierCalcul: String(dataScore[i][2] || "") };
+  }
+
+  // Entreprises éligibles aujourd'hui : au moins un étudiant Inscrit/Préinscrit
+  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+  const eligibles = new Set();
+  for (let j = 1; j < dE.length; j++) {
+    const idEnt = String(dE[j][11] || "").trim();
+    if (!idEnt) continue;
+    const typo = String(dE[j][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (typo.includes("inscrit")) eligibles.add(idEnt.toUpperCase());
+  }
+
+  let nbMisAJour = 0;
+  eligibles.forEach(function(idEntUpper) {
+    const entry = scoreMap[idEntUpper];
+    if (entry) {
+      if (entry.dernierCalcul !== todayStr) {
+        wsScore.getRange(entry.row, 1, 1, 3).setValues([[idEntUpper, entry.score + 1, todayStr]]);
+        nbMisAJour++;
+      }
+    } else {
+      wsScore.appendRow([idEntUpper, 1, todayStr]);
+      nbMisAJour++;
+    }
+  });
+
+  _invalidatePartnersCache_();
+  Logger.log('Score entreprises : ' + nbMisAJour + ' entreprise(s) incrémentée(s) pour le ' + todayStr);
+}
+
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script (▶ Exécuter) pour installer
+ * le trigger quotidien du score entreprises.
+ */
+function creerTriggerScoreEntreprises() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === "calculerScoreQuotidienEntreprises") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("calculerScoreQuotidienEntreprises").timeBased().everyDays(1).atHour(5).create();
 }
 
 function _getOrCreateAnciensSheet(ss) {
@@ -976,13 +1642,14 @@ function handleSignalFormerAlternant(p, ss) {
 
     // Mise à jour bilatérale : retirer l'entreprise du dossier étudiant
     if (rowEtu !== -1) {
-      sheetEtu.getRange(rowEtu, 12).setValue("");
-      sheetEtu.getRange(rowEtu, 13).setValue("");
+      sheetEtu.getRange(rowEtu, 12, 1, 2).setValues([["", ""]]);
       sheetEtu.getRange(rowEtu, 22).setValue("");
       logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", idEtu, "Entreprise « " + nomEnt + " » retirée automatiquement (départ signalé depuis dossier entreprise)");
     }
 
     logAction(p.idAuteur, p.roleAuteur, "Création", "AncienAlternant", idEtu, (p.prenom||"") + " " + (p.nom||"") + " — départ de « " + nomEnt + " » enregistré");
+    _invalidatePartnersCache_();
+    _invalidatePartnerDetailsCache_(idEnt);
     return createJsonResponse({ success: true });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -991,7 +1658,7 @@ function handleConfirmFormerAlternant(p, ss) {
   const s = _getOrCreateAnciensSheet(ss);
   const data = s.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(p.id)) { s.getRange(i + 1, 7).setValue("Confirmé"); return createJsonResponse({ success: true }); }
+    if (String(data[i][0]) === String(p.id)) { s.getRange(i + 1, 7).setValue("Confirmé"); _invalidatePartnersCache_(); _invalidatePartnerDetailsCache_(data[i][1]); return createJsonResponse({ success: true }); }
   }
   return createJsonResponse({ success: false, message: "Entrée introuvable" });
 }
@@ -1000,7 +1667,7 @@ function handleRemoveFormerAlternant(p, ss) {
   const s = _getOrCreateAnciensSheet(ss);
   const data = s.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(p.id)) { s.getRange(i + 1, 7).setValue("Erreur"); return createJsonResponse({ success: true }); }
+    if (String(data[i][0]) === String(p.id)) { s.getRange(i + 1, 7).setValue("Erreur"); _invalidatePartnersCache_(); _invalidatePartnerDetailsCache_(data[i][1]); return createJsonResponse({ success: true }); }
   }
   return createJsonResponse({ success: false, message: "Entrée introuvable" });
 }
@@ -1009,6 +1676,9 @@ function handleRemoveFormerAlternant(p, ss) {
 // OFFRES
 // ==========================================
 function handleGetOffres(p, ss) {
+  // Réponse identique pour tout le monde : mise en cache 20s (endpoint sans cache
+  // jusqu'ici, contrairement au dashboard/stats, alors qu'il est aussi très sollicité).
+  return getCachedJsonResponse_('offres_v1', 20, function() {
   try {
     const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
     const dP = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
@@ -1039,16 +1709,23 @@ function handleGetOffres(p, ss) {
       if(mail) etuMap[mail] = nomComplet;
     }
 
+    // Regroupe les partages par offre en une seule passe (O(N+M) au lieu de O(N×M)
+    // avec un .filter() sur tout PARTAGES pour chaque offre) — gain sensible dès que
+    // le nombre d'offres et de partages grandit.
+    const sharesByOffre = {};
+    for (let s = 1; s < dP.length; s++) {
+      const idO = String(dP[s][1]).trim();
+      if (!idO) continue;
+      const key = String(dP[s][0]).trim();
+      const nom = etuMap[key.toUpperCase()] || etuMap[key.toLowerCase()] || ("Inconnu (" + key + ")");
+      (sharesByOffre[idO] || (sharesByOffre[idO] = [])).push(nom);
+    }
+
     const res = [];
     for (let i = 1; i < dO.length; i++) {
       if (dO[i][0]) {
         const idOffre = String(dO[i][0]).trim();
-        const sharedWith = dP
-          .filter(r => String(r[1]).trim() === idOffre)
-          .map(r => {
-             let key = String(r[0]).trim();
-             return etuMap[key.toUpperCase()] || etuMap[key.toLowerCase()] || ("Inconnu (" + key + ")");
-          });
+        const sharedWith = sharesByOffre[idOffre] || [];
 
         const lastNote = lastNoteMap[idOffre.toUpperCase()] || null;
         res.push({
@@ -1064,10 +1741,16 @@ function handleGetOffres(p, ss) {
     }
     return createJsonResponse({ success: true, data: res });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
 }
-function handleAddOffre(p, ss) { 
+// Invalide le cache de handleGetOffres après toute écriture sur OFFRES/PARTAGES/SUIVI_OFFRES
+function _invalidateOffresCache_() {
+  try { CacheService.getScriptCache().remove('offres_v1'); } catch(e) {}
+}
+
+function handleAddOffre(p, ss) {
   getSheetSafe(ss, "OFFRES").appendRow([
-    "OFR" + new Date().getTime().toString().slice(-6), // A : ID
+    "OFR" + new Date().getTime().toString() + Math.floor(100 + Math.random() * 900), // A : ID (timestamp complet + suffixe aléatoire pour éviter toute collision)
     p.url,              // B : Lien
     new Date(),         // C : Date
     p.plateforme,       // D : Plateforme
@@ -1085,6 +1768,7 @@ function handleAddOffre(p, ss) {
   ]); 
 
   logAction(p.idAuteur, p.roleAuteur, "Création", "Offres", "Nouvelle Offre", "A ajouté l'offre : " + p.poste + " chez " + p.entreprise + " (" + (p.plateforme || "?") + ") — " + (p.ville || "Ville ?") + " — Statut: À qualifier");
+  _invalidateOffresCache_();
   return createJsonResponse({ success: true });
 }
 
@@ -1119,20 +1803,33 @@ function handleUpdateOffre(p, ss) {
           changes.push("Notes internes modifiées");
         }
 
-        // 1. Mise à jour des informations classiques
-        sheet.getRange(i + 1, 2).setValue(p.url);
-        sheet.getRange(i + 1, 4).setValue(p.plateforme);
-        sheet.getRange(i + 1, 5).setValue(p.entreprise);
-        sheet.getRange(i + 1, 6).setValue(p.ville || "");
-        sheet.getRange(i + 1, 7).setValue(p.missions);
-        sheet.getRange(i + 1, 15).setValue(p.poste);
-        sheet.getRange(i + 1, 10).setValue(p.qualite);
-        if (p.etat) sheet.getRange(i + 1, 14).setValue(p.etat);
+        // 1. Mise à jour des informations classiques — un seul appel setValues() groupé
+        // au lieu de 8 appels setValue() séparés (cause probable des mises à jour de
+        // statut lentes/perdues sous charge : "vérifiée", "partagée", etc.)
+        const rowCopy = oldRow.slice();
+        rowCopy[1] = p.url;
+        rowCopy[3] = p.plateforme;
+        rowCopy[4] = p.entreprise;
+        rowCopy[5] = p.ville || "";
+        rowCopy[6] = p.missions;
+        rowCopy[14] = p.poste;
+        rowCopy[9] = p.qualite;
+        if (p.etat) rowCopy[13] = p.etat;
+        sheet.getRange(i + 1, 1, 1, rowCopy.length).setValues([rowCopy]);
 
         const logDetail = changes.length > 0
           ? "Offre " + (oldRow[14] || p.poste) + " | " + changes.join(" | ")
           : "Mise à jour offre " + (p.poste || p.id);
         logAction(p.idAuteur, p.roleAuteur, "Modification", "Offres", p.id, logDetail);
+        _invalidateOffresCache_();
+        // Invalide aussi le cache des dossiers des étudiants à qui cette offre a été partagée,
+        // sinon le lien/l'état affichés côté dossier peuvent rester périmés jusqu'à 20s.
+        try {
+          const dataPartages = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
+          dataPartages.forEach(r => {
+            if (String(r[1]).trim() === String(p.id).trim()) _invalidateStudentDetailsCache_(r[0]);
+          });
+        } catch(eCache) {}
         return createJsonResponse({ success: true, message: "Offre mise à jour !" });
       }
     }
@@ -1141,23 +1838,95 @@ function handleUpdateOffre(p, ss) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
 }
+
+// --- CHANGEMENT GROUPÉ DE QUALITÉ / ÉTAT SUR PLUSIEURS OFFRES ---
+// Ne touche QUE les colonnes Qualité (J) et/ou État (N) des offres sélectionnées,
+// sans réécrire les autres champs (contrairement à handleUpdateOffre qui suppose une
+// fiche complète) — pense à sélection multiple + action groupée côté offres.html.
+function handleBulkUpdateOffres(p, ss) {
+  try {
+    const ids = Array.isArray(p.ids) ? p.ids.map(id => String(id).trim()).filter(Boolean) : [];
+    if (!ids.length) return createJsonResponse({ success: false, message: "Aucune offre sélectionnée." });
+    if (!p.qualite && !p.etat) return createJsonResponse({ success: false, message: "Aucun changement demandé." });
+
+    const sheet = getSheetSafe(ss, "OFFRES");
+    const data = sheet.getDataRange().getValues();
+    const idSet = new Set(ids);
+    const libelles = [];
+    let count = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const rowId = String(data[i][0]).trim();
+      if (!idSet.has(rowId)) continue;
+      if (p.qualite) sheet.getRange(i + 1, 10).setValue(p.qualite); // Colonne J : Qualité
+      if (p.etat)    sheet.getRange(i + 1, 14).setValue(p.etat);    // Colonne N : État
+      libelles.push(String(data[i][14] || rowId) + " chez " + String(data[i][4] || "?"));
+      count++;
+    }
+
+    if (count === 0) return createJsonResponse({ success: false, message: "Aucune des offres sélectionnées n'a été trouvée." });
+
+    const changement = [p.qualite ? "Qualité → " + p.qualite : null, p.etat ? "État → " + p.etat : null].filter(Boolean).join(", ");
+    logAction(p.idAuteur, p.roleAuteur, "Modification", "Offres", count + " offre(s)",
+      "Changement groupé (" + changement + ") sur " + count + " offre(s) : " + libelles.slice(0, 15).join(" ; ") + (libelles.length > 15 ? "…" : ""));
+
+    _invalidateOffresCache_();
+    return createJsonResponse({ success: true, count: count });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: e.toString() });
+  }
+}
 // ==========================================
 // COMMUNICATION & CAMPAGNES
 // ==========================================
+// Invalide le cache de handleGetCampagnes après toute écriture sur CAMPAGNES.
+function _invalidateCampagnesCache_() {
+  try { CacheService.getScriptCache().remove('campagnes_v1'); } catch(e) {}
+}
+
+// Schéma de l'onglet CAMPAGNES (aligné sur les libellés d'en-tête) :
+// A(0) ID | B(1) Nom | C(2) Objet | D(3) Corps/message | E(4) Cible | F(5) Fréquence
+//  | G(6) DernierEnvoi | H(7) Statut | I(8) PJ_URL | J(9) EmailsManuels | K(10) EmailsExclus
+var CAMP_COL = { ID:0, NOM:1, OBJET:2, CORPS:3, CIBLE:4, FREQ:5, DERNIER:6, STATUT:7, PJ:8, MANUELS:9, EXCLUS:10 };
+
 function handleGetCampagnes(ss) {
+  // Mise en cache 20s : évite de relire toute la feuille CAMPAGNES à chaque ouverture.
+  return getCachedJsonResponse_('campagnes_v1', 20, function() {
   try {
     const sheet = getSheetSafe(ss, "CAMPAGNES");
     const data = sheet.getDataRange().getValues();
     const campaigns = [];
     for (let i = 1; i < data.length; i++) {
+      if (!data[i][CAMP_COL.ID]) continue;
       campaigns.push({
-        id: data[i][0], nom: data[i][1], frequence: data[i][2],
-        dateCreation: data[i][3], dernierEnvoi: data[i][4],
-        objet: data[i][5], message: data[i][6], statut: data[i][7], cibles: data[i][8]
+        id: data[i][CAMP_COL.ID], nom: data[i][CAMP_COL.NOM],
+        objet: data[i][CAMP_COL.OBJET], message: data[i][CAMP_COL.CORPS],
+        cibles: data[i][CAMP_COL.CIBLE], frequence: data[i][CAMP_COL.FREQ],
+        dernierEnvoi: data[i][CAMP_COL.DERNIER], statut: data[i][CAMP_COL.STATUT],
+        pjUrl: data[i][CAMP_COL.PJ] || "",
+        emailsManuels: data[i][CAMP_COL.MANUELS] || "", emailsExclus: data[i][CAMP_COL.EXCLUS] || ""
       });
     }
     return createJsonResponse({ success: true, data: campaigns });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
+}
+
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script.
+ * Écrit l'en-tête correct de l'onglet CAMPAGNES (les anciens libellés ne
+ * correspondaient plus à ce que le code écrit réellement).
+ */
+function setupCampagnesSheet() {
+  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var ws = ss.getSheetByName("CAMPAGNES") || ss.insertSheet("CAMPAGNES");
+  ws.getRange(1, 1, 1, 11).setValues([[
+    "ID", "Nom", "Objet", "Corps (message HTML)", "Cible", "Fréquence",
+    "DernierEnvoi", "Statut", "PJ_URL", "EmailsManuels", "EmailsExclus"
+  ]]);
+  ws.setFrozenRows(1);
+  ws.getRange(1, 1, 1, 11).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  Logger.log("En-tête CAMPAGNES mis à jour.");
 }
 
 function handleGetSettings(ss) {
@@ -1215,11 +1984,12 @@ function handleDeleteCampaign(p, ss) {
     const sheet = getSheetSafe(ss, "CAMPAGNES");
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === p.id) {
-        sheet.getRange(i + 1, 8).setValue("Archivé"); // On change le statut en H
+      if (String(data[i][CAMP_COL.ID]) === String(p.id || p.campaignId)) {
+        sheet.getRange(i + 1, CAMP_COL.STATUT + 1).setValue("Archivé");
         break;
       }
     }
+    _invalidateCampagnesCache_();
     return createJsonResponse({ success: true, message: "Campagne rangée dans l'historique." });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -1327,6 +2097,7 @@ function handleSendComMail(p, ss) {
           break;
         }
       }
+      _invalidateComEventsCache_();
     } catch(eStatus) {}
   }
 
@@ -1991,15 +2762,24 @@ function handlePublicRegister(p, ss) {
     new Date(),            // Date d'inscription
     p.eventId              // ID de l'événement pour le suivi
   ]);
+  _invalidateProspectsCache_();
 
   return createJsonResponse({ success: true, message: "Inscription validée" });
 }
 
+// Invalide le cache de handleGetProspects après toute écriture sur PROSPECTS.
+function _invalidateProspectsCache_() {
+  try { CacheService.getScriptCache().remove('prospects_v1'); } catch(e) {}
+}
+
 function handleGetProspects(params, ss) {
-  const data = getSheetSafe(ss, "PROSPECTS").getDataRange().getValues();
-  const list = [];
-  for(let i=1; i<data.length; i++) if(data[i][0]) list.push({ id: data[i][0], nom: data[i][1], prenom: data[i][2], mail: data[i][3], tel: data[i][4], source: data[i][5], comm: data[i][6] });
-  return createJsonResponse({ success: true, data: list.reverse() });
+  // Mise en cache 20s : évite de relire toute la feuille PROSPECTS à chaque ouverture de page.
+  return getCachedJsonResponse_('prospects_v1', 20, function() {
+    const data = getSheetSafe(ss, "PROSPECTS").getDataRange().getValues();
+    const list = [];
+    for(let i=1; i<data.length; i++) if(data[i][0]) list.push({ id: data[i][0], nom: data[i][1], prenom: data[i][2], mail: data[i][3], tel: data[i][4], source: data[i][5], comm: data[i][6] });
+    return createJsonResponse({ success: true, data: list.reverse() });
+  });
 }
 
 function handleDeleteProspect(params, ss) {
@@ -2010,6 +2790,7 @@ function handleDeleteProspect(params, ss) {
       _archiveItem(ss, "Prospect", params.emailAuteur || params.idAuteur, params.motif || "", params.id, { row: d[i], label: label.trim() });
       ws.deleteRow(i+1);
       logAction(params.idAuteur, params.roleAuteur, "Suppression", "Prospects", params.id, "Prospect supprimé : " + label.trim() + " — Motif : " + (params.motif || "Non précisé"));
+      _invalidateProspectsCache_();
       return createJsonResponse({success: true});
     }
   }
@@ -2682,10 +3463,17 @@ function handleMarkPresence(p, ss) {
     return createJsonResponse({ success: false, message: "Inscrit introuvable pour cet événement." });
   }
 }
+// Invalide le cache de handleGetComEvents après toute écriture sur CAMPAGNES_COM.
+function _invalidateComEventsCache_() {
+  try { CacheService.getScriptCache().remove('com_events_v1'); } catch(e) {}
+}
+
 function handleGetComEvents(p, ss) {
+  // Mise en cache 20s : évite de relire toute la feuille CAMPAGNES_COM à chaque ouverture.
+  return getCachedJsonResponse_('com_events_v1', 20, function() {
   const sheet = ss.getSheetByName("CAMPAGNES_COM");
   if (!sheet) return createJsonResponse({ success: true, data: [] });
-  
+
   const data = sheet.getDataRange().getValues();
   const list = [];
   for(let i = 1; i < data.length; i++) {
@@ -2709,6 +3497,7 @@ function handleGetComEvents(p, ss) {
             });
   }
   return createJsonResponse({ success: true, data: list.reverse() });
+  });
 }
 
 function handleSaveComEvent(p, ss) {
@@ -2743,6 +3532,7 @@ function handleSaveComEvent(p, ss) {
   const evtDateStr = p.dateEvt ? new Date(p.dateEvt).toLocaleDateString('fr-FR') : "sans date";
   const logDetail = (p.nom || "Événement") + " | Type: " + (p.type || "?") + " | Date: " + evtDateStr + " | Statut: " + (p.statut || "Brouillon");
   logAction(p.idAuteur, p.roleAuteur, isNew ? "Création" : "Modification", "Com & Événements", id, logDetail);
+  _invalidateComEventsCache_();
   return createJsonResponse({ success: true, message: "Événement enregistré avec succès." });
 }
 
@@ -2835,6 +3625,9 @@ function handleGetParticipants(p, ss) {
   }
 }
 function handleGetStudentsMinList(ss) {
+  // Mise en cache 20s : ETUDIANTS a de nombreux écrivains dispersés (comme stats_v1),
+  // un TTL court suffit plutôt qu'une invalidation ciblée.
+  return getCachedJsonResponse_('students_min_v1', 20, function() {
   const sheet = ss.getSheetByName("ETUDIANTS");
   const data = sheet.getDataRange().getValues();
   const list = [];
@@ -2855,6 +3648,7 @@ function handleGetStudentsMinList(ss) {
   }
   list.sort((a, b) => a.nom.localeCompare(b.nom));
   return createJsonResponse({ success: true, data: list });
+  });
 }
 
 function handleGetEnterprisesMinList(ss) {
@@ -3000,25 +3794,32 @@ function handlePreviewComMail(p, ss) {
       } else {
         // --- MODE CLASSIQUE (On exclut d'office les sortis et refusés) ---
         if (!typo.includes("sorti") && !typo.includes("refus")) {
-          
-          // 1. Etudiants en recherche : (Statut Recherche) ET (Inscrit OU Préinscrit)
-          if (cnf.target_recherche && status.includes("recherche") && typo.includes("inscrit")) {
+
+          // "PRÉINSCRIT" contient "inscrit" : on distingue explicitement les deux typologies.
+          const estPreinscrit    = typo.includes("préin") || typo.includes("prein");
+          const estInscritStrict = typo.includes("inscrit") && !estPreinscrit;
+          const estProspect      = typo.includes("prospect");
+
+          // 1. Étudiants en recherche : statut "en recherche" ET (Inscrit OU Préinscrit).
+          //    Jamais les prospects.
+          if (cnf.target_recherche && status.includes("recherche") && (estInscritStrict || estPreinscrit)) {
             ok = true;
           }
 
-          // 2. Etudiants préinscrits uniquement (Peu importe le statut)
-          if (cnf.b2c_preinscrits && typo.includes("préin")) {
+          // 2. Étudiants préinscrits uniquement (en alternance ou non, peu importe le statut).
+          if (cnf.b2c_preinscrits && estPreinscrit) {
             ok = true;
           }
 
-          // 3. Etudiants prospects uniquement
-          if (cnf.b2c_prospects && typo.includes("prospect")) {
+          // 3. Étudiants prospects uniquement.
+          if (cnf.b2c_prospects && estProspect) {
             ok = true;
           }
 
-          // 4. Inscrits définitivement (Tous les inscrits, peu importe le statut)
-          if (cnf.b2c_inscrits && typo.includes("inscrit")) ok = true;
-          
+          // 4. Étudiants inscrits uniquement (jamais les préinscrits, peu importe le statut).
+          if (cnf.b2c_inscrits && estInscritStrict) {
+            ok = true;
+          }
         }
       }
 
@@ -3045,12 +3846,21 @@ function handlePreviewComMail(p, ss) {
   }
 }
     
-    // Suppression des doublons
+    // 3. EMAILS AJOUTÉS MANUELLEMENT (au cas par cas depuis le formulaire)
+    if (p.emailsLibres) {
+      String(p.emailsLibres).split(/[\s,;]+/).forEach(function(raw) {
+        const mail = String(raw || "").trim().toLowerCase();
+        if (mail.includes('@')) contactsList.push({ email: mail, nom: mail, source: "Ajouté" });
+      });
+    }
+
+    // Suppression des doublons (la 1re occurrence gagne : un étudiant ciblé
+    // prime sur le même email ressaisi manuellement)
     const unique = contactsList.filter((v, i, a) => a.findIndex(t => t.email === v.email) === i);
     return createJsonResponse({ success: true, data: unique });
 
-  } catch(e) { 
-    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() }); 
+  } catch(e) {
+    return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
   }
 }
 
@@ -3066,6 +3876,7 @@ function handleDeleteComEvent(p, ss) {
       const typeEvt = data[i][5] || "?";
       ws.getRange(i + 1, 8).setValue("Archivé");
       logAction(p.idAuteur, p.roleAuteur, "Suppression", "Com & Événements", p.id, "Événement archivé : " + nomEvt + " (" + typeEvt + ")");
+      _invalidateComEventsCache_();
       break;
     }
   }
@@ -3176,60 +3987,280 @@ function processWeeklyCampagnes() {
   });
 }
 
-// Créer une campagne
+// Créer une campagne — écrit dans le schéma CAMP_COL
+// A ID | B Nom | C Objet | D Corps | E Cible | F Fréquence | G DernierEnvoi | H Statut | I PJ_URL | J EmailsManuels | K EmailsExclus
 function handleCreateCampaign(p, ss) {
   try {
     const sheet = getSheetSafe(ss, "CAMPAGNES");
     const newId = "CMP-" + Math.floor(10000 + Math.random() * 90000);
-    const newRow = [
-      newId, p.nom, p.frequence, new Date(), "", p.objet, p.message, "Active", p.cibles
-    ];
+    // Le front envoie la clé "cible" (tableau) ; on tolère aussi l'ancienne "cibles".
+    const ciblesCampagne = p.cible || p.cibles || "";
+    const cibleStr = Array.isArray(ciblesCampagne) ? ciblesCampagne.join(", ") : String(ciblesCampagne);
+    const emailsManuelsStr = String(p.emailsManuels || "");
+    const emailsExclusStr = Array.isArray(p.emailsExclus) ? p.emailsExclus.join(", ") : String(p.emailsExclus || "");
+    // Le formulaire campagnes.html envoie la clé "corps" ; on tolère aussi "message".
+    const messageCampagne = (p.corps !== undefined && p.corps !== "") ? p.corps : (p.message || p.corps || "");
+    if (!String(messageCampagne).trim()) {
+      return createJsonResponse({ success: false, message: "Le message de la campagne est vide." });
+    }
+    if (String(messageCampagne).length > 48000) {
+      return createJsonResponse({ success: false, message: "Message trop long pour être enregistré (max ~48 000 caractères). Allégez le HTML ou hébergez les images ailleurs." });
+    }
+    const newRow = [];
+    newRow[CAMP_COL.ID]      = newId;
+    newRow[CAMP_COL.NOM]     = p.nom || "Sans nom";
+    newRow[CAMP_COL.OBJET]   = p.objet || "Sans objet";
+    newRow[CAMP_COL.CORPS]   = messageCampagne;
+    newRow[CAMP_COL.CIBLE]   = cibleStr;
+    newRow[CAMP_COL.FREQ]    = p.frequence || "Une fois";
+    newRow[CAMP_COL.DERNIER] = "";
+    newRow[CAMP_COL.STATUT]  = "À lancer";
+    newRow[CAMP_COL.PJ]      = String(p.pjUrl || "");
+    newRow[CAMP_COL.MANUELS] = emailsManuelsStr;
+    newRow[CAMP_COL.EXCLUS]  = emailsExclusStr;
+    for (var k = 0; k < newRow.length; k++) if (newRow[k] === undefined) newRow[k] = "";
     sheet.appendRow(newRow);
-    return createJsonResponse({ success: true, message: "Campagne créée !" });
+    _invalidateCampagnesCache_();
+    return createJsonResponse({ success: true, message: "Campagne créée !", id: newId });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
-// Mettre à jour (Modifier)
+// Mettre à jour (Modifier) — fusion : ne réécrit QUE les champs réellement fournis
+// (l'ancienne version écrasait objet/message/cible avec "undefined" quand la modale
+// d'édition n'envoyait que nom / fréquence / statut).
 function handleUpdateCampaign(p, ss) {
   try {
     const sheet = getSheetSafe(ss, "CAMPAGNES");
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === p.id) {
-        sheet.getRange(i + 1, 2, 1, 8).setValues([[p.nom, p.frequence, data[i][3], data[i][4], p.objet, p.message, p.statut, p.cibles]]);
+      if (String(data[i][CAMP_COL.ID]) === String(p.id)) {
+        const row = data[i].slice();
+        while (row.length <= CAMP_COL.EXCLUS) row.push("");
+        if (p.nom       !== undefined) row[CAMP_COL.NOM]   = p.nom;
+        if (p.frequence !== undefined) row[CAMP_COL.FREQ]  = p.frequence;
+        if (p.objet     !== undefined) row[CAMP_COL.OBJET] = p.objet;
+        var nouveauMessage = (p.message !== undefined) ? p.message : (p.corps !== undefined ? p.corps : undefined);
+        if (nouveauMessage !== undefined) {
+          if (String(nouveauMessage).length > 48000) {
+            return createJsonResponse({ success: false, message: "Message trop long pour être enregistré (max ~48 000 caractères). Allégez le HTML ou hébergez les images ailleurs." });
+          }
+          row[CAMP_COL.CORPS] = nouveauMessage;
+        }
+        if (p.statut    !== undefined) row[CAMP_COL.STATUT] = p.statut;
+        if (p.cible !== undefined || p.cibles !== undefined) {
+          const cb = (p.cible !== undefined) ? p.cible : p.cibles;
+          row[CAMP_COL.CIBLE] = Array.isArray(cb) ? cb.join(", ") : String(cb || "");
+        }
+        if (p.emailsManuels !== undefined) row[CAMP_COL.MANUELS] = String(p.emailsManuels || "");
+        if (p.emailsExclus  !== undefined) row[CAMP_COL.EXCLUS]  = Array.isArray(p.emailsExclus) ? p.emailsExclus.join(", ") : String(p.emailsExclus || "");
+        if (p.pjUrl         !== undefined) row[CAMP_COL.PJ]      = String(p.pjUrl || "");
+        for (var k = 0; k < row.length; k++) if (row[k] === undefined) row[k] = "";
+        if (sheet.getMaxColumns() < row.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), row.length - sheet.getMaxColumns());
+        sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
         break;
       }
     }
+    _invalidateCampagnesCache_();
     return createJsonResponse({ success: true, message: "Campagne mise à jour !" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MOTEUR D'ENVOI DES CAMPAGNES — schéma CAMP_COL
+//  A ID | B Nom | C Objet | D Corps | E Cible | F Fréquence | G DernierEnvoi
+//   | H Statut | I PJ_URL | J EmailsManuels | K EmailsExclus
+// ══════════════════════════════════════════════════════════════════
+
+// Convertit la chaîne "cible" stockée (jetons cochés dans campagnes.html)
+// en objet compris par la logique de filtrage.
+function _campagneCibleToCnf_(cibleStr) {
+  var cnf = {};
+  String(cibleStr || "").split(/[\s,;]+/).forEach(function(tok) {
+    switch (String(tok).trim().toLowerCase()) {
+      case "recherche":  cnf.target_recherche = true; break;
+      case "prein":
+      case "preinscrit":
+      case "préinscrit": cnf.b2c_preinscrits = true; break;
+      case "prospect":   cnf.b2c_prospects  = true; break;
+      case "inscrit":    cnf.b2c_inscrits   = true; break;
+      case "ent_avec":   cnf.b2b_avec       = true; break;
+      case "ent_sans":   cnf.b2b_sans       = true; break;
+      case "sortis":     cnf.b2c_sortis     = true; break;
+    }
+  });
+  return cnf;
+}
+
+// Liste finale : cibles prédéfinies + emails manuels − emails exclus. → [{email, nom, prenom}]
+function _resolveCampagneRecipients_(ss, cibleStr, emailsManuels, emailsExclus) {
+  var cnf = _campagneCibleToCnf_(cibleStr);
+  var out = [], seen = {};
+  function add(email, nom, prenom) {
+    var e = String(email || "").trim().toLowerCase();
+    if (e.indexOf('@') === -1 || seen[e]) return;
+    seen[e] = true;
+    out.push({ email: e, nom: String(nom || e).trim(), prenom: String(prenom || "").trim() });
+  }
+
+  var wantEtu = cnf.target_recherche || cnf.b2c_preinscrits || cnf.b2c_prospects || cnf.b2c_inscrits || cnf.b2c_sortis;
+  var wantEnt = cnf.b2b_avec || cnf.b2b_sans;
+
+  if (wantEtu) {
+    var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    var cibleSortis = cnf.b2c_sortis === true;
+    for (var i = 1; i < dE.length; i++) {
+      var row = dE[i];
+      var mail = String(row[4] || "").trim().toLowerCase();
+      if (mail.indexOf('@') === -1) continue;
+      var statut = String(row[13] || "").toLowerCase();
+      var typo   = String(row[20] || "").toLowerCase();
+      var ok = false;
+      if (cibleSortis) {
+        if (typo.indexOf("sorti") !== -1) ok = true;
+      } else if (typo.indexOf("sorti") === -1 && typo.indexOf("refus") === -1) {
+        var estPre = typo.indexOf("préin") !== -1 || typo.indexOf("prein") !== -1;
+        var estInscritStrict = typo.indexOf("inscrit") !== -1 && !estPre;
+        var estProspect = typo.indexOf("prospect") !== -1;
+        if (cnf.target_recherche && statut.indexOf("recherche") !== -1 && (estInscritStrict || estPre)) ok = true;
+        if (cnf.b2c_preinscrits && estPre) ok = true;
+        if (cnf.b2c_prospects && estProspect) ok = true;
+        if (cnf.b2c_inscrits && estInscritStrict) ok = true;
+      }
+      if (ok) add(mail, (row[3] || "") + " " + (row[2] || ""), row[3] || "");
+    }
+  }
+
+  if (wantEnt) {
+    var dP = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
+    for (var j = 1; j < dP.length; j++) {
+      var rowP = dP[j];
+      var mailP = String(rowP[3] || "").trim().toLowerCase();
+      if (mailP.indexOf('@') === -1) continue;
+      var cellAlt = String(rowP[9] || "").trim();
+      var nbAlt = (cellAlt === "" || cellAlt === "0") ? 0 : 1;
+      if ((cnf.b2b_avec && nbAlt > 0) || (cnf.b2b_sans && nbAlt === 0)) add(mailP, rowP[1] || "Entreprise", "");
+    }
+  }
+
+  String(emailsManuels || "").split(/[\s,;]+/).forEach(function(raw) { add(raw, raw, ""); });
+
+  var exclus = {};
+  String(emailsExclus || "").split(/[\s,;]+/).forEach(function(raw) {
+    var e = String(raw || "").trim().toLowerCase();
+    if (e) exclus[e] = true;
+  });
+  return out.filter(function(c) { return !exclus[c.email]; });
+}
+
+// Envoi effectif. overrideRecipients = liste imposée (mode test). Renvoie {sent, errors, recipients}.
+function _envoyerCampagne_(ss, camp, overrideRecipients) {
+  var nom   = String(camp[CAMP_COL.NOM] || "Campagne");
+  var objet = String(camp[CAMP_COL.OBJET] || "").trim() || "Message HECG";
+  var corps = String(camp[CAMP_COL.CORPS] || "").trim();
+  if (!corps) throw new Error("Le message de cette campagne est vide (colonne D « Corps » de l'onglet CAMPAGNES). Ouvrez-la avec ✏️, saisissez le texte de l'email et enregistrez, puis relancez.");
+
+  var recipients = overrideRecipients || _resolveCampagneRecipients_(
+    ss, String(camp[CAMP_COL.CIBLE] || ""), String(camp[CAMP_COL.MANUELS] || ""), String(camp[CAMP_COL.EXCLUS] || "")
+  );
+  if (!recipients.length) return { sent: 0, errors: 0, recipients: [], reason: "Aucun destinataire pour cette campagne." };
+
+  var attachments = [];
+  var pjUrl = String(camp[CAMP_COL.PJ] || "");
+  if (pjUrl) {
+    try { var m = pjUrl.match(/[-\w]{25,}/); if (m) attachments = [DriveApp.getFileById(m[0]).getBlob()]; } catch (e) {}
+  }
+
+  var signature = getSignatureHTML();
+  var sent = 0, errors = 0, quotaStop = false;
+  var quota = 999999;
+  try { quota = MailApp.getRemainingDailyQuota(); } catch (eQ) {}
+
+  recipients.forEach(function(r) {
+    if (quotaStop) return;
+    if (sent >= quota) { quotaStop = true; return; }
+    try {
+      var prenom = r.prenom || (r.nom ? String(r.nom).split(" ")[0] : "");
+      var sujet = objet.replace(/\{\{\s*PRENOM\s*\}\}/gi, prenom);
+      var html = corps.replace(/\{\{\s*PRENOM\s*\}\}/gi, prenom);
+      if (html.indexOf("<") === -1) html = html.replace(/\n/g, "<br>"); // message en texte simple → HTML
+      // Signature insérée avant </body> si le message est un document HTML complet.
+      var htmlFinal = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, signature + "</body>") : (html + signature);
+      var opts = { htmlBody: htmlFinal, name: "HECG - École de Gestion" };
+      if (attachments.length) opts.attachments = attachments;
+      GmailApp.sendEmail(r.email, sujet, "", opts);
+      sent++;
+    } catch (eSend) { errors++; }
+  });
+
+  try {
+    logMailDetail(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), {
+      auteur: "CRM — Campagnes", categorie: "Campagne", sousCat: "Envoi — " + nom,
+      objet: objet, destinataires: recipients.map(function(r) { return r.email; }),
+      corps: corps, sourceId: String(camp[0] || "")
+    });
+  } catch (eLog) {}
+
+  return { sent: sent, errors: errors, recipients: recipients, quotaStop: quotaStop };
 }
 
 // Fonction pour lancer manuellement la campagne depuis le bouton 🚀
 function handleRunCampagneManual(p, ss) {
   try {
-    // On appelle la logique globale de traitement hebdomadaire
-    processWeeklyCampagnes(); 
-    return createJsonResponse({ success: true, message: "Lancement de la campagne effectué !" });
+    var sheet = getSheetSafe(ss, "CAMPAGNES");
+    var data = sheet.getDataRange().getValues();
+    var campId = String(p.id || p.campaignId || "").trim();
+    var rowIdx = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === campId) { rowIdx = i; break; }
+    }
+    if (rowIdx === -1) return createJsonResponse({ success: false, message: "Campagne introuvable." });
+
+    var camp = data[rowIdx];
+    var res = _envoyerCampagne_(ss, camp);
+    if (!res.recipients.length) return createJsonResponse({ success: false, message: res.reason || "Aucun destinataire." });
+
+    var freq = String(camp[CAMP_COL.FREQ] || "Une fois");
+    sheet.getRange(rowIdx + 1, CAMP_COL.DERNIER + 1).setValue(new Date());                            // G : dernier envoi
+    sheet.getRange(rowIdx + 1, CAMP_COL.STATUT + 1).setValue(freq === "Une fois" ? "Terminée" : "Active"); // H : statut
+    _invalidateCampagnesCache_();
+    logAction(p.idAuteur, p.roleAuteur, "Envoi", "Campagnes", campId,
+      "Campagne « " + camp[CAMP_COL.NOM] + " » lancée — " + res.sent + " envoi(s)" + (res.errors ? ", " + res.errors + " échec(s)" : ""));
+
+    return createJsonResponse({
+      success: true,
+      count: res.sent,
+      message: res.sent + " email(s) envoyé(s)"
+        + (res.errors ? " · " + res.errors + " échec(s)" : "")
+        + (res.quotaStop ? " · quota d'envoi Gmail atteint, le reste partira demain" : "")
+    });
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
 }
 
-// Fonction pour envoyer un test à l'admin
+// Fonction pour envoyer un test (à l'adresse de l'utilisateur connecté par défaut)
 function handleTestCampaign(p, ss) {
   try {
-    const sheet = getSheetSafe(ss, "CAMPAGNES");
-    const data = sheet.getDataRange().getValues();
-    const camp = data.find(r => String(r[0]) === String(p.campaignId));
-    
+    var sheet = getSheetSafe(ss, "CAMPAGNES");
+    var data = sheet.getDataRange().getValues();
+    var campId = String(p.campaignId || p.id || "").trim();
+    var camp = null;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === campId) { camp = data[i]; break; }
+    }
     if (!camp) throw new Error("Campagne introuvable.");
 
-    // Récupération de l'email de test dans les réglages
-    const settings = handleGetSettings(ss);
-    const emailDest = JSON.parse(settings.getContent()).email_test;
+    var settings = JSON.parse(handleGetSettings(ss).getContent());
+    var dest = String(p.testEmail || p.emailAuteur || settings.email_test || SENDER_EMAIL).trim();
 
-    GmailApp.sendEmail(emailDest, "[TEST] " + camp[5], "", { htmlBody: camp[6] });
-    return createJsonResponse({ success: true, message: "Email de test envoyé à " + emailDest });
+    var campTest = camp.slice();
+    campTest[CAMP_COL.OBJET] = "[TEST] " + String(camp[CAMP_COL.OBJET] || "");
+    var res = _envoyerCampagne_(ss, campTest, [{ email: dest, nom: dest, prenom: "" }]);
+
+    return createJsonResponse({
+      success: res.sent > 0,
+      message: res.sent > 0 ? ("Email de test envoyé à " + dest) : "Échec de l'envoi du test."
+    });
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
@@ -3246,13 +4277,13 @@ function handleDuplicateCampaign(p, ss) {
 
     const newId = "CMP-" + Math.floor(10000 + Math.random() * 90000);
     const newRow = [...original];
-    newRow[0] = newId;
-    newRow[1] = original[1] + " (Copie)";
-    newRow[3] = new Date();
-    newRow[4] = "";
-    newRow[7] = "À lancer"; // Statut par défaut
-    
+    newRow[CAMP_COL.ID]      = newId;
+    newRow[CAMP_COL.NOM]     = original[CAMP_COL.NOM] + " (Copie)";
+    newRow[CAMP_COL.DERNIER] = "";
+    newRow[CAMP_COL.STATUT]  = "À lancer";
+
     sheet.appendRow(newRow);
+    _invalidateCampagnesCache_();
     return createJsonResponse({ success: true, message: "Campagne dupliquée !" });
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
@@ -3275,41 +4306,36 @@ function runScheduledCampaigns() {
 
   for (let i = 1; i < dataCamp.length; i++) {
     const row = dataCamp[i];
-    const idCmp = row[0];
-    const freq = row[2]; // Colonne C
-    const statut = row[7]; // Colonne H
+    const idCmp = row[CAMP_COL.ID];
+    const freq = row[CAMP_COL.FREQ];
+    const statut = row[CAMP_COL.STATUT];
 
     if (statut !== "Active") { nbIgnorees++; continue; }
 
     let dernierEnvoi = null;
-    if (row[4]) {
-      dernierEnvoi = new Date(row[4]);
+    if (row[CAMP_COL.DERNIER]) {
+      dernierEnvoi = new Date(row[CAMP_COL.DERNIER]);
       dernierEnvoi.setHours(0, 0, 0, 0); // Normalisation identique
     }
 
     let doitPartir = false;
 
-    if (!dernierEnvoi) {
-      doitPartir = true;
-    } else {
+    // SÉCURITÉ : le CRON ne fait QUE reconduire une campagne récurrente déjà
+    // lancée manuellement au moins une fois (dernierEnvoi rempli). Il ne lance
+    // jamais une campagne "de zéro" — ça, c'est le bouton 🚀 dans l'appli.
+    if (dernierEnvoi && freq !== "Une fois") {
       const joursEcoules = Math.floor((today - dernierEnvoi) / (1000 * 60 * 60 * 24));
-
-      if (freq === "Hebdomadaire" && joursEcoules >= 7) {
-        doitPartir = true;
-      } else if (freq === "Mensuelle" && joursEcoules >= 28) {
-        doitPartir = true;
-      } else if (freq === "Compte à rebours" && joursEcoules >= 1) {
-        doitPartir = true;
-      }
-      // "Une fois" avec dernierEnvoi existant → ne repart pas
+      if (freq === "Hebdomadaire" && joursEcoules >= 7)  doitPartir = true;
+      else if (freq === "Mensuelle" && joursEcoules >= 28) doitPartir = true;
+      else if (freq === "Compte à rebours" && joursEcoules >= 1) doitPartir = true;
     }
 
     if (doitPartir) {
       try {
-        Logger.log("Lancement de la campagne : " + row[1]);
-        executeSendingLogic(row, ss);
-        sheetCamp.getRange(i + 1, 5).setValue(new Date());
-        if (freq === "Une fois") sheetCamp.getRange(i + 1, 8).setValue("Terminée");
+        Logger.log("Lancement de la campagne : " + row[CAMP_COL.NOM]);
+        _envoyerCampagne_(ss, row);
+        sheetCamp.getRange(i + 1, CAMP_COL.DERNIER + 1).setValue(new Date());
+        if (freq === "Une fois") sheetCamp.getRange(i + 1, CAMP_COL.STATUT + 1).setValue("Terminée");
         nbLancees++;
       } catch (e) {
         nbErreurs++;
@@ -3327,7 +4353,14 @@ function runScheduledCampaigns() {
 // ==========================================
 
 // 1. Lire et afficher les alertes actives
+// Invalide le cache de handleGetAllAlerts après toute écriture sur ALERTES_PARTENAIRES.
+function _invalidatePartnerAlertsCache_() {
+  try { CacheService.getScriptCache().remove('alerts_partners_v1'); } catch(e) {}
+}
+
 function handleGetAllAlerts(p, ss) {
+  // Mise en cache 20s : évite de relire ALERTES_PARTENAIRES + PARTENARIAT à chaque ouverture.
+  return getCachedJsonResponse_('alerts_partners_v1', 20, function() {
   try {
     const sA = getSheetSafe(ss, "ALERTES_PARTENAIRES");
     const sP = getSheetSafe(ss, "PARTENARIAT");
@@ -3339,18 +4372,18 @@ function handleGetAllAlerts(p, ss) {
     for(let j = 1; j < dP.length; j++) {
       // On associe l'ID (Col B) au NOM (Col C) en ignorant les espaces/majuscules
       let cleanId = String(dP[j][1] || "").trim().toUpperCase();
-      if(cleanId) partMap[cleanId] = String(dP[j][2] || "Entreprise sans nom").trim(); 
+      if(cleanId) partMap[cleanId] = String(dP[j][2] || "Entreprise sans nom").trim();
     }
 
     const list = [];
     for(let i = 1; i < dA.length; i++) {
       // On ignore les lignes vides, terminées ou annulées
-      if(!dA[i][0] || dA[i][5] === "Terminé" || dA[i][5] === "Annulé") continue; 
-      
+      if(!dA[i][0] || dA[i][5] === "Terminé" || dA[i][5] === "Annulé") continue;
+
       let dateObj = new Date(dA[i][2]);
       let idAlerte = String(dA[i][1]).trim().toUpperCase();
       let nomTrouve = partMap[idAlerte] ? partMap[idAlerte] : ("ID : " + dA[i][1]);
-      
+
       list.push({
         id: dA[i][0],
         partId: dA[i][1],
@@ -3363,12 +4396,13 @@ function handleGetAllAlerts(p, ss) {
         auteur: dA[i][7] || ""
       });
     }
-    
+
     // On trie pour avoir les plus urgentes en premier
     list.sort((a, b) => new Date(a.dateRaw) - new Date(b.dateRaw));
-    
+
     return createJsonResponse({ success: true, data: list });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
 }
 
 // 1b. Historique complet de toutes les alertes (y compris Terminé/Annulé)
@@ -3460,6 +4494,7 @@ function handleCompleteAlert(p, ss) {
           logAction(p.idAuteur, p.roleAuteur, "Action", "Alertes Partenaires", idPart, "Alerte récurrente complétée, prochaine: " + oldDate.toLocaleDateString('fr-FR') + " : « " + msgAlerte + " »");
         }
         notifierMMOKEtCreerMission(ss, p, "Partenaire", idPart, "cloture", msgAlerte);
+        _invalidatePartnerAlertsCache_();
         return createJsonResponse({ success: true });
       }
     }
@@ -3482,6 +4517,7 @@ function handleUpdateAlert(p, ss) {
         sA.getRange(i+1, 7).setValue(p.destinataire);
         const newDate = p.date ? new Date(p.date).toLocaleDateString('fr-FR') : "?";
         logAction(p.idAuteur, p.roleAuteur, "Modification", "Alertes Partenaires", idPart, "Alerte modifiée → Date: " + newDate + " | « " + String(p.msg || "").substring(0, 60) + " »");
+        _invalidatePartnerAlertsCache_();
         return createJsonResponse({ success: true, message: "Alerte mise à jour avec succès !" });
       }
     }
@@ -3501,6 +4537,7 @@ function handleCancelAlert(p, ss) {
         const msgAlerte = String(dA[i][3] || "").substring(0, 60);
         sA.getRange(i+1, 6).setValue("Annulé");
         logAction(p.idAuteur, p.roleAuteur, "Action", "Alertes Partenaires", idPart, "Alerte annulée : « " + msgAlerte + " »");
+        _invalidatePartnerAlertsCache_();
         return createJsonResponse({ success: true, message: "Alerte annulée" });
       }
     }
@@ -3719,6 +4756,7 @@ function handleSetPartnerAlert(p, ss) {
     logAction(p.idAuteur, p.roleAuteur, "Création", "Alertes Partenaires", idPartenaire, "Alerte programmée le " + dateAlerte + " : « " + msgApercu + " » (" + (p.frequence || p.freq || "Unique") + ")");
     const msnId = creerMissionDepuisAlerte(ss, p, "Partenaire", idPartenaire);
     notifierMMOKEtCreerMission(ss, p, "Partenaire", idPartenaire, "creation", p.message || p.msg || "Relance");
+    _invalidatePartnerAlertsCache_();
     const msgRetour = msnId ? "Alerte créée + Mission " + msnId + " déclenchée !" : "Alerte créée avec succès dans la base !";
     return createJsonResponse({ success: true, message: msgRetour, missionId: msnId || null });
   } catch(e) {
@@ -3727,12 +4765,19 @@ function handleSetPartnerAlert(p, ss) {
 }
 // FONCTION POUR RÉCUPÉRER TOUS LES DÉTAILS D'UN PARTENAIRE (HISTORIQUE, ALTERNANTS, ETC.)
 function handleGetPartnerDetails(params, ss) {
+  const id = String(params.targetId || "").trim().toUpperCase();
+  // Cache par entreprise (20s) : cette fiche lit ~6 feuilles complètes à chaque
+  // ouverture, ce qui rendait l'ouverture directe d'un dossier entreprise lente.
+  return getEntityCachedJsonResponse_('partner_details', id, 20, function() {
   try {
-    const id = String(params.targetId || "").trim().toUpperCase();
     const sheetPart = getSheetSafe(ss, "PARTENARIAT");
     const dP = sheetPart.getDataRange().getValues();
     let info = null;
     const contacts = [];
+    const colDateCrea = (dP[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
+    // Date de création de l'entreprise = plus ancienne date de ses contacts, seulement si
+    // TOUS ses contacts en ont une (sinon l'entreprise existait avant la mise en place).
+    let dateCreaEnt = null, dateCreaEntComplete = true;
 
     for (let i = 1; i < dP.length; i++) {
       if (String(dP[i][1]).trim().toUpperCase() === id) {
@@ -3746,12 +4791,17 @@ function handleGetPartnerDetails(params, ss) {
           tel2: String(dP[i][9] || "").trim(),
           mail2: String(dP[i][8] || "").trim(),
           poste: String(dP[i][13] || "").trim(),
-          is_ma: String(dP[i][14] || "Non").trim()
+          is_ma: String(dP[i][14] || "Non").trim(),
+          dateCreation: colDateCrea >= 0 ? _formatDateCreation_(dP[i][colDateCrea]) : ""
         });
+        const vCrea = _dateCreationToDate_(colDateCrea >= 0 ? dP[i][colDateCrea] : "");
+        if (vCrea) { if (!dateCreaEnt || vCrea < dateCreaEnt) dateCreaEnt = vCrea; }
+        else dateCreaEntComplete = false;
       }
     }
 
     if (!info) return createJsonResponse({ success: false, message: "Entreprise introuvable" });
+    info.dateCreation = (dateCreaEnt && dateCreaEntComplete) ? _formatDateCreation_(dateCreaEnt) : "";
     
     const dataEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
     const nomEntLower = info.entreprise.toLowerCase();
@@ -3786,12 +4836,12 @@ function handleGetPartnerDetails(params, ss) {
       const wsA = ss.getSheetByName("ANCIENS_ALTERNANTS");
       if (wsA && wsA.getLastRow() > 1) {
         // Construire un map idEtu → infos actuelles (pour enrichir avec classe/campus si manquants dans l'historique)
+        // Réutilise dataEtu déjà chargé plus haut au lieu de relire toute la feuille ETUDIANTS.
         const etuMap = {};
         try {
-          const dEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-          for (let ei = 1; ei < dEtu.length; ei++) {
-            const eid = String(dEtu[ei][0]).trim();
-            if (eid) etuMap[eid] = { classe: String(dEtu[ei][14]||""), campus: String(dEtu[ei][22]||""), mail: String(dEtu[ei][4]||""), tel: String(dEtu[ei][5]||"") };
+          for (let ei = 1; ei < dataEtu.length; ei++) {
+            const eid = String(dataEtu[ei][0]).trim();
+            if (eid) etuMap[eid] = { classe: String(dataEtu[ei][14]||""), campus: String(dataEtu[ei][22]||""), mail: String(dataEtu[ei][4]||""), tel: String(dataEtu[ei][5]||"") };
           }
         } catch(eMap) {}
         anciensAlternants = wsA.getDataRange().getValues()
@@ -3819,48 +4869,23 @@ function handleGetPartnerDetails(params, ss) {
       }
     } catch(eAnc) {}
 
-    // Calcul du score — logique identique à handleGetPartners
-    const todayScore = new Date(); todayScore.setHours(0, 0, 0, 0);
-    let activeScoreSum = 0;
-    let activeCount = 0;
-    let sortiCount = 0;
-    for (let k = 1; k < dataEtu.length; k++) {
-      const entIdK = String(dataEtu[k][11] || "").trim().toUpperCase();
-      if (entIdK !== id) continue;
-      const statutK   = String(dataEtu[k][13] || "").toLowerCase();
-      const typoK     = String(dataEtu[k][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      const isActiveAlt = statutK.includes("altern") || statutK.includes("apprenti");
-      const isSorti     = typoK.includes("sorti");
-      if (isActiveAlt) {
-        const raw = dataEtu[k][17];
-        let days = 0;
-        if (raw) {
-          const d = raw instanceof Date ? raw : new Date(String(raw).replace(/^'/, "").trim());
-          if (!isNaN(d.getTime())) days = Math.max(0, Math.floor((todayScore - d) / 86400000));
-        }
-        activeScoreSum += (50 + days);
-        activeCount++;
-      } else if (isSorti) {
-        sortiCount++;
-      }
-    }
-    const qualifiedContactCount = contacts.filter(c => {
-      const hasName = !!(c.nom && c.prenom);
-      const hasMail = !!(c.mail && String(c.mail).includes('@'));
-      const hasTel  = !!(c.tel || c.tel2);
-      return hasName && (hasMail || hasTel);
-    }).length;
-    const scoreA = activeScoreSum * activeCount;
-    const scoreB = sortiCount * 50;
-    const scoreC = qualifiedContactCount * 10;
-    const score = scoreA + scoreB + scoreC;
-    const scoreDetails = { A: scoreA, B: scoreB, C: scoreC, activeCount, sortiCount, qualifiedContactCount };
+    // Score quotidien (identique à handleGetPartners) : +1 point/jour tant que
+    // l'entreprise a au moins un étudiant Inscrit/Préinscrit, calculé une fois par jour
+    // par calculerScoreQuotidienEntreprises(). On se contente ici de le lire.
+    const score = _getScoreEntreprisesMap_(ss)[id] || 0;
 
-    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants, score, scoreDetails } });
+    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants, score } });
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
+  });
 }
+
+// Invalide le cache de handleGetPartnerDetails pour une entreprise précise
+function _invalidatePartnerDetailsCache_(id) {
+  bumpEntityCacheVersion_('partner_details', String(id || "").trim().toUpperCase());
+}
+
 function handleUpdateEnterprise(p, ss) {
   try {
     const sheet = getSheetSafe(ss, "PARTENARIAT");
@@ -3868,6 +4893,13 @@ function handleUpdateEnterprise(p, ss) {
     const idCible = String(p.id_entreprise).trim().toUpperCase();
     let found = false;
     const changes = [];
+    // Une entreprise a une ligne par contact dans PARTENARIAT : on doit mettre à jour
+    // toutes les lignes correspondantes. On modifie le tableau en mémoire et on écrit
+    // en UN SEUL appel setValues() par ligne (au lieu de jusqu'à 4 appels setValue()
+    // séparés par ligne) pour limiter le nombre d'aller-retours vers Google Sheets —
+    // c'était la cause probable des sauvegardes très lentes sur les entreprises ayant
+    // plusieurs contacts.
+    const rowsToWrite = []; // { rowIndex1Based, values }
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]).trim().toUpperCase() === idCible) {
         if (!found) {
@@ -3877,16 +4909,23 @@ function handleUpdateEnterprise(p, ss) {
           if (p.cp !== undefined && String(data[i][11]) !== String(p.cp)) changes.push("CP: " + (data[i][11] || "-") + " → " + (p.cp || "-"));
           if (p.ville !== undefined && data[i][12] !== p.ville) changes.push("Ville: " + (data[i][12] || "-") + " → " + (p.ville || "-"));
         }
-        if (p.nouveauNom !== undefined && p.nouveauNom) sheet.getRange(i + 1, 3).setValue(p.nouveauNom);
-        if (p.adresse !== undefined) sheet.getRange(i + 1, 11).setValue(p.adresse);
-        if (p.cp !== undefined) sheet.getRange(i + 1, 12).setValue(p.cp);
-        if (p.ville !== undefined) sheet.getRange(i + 1, 13).setValue(p.ville);
+        const rowCopy = data[i].slice();
+        if (p.nouveauNom !== undefined && p.nouveauNom) rowCopy[2] = p.nouveauNom;
+        if (p.adresse !== undefined) rowCopy[10] = p.adresse;
+        if (p.cp !== undefined) rowCopy[11] = p.cp;
+        if (p.ville !== undefined) rowCopy[12] = p.ville;
+        rowsToWrite.push({ rowIndex1Based: i + 1, values: rowCopy });
         found = true;
       }
     }
+    rowsToWrite.forEach(function(r) {
+      sheet.getRange(r.rowIndex1Based, 1, 1, r.values.length).setValues([r.values]);
+    });
     if (found) {
       const logDetail = changes.length > 0 ? changes.join(" | ") : "Mise à jour fiche entreprise";
       logAction(p.idAuteur, p.roleAuteur, "Modification", "Entreprise", idCible, logDetail);
+      _invalidatePartnersCache_();
+      _invalidatePartnerDetailsCache_(idCible);
       return createJsonResponse({ success: true });
     }
     return createJsonResponse({ success: false, message: "ID non trouvé" });
@@ -3910,17 +4949,22 @@ function handleUpdateContact(p, ss) {
         if (p.mail2 !== undefined && oldRow[8] !== p.mail2) changes.push("Mail2: " + (oldRow[8] || "-") + " → " + p.mail2);
         if (p.tel2 !== undefined && String(oldRow[9]) !== String(p.tel2)) changes.push("Tél2: " + (oldRow[9] || "-") + " → " + p.tel2);
 
-        if (p.nom !== undefined) sheet.getRange(i + 1, 4).setValue(p.nom);
-        if (p.prenom !== undefined) sheet.getRange(i + 1, 5).setValue(p.prenom);
-        if (p.tel !== undefined) sheet.getRange(i + 1, 6).setValue(p.tel);
-        if (p.mail !== undefined) sheet.getRange(i + 1, 7).setValue(p.mail);
-        if (p.mail2 !== undefined) sheet.getRange(i + 1, 9).setValue(p.mail2);
-        if (p.tel2 !== undefined) sheet.getRange(i + 1, 10).setValue(p.tel2);
-        if (p.poste !== undefined) sheet.getRange(i + 1, 14).setValue(p.poste);
-        if (p.is_ma !== undefined) sheet.getRange(i + 1, 15).setValue(p.is_ma);
+        // Un seul appel setValues() groupé au lieu de jusqu'à 8 appels setValue() séparés
+        const rowCopy = oldRow.slice();
+        if (p.nom !== undefined) rowCopy[3] = p.nom;
+        if (p.prenom !== undefined) rowCopy[4] = p.prenom;
+        if (p.tel !== undefined) rowCopy[5] = p.tel;
+        if (p.mail !== undefined) rowCopy[6] = p.mail;
+        if (p.mail2 !== undefined) rowCopy[8] = p.mail2;
+        if (p.tel2 !== undefined) rowCopy[9] = p.tel2;
+        if (p.poste !== undefined) rowCopy[13] = p.poste;
+        if (p.is_ma !== undefined) rowCopy[14] = p.is_ma;
+        sheet.getRange(i + 1, 1, 1, rowCopy.length).setValues([rowCopy]);
 
         const logDetail = "Contact " + nomComplet.trim() + (changes.length > 0 ? " | " + changes.join(" | ") : " — coordonnées mises à jour");
         logAction(p.idAuteur, p.roleAuteur, "Modification", "Contact", idCible, logDetail);
+        _invalidatePartnersCache_();
+        _invalidatePartnerDetailsCache_(oldRow[1]);
         return createJsonResponse({ success: true });
       }
     }
@@ -3942,6 +4986,8 @@ function handleDeleteContact(p, ss) {
         sheet.deleteRow(i + 1);
         logAction(p.idAuteur, p.roleAuteur, "Suppression", "Contact", idCible, "A supprimé le contact " + nomContact.trim() + " (Entreprise : " + nomEnt + ") — Motif : " + (p.motif || "Non précisé"));
         notifierSuppression(p.idAuteur, p.roleAuteur, "Contact entreprise supprimé", nomContact.trim() + " — " + nomEnt + " — Motif : " + (p.motif || "Non précisé"));
+        _invalidatePartnersCache_();
+        _invalidatePartnerDetailsCache_(data[i][1]);
         return createJsonResponse({ success: true });
       }
     }
@@ -4016,6 +5062,7 @@ function handlePartagerOffre(p, ss) {
       }
     }
     SpreadsheetApp.flush();
+    _invalidateOffresCache_();
 
     let nbAjoutes = 0;
     var mailsEnvoyes = [];
@@ -4029,6 +5076,7 @@ function handlePartagerOffre(p, ss) {
       if (shouldSend) {
         if (!dejaFait) {
           sheetPartages.appendRow([etu.id, p.id_offre, now, "Partagée"]);
+          _invalidateStudentDetailsCache_(String(etu.id).trim()); // l'offre apparaît tout de suite dans le dossier
         }
         try {
           const msgCorps = String(p.messagePersonnalise || "").trim() || "Tu peux postuler directement depuis ton dossier étudiant HECG.";
@@ -4061,9 +5109,12 @@ function handlePostulerOffre(p, ss) {
   try {
     const sheet = getSheetSafe(ss, "PARTAGES");
     const data = sheet.getDataRange().getValues();
+    const idx = _indexEtudiantsPourPartages_(getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues());
+    const idEtu = String(p.id_etu || "").trim().toUpperCase();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === String(p.id_etu) && String(data[i][1]) === String(p.id_offre)) {
+      if (String(_resoudreEtuPartage_(idx, data[i][0]) || "").toUpperCase() === idEtu && String(data[i][1]).trim() === String(p.id_offre).trim()) {
         sheet.getRange(i + 1, 4).setValue("Postulée");
+        _invalidateStudentDetailsCache_(String(p.id_etu).trim());
         logAction(p.idAuteur, p.roleAuteur, "Action", "Candidature", p.id_etu, "L'étudiant a cliqué sur POSTULER pour l'offre " + p.id_offre);
         return createJsonResponse({ success: true });
       }
@@ -4076,14 +5127,19 @@ function nettoyerOffresPerimees() {
   const sheet = getSheetSafe(ss, "OFFRES");
   const data = sheet.getDataRange().getValues();
   const today = new Date();
-  
+  // Offres présentes dans PARTAGES : jamais rendues obsolètes par ce nettoyage, même si leur
+  // col N (État) a été écrasée à « Non partagée » (sinon elles disparaissaient des dossiers).
+  const offresPartagees = {};
+  getSheetSafe(ss, "PARTAGES").getDataRange().getValues().forEach(function(r) { const k = String(r[1] || "").trim(); if (k) offresPartagees[k] = true; });
+
   for (let i = 1; i < data.length; i++) {
     const dateOffre = new Date(data[i][2]);
     const diffJours = (today - dateOffre) / (1000 * 60 * 60 * 24);
-    
+
     // Si l'offre a plus de 14 jours, non partagée, et qualité pas déjà Obsolète/Vérifiée
     const qualiteActuelle = String(data[i][9] || "").trim();
     const etatActuel      = String(data[i][13] || "").trim();
+    if (offresPartagees[String(data[i][0] || "").trim()]) continue;
     if (diffJours > 14 && qualiteActuelle !== "Obsolète" && !etatActuel.includes("Partagée")) {
       sheet.getRange(i + 1, 10).setValue("Obsolète"); // Colonne J : Qualité
     }
@@ -4106,6 +5162,7 @@ function handleDeleteOffre(p, ss) {
           if (String(dataP[j][1]) === String(p.id)) sheetP.deleteRow(j + 1);
         }
         logAction(p.idAuteur, p.roleAuteur, "Suppression", "Offres", p.id, "A supprimé l'offre : " + infoLog + " — Motif : " + (p.motif || "Non précisé"));
+        _invalidateOffresCache_();
         return createJsonResponse({ success: true });
       }
     }
@@ -4131,6 +5188,7 @@ function handleAddOffreNote(p, ss) {
     const id = "ON-" + Date.now();
     ws.appendRow([id, String(p.id_offre).trim(), p.idAuteur || "Inconnu", new Date(), String(p.texte).trim()]);
     logAction(p.idAuteur, p.roleAuteur, "Note", "Offres", p.id_offre, "Note ajoutée : " + String(p.texte).substring(0, 80));
+    _invalidateOffresCache_(); // la note ajoutée doit apparaître dans le "dernier échange" de getOffres
     return createJsonResponse({ success: true, id });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -4193,7 +5251,7 @@ function handleAddPartner(p, ss) {
       p.is_ma || "Non"  // Colonne O — Maître d'apprentissage
     ];
     
-    sheetPart.appendRow(nouvelleLigne);
+    sheetPart.appendRow(_withDateCreation_(sheetPart, nouvelleLigne));
 
     // 5. On laisse une trace dans l'historique
     // 5. On laisse une trace dans l'historique (avec sécurité sur le nom)
@@ -4202,7 +5260,9 @@ function handleAddPartner(p, ss) {
     const isNewEnt = !p.id_entreprise || String(p.id_entreprise).trim() === "";
     const logDetail = (isNewEnt ? "Nouvelle entreprise : " : "Nouveau contact ajouté à : ") + (p.nom_entreprise || "?") + " | Contact : " + (p.prenom || "") + " " + (p.nom || "") + (p.mail1 ? " <" + p.mail1 + ">" : "") + (p.ville ? " — " + p.ville : "");
     logAction(auteurReconnu, roleReconnu, "Création", isNewEnt ? "Entreprise" : "Contact", idEnt, logDetail);
-    
+    _invalidatePartnersCache_();
+    _invalidatePartnerDetailsCache_(idEnt);
+
     return createJsonResponse({ success: true, message: "Interlocuteur (et entreprise) ajouté avec succès !", id_contact: idCont, id_entreprise: idEnt });
 
   } catch (e) {
@@ -4231,6 +5291,8 @@ function handleDeleteEnterprise(p, ss) {
     for (let i = 0; i < indices.length; i++) sheet.deleteRow(indices[i] + 1);
     logAction(p.idAuteur, p.roleAuteur, "Suppression", "Entreprise", idCible, "A supprimé «" + nomEnt + "» et ses " + indices.length + " contact(s) — Motif : " + (p.motif || "Non précisé"));
     notifierSuppression(p.idAuteur, p.roleAuteur, "Entreprise supprimée", nomEnt + " (ID : " + idCible + ") — Motif : " + (p.motif || "Non précisé"));
+    _invalidatePartnersCache_();
+    _invalidatePartnerDetailsCache_(idCible);
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -4298,6 +5360,7 @@ function handleRestoreArchive(p, ss) {
         getSheetSafe(ss, "OFFRES").appendRow(donnees.row);
       } else if (type === "Prospect" && donnees.row) {
         getSheetSafe(ss, "PROSPECTS").appendRow(donnees.row);
+        _invalidateProspectsCache_();
       } else {
         return createJsonResponse({ success: false, message: "Données d'archive manquantes ou type non supporté" });
       }
@@ -4321,13 +5384,13 @@ function handleLinkMAToStudents(p, ss) {
     let updated = 0;
     for (let i = 1; i < data.length; i++) {
       if (ids.includes(String(data[i][0]).trim())) {
-        sheet.getRange(i + 1, 12).setValue(idEnt);   // col L — id_ent
-        sheet.getRange(i + 1, 13).setValue(idCont);  // col M — id_cont
-        sheet.getRange(i + 1, 22).setValue(nomEnt);  // col V — nom entreprise
+        sheet.getRange(i + 1, 12, 1, 2).setValues([[idEnt, idCont]]); // col L-M — id_ent, id_cont
+        sheet.getRange(i + 1, 22).setValue(nomEnt);                   // col V — nom entreprise
         updated++;
       }
     }
     logAction(p.idAuteur, p.roleAuteur, "Liaison MA", "Contact", idCont, "MA rattaché à " + updated + " étudiant(s) de " + nomEnt);
+    if (updated > 0) { _invalidatePartnersCache_(); _invalidatePartnerDetailsCache_(idEnt); }
     return createJsonResponse({ success: true, updated });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -4919,22 +5982,26 @@ function _doRelanceHebdo(ss, auteur, dryRun) {
     persoMap[ref] = { nom: String(dataPerso[i][1] || ""), prenom: String(dataPerso[i][2] || ""), mail: String(dataPerso[i][6] || "") };
   }
 
-  // Index des offres : qualite col[13] (même logique que handleStudentDetails)
+  // Index des offres : Qualité = col J (index 9). L'ancien code lisait la col N (État),
+  // si bien que des offres obsolètes étaient annoncées dans le mail alors que le dossier les masquait.
   const offresQualiteMap = {};
   for (let i = 1; i < dataOffres.length; i++) {
     const idOffre = String(dataOffres[i][0] || "").trim();
     if (!idOffre) continue;
-    offresQualiteMap[idOffre] = String(dataOffres[i][13] || "").trim();
+    offresQualiteMap[idOffre] = String(dataOffres[i][9] || "").trim();
   }
 
-  // Comptage des offres NON-Obsolètes par étudiant (aligné exactement avec le dossier étudiant)
+  // Comptage des offres ENCORE ACTIVES par étudiant (les offres obsolètes restent visibles
+  // dans le dossier, marquées « expirées », mais ne sont pas annoncées comme disponibles)
+  const idxEtuPartages = _indexEtudiantsPourPartages_(dataEtu);
   const nbPartagesParEtu = {};
   for (let i = 1; i < dataPartages.length; i++) {
-    const idEtu   = String(dataPartages[i][0] || "").trim();
+    const idEtu   = _resoudreEtuPartage_(idxEtuPartages, dataPartages[i][0]);
     const idOffre = String(dataPartages[i][1] || "").trim();
     if (!idEtu || !idOffre) continue;
-    const qualite = offresQualiteMap[idOffre] || "";
-    if (qualite === "Obsolète") continue; // même filtre que le dossier
+    if (!(idOffre in offresQualiteMap)) continue; // offre retirée
+    const qualite = offresQualiteMap[idOffre];
+    if (qualite === "Obsolète") continue;
     if (!nbPartagesParEtu[idEtu]) nbPartagesParEtu[idEtu] = {};
     nbPartagesParEtu[idEtu][idOffre] = true; // déduplique au cas où
   }
@@ -5433,6 +6500,9 @@ function handleGetHistory(p, ss) {
     return createJsonResponse({ success: false, message: "Accès refusé" });
   }
 
+  // Mise en cache 20s : HISTORIQUE est écrit par ~90 handlers différents via logAction(),
+  // trop dispersé pour une invalidation ciblée — un TTL court suffit (même logique que stats_v1).
+  return getCachedJsonResponse_('history_v1', 20, function() {
   try {
     const sheetLog = getSheetSafe(ss, "HISTORIQUE");
     const data = sheetLog.getDataRange().getValues();
@@ -5476,6 +6546,7 @@ function handleGetHistory(p, ss) {
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
+  });
 }
 
 
@@ -6014,6 +7085,195 @@ function buildRapportHebdomadaireHTML(data, lundiStr, dimStr) {
   + '</div></body></html>';
 }
 
+// ── ACTIVITÉ ÉTUDIANTS DANS LEUR DOSSIER — TOP QUOTIDIEN ────────────
+// Remplace l'ancienne alerte mail à chaque écriture étudiant (carnet de route, suivi
+// de candidatures...) : chaque écriture reste tracée par logAction() dans HISTORIQUE
+// avec roleAuteur = "Etudiant" (identifie sans ambiguïté une action faite PAR l'étudiant
+// dans SON dossier, quelle que soit la fonctionnalité), et un Top 10 quotidien est
+// envoyé automatiquement au pôle pédagogique.
+
+/**
+ * Agrège les actions faites par les étudiants eux-mêmes (roleAuteur === "Etudiant")
+ * dans HISTORIQUE sur la période donnée. dateDebut/dateFin au format "yyyy-MM-dd"
+ * (ou null pour tout l'historique).
+ * Retourne { total, ranking } où ranking = [{ id, nom, count, detail:[{date,categorie,type,details}] }]
+ * trié par nombre d'actions décroissant.
+ */
+function computeActiviteEtudiants(ss, dateDebut, dateFin) {
+  var debut = dateDebut ? new Date(dateDebut + 'T00:00:00') : null;
+  var fin   = dateFin   ? new Date(dateFin   + 'T23:59:59') : null;
+  return _computeActiviteEtudiantsEntre_(ss, debut, fin);
+}
+
+// Même calcul avec des bornes Date précises (heure comprise) — utilisé par le rapport hebdo du mardi
+function _computeActiviteEtudiantsEntre_(ss, debut, fin) {
+
+  var sh = getSheetSafe(ss, "HISTORIQUE");
+  var data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { total: 0, ranking: [] };
+
+  var studentsMap = {};
+  try {
+    var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    for (var i = 1; i < dE.length; i++) {
+      if (!dE[i][0]) continue;
+      var id = String(dE[i][0]).trim();
+      var fullName = (String(dE[i][3] || "").trim() + " " + String(dE[i][2] || "").trim()).trim();
+      if (id && fullName) studentsMap[id] = fullName;
+    }
+  } catch(e) {}
+
+  var countByStudent = {}, detailByStudent = {}, total = 0;
+
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r];
+    var d = row[1];
+    if (debut && new Date(d) < debut) continue;
+    if (fin && new Date(d) > fin) continue;
+    if (String(row[3] || "").trim().toLowerCase().replace(/é/g, "e") !== "etudiant") continue;
+    var idCible = String(row[6] || "").trim();
+    if (!idCible) continue;
+
+    total++;
+    countByStudent[idCible] = (countByStudent[idCible] || 0) + 1;
+    if (!detailByStudent[idCible]) detailByStudent[idCible] = [];
+    detailByStudent[idCible].push({ date: d, categorie: String(row[5] || ""), type: String(row[4] || ""), details: String(row[7] || "") });
+  }
+
+  var ranking = Object.keys(countByStudent).map(function(id) {
+    return { id: id, nom: studentsMap[id] || id, count: countByStudent[id], detail: detailByStudent[id] };
+  }).sort(function(a, b) { return b.count - a.count; });
+
+  return { total: total, ranking: ranking };
+}
+
+function handleGetActiviteEtudiants(p, ss) {
+  if (p.roleAuteur !== "Administrateur") return createJsonResponse({ success: false, message: "Accès refusé" });
+  try {
+    var data = computeActiviteEtudiants(ss, p.dateDebut || null, p.dateFin || null);
+    return createJsonResponse({ success: true, data: data });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+function buildRapportActiviteEtudiantsHTML(data, dateStr) {
+  var top10 = data.ranking.slice(0, 10);
+  var rows = !top10.length
+    ? '<tr><td style="padding:14px;color:#9ca3af;font-style:italic;text-align:center">Aucune activité étudiante enregistrée aujourd\'hui.</td></tr>'
+    : top10.map(function(e, i) {
+        var medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : (i + 1)));
+        return '<tr style="background:' + (i % 2 ? '#f8fafc' : '#fff') + '">'
+          + '<td style="padding:9px 14px;font-weight:800;width:34px;text-align:center">' + medal + '</td>'
+          + '<td style="padding:9px 14px;font-weight:700">' + e.nom + '</td>'
+          + '<td style="padding:9px 14px;font-weight:800;color:#f59e0b;text-align:right">' + e.count + ' action' + (e.count > 1 ? 's' : '') + '</td>'
+          + '</tr>';
+      }).join('');
+
+  return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:640px;margin:auto;background:#f1f5f9;padding:24px">'
+  + '<div style="background:#f59e0b;color:#fff;padding:26px 30px;border-radius:12px 12px 0 0">'
+  + '<h1 style="margin:0;font-size:21px">🎓 Activité des étudiants dans leur dossier — ' + dateStr + '</h1>'
+  + '<p style="margin:6px 0 0;opacity:.85;font-size:12px">CRM HECG — Rapport automatique quotidien</p></div>'
+  + '<div style="background:#fff;padding:24px 30px;border-radius:0 0 12px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)">'
+  + '<p style="font-size:13px;color:#374151"><b>' + data.total + '</b> action' + (data.total > 1 ? 's' : '') + ' enregistrée' + (data.total > 1 ? 's' : '') + ' aujourd\'hui (carnet de route, suivi de candidatures...).</p>'
+  + '<h3 style="color:#f59e0b;font-size:13px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:6px;margin-top:18px">🏆 Top 10 des étudiants les plus actifs</h3>'
+  + '<table style="width:100%;border-collapse:collapse;margin-top:6px">' + rows + '</table>'
+  + '<p style="margin-top:22px;color:#9ca3af;font-size:10px;text-align:center">Détail complet (date, catégorie, contenu) disponible dans l\'onglet Historique → panneau "Activité étudiants".</p>'
+  + '</div></body></html>';
+}
+
+function sendRapportActiviteEtudiantsAuto() {
+  try {
+    var ss      = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+    var tz      = Session.getScriptTimeZone();
+    var today   = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+    var todayFr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
+    var data    = computeActiviteEtudiants(ss, today, today);
+    var html    = buildRapportActiviteEtudiantsHTML(data, todayFr);
+    GmailApp.sendEmail("polepedagogique@hecg.fr", "Top 10 étudiants les plus actifs — " + todayFr, "",
+      { htmlBody: html, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
+    logAction("Système", "Auto", "Action", "Rapport activité étudiants", "Mail", "Top 10 du " + todayFr + " envoyé (" + data.total + " action(s))");
+  } catch(e) { Logger.log("Erreur sendRapportActiviteEtudiantsAuto : " + e.toString()); }
+}
+
+// --- RAPPORT HEBDO : TOP 10 DES ÉTUDIANTS LES PLUS ACTIFS (mardi ~15h30 → m.mokhtari@hecg.fr) ---
+// Période : les 7 jours glissants précédant l'envoi. Une action = un log HISTORIQUE écrit par
+// l'étudiant lui-même (rôle "Etudiant") : carnet de route, création/modif de candidature, POSTULER...
+var RAPPORT_ACTIVITE_HEBDO_DEST = "m.mokhtari@hecg.fr";
+
+function buildRapportActiviteHebdoHTML(data, debutFr, finFr) {
+  var esc = function(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  var tz = Session.getScriptTimeZone();
+  var top10 = data.ranking.slice(0, 10);
+  var resume = !top10.length
+    ? '<tr><td style="padding:14px;color:#9ca3af;font-style:italic;text-align:center">Aucune action étudiante enregistrée sur la semaine.</td></tr>'
+    : top10.map(function(e, i) {
+        var medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : (i + 1)));
+        return '<tr style="background:' + (i % 2 ? '#f8fafc' : '#fff') + '">'
+          + '<td style="padding:9px 14px;font-weight:800;width:34px;text-align:center">' + medal + '</td>'
+          + '<td style="padding:9px 14px;font-weight:700">' + esc(e.nom) + ' <span style="color:#9ca3af;font-weight:400;font-size:11px">(' + esc(e.id) + ')</span></td>'
+          + '<td style="padding:9px 14px;font-weight:800;color:#f59e0b;text-align:right">' + e.count + ' action' + (e.count > 1 ? 's' : '') + '</td></tr>';
+      }).join('');
+
+  var details = top10.map(function(e, i) {
+    // Répartition par catégorie
+    var parCat = {};
+    e.detail.forEach(function(it) { var c = it.categorie || "Autre"; parCat[c] = (parCat[c] || 0) + 1; });
+    var repart = Object.keys(parCat).sort(function(a, b) { return parCat[b] - parCat[a]; })
+      .map(function(c) { return esc(c) + ' : <b>' + parCat[c] + '</b>'; }).join(' · ');
+    var items = e.detail.slice().sort(function(a, b) { return new Date(b.date) - new Date(a.date); }).map(function(it) {
+      var d = it.date ? Utilities.formatDate(new Date(it.date), tz, "EEE dd/MM HH:mm") : "";
+      var txt = String(it.details || "");
+      if (txt.length > 220) txt = txt.substring(0, 220) + "…";
+      return '<tr><td style="padding:5px 8px;color:#92400e;font-weight:700;white-space:nowrap;vertical-align:top;font-size:11px">' + esc(d) + '</td>'
+        + '<td style="padding:5px 8px;vertical-align:top;font-size:11px"><b>' + esc(it.categorie) + '</b>' + (it.type ? ' — ' + esc(it.type) : '')
+        + '<div style="color:#6b7280;margin-top:2px">' + esc(txt) + '</div></td></tr>';
+    }).join('');
+    return '<div style="margin-top:16px;border:1px solid #fde68a;border-radius:10px;overflow:hidden">'
+      + '<div style="background:#fffbeb;padding:10px 14px"><b>' + (i + 1) + '. ' + esc(e.nom) + '</b> — ' + e.count + ' action' + (e.count > 1 ? 's' : '')
+      + '<div style="font-size:11px;color:#6b7280;margin-top:3px">' + repart + '</div></div>'
+      + '<table style="width:100%;border-collapse:collapse">' + items + '</table></div>';
+  }).join('');
+
+  return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:720px;margin:auto;background:#f1f5f9;padding:24px">'
+  + '<div style="background:#f59e0b;color:#fff;padding:26px 30px;border-radius:12px 12px 0 0">'
+  + '<h1 style="margin:0;font-size:21px">🎓 Top 10 des étudiants les plus actifs de la semaine</h1>'
+  + '<p style="margin:6px 0 0;opacity:.9;font-size:12px">Du ' + debutFr + ' au ' + finFr + ' — CRM HECG, rapport automatique du mardi</p></div>'
+  + '<div style="background:#fff;padding:24px 30px;border-radius:0 0 12px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)">'
+  + '<p style="font-size:13px;color:#374151"><b>' + data.total + '</b> action' + (data.total > 1 ? 's' : '') + ' réalisée' + (data.total > 1 ? 's' : '')
+  + ' par <b>' + data.ranking.length + '</b> étudiant' + (data.ranking.length > 1 ? 's' : '') + ' dans leur espace (carnet de route, candidatures, offres...).</p>'
+  + '<h3 style="color:#f59e0b;font-size:13px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:6px;margin-top:18px">🏆 Classement</h3>'
+  + '<table style="width:100%;border-collapse:collapse;margin-top:6px">' + resume + '</table>'
+  + (details ? '<h3 style="color:#f59e0b;font-size:13px;text-transform:uppercase;border-bottom:2px solid #fde68a;padding-bottom:6px;margin-top:26px">📋 Détail des actions</h3>' + details : '')
+  + '</div></body></html>';
+}
+
+function sendRapportActiviteEtudiantsHebdo() {
+  try {
+    var ss    = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+    var tz    = Session.getScriptTimeZone();
+    var fin   = new Date();
+    var debut = new Date(fin.getTime() - 7 * 24 * 60 * 60 * 1000);
+    var debutFr = Utilities.formatDate(debut, tz, "dd/MM/yyyy HH:mm");
+    var finFr   = Utilities.formatDate(fin, tz, "dd/MM/yyyy HH:mm");
+    var data  = _computeActiviteEtudiantsEntre_(ss, debut, fin);
+    var html  = buildRapportActiviteHebdoHTML(data, debutFr, finFr);
+    var sujet = "Top 10 étudiants les plus actifs — semaine du " + Utilities.formatDate(debut, tz, "dd/MM") + " au " + Utilities.formatDate(fin, tz, "dd/MM/yyyy");
+    GmailApp.sendEmail(RAPPORT_ACTIVITE_HEBDO_DEST, sujet, "", { htmlBody: html, name: "CRM HECG — Automatique", from: SENDER_EMAIL });
+    logAction("Système", "Auto", "Action", "Rapport activité étudiants", "Mail", "Top 10 hebdo (" + debutFr + " → " + finFr + ") envoyé à " + RAPPORT_ACTIVITE_HEBDO_DEST + " (" + data.total + " action(s))");
+  } catch(e) { Logger.log("Erreur sendRapportActiviteEtudiantsHebdo : " + e.toString()); }
+}
+
+/**
+ * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script (▶ Exécuter) :
+ * envoi du rapport hebdo chaque mardi vers 15h30 (Apps Script garantit ±15 min).
+ */
+function creerTriggerRapportActiviteHebdo() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendRapportActiviteEtudiantsHebdo') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendRapportActiviteEtudiantsHebdo').timeBased().onWeekDay(ScriptApp.WeekDay.TUESDAY).atHour(15).nearMinute(30).create();
+  Logger.log("✅ Trigger créé : rapport Top 10 étudiants actifs chaque mardi ~15h30");
+}
+
 /**
  * À exécuter UNE SEULE FOIS depuis l'éditeur Apps Script.
  * Crée les déclencheurs temporels automatiques.
@@ -6021,13 +7281,15 @@ function buildRapportHebdomadaireHTML(data, lundiStr, dimStr) {
 function setupIndicateursTriggers() {
   ScriptApp.getProjectTriggers().forEach(function(t) {
     var fn = t.getHandlerFunction();
-    if (fn === 'sendBilanJournalierAuto' || fn === 'sendRapportHebdomadaireAuto') ScriptApp.deleteTrigger(t);
+    if (fn === 'sendBilanJournalierAuto' || fn === 'sendRapportHebdomadaireAuto' || fn === 'sendRapportActiviteEtudiantsAuto') ScriptApp.deleteTrigger(t);
   });
   // Bilan journalier : tous les jours à ~16h (Apps Script ne garantit pas les minutes)
   ScriptApp.newTrigger('sendBilanJournalierAuto').timeBased().everyDays(1).atHour(16).create();
   // Rapport hebdo : chaque vendredi à ~17h
   ScriptApp.newTrigger('sendRapportHebdomadaireAuto').timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(17).create();
-  Logger.log("✅ Triggers créés : bilan journalier 16h + rapport hebdo vendredi 17h");
+  // Top 10 activité étudiants : tous les jours à ~20h (couvre la journée complète)
+  ScriptApp.newTrigger('sendRapportActiviteEtudiantsAuto').timeBased().everyDays(1).atHour(20).create();
+  Logger.log("✅ Triggers créés : bilan journalier 16h + rapport hebdo vendredi 17h + top étudiants 20h");
 }
 
 function extraireVille(texte) {
@@ -6079,6 +7341,9 @@ function handleAspirerOffresGmail(p, ss) {
 }
 
 function handleGetClassesList(ss) {
+  // Mise en cache 20s : ETUDIANTS a de nombreux écrivains dispersés, un TTL court
+  // suffit plutôt qu'une invalidation ciblée (même logique que stats_v1).
+  return getCachedJsonResponse_('classes_list_v1', 20, function() {
   const d = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
   const classes = [];
   for (let i = 1; i < d.length; i++) {
@@ -6086,6 +7351,7 @@ function handleGetClassesList(ss) {
     if (c && !classes.includes(c)) classes.push(c);
   }
   return createJsonResponse({ success: true, data: classes.sort() });
+  });
 }
 
 function diagnosticLiens() {
@@ -6148,6 +7414,12 @@ function diagnosticUltime() {
  * Colonnes attendues : ID_Partenaire | Auteur | Date | Compte_rendu
  */
 function handleAddPartnerNote(params, ss) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (eLock) {
+    return createJsonResponse({ success: false, message: "Le serveur est occupé, merci de réessayer dans quelques secondes." });
+  }
   try {
     const sheet = getSheetSafe(ss, "SUIVI_PARTENARIAT");
 
@@ -6156,27 +7428,51 @@ function handleAddPartnerNote(params, ss) {
     const roleFinal = params.roleAuteur || "N/A";
 
     const idPartenaire = String(params.id_entreprise || params.targetId || "").trim();
+    const texteFinal = String(params.texte || "");
+
+    // Garde anti-doublon : si un retry réseau côté client renvoie la même requête,
+    // on évite d'ajouter deux fois la même note (même partenaire + même texte en moins de 15s).
+    const maintenant = new Date();
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const checkStart = Math.max(2, lastRow - 4);
+      const recentRows = sheet.getRange(checkStart, 1, lastRow - checkStart + 1, 4).getValues();
+      for (let i = recentRows.length - 1; i >= 0; i--) {
+        const ligne = recentRows[i];
+        if (String(ligne[0]).trim() === idPartenaire && String(ligne[3]) === texteFinal) {
+          const dateLigne = new Date(ligne[2]);
+          if ((maintenant - dateLigne) < 15000) {
+            return createJsonResponse({ success: true, message: "Note déjà enregistrée (doublon évité)." });
+          }
+        }
+      }
+    }
+
     const nouvelleLigne = [
       idPartenaire,
       auteurFinal,
-      new Date(),
-      params.texte
+      maintenant,
+      texteFinal
     ];
 
     sheet.appendRow(nouvelleLigne);
 
-    const apercuNote = params.texte ? String(params.texte).substring(0, 80) + (params.texte.length > 80 ? "…" : "") : "";
+    const apercuNote = texteFinal ? texteFinal.substring(0, 80) + (texteFinal.length > 80 ? "…" : "") : "";
     logAction(auteurFinal, roleFinal, "Création", "Note Partenaire", idPartenaire, "Échange ajouté : « " + apercuNote + " »");
+    _invalidatePartnersCache_();
+    _invalidatePartnerDetailsCache_(idPartenaire);
 
-    return { 
-      success: true, 
-      message: "Note enregistrée avec succès dans le carnet de bord." 
-    };
+    return createJsonResponse({
+      success: true,
+      message: "Note enregistrée avec succès dans le carnet de bord."
+    });
   } catch (e) {
-    return { 
-      success: false, 
-      message: "Erreur lors de l'enregistrement de la note : " + e.toString() 
-    };
+    return createJsonResponse({
+      success: false,
+      message: "Erreur lors de l'enregistrement de la note : " + e.toString()
+    });
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -6397,17 +7693,22 @@ function handleUpdateStudent(p, ss) {
       p.entreprise || "",  // V : Nom_entreprise
       p.campus || "",      // W : Campus
       oldRow[23] || "",    // X : Identifiant Elève
-      p.cvTech || "Non"   // Y : CV Tech
+      p.cvTech || "Non",  // Y : CV Tech
+      oldRow[25] || "",    // Z : (préservé)
+      (p.mailHecg !== undefined ? p.mailHecg : (oldRow[26] || ""))  // AA : Mail HECG (adresse mail domaine)
     ];
 
     sheet.getRange(rowIndex, 1, 1, updatedRow.length).setValues([updatedRow]);
-    SpreadsheetApp.flush();
 
     // Log immédiatement après la sauvegarde, pendant que oldRow est accessible
     try {
       const texteLog = (p.detailsLog && p.detailsLog !== "") ? p.detailsLog : "Mise à jour fiche étudiant";
       logAction(p.idAuteur, p.roleAuteur, "Modification", "Dossier étudiant", actualIdInSheet, texteLog);
     } catch(eLog) {}
+    _invalidatePartnersCache_(); // le changement peut affecter le compteur d'alternants/score entreprise
+    _invalidateStudentDetailsCache_(actualIdInSheet);
+    if (oldIdEnt) _invalidatePartnerDetailsCache_(oldIdEnt);
+    if (newIdEnt && newIdEnt !== oldIdEnt) _invalidatePartnerDetailsCache_(newIdEnt);
 
     return createJsonResponse({ success: true, message: "Mise à jour réussie", typoSaved: typoFinale });
   } catch (erreur) {
@@ -6465,12 +7766,20 @@ function handleSetStudentAlert(p, ss) {
     logAction(p.idAuteur, p.roleAuteur, "Création", "Alertes Étudiants", idEtu, "Alerte programmée le " + dateAlerte + " : « " + msgApercu + " » (" + (p.frequence || p.freq || "Unique") + ")");
     const msnId = creerMissionDepuisAlerte(ss, p, "Étudiant", idEtu);
     notifierMMOKEtCreerMission(ss, p, "Étudiant", idEtu, "creation", p.message || p.msg || "Relance");
+    _invalidateStudentAlertsCache_();
     const msgRetour = msnId ? "Alerte étudiant créée + Mission " + msnId + " déclenchée !" : "Alerte étudiant créée !";
     return createJsonResponse({ success: true, message: msgRetour, missionId: msnId || null });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
+// Invalide le cache de handleGetAllStudentAlerts après toute écriture sur ALERTES_ETUDIANTS.
+function _invalidateStudentAlertsCache_() {
+  try { CacheService.getScriptCache().remove('alerts_students_v1'); } catch(e) {}
+}
+
 function handleGetAllStudentAlerts(p, ss) {
+  // Mise en cache 20s : évite de relire ALERTES_ETUDIANTS + ETUDIANTS à chaque ouverture.
+  return getCachedJsonResponse_('alerts_students_v1', 20, function() {
   try {
     let sheet;
     try { sheet = getSheetSafe(ss, "ALERTES_ETUDIANTS"); }
@@ -6502,6 +7811,7 @@ function handleGetAllStudentAlerts(p, ss) {
     list.sort((a, b) => new Date(a.dateRaw) - new Date(b.dateRaw));
     return createJsonResponse({ success: true, data: list });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
 }
 
 function handleCompleteStudentAlert(p, ss) {
@@ -6524,6 +7834,7 @@ function handleCompleteStudentAlert(p, ss) {
           logAction(p.idAuteur, p.roleAuteur, "Action", "Alertes Étudiants", idEtu, "Alerte récurrente complétée, prochaine: " + newDate.toLocaleDateString('fr-FR') + " : « " + msgAlerte + " »");
         }
         notifierMMOKEtCreerMission(ss, p, "Étudiant", idEtu, "cloture", msgAlerte);
+        _invalidateStudentAlertsCache_();
         return createJsonResponse({ success: true });
       }
     }
@@ -6544,6 +7855,7 @@ function handleUpdateStudentAlert(p, ss) {
         sheet.getRange(i + 1, 7).setValue(p.destinataire);
         const newDate = p.date ? new Date(p.date).toLocaleDateString('fr-FR') : "?";
         logAction(p.idAuteur, p.roleAuteur, "Modification", "Alertes Étudiants", idEtu, "Alerte modifiée → Date: " + newDate + " | « " + String(p.msg || "").substring(0, 60) + " »");
+        _invalidateStudentAlertsCache_();
         return createJsonResponse({ success: true });
       }
     }
@@ -6561,6 +7873,7 @@ function handleCancelStudentAlert(p, ss) {
         const msgAlerte = String(dA[i][3] || "").substring(0, 60);
         sheet.getRange(i + 1, 6).setValue("Annulé");
         logAction(p.idAuteur, p.roleAuteur, "Action", "Alertes Étudiants", idEtu, "Alerte annulée : « " + msgAlerte + " »");
+        _invalidateStudentAlertsCache_();
         return createJsonResponse({ success: true });
       }
     }
@@ -6815,7 +8128,19 @@ function aspirerMissionsGmail() {
  * Admin/MMOK → toutes les missions.
  * Collaborateur → uniquement ses missions (filtrage sur Email_Dest).
  */
+// Invalide le cache de handleGetMissions. La vue admin (toutes les missions) et la vue
+// par collaborateur (missions_v1_<email>) ont des clés séparées : on invalide les deux
+// concernées par l'écriture (admin + destinataire email si connu).
+function _invalidateMissionsCache_(email) {
+  bumpEntityCacheVersion_('missions_v1', 'admin');
+  if (email) bumpEntityCacheVersion_('missions_v1', String(email).toLowerCase());
+}
+
 function handleGetMissions(p, ss) {
+  const isAdmin = p.roleAuteur === "Administrateur" || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";
+  const cacheEntity = isAdmin ? 'admin' : String(p.emailAuteur || "").toLowerCase();
+  // Mise en cache 20s par vue (admin = toutes les missions, sinon par collaborateur).
+  return getEntityCachedJsonResponse_('missions_v1', cacheEntity, 20, function() {
   try {
     let sheet;
     try { sheet = getSheetSafe(ss, "MISSIONS"); }
@@ -6823,8 +8148,6 @@ function handleGetMissions(p, ss) {
 
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return createJsonResponse({ success: true, data: [] });
-
-    const isAdmin = p.roleAuteur === "Administrateur" || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";
 
     const missions = [];
     for (let i = 1; i < data.length; i++) {
@@ -6865,6 +8188,7 @@ function handleGetMissions(p, ss) {
   } catch(e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
+  });
 }
 
 /**
@@ -6912,6 +8236,7 @@ function handleUpdateMissionStatus(p, ss) {
             }
           } catch(eSync) {}
         }
+        _invalidateMissionsCache_(data[i][3]);
         return createJsonResponse({ success: true });
       }
     }
@@ -6942,6 +8267,7 @@ function handleAddMissionNote(p, ss) {
         sheet.getRange(i + 1, 11).setValue(new Date()); // Col K : Date_Maj
         logAction(p.idAuteur, p.roleAuteur, "Création", "Missions", p.id,
           "Note ajoutée sur mission : « " + String(p.note || "").substring(0, 60) + " »");
+        _invalidateMissionsCache_(data[i][3]);
         return createJsonResponse({ success: true });
       }
     }
@@ -6972,6 +8298,7 @@ function handleUpdateMissionField(p, ss) {
       if (!isAdmin && emailDest !== emailUser) return createJsonResponse({ success: false, message: "Accès refusé." });
       sheet.getRange(i+1, col).setValue(p.field === 'priorite' ? Number(p.val) : String(p.val));
       sheet.getRange(i+1, 11).setValue(new Date());
+      _invalidateMissionsCache_(data[i][3]);
       return createJsonResponse({ success: true });
     }
     return createJsonResponse({ success: false, message: "Mission introuvable." });
@@ -7011,6 +8338,7 @@ function handleAddMission(p, ss) {
     ]);
     logAction(p.idAuteur, p.roleAuteur, "Création", "Missions", id,
       "Mission manuelle : " + String(p.objet || "").substring(0,80) + " | Pour : " + nomCollab);
+    _invalidateMissionsCache_(emailDest);
     return createJsonResponse({ success: true, id: id });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -7026,9 +8354,20 @@ function handleAspirerMissionsNow(p, ss) {
                     String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";
     if (!isAdmin) return createJsonResponse({ success: false, message: "Accès refusé." });
 
-    // On relance l'aspiration et on capture le résultat
-    const result = aspirerMissionsGmailAvecRetour(ss);
-    return createJsonResponse({ success: true, nb: result.nb, objets: result.objets });
+    // IMPORTANT : ne JAMAIS exécuter l'aspiration Gmail en synchrone dans un doPost.
+    // GmailApp.search() sur toute la boîte "envoyés" n'est pas plafonné en temps et peut
+    // à lui seul prendre plusieurs minutes ; combiné à la boucle (plafonnée à 4 min), le
+    // doPost peut alors flirter avec la limite absolue de 6 minutes d'Apps Script. Quand
+    // cette limite est dépassée, Google tue l'exécution et renvoie une page d'erreur HTML
+    // au lieu du JSON attendu — d'où les "Unexpected token '<'" côté navigateur, et le
+    // créneau d'exécution reste bloqué tout ce temps pour les autres utilisateurs.
+    // On délègue donc le travail réel à un trigger ponctuel et on répond immédiatement.
+    ScriptApp.newTrigger('aspirerMissionsGmail').timeBased().after(1000).create();
+    return createJsonResponse({
+      success: true,
+      async: true,
+      message: "Aspiration lancée en arrière-plan. Les nouvelles missions apparaîtront dans une minute ou deux."
+    });
   } catch(e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
@@ -7381,6 +8720,9 @@ function importerHistoriqueNotes() {
 // ==========================================
 
 function handleGetReferentielMatieres(p, ss) {
+  // Mise en cache 300s : feuille éditée à la main dans le classeur (aucun écrivain
+  // dans l'appli), même profil que getPersonnelDataCached_.
+  return getCachedJsonResponse_('referentiel_matieres_v1', 300, function() {
   try {
     const data = getSheetSafe(ss, "Referentiel_matieres").getDataRange().getValues();
     const result = {};
@@ -7395,6 +8737,7 @@ function handleGetReferentielMatieres(p, ss) {
     }
     return createJsonResponse({ success: true, data: result });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
 }
 
 // ==========================================
@@ -7730,11 +9073,51 @@ function handleSaveClasseInfo(p, ss) {
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
+// RAZ des infos classe (PP, délégués, suppléants, dates/heures de conseils) :
+// p.toutes === true → toutes les classes ; sinon la seule classe p.classe.
+// Le nom de la classe (col A) est conservé ; les anciennes valeurs sont copiées dans ARCHIVES.
+function handleRazClasseInfo(p, ss) {
+  try {
+    if (['Super-admin', 'Pédagogie', 'Administratif'].indexOf(p.vieScRole) === -1) return createJsonResponse({ success: false, message: "Accès refusé." });
+    const toutes = p.toutes === true;
+    const cible = String(p.classe || "").trim().toLowerCase();
+    if (!toutes && !cible) return createJsonResponse({ success: false, message: "Classe non précisée." });
+    const ws = getSheetSafe(ss, "CLASSES_INFO");
+    const data = ws.getDataRange().getValues();
+    const vides = [["", "", "", "", "", "", "", "", "", "", ""]]; // colonnes B → L
+    const archivees = [];
+    for (let i = 1; i < data.length; i++) {
+      const nom = String(data[i][0] || "").trim();
+      if (!nom) continue;
+      if (!toutes && nom.toLowerCase() !== cible) continue;
+      if (data[i].slice(1, 12).every(v => v === "" || v === null)) continue; // déjà vide
+      archivees.push(data[i].slice(0, 12));
+      ws.getRange(i + 1, 2, 1, 11).setValues(vides);
+    }
+    if (!toutes && !archivees.length && !data.some((r, i) => i > 0 && String(r[0] || "").trim().toLowerCase() === cible))
+      return createJsonResponse({ success: false, message: "Classe introuvable." });
+    if (archivees.length) {
+      _archiveItem(ss, "Infos classes (RAZ)", p.emailAuteur || "?", toutes ? "RAZ de toutes les classes" : "RAZ de la classe " + p.classe,
+        toutes ? "TOUTES" : p.classe, { colonnes: ["Classe","PP","Délégué 1","Délégué 2","Suppléant 1","Suppléant 2","Arrêt S1","Conseil S1","Arrêt S2","Conseil S2","Heure S1","Heure S2"], rows: archivees });
+    }
+    logAction(p.emailAuteur || "?", p.vieScRole || "?", "Suppression", "Vie scolaire", toutes ? "TOUTES" : p.classe,
+      (toutes ? "RAZ de toutes les classes" : "RAZ de la classe " + p.classe) + " (" + archivees.length + " classe(s) vidée(s), anciennes valeurs dans ARCHIVES)");
+    return createJsonResponse({ success: true, nb: archivees.length });
+  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
 // VIE SCOLAIRE — PERSONNEL ENCADRANT (onglet Adultes)
 // Colonnes : A=ID B=Nom C=Prenom D=Mail_Perso E=Mail_Pro F=Adresse G=CP H=Ville I=Matieres J=Date_entree K=Date_sortie L=Tel M=Etat_formateur
 // ==========================================
 
+// Invalide le cache de handleGetPersonnel après toute écriture sur Adultes/FORMATEURS.
+function _invalidatePersonnelExtCache_() {
+  try { CacheService.getScriptCache().remove('personnel_ext_v1'); } catch(e) {}
+}
+
 function handleGetPersonnel(p, ss) {
+  // Mise en cache 20s : évite de relire toute la feuille Adultes/FORMATEURS à chaque ouverture.
+  return getCachedJsonResponse_('personnel_ext_v1', 20, function() {
   try {
     var ws; try { ws = getSheetSafe(ss, "Adultes"); } catch(e) { ws = getSheetSafe(ss, "FORMATEURS"); }
     var data = ws.getDataRange().getValues(); var rows = [];
@@ -7755,25 +9138,39 @@ function handleGetPersonnel(p, ss) {
         dateSortie:      dateS instanceof Date ? Utilities.formatDate(dateS,Session.getScriptTimeZone(),"dd/MM/yyyy") : String(dateS||""),
         tel:             String(data[i][11]||""),
         etatFormateur:   String(data[i][12]||"NON").trim().toUpperCase(),
+        classes:         String(data[i][14]||"").split(",").map(function(c){ return c.trim(); }).filter(Boolean),
       });
     }
     return createJsonResponse({ success: true, data: rows });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
 }
+
+// Modification du personnel encadrant ouverte à tout le personnel Vie Scolaire
+// (Super-admin, Pédagogie, Administratif) — aligné sur WRITE.formateurs côté frontend,
+// qui affichait déjà les boutons à ces 3 rôles alors que le backend ne laissait passer
+// que Super-admin.
+const VIE_SC_ROLES_PERSONNEL = ['Super-admin', 'Pédagogie', 'Administratif'];
 
 function handleSavePersonnel(p, ss) {
   try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success:false, message:"Accès refusé." });
+    if (!VIE_SC_ROLES_PERSONNEL.includes(p.vieScRole)) return createJsonResponse({ success:false, message:"Accès refusé." });
     var ws; try { ws = getSheetSafe(ss, "Adultes"); } catch(e) { ws = getSheetSafe(ss, "FORMATEURS"); }
     var data = ws.getDataRange().getValues();
     var row = [p.id||"", p.nom||"", p.prenom||"", p.mailPerso||"", p.mailPro||"",
                p.adresse||"", p.cp||"", p.ville||"", p.matieres||"",
                p.dateEntree||"", p.dateSortie||"", p.tel||"", (p.etatFormateur||"NON").toUpperCase()];
+    // Colonne O : classes où le formateur intervient (mêmes noms de classe que la
+    // feuille ETUDIANTS — pas de nomenclature séparée), séparées par virgule.
+    var classesStr = (Array.isArray(p.classes) ? p.classes : String(p.classes||"").split(","))
+      .map(function(c){ return String(c||"").trim(); }).filter(Boolean).join(",");
     if (p.id) {
       for (var i=1;i<data.length;i++) {
         if (String(data[i][0])===String(p.id)) {
           ws.getRange(i+1,1,1,13).setValues([row]);
+          ws.getRange(i+1,15).setValue(classesStr);
           logAction(p.emailAuteur||"?",p.vieScRole||"?","Modification","Vie scolaire",p.id,"Personnel: "+p.nom+" "+p.prenom);
+          _invalidatePersonnelExtCache_();
           return createJsonResponse({ success:true });
         }
       }
@@ -7785,20 +9182,23 @@ function handleSavePersonnel(p, ss) {
     var existingCodes = new Set();
     for (var k=1;k<data.length;k++) if (data[k][13]) existingCodes.add(String(data[k][13]));
     ws.getRange(ws.getLastRow(), 14).setValue(_genCodeFormateur(existingCodes));
+    ws.getRange(ws.getLastRow(), 15).setValue(classesStr);
     logAction(p.emailAuteur||"?",p.vieScRole||"?","Création","Vie scolaire",id,"Personnel: "+p.nom+" "+p.prenom);
+    _invalidatePersonnelExtCache_();
     return createJsonResponse({ success:true, id:id });
   } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
 }
 
 function handleDeletePersonnel(p, ss) {
   try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success:false, message:"Accès refusé." });
+    if (!VIE_SC_ROLES_PERSONNEL.includes(p.vieScRole)) return createJsonResponse({ success:false, message:"Accès refusé." });
     var ws; try { ws = getSheetSafe(ss, "Adultes"); } catch(e) { ws = getSheetSafe(ss, "FORMATEURS"); }
     var data = ws.getDataRange().getValues();
     for (var i=1;i<data.length;i++) {
       if (String(data[i][0])===String(p.id)) {
         ws.deleteRow(i+1);
         logAction(p.emailAuteur||"?",p.vieScRole||"?","Suppression","Vie scolaire",p.id,"Personnel supprimé");
+        _invalidatePersonnelExtCache_();
         return createJsonResponse({ success:true });
       }
     }
@@ -8453,7 +9853,7 @@ function handleAspirerInscriptions(p, ss) {
         // Si une sélection est fournie, ignorer les messages non sélectionnés
         if (selectedMsgIds && selectedMsgIds.indexOf(msg.getId()) === -1) return;
         var id = "ETU"+new Date().getTime().toString().slice(-5)+Math.floor(Math.random()*100);
-        ws.appendRow([id,"",f.prenom,f.nom,f.email,f.tel,"","","","","","","","Prospect","","Non","Non","","","","PROSPECT",f.formation,f.campus]);
+        ws.appendRow(_withDateCreation_(ws, [id,"",f.prenom,f.nom,f.email,f.tel,"","","","","","","","Prospect","","Non","Non","","","","PROSPECT",f.formation,f.campus]));
         logAction("Système","Auto","Création","ETUDIANTS",id,"Inscription web: "+f.prenom+" "+f.nom+" — "+f.formation+" — "+f.campus);
         nb++; inseres.push(f.prenom+" "+f.nom+" ("+f.formation+" / "+f.campus+")");
         hasInsert = true;
@@ -9590,11 +10990,15 @@ function handleMigratePlanningWeek(p, ss) {
 // ==========================================
 
 function handleGetTropheeData(p, ss) {
-  try {
-    const emailUser  = String(p.emailUser  || "").trim().toLowerCase();
-    const nomUser    = String(p.nomUser    || "").trim();
-    if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
+  const emailUser  = String(p.emailUser  || "").trim().toLowerCase();
+  const nomUser    = String(p.nomUser    || "").trim();
+  if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
 
+  // Mise en cache 30s par utilisateur : cet endpoint relit 7 feuilles à chaque ouverture,
+  // dont HISTORIQUE en entier — trop coûteux pour rester sans cache. Pas d'invalidation
+  // ciblée (dérivé de HISTORIQUE, écrit par ~90 handlers) : un TTL court suffit.
+  return getEntityCachedJsonResponse_('trophee_data', emailUser, 30, function() {
+  try {
     // --- 1. Lire HISTORIQUE et compter par catégorie ---
     var histWs, histData;
     try { histWs = getSheetSafe(ss, "HISTORIQUE"); histData = histWs.getDataRange().getValues(); }
@@ -9605,7 +11009,10 @@ function handleGetTropheeData(p, ss) {
       Missions:15, Objectifs:50, Alertes:10, Com:35, Entreprise:25, Etudiant:20, Special:100
     };
 
-    var count = { Actions:0, Offres:0, CarnetRoute:0, CarnetEntreprise:0, Missions:0, Objectifs:0, Alertes:0, Com:0, Entreprise:0, Etudiant:0, Special:0 };
+    var count = { Actions:0, Offres:0, CarnetRoute:0, CarnetEntreprise:0, Missions:0, Objectifs:0, Alertes:0, Com:0, Entreprise:0, Etudiant:0, Special:0,
+                  Regularite:0, Serie:0, Polyvalence:0, Matinal:0 };
+    var activeDays = {}, distinctCats = {};
+    var tzTroph = Session.getScriptTimeZone();
     var actionRows = [];
     var missionsSelfCreated = 0;
 
@@ -9641,7 +11048,38 @@ function handleGetTropheeData(p, ss) {
         date: dateVal ? Utilities.formatDate(new Date(dateVal), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm") : "",
         type: typeAct, categorie: cat, cible: cible, details: details
       });
+
+      // Statistiques d'engagement (trophées v2 : régularité, séries, polyvalence, matinal)
+      if (dateVal) {
+        try {
+          var dObj = new Date(dateVal);
+          if (!isNaN(dObj.getTime())) {
+            var fmt = Utilities.formatDate(dObj, tzTroph, "yyyy-MM-dd|H|m").split("|");
+            activeDays[fmt[0]] = true;
+            if (Number(fmt[1]) * 60 + Number(fmt[2]) < 8 * 60 + 30) count.Matinal++;
+          }
+        } catch(eD) {}
+      }
+      if (cat) distinctCats[cat] = true;
     }
+
+    // Jours actifs distincts, plus longue série de jours ouvrés consécutifs, polyvalence
+    var dayKeys = Object.keys(activeDays).sort();
+    count.Regularite = dayKeys.length;
+    count.Polyvalence = Object.keys(distinctCats).length;
+    var bestSerie = 0, curSerie = 0, prevDay = null;
+    dayKeys.forEach(function(k) {
+      var d = new Date(k + "T12:00:00");
+      if (prevDay) {
+        var expected = new Date(prevDay.getTime());
+        do { expected.setDate(expected.getDate() + 1); } while (expected.getDay() === 0 || expected.getDay() === 6);
+        var sameAsExpected = Utilities.formatDate(expected, "UTC", "yyyy-MM-dd") === Utilities.formatDate(d, "UTC", "yyyy-MM-dd");
+        curSerie = sameAsExpected ? curSerie + 1 : 1;
+      } else { curSerie = 1; }
+      if (curSerie > bestSerie) bestSerie = curSerie;
+      prevDay = d;
+    });
+    count.Serie = bestSerie;
 
     // --- 2. Compter objectifs validés (équipe) ---
     try {
@@ -9719,6 +11157,26 @@ function handleGetTropheeData(p, ss) {
       }
     } catch(e) {}
 
+    // --- 5b. Catalogue v2 : trophées à paliers (Bronze → Argent → Or → Platine → Diamant → Incandescent)
+    //         Défini dans le code (getTropheeCatalogueV2_) et fusionné avec RECOMPENSE.
+    //         Un id déjà présent dans RECOMPENSE n'est jamais doublé (le Sheet reste prioritaire).
+    try {
+      var idsExistants = {};
+      trophees.forEach(function(t){ idsExistants[t.id] = true; });
+      getTropheeCatalogueV2_().forEach(function(c) {
+        c.paliers.forEach(function(pal, idx) {
+          var tid = 'v2_' + c.catKey + '_' + (idx + 1);
+          if (idsExistants[tid]) return;
+          var cur = count[c.catKey] || 0;
+          trophees.push({
+            id: tid, nom: pal[1], url: "", tier: TROPHEE_TIERS_V2[idx], categorie: c.label, catKey: c.catKey,
+            quantite: pal[0], count: cur, unlocked: cur >= pal[0], palier: idx + 1, nbPaliers: c.paliers.length,
+            description: c.desc.replace('{n}', pal[0]), v2: true
+          });
+        });
+      });
+    } catch(eV2) { console.error('Catalogue trophées v2 : ' + eV2); }
+
     // --- 6. Lire TROPHESPEC (trophées spéciaux attribués manuellement depuis le Sheet) ---
     try {
       var specWs = ss.getSheetByName("TROPHESPEC");
@@ -9779,14 +11237,21 @@ function handleGetTropheeData(p, ss) {
 
     // Enregistrer nouvelles obtentions (réguliers + spéciaux)
     var newUnlocks = [];
+    // Première ouverture après l'arrivée du catalogue v2 : les paliers déjà atteints sont
+    // enregistrés en silence (pas de rafale de notifications).
+    var v2Bootstrap = !Object.keys(suivi).some(function(k){ return k.indexOf('v2_') === 0; });
+    var suiviToAppend = [];
     trophees.forEach(function(t) {
       if (t.unlocked && !suivi[t.id]) {
-        newUnlocks.push(t.id);
-        try { suiviWs.appendRow([emailUser, t.id, new Date()]); } catch(e) {}
+        if (!(t.v2 && v2Bootstrap)) newUnlocks.push(t.id);
+        suiviToAppend.push([emailUser, t.id, new Date()]);
         suivi[t.id] = new Date();
       }
       t.dateObtention = suivi[t.id] ? Utilities.formatDate(new Date(suivi[t.id]), Session.getScriptTimeZone(), "dd/MM/yyyy") : null;
     });
+    if (suiviToAppend.length) {
+      try { suiviWs.getRange(suiviWs.getLastRow() + 1, 1, suiviToAppend.length, 3).setValues(suiviToAppend); } catch(eS) {}
+    }
 
     return createJsonResponse({
       success: true,
@@ -9795,6 +11260,47 @@ function handleGetTropheeData(p, ss) {
       actionRows: actionRows, prefs: prefs, newUnlocks: newUnlocks
     });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  });
+}
+
+// ==========================================
+// TROPHEES — CATALOGUE v2 (paliers)
+// ==========================================
+// Chaque catégorie a 6 paliers. Format palier : [seuil, nom].
+// Pour ajouter/renommer un trophée : modifier ce tableau puis déployer (bash deploy.sh).
+var TROPHEE_TIERS_V2 = ['bronze', 'argent', 'or', 'platine', 'diamant', 'arc-en-ciel'];
+
+function getTropheeCatalogueV2_() {
+  return [
+    { catKey:'Actions', label:'Actions', desc:'Réaliser {n} actions dans le CRM.', paliers:[
+      [50,'Premiers pas'], [250,'Main sûre'], [1000,'Infatigable'], [2500,'Moteur de l\'équipe'], [5000,'Force tranquille'], [10000,'Légende vivante'] ] },
+    { catKey:'Offres', label:'Offres', desc:'Créer ou mettre à jour {n} offres.', paliers:[
+      [5,'Chasse aux offres'], [25,'Dénicheur d\'opportunités'], [75,'Pourvoyeur d\'offres'], [150,'Marché ouvert'], [300,'Grand veneur'], [600,'Maître des offres'] ] },
+    { catKey:'CarnetRoute', label:'Carnet de route', desc:'Rédiger {n} notes de carnet de route.', paliers:[
+      [10,'Carnet ouvert'], [50,'Suivi attentif'], [150,'Boussole'], [400,'Guide de route'], [800,'Phare'], [1500,'Gardien des parcours'] ] },
+    { catKey:'CarnetEntreprise', label:'Carnet entreprise', desc:'Rédiger {n} notes partenaires.', paliers:[
+      [5,'Premier contact'], [25,'Lien solide'], [75,'Diplomatie'], [150,'Ambassade'], [300,'Grand connecteur'], [600,'Architecte du réseau'] ] },
+    { catKey:'Missions', label:'Missions', desc:'Clôturer {n} missions.', paliers:[
+      [3,'Mission accomplie'], [15,'Opérationnel'], [40,'Agent d\'élite'], [100,'Commandement'], [200,'Stratège'], [400,'Maître des missions'] ] },
+    { catKey:'Objectifs', label:'Objectifs', desc:'{n} objectifs d\'équipe validés.', paliers:[
+      [3,'Cap fixé'], [10,'Cap tenu'], [25,'Cap franchi'], [50,'Cap majeur'], [100,'Cap légendaire'], [200,'Au-delà du cap'] ] },
+    { catKey:'Alertes', label:'Alertes', desc:'Créer {n} alertes.', paliers:[
+      [5,'Vigie'], [25,'Sentinelle'], [75,'Veille active'], [150,'Radar'], [300,'Tour de guet'], [600,'Oracle'] ] },
+    { catKey:'Com', label:'Com & Événements', desc:'Créer {n} actions de communication / événements.', paliers:[
+      [2,'Première voix'], [10,'Porte-parole'], [25,'Animation'], [50,'Chef d\'orchestre'], [100,'Grande scène'], [200,'Icône'] ] },
+    { catKey:'Entreprise', label:'Entreprises', desc:'Créer {n} fiches entreprise.', paliers:[
+      [3,'Prospection'], [15,'Bâtisseur de liens'], [40,'Développement'], [100,'Conquête'], [200,'Empire'], [400,'Titan du réseau'] ] },
+    { catKey:'Etudiant', label:'Étudiants', desc:'Créer {n} dossiers étudiants.', paliers:[
+      [5,'Accueil'], [25,'Recrutement'], [75,'Talent scout'], [150,'Bâtisseur de promos'], [300,'Grand recrutement'], [600,'Faiseur d\'avenirs'] ] },
+    { catKey:'Regularite', label:'Régularité', desc:'Être actif {n} jours différents.', paliers:[
+      [5,'Présence'], [20,'Assiduité'], [60,'Pilier'], [120,'Roc'], [200,'Inébranlable'], [300,'Éternel'] ] },
+    { catKey:'Serie', label:'Séries', desc:'{n} jours ouvrés d\'activité d\'affilée.', paliers:[
+      [3,'Lancé'], [5,'En rythme'], [10,'Série d\'or'], [20,'Imparable'], [40,'Marathon'], [60,'Flamme éternelle'] ] },
+    { catKey:'Polyvalence', label:'Polyvalence', desc:'Agir dans {n} catégories différentes du CRM.', paliers:[
+      [3,'Curiosité'], [5,'Polyvalence'], [8,'Couteau suisse'], [11,'Multitalent'], [14,'Virtuose'], [18,'Esprit universel'] ] },
+    { catKey:'Matinal', label:'Lève-tôt', desc:'{n} actions avant 8h30.', paliers:[
+      [5,'Lève-tôt'], [25,'Aube'], [75,'Premier café'], [150,'Soleil levant'], [300,'Gardien de l\'aube'], [500,'Maître du matin'] ] }
+  ];
 }
 
 // ==========================================
@@ -9805,7 +11311,10 @@ function handleSaveTropheePrefs(p, ss) {
   try {
     const emailUser = String(p.emailUser || "").trim().toLowerCase();
     if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
+    var persWs = getSheetSafe(ss, "Personnel");
     var persData = getPersonnelDataCached_(ss);
+    try { CacheService.getScriptCache().remove('personnel_data_v1'); } catch(eC) {}
+    bumpEntityCacheVersion_('trophee_data', emailUser);
     for (var i = 1; i < persData.length; i++) {
       if (String(persData[i][6]||"").trim().toLowerCase() === emailUser) {
         var row = i + 1;
@@ -9827,6 +11336,7 @@ function handleMarkTropheesVus(p, ss) {
   try {
     const emailUser = String(p.emailUser || "").trim().toLowerCase();
     if (!emailUser) return createJsonResponse({ success: false, message: "emailUser manquant." });
+    var persWs = getSheetSafe(ss, "Personnel");
     var persData = getPersonnelDataCached_(ss);
     for (var i = 1; i < persData.length; i++) {
       if (String(persData[i][6]||"").trim().toLowerCase() === emailUser) {
@@ -9869,8 +11379,7 @@ function handleDetachStudentFromEnterprise(p, ss) {
       motif: "Retrait manuel"
     });
 
-    sheet.getRange(rowIndex, 12).setValue("");
-    sheet.getRange(rowIndex, 13).setValue("");
+    sheet.getRange(rowIndex, 12, 1, 2).setValues([["", ""]]); // colonnes 12-13 (id_ent, id_cont)
     sheet.getRange(rowIndex, 22).setValue("");
 
     var auteur = p.emailAuteur || p.idAuteur || "?";
@@ -9879,6 +11388,9 @@ function handleDetachStudentFromEnterprise(p, ss) {
       auteur + " a retiré l'entreprise « " + oldNomEnt + " » du dossier de " + nomEtu + " — Mouvement enregistré dans Anciens alternants");
     logAction(auteur, p.roleAuteur||"?", "Création", "AncienAlternant", idEtu,
       nomEtu + " quitte « " + oldNomEnt + " » (retrait depuis dossier étudiant)");
+    _invalidatePartnersCache_();
+    _invalidatePartnerDetailsCache_(oldIdEnt);
+    _invalidateStudentDetailsCache_(idEtu);
 
     return createJsonResponse({ success: true, oldEntreprise: oldNomEnt, oldIdEnt: oldIdEnt, nomEtu: nomEtu });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }

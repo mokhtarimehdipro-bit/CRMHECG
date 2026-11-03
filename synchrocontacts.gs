@@ -97,6 +97,7 @@ function extractEtudiants(ss) {
   for (let i = 1; i < data.length; i++) {
     const nom    = String(data[i][2]  || "").trim();
     const prenom = String(data[i][3]  || "").trim();
+    const mail   = String(data[i][4]  || "").trim();
     const tel    = formatPhone(data[i][5]);
     const typo   = String(data[i][20] || "").toLowerCase();
     const statut = String(data[i][13] || "").trim();
@@ -137,7 +138,7 @@ function extractEtudiants(ss) {
     contacts.push({
       nom, prenom,
       phones:     [tel],
-      emails:     [],
+      emails:     (mail && mail.includes('@')) ? [mail] : [],
       labels:     [...labelsSet],
       entreprise: nomEnt,
       contactEnt: partMap[idCont] || null

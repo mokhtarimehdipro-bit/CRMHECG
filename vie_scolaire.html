@@ -83,6 +83,7 @@
       main { padding:0 !important; }
     }
   </style>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -786,6 +787,7 @@
         </div>
         <div class="flex gap-3">
           <button onclick="loadTableauxSuivi()" class="btn-ghost">↺ Actualiser</button>
+          <button onclick="CUBE.open()" class="btn-primary" title="Tableau croisé dynamique multi-sources">🧊 CUBE · Analyse croisée</button>
           <button onclick="openTsCreateModal()" class="btn-orange">+ Nouveau tableau</button>
         </div>
       </div>
@@ -8292,5 +8294,6 @@ async function importSuiviData(){
   } finally { btn.disabled = false; btn.textContent = 'Importer'; }
 }
 </script>
+<script src="cube.js?v=1"></script>
 </body>
 </html>

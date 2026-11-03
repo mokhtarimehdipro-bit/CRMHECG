@@ -23,6 +23,9 @@
         .trophy-card { transition: transform 0.15s, box-shadow 0.15s; }
         .trophy-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
         .trophy-locked { filter: grayscale(1); opacity: 0.5; }
+        .badge-locked { filter: grayscale(1) brightness(1.1); opacity: .38; }
+        .ladder-step { transition: transform .2s; }
+        .ladder-step:hover { transform: translateY(-3px); }
         .level-bronze { color: #cd7f32; }
         .level-gold { color: #f59e0b; }
         .level-rainbow {
@@ -65,6 +68,7 @@
         }
         .notif-special-gold { animation: goldPulse 1.8s ease-in-out infinite; border:3px solid #f59e0b !important; }
     </style>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -169,6 +173,16 @@
             <div id="tropheesGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 <p class="text-gray-400 text-sm col-span-full text-center py-8">Chargement…</p>
             </div>
+        </div>
+
+        <!-- NIVEAUX DE TROPHÉES PAR CATÉGORIE -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div class="flex flex-wrap items-baseline gap-3 mb-1">
+                <h2 class="text-lg font-black text-gray-800">🎖️ Niveaux de trophées</h2>
+                <span class="text-xs text-gray-400 font-semibold">Bronze → Argent → Or → Platine → Diamant → Incandescent</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-5">Chaque catégorie compte 6 paliers. Cliquez sur un badge pour voir sa condition.</p>
+            <div id="ladderGrid" class="space-y-3"><p class="text-gray-400 text-sm text-center py-6">Chargement…</p></div>
         </div>
 
         <!-- HISTORIQUE ACTIONS -->
@@ -331,7 +345,7 @@ const NOM_USER   = user.nom || user.name || '';
 if (!EMAIL_USER) { localStorage.clear(); window.location.href = 'index.html'; }
 
 const XP_MAP = {Actions:1,Offres:10,CarnetRoute:5,CarnetEntreprise:15,Missions:15,Objectifs:50,Alertes:10,Com:35,Entreprise:25,Etudiant:20,Special:100};
-const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial'};
+const XP_LABELS = {Actions:'Actions',Offres:'Offres',CarnetRoute:'Carnet de route',CarnetEntreprise:'Carnet entreprise',Missions:'Missions',Objectifs:'Objectifs validés',Alertes:'Alertes',Com:'Com & Événements',Entreprise:'Entreprises créées',Etudiant:'Étudiants créés',Special:'Spécial',Regularite:'Jours actifs',Serie:'Jours consécutifs',Polyvalence:'Catégories',Matinal:'Actions avant 8h30'};
 const KPI_COLORS = {Actions:'blue',Offres:'emerald',CarnetRoute:'violet',CarnetEntreprise:'pink',Missions:'amber',Objectifs:'green',Alertes:'orange',Com:'cyan',Entreprise:'indigo',Etudiant:'teal',Special:'red'};
 
 let tropheeData = null;
@@ -348,52 +362,111 @@ async function apiPost(payload) {
     return result;
 }
 
+// Cache local (90s, par utilisateur) + rafraîchissement silencieux en arrière-plan —
+// même pattern que dashboard.html/offres.html/missions.html.
+const TROPHEES_CACHE_KEY = 'hecg_cache_trophees_v1_' + EMAIL_USER;
+const TROPHEES_CACHE_TTL_MS = 90 * 1000;
+
+function _renderTropheePayload(res) {
+    tropheeData = res;
+    allActionRows = res.actionRows || [];
+
+    renderBanner(res);
+    renderKPIs(res);
+    renderHeptagon(res);
+    renderTrophees(res);
+    renderLadders(res);
+    renderActionTable(res);
+    buildCatFilter(res);
+
+    // Efface le badge
+    localStorage.removeItem('hecg_trophees_new');
+    const badgeEl = document.getElementById('navTropheesBadge');
+    if (badgeEl) badgeEl.style.display = 'none';
+}
+
+async function _fetchTropheeDataFresh() {
+    const res = await apiPost({action:'getTropheeData', emailUser: EMAIL_USER, nomUser: NOM_USER});
+    if (!res.success) { console.error(res.message); return res; }
+    try { sessionStorage.setItem(TROPHEES_CACHE_KEY, JSON.stringify({ ts: Date.now(), res })); } catch(eStore) {}
+    _renderTropheePayload(res);
+
+    // Marquer vus + notifier (spéciaux d'abord, puis réguliers) — uniquement sur une
+    // vraie réponse fraîche du serveur, pas sur un rejeu depuis le cache local.
+    if (res.newUnlocks && res.newUnlocks.length > 0) {
+        apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
+        const allT = res.trophees || [];
+        const newSpecial  = res.newUnlocks.map(id => allT.find(t => t.id === id && t.isSpecial)).filter(Boolean);
+        const newRegIds   = res.newUnlocks.filter(id => !allT.find(t => t.id === id && t.isSpecial));
+        if (newSpecial.length > 0) {
+            notifQueue = newRegIds.map(id => allT.find(t => t.id === id)).filter(Boolean);
+            notifIdx = 0;
+            showSpecialNotifs(newSpecial);
+        } else {
+            showTropheeNotifs(newRegIds);
+        }
+    }
+    return res;
+}
+
 async function loadData(force) {
     try {
-        const res = await apiPost({action:'getTropheeData', emailUser: EMAIL_USER, nomUser: NOM_USER});
-        if (!res.success) { console.error(res.message); return; }
-        tropheeData = res;
-        allActionRows = res.actionRows || [];
-
-        renderBanner(res);
-        renderKPIs(res);
-        renderHeptagon(res);
-        renderTrophees(res);
-        renderActionTable(res);
-        buildCatFilter(res);
-
-        // Efface le badge
-        localStorage.removeItem('hecg_trophees_new');
-        const badgeEl = document.getElementById('navTropheesBadge');
-        if (badgeEl) badgeEl.style.display = 'none';
-
-        // Marquer vus + notifier (spéciaux d'abord, puis réguliers)
-        if (res.newUnlocks && res.newUnlocks.length > 0) {
-            apiPost({action:'markTropheesVus', emailUser: EMAIL_USER});
-            const allT = res.trophees || [];
-            const newSpecial  = res.newUnlocks.map(id => allT.find(t => t.id === id && t.isSpecial)).filter(Boolean);
-            const newRegIds   = res.newUnlocks.filter(id => !allT.find(t => t.id === id && t.isSpecial));
-            if (newSpecial.length > 0) {
-                notifQueue = newRegIds.map(id => allT.find(t => t.id === id)).filter(Boolean);
-                notifIdx = 0;
-                showSpecialNotifs(newSpecial);
-            } else {
-                showTropheeNotifs(newRegIds);
-            }
+        if (!force) {
+            try {
+                const cached = JSON.parse(sessionStorage.getItem(TROPHEES_CACHE_KEY) || 'null');
+                if (cached && (Date.now() - cached.ts) < TROPHEES_CACHE_TTL_MS) {
+                    _renderTropheePayload(cached.res);
+                    _fetchTropheeDataFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                    return;
+                }
+            } catch(eCache) {}
         }
+        await _fetchTropheeDataFresh();
     } catch(e) { console.error(e); }
 }
 
+// Rafraîchissement périodique silencieux tant que l'onglet est visible
+setInterval(function() {
+    if (document.visibilityState === 'visible') {
+        _fetchTropheeDataFresh().catch(function(e){ console.error(e); });
+    }
+}, TROPHEES_CACHE_TTL_MS);
+
+// Niveaux titrés (basés sur l'XP). Les personnages restent débloqués par l'XP (feuille PERSONNAGE).
+const NIVEAUX = [
+    {xp:0,     titre:'Recrue',       tier:'bronze'},
+    {xp:100,   titre:'Vigie',        tier:'bronze'},
+    {xp:250,   titre:'Sentinelle',   tier:'bronze'},
+    {xp:500,   titre:'Pilier',       tier:'argent'},
+    {xp:900,   titre:'Mentor',       tier:'argent'},
+    {xp:1500,  titre:'Stratège',     tier:'argent'},
+    {xp:2500,  titre:'Capitaine',    tier:'or'},
+    {xp:4000,  titre:'Architecte',   tier:'or'},
+    {xp:6000,  titre:'Virtuose',     tier:'or'},
+    {xp:9000,  titre:'Visionnaire',  tier:'platine'},
+    {xp:13000, titre:'Sage',         tier:'platine'},
+    {xp:18000, titre:'Icône',        tier:'diamant'},
+    {xp:25000, titre:'Légende',      tier:'diamant'},
+    {xp:35000, titre:'Mythe',        tier:'arc-en-ciel'},
+    {xp:50000, titre:'Panthéon',  tier:'arc-en-ciel'}
+];
+function getNiveauFromXP(xp) {
+    let i = 0;
+    while (i + 1 < NIVEAUX.length && xp >= NIVEAUX[i + 1].xp) i++;
+    return { n: i + 1, cur: NIVEAUX[i], next: NIVEAUX[i + 1] || null };
+}
 function getNiveauLabel(n) {
-    if (n <= 3) return {label: 'Niveau ' + n, cls: 'level-bronze', tier: 'bronze'};
-    if (n <= 8) return {label: 'Niveau ' + n, cls: 'level-gold',   tier: 'or'};
-    return      {label: 'Niveau ' + n, cls: 'level-rainbow',        tier: 'rainbow'};
+    const lv = NIVEAUX[Math.max(0, Math.min(NIVEAUX.length, n) - 1)] || NIVEAUX[0];
+    const tier = lv.tier;
+    const cls = tier === 'arc-en-ciel' ? 'level-rainbow' : '';
+    return {label: 'Niveau ' + n + ' · ' + lv.titre, cls, tier, col: TIER_META[tier].col};
 }
 
 function renderBanner(d) {
     const prefs = d.prefs || {};
     const xp = d.xpTotal || 0;
-    const niveau = d.niveau || 0;
+    const lvInfo = getNiveauFromXP(xp);
+    const niveau = lvInfo.n;
     const nl = getNiveauLabel(niveau);
 
     document.getElementById('pseudoDisplay').textContent = prefs.pseudo || NOM_USER || 'Joueur';
@@ -405,19 +478,16 @@ function renderBanner(d) {
     // Niveau + nom de l'emblème sélectionné
     const niveauEl = document.getElementById('niveauDisplay');
     niveauEl.className = 'text-base font-bold mb-5 ' + nl.cls;
+    niveauEl.style.color = nl.cls ? '' : nl.col;
     const embLabel = emblemeT ? `<span style="-webkit-text-fill-color:rgba(255,255,255,0.5);color:rgba(255,255,255,0.5);font-weight:400;font-size:0.7rem;margin-left:8px">· ${escH(emblemeT.nom)}</span>` : '';
     niveauEl.innerHTML = nl.label + embLabel;
 
     // Liseré neon sur le portrait selon le tier du niveau
     const portrait = document.getElementById('personnagePortrait');
     portrait.classList.remove('portrait-rainbow-border');
-    if (nl.tier === 'bronze') {
-        portrait.style.borderColor = '#c87832';
-        portrait.style.boxShadow   = '0 0 10px rgba(200,120,50,0.8), 0 0 22px rgba(200,120,50,0.35)';
-        portrait.style.animation   = '';
-    } else if (nl.tier === 'or') {
-        portrait.style.borderColor = '#f59e0b';
-        portrait.style.boxShadow   = '0 0 13px rgba(245,158,11,0.9), 0 0 28px rgba(245,158,11,0.4)';
+    if (nl.tier !== 'arc-en-ciel') {
+        portrait.style.borderColor = nl.col;
+        portrait.style.boxShadow   = '0 0 12px ' + nl.col + 'cc, 0 0 26px ' + nl.col + '55';
         portrait.style.animation   = '';
     } else {
         portrait.style.borderColor = '';
@@ -425,14 +495,18 @@ function renderBanner(d) {
         portrait.classList.add('portrait-rainbow-border');
     }
 
-    document.getElementById('xpDisplay').textContent = xp.toLocaleString('fr') + ' XP';
 
-    // Calcul XP vers prochain niveau
-    const persos = (d.personnages || []).sort((a,b) => a.xpRequired - b.xpRequired);
-    const nextPerso = persos.find(p => !p.unlocked);
-    const maxXP = nextPerso ? nextPerso.xpRequired : (xp || 1);
-    const pct = nextPerso ? Math.min(100, Math.round(xp / maxXP * 100)) : 100;
-    document.getElementById('xpBarFill').style.width = pct + '%';
+    // Progression vers le niveau suivant
+    let pct = 100;
+    if (lvInfo.next) {
+        pct = Math.min(100, Math.round((xp - lvInfo.cur.xp) / (lvInfo.next.xp - lvInfo.cur.xp) * 100));
+        document.getElementById('xpDisplay').innerHTML = xp.toLocaleString('fr') + ' XP <span style="opacity:.6">· encore ' + (lvInfo.next.xp - xp).toLocaleString('fr') + ' XP pour « ' + escH(lvInfo.next.titre) + ' »</span>';
+    } else {
+        document.getElementById('xpDisplay').innerHTML = xp.toLocaleString('fr') + ' XP <span style="opacity:.6">· niveau maximum atteint ✨</span>';
+    }
+    const fill = document.getElementById('xpBarFill');
+    fill.style.width = pct + '%';
+    fill.style.background = nl.tier === 'arc-en-ciel' ? 'linear-gradient(90deg,#f43f5e,#f59e0b,#22c55e,#3b82f6,#a855f7)' : 'linear-gradient(90deg,' + nl.col + ',' + TIER_META[nl.tier].metal[2] + ')';
 
     // Afficher l'emblème dans le cercle
     const emblemeEl = document.getElementById('emblemeDisplay');
@@ -499,100 +573,99 @@ function renderKPIs(d) {
     }).join('');
 }
 
-function tropheeImg(t, big, overrideSz) {
-    const sz = overrideSz != null ? overrideSz : (big ? 70 : 48);
-    const rad = sz > 90 ? 18 : 10;
-    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${sz}px;height:${sz}px;object-fit:contain;background:#000;border-radius:${rad}px;display:block">`;
-    const tier = (t.tier||'').toLowerCase();
-    const isRw = tier === 'arc-en-ciel';
-    const cls = isRw ? 'trophy-rw-anim' : '';
-    const uid = Math.random().toString(36).slice(2,9);
-    const PAL = {
-        bronze: {
-            chrome: ['#1a0d05','#3a1a06','#78390e','#b5621c','#d4883c','#f0ae6a','#d4883c','#b5621c','#78390e','#3a1a06','#1a0d05'],
-            depth:  ['rgba(180,100,30,0.10)','rgba(10,4,0,0.55)'],
-            spec:   'rgba(255,215,160,0.52)',
-            rim:    ['#3a1806','#c87832','#f5c880','#c87832','#3a1806'],
-            base:   ['#0e0906','#2e1808','#5a3010','#2e1808','#0e0906'],
-            stroke: '#c87832', glow: 'rgba(200,120,50,0.75)'
-        },
-        argent: {
-            chrome: ['#0a1016','#1c2e3c','#385468','#6488a0','#90b4c8','#c8e0f0','#90b4c8','#6488a0','#385468','#1c2e3c','#0a1016'],
-            depth:  ['rgba(150,185,210,0.10)','rgba(4,10,16,0.55)'],
-            spec:   'rgba(215,240,255,0.52)',
-            rim:    ['#1a2e3c','#8ab0cc','#d8eef8','#8ab0cc','#1a2e3c'],
-            base:   ['#06090d','#18283a','#304858','#18283a','#06090d'],
-            stroke: '#8ab0cc', glow: 'rgba(138,176,204,0.75)'
-        },
-        or: {
-            chrome: ['#181200','#302200','#685000','#a87e0e','#c8a01e','#ecd050','#c8a01e','#a87e0e','#685000','#302200','#181200'],
-            depth:  ['rgba(220,175,25,0.10)','rgba(12,8,0,0.55)'],
-            spec:   'rgba(255,242,168,0.52)',
-            rim:    ['#302000','#d4b018','#f8e878','#d4b018','#302000'],
-            base:   ['#0c0a00','#281e06','#4e3a08','#281e06','#0c0a00'],
-            stroke: '#d4b018', glow: 'rgba(212,176,24,0.80)'
-        }
-    };
-    PAL['arc-en-ciel'] = Object.assign({}, PAL.argent);
-    const p = PAL[tier] || PAL.or;
-    const drp = isRw ? '' : `filter:drop-shadow(0 0 7px ${p.glow}) drop-shadow(0 3px 10px rgba(0,0,0,0.9))`;
-    const mk = arr => arr.map((c,i) => `<stop offset="${Math.round(i*100/(arr.length-1))}%" stop-color="${c}"/>`).join('');
-    return `<svg class="${cls}" width="${sz}" height="${sz}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;${drp}">
+// ============================================================================
+//  BADGES v2 — médaillons vectoriels générés (remplacent les coupes)
+//  Forme selon le palier, couleur + pictogramme selon la catégorie.
+// ============================================================================
+const TIER_ORDER = ['bronze','argent','or','platine','diamant','arc-en-ciel'];
+const TIER_META = {
+    'bronze':      {label:'Bronze',       col:'#c87832', bg:'rgba(200,120,50,0.10)',  metal:['#5a2e0e','#a85f22','#e9a566','#fbd3a4','#c47a3a','#6b3812'], edge:'#7a4016'},
+    'argent':      {label:'Argent',       col:'#8ea4ba', bg:'rgba(142,164,186,0.12)', metal:['#4b5b6b','#8ea4ba','#dfe8f1','#ffffff','#a9bccd','#56677a'], edge:'#5d6f82'},
+    'or':          {label:'Or',           col:'#d4a017', bg:'rgba(212,160,23,0.12)',  metal:['#6b4a00','#c8920e','#f7d65c','#fff3b8','#e0b22a','#7a5404'], edge:'#8a6206'},
+    'platine':     {label:'Platine',      col:'#2bb3c0', bg:'rgba(43,179,192,0.10)',  metal:['#0d4a55','#2bb3c0','#a5ecf2','#f0feff','#58c9d4','#11535e'], edge:'#13616c'},
+    'diamant':     {label:'Diamant',      col:'#5b6cf9', bg:'rgba(91,108,249,0.10)',  metal:['#1c1f7a','#5b6cf9','#b9c3ff','#f4f6ff','#7d8cff','#262a96'], edge:'#2b2f9e'},
+    'arc-en-ciel': {label:'Incandescent', col:'#a855f7', bg:'rgba(168,85,247,0.10)',  metal:['#f43f5e','#f59e0b','#facc15','#22c55e','#3b82f6','#a855f7'], edge:'#6d28d9'}
+};
+const CAT_STYLE = {
+    Actions:          {c1:'#1A4E8A', c2:'#3f7cc4', ico:'M13 2 3 14h9l-1 8 10-12h-9l1-8z'},
+    Offres:           {c1:'#047857', c2:'#10b981', ico:'M3 7h18v13H3z M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M3 13h18'},
+    CarnetRoute:      {c1:'#6d28d9', c2:'#a78bfa', ico:'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15'},
+    CarnetEntreprise: {c1:'#be185d', c2:'#f472b6', ico:'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7 M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'},
+    Missions:         {c1:'#b45309', c2:'#fbbf24', ico:'M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18z M12 7a5 5 0 1 0 0 10 5 5 0 1 0 0-10z M12 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z'},
+    Objectifs:        {c1:'#15803d', c2:'#4ade80', ico:'M5 22V3 M5 4h12l-2.5 4.5L17 13H5'},
+    Alertes:          {c1:'#c2410c', c2:'#F26522', ico:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0'},
+    Com:              {c1:'#0e7490', c2:'#22d3ee', ico:'M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z M16 9a4 4 0 0 1 0 6 M19 6a8 8 0 0 1 0 12'},
+    Entreprise:       {c1:'#4338ca', c2:'#818cf8', ico:'M4 21V5l8-3v19 M12 21V9l8 3v9 M2 21h20 M7 8h2 M7 12h2 M7 16h2 M15 14h2 M15 17h2'},
+    Etudiant:         {c1:'#0f766e', c2:'#2dd4bf', ico:'M22 10 12 5 2 10l10 5 10-5z M6 12v5c3 2 9 2 12 0v-5'},
+    Special:          {c1:'#b91c1c', c2:'#f87171', ico:'M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z'},
+    Regularite:       {c1:'#0369a1', c2:'#38bdf8', ico:'M3 5h18v16H3z M3 10h18 M8 3v4 M16 3v4 M9 15l2 2 4-4'},
+    Serie:            {c1:'#be123c', c2:'#fb7185', ico:'M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z'},
+    Polyvalence:      {c1:'#a21caf', c2:'#e879f9', ico:'M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z'},
+    Matinal:          {c1:'#a16207', c2:'#facc15', ico:'M12 2v4 M4.9 6.9l1.4 1.4 M2 16h2 M20 16h2 M17.7 8.3l1.4-1.4 M18 16a6 6 0 0 0-12 0 M2 20h20'}
+};
+function _polyPts(cx, cy, n, r1, r2, rot) {
+    const pts = [];
+    const steps = r2 ? n * 2 : n;
+    for (let i = 0; i < steps; i++) {
+        const r = (r2 && i % 2) ? r2 : r1;
+        const a = (rot || 0) + i * Math.PI * 2 / steps - Math.PI / 2;
+        pts.push((cx + r * Math.cos(a)).toFixed(2) + ',' + (cy + r * Math.sin(a)).toFixed(2));
+    }
+    return pts.join(' ');
+}
+function _badgeShape(tier, inset) {
+    const k = inset || 0;
+    switch (tier) {
+        case 'argent':      return `<polygon points="${_polyPts(50,48,6,40-k)}"/>`;
+        case 'or':          return `<path d="M50 ${7+k} L${85-k} ${18+k*0.6} V48 C${85-k} ${70-k*0.4} ${68-k*0.3} ${85-k*0.8} 50 ${93-k*1.1} C${32+k*0.3} ${85-k*0.8} ${15+k} ${70-k*0.4} ${15+k} 48 V${18+k*0.6} Z"/>`;
+        case 'platine':     return `<polygon points="${_polyPts(50,48,8,41-k,0,Math.PI/8)}"/>`;
+        case 'diamant':     return `<polygon points="${_polyPts(50,48,10,43-k,36-k)}"/>`;
+        case 'arc-en-ciel': return `<polygon points="${_polyPts(50,48,16,44-k,37-k)}"/>`;
+        default:            return `<circle cx="50" cy="48" r="${38-k}"/>`;
+    }
+}
+function badgeSVG(t, sz, locked) {
+    const tier = TIER_META[(t.tier||'').toLowerCase()] ? (t.tier||'').toLowerCase() : 'or';
+    const m = TIER_META[tier];
+    const cs = CAT_STYLE[t.catKey] || CAT_STYLE.Special;
+    const u = 'b' + Math.random().toString(36).slice(2, 9);
+    const rank = TIER_ORDER.indexOf(tier) + 1;
+    const stops = m.metal.map((c, i) => `<stop offset="${Math.round(i * 100 / (m.metal.length - 1))}%" stop-color="${c}"/>`).join('');
+    const pips = Array.from({length: rank}, (_, i) => {
+        const x = 50 + (i - (rank - 1) / 2) * 5.2;
+        return `<circle cx="${x.toFixed(1)}" cy="81" r="1.8" fill="#fff" stroke="${m.edge}" stroke-width=".9"/>`;
+    }).join('');
+    const isRw = tier === 'arc-en-ciel' && !locked;
+    const glow = locked ? '' : `filter:drop-shadow(0 4px 10px ${m.col}55) drop-shadow(0 1px 2px rgba(0,0,0,.25));`;
+    return `<svg class="${isRw ? 'trophy-rw-anim' : ''} ${locked ? 'badge-locked' : ''}" width="${sz}" height="${Math.round(sz * 1.1)}" viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;${glow}">
   <defs>
-    <linearGradient id="cG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.chrome)}</linearGradient>
-    <linearGradient id="rG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.rim)}</linearGradient>
-    <linearGradient id="bG${uid}" x1="0%" y1="0%" x2="100%" y2="0%">${mk(p.base)}</linearGradient>
-    <linearGradient id="dG${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="${p.depth[0]}"/>
-      <stop offset="100%" stop-color="${p.depth[1]}"/>
-    </linearGradient>
-    <radialGradient id="sG${uid}" cx="34%" cy="26%" r="44%">
-      <stop offset="0%" stop-color="${p.spec}"/>
-      <stop offset="70%" stop-color="rgba(255,255,255,0.05)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-    </radialGradient>
-    <radialGradient id="iG${uid}" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0.28)"/>
-    </radialGradient>
+    <linearGradient id="m${u}" x1="0" y1="0" x2="1" y2="1">${stops}</linearGradient>
+    <linearGradient id="c${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${cs.c2}"/><stop offset="1" stop-color="${cs.c1}"/></linearGradient>
+    <linearGradient id="s${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="k${u}">${_badgeShape(tier)}</clipPath>
   </defs>
-  <!-- Handles drawn first so cup body overlaps attachment points -->
-  <!-- Left handle: dark shadow → tier color → bright specular -->
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
-  <path d="M18,22 C4,27 1,42 4,52 C7,60 15,63 21,61" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="2" stroke-linecap="round"/>
-  <!-- Right handle: dark shadow → tier color → bright specular -->
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(0,0,0,0.72)" stroke-width="12" stroke-linecap="round"/>
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="${p.stroke}" stroke-width="7.5" stroke-linecap="round"/>
-  <path d="M82,22 C96,27 99,42 96,52 C93,60 85,63 79,61" fill="none" stroke="rgba(255,255,255,0.20)" stroke-width="2" stroke-linecap="round"/>
-  <!-- Cup body: chalice shape — wide rim, curves inward then tapers to stem junction -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#cG${uid})" stroke="${p.stroke}" stroke-width="2.8" stroke-linejoin="round"/>
-  <!-- Vertical depth shading (lit at top, shadowed at bottom) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#dG${uid})" pointer-events="none"/>
-  <!-- Radial inner shadow (gives bowl depth) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#iG${uid})" pointer-events="none"/>
-  <!-- Specular highlight (bright spot upper-left, simulates light source) -->
-  <path d="M18,13 C15,28 12,44 21,57 C27,65 38,68 50,69 C62,68 73,65 79,57 C88,44 85,28 82,13 Z"
-        fill="url(#sG${uid})" pointer-events="none"/>
-  <!-- Inner cup edge shadow (gives thickness/depth to the cup walls) -->
-  <path d="M23,13 C21,27 18,43 26,55 C31,63 40,66 50,67 C60,66 69,63 74,55 C82,43 79,27 77,13"
-        fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="1.5"/>
-  <!-- Rim band (flat top of cup, most reflective part) -->
-  <path d="M12,5 H88 V12 Q88,14 82,14 H18 Q12,14 12,12 Z" fill="url(#rG${uid})" stroke="${p.stroke}" stroke-width="1.2"/>
-  <line x1="16" y1="8.5" x2="84" y2="8.5" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>
-  <!-- Junction band (cup-to-stem) -->
-  <rect x="37" y="68" width="26" height="5.5" rx="1.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2"/>
-  <!-- Stem -->
-  <rect x="43" y="73.5" width="14" height="7" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.2"/>
-  <!-- Upper base tier -->
-  <rect x="26" y="80" width="48" height="7" rx="2" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.4"/>
-  <!-- Lower base tier (widest, most prominent) -->
-  <rect x="15" y="86" width="70" height="9" rx="2.5" fill="url(#bG${uid})" stroke="${p.stroke}" stroke-width="2.7"/>
-  <line x1="18" y1="89.5" x2="82" y2="89.5" stroke="rgba(255,255,255,0.14)" stroke-width="0.9"/>
+  <g opacity=".95">
+    <path d="M34 70 L26 106 L35 99 L42 106 L47 74 Z" fill="${cs.c1}"/>
+    <path d="M66 70 L74 106 L65 99 L58 106 L53 74 Z" fill="${cs.c1}"/>
+    <path d="M34 70 L30 88 L44 90 L47 74 Z" fill="#000" opacity=".18"/>
+    <path d="M66 70 L70 88 L56 90 L53 74 Z" fill="#000" opacity=".18"/>
+  </g>
+  <g fill="url(#m${u})" stroke="${m.edge}" stroke-width="1.6" stroke-linejoin="round">${_badgeShape(tier)}</g>
+  <g fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.1">${_badgeShape(tier, 4.5)}</g>
+  <g clip-path="url(#k${u})"><rect x="0" y="0" width="100" height="50" fill="url(#s${u})"/><path d="M-10 70 L70 -10 L80 -10 L0 70Z" fill="#fff" opacity=".12"/></g>
+  <circle cx="50" cy="47" r="24" fill="url(#c${u})" stroke="#fff" stroke-width="2.4"/>
+  <circle cx="50" cy="47" r="24" fill="none" stroke="#000" stroke-opacity=".12" stroke-width="1" transform="translate(0 1)"/>
+  <path d="M30 40 a24 24 0 0 1 40 0" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.6"/>
+  <g transform="translate(34 31) scale(1.333)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${cs.ico}"/></g>
+  ${pips}
 </svg>`;
+}
+
+function tropheeImg(t, big, overrideSz) {
+    const sz = overrideSz != null ? overrideSz : (big ? 70 : 56);
+    const rad = sz > 90 ? 18 : 10;
+    if (t.url) return `<img src="${escH(driveImg(t.url))}" style="width:${sz}px;height:${sz}px;object-fit:contain;background:#000;border-radius:${rad}px;display:block;${t.unlocked===false?'filter:grayscale(1);opacity:.45':''}">`;
+    return badgeSVG(t, sz, t.unlocked === false);
 }
 
 function openTropheeById(id) {
@@ -613,19 +686,14 @@ function renderTrophees(d) {
     const all      = d.trophees || [];
     const unlocked = all.filter(t => t.unlocked);
 
-    const tc = {bronze:0, argent:0, or:0, 'arc-en-ciel':0};
+    const tc = {bronze:0, argent:0, or:0, platine:0, diamant:0, 'arc-en-ciel':0};
     unlocked.forEach(t => { const k = (t.tier||'').toLowerCase(); if (k in tc) tc[k]++; });
 
-    const tierBadges = [
-        {k:'bronze',      label:'Bronze',       col:'#c87832', bg:'rgba(200,120,50,0.12)'},
-        {k:'argent',      label:'Argent',       col:'#8ab0cc', bg:'rgba(138,176,204,0.12)'},
-        {k:'or',          label:'Or',           col:'#d4b018', bg:'rgba(212,176,24,0.12)'},
-        {k:'arc-en-ciel', label:'Incandescent', col:'#a855f7', bg:'rgba(168,85,247,0.10)'},
-    ];
+    const tierBadges = TIER_ORDER.map(k => ({k, label: TIER_META[k].label, col: TIER_META[k].col, bg: TIER_META[k].bg}));
 
     const statsBar = `<div class="col-span-full flex flex-wrap gap-3 mb-2">
-        <div class="flex-1 min-w-[120px] bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center">
-            <p class="text-[10px] font-black text-amber-500 uppercase tracking-widest">Total</p>
+        <div class="flex-1 min-w-[110px] bg-white border border-gray-200 rounded-2xl px-4 py-3 text-center">
+            <p class="text-[10px] font-black text-[#1A4E8A] uppercase tracking-widest">Total</p>
             <p class="text-2xl font-black text-gray-800 mt-0.5">${unlocked.length}<span class="text-sm text-gray-400 font-normal"> / ${all.length}</span></p>
         </div>
         ${tierBadges.map(b => {
@@ -661,16 +729,51 @@ function renderTrophees(d) {
         ? `<p class="text-gray-400 text-sm col-span-full text-center py-6">Aucun trophée ${tierBadges.find(x=>x.k===currentTierFilter)?.label||''} pour l'instant.</p>`
         : filtered.map(t => {
             const sp = t.isSpecial;
-            return `<div class="trophy-card ${sp?'bg-yellow-950/20 border-amber-400/50 ring-1 ring-amber-400/20':'bg-amber-50 border-amber-100'} border rounded-2xl p-4 text-center cursor-pointer relative" onclick="openTropheeById('${escH(t.id)}')">
+            const tm = TIER_META[(t.tier||'').toLowerCase()] || TIER_META.or;
+            return `<div class="trophy-card ${sp?'ring-1 ring-amber-400/30':''} border rounded-2xl p-4 text-center cursor-pointer relative" style="border-color:${tm.col}33;background:linear-gradient(180deg,${tm.bg},#fff 70%)" onclick="openTropheeById('${escH(t.id)}')">
                 ${sp ? `<span class="absolute top-2 right-2 text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">Spécial</span>` : ''}
                 <div class="mb-2 flex justify-center">${tropheeImg(t, false)}</div>
                 <p class="font-black text-gray-800 text-xs leading-tight">${escH(t.nom)}</p>
-                <p class="text-[10px] text-amber-600 mt-1">${escH(t.categorie)}</p>
+                <p class="text-[10px] mt-1 font-bold" style="color:${tm.col}">${escH(t.categorie)} · ${tm.label}</p>
                 ${t.dateObtention ? `<p class="text-[9px] text-gray-400 mt-1">${t.dateObtention}</p>` : ''}
             </div>`;
         }).join('');
 
     grid.innerHTML = statsBar + heading + cards;
+}
+
+function renderLadders(d) {
+    const el = document.getElementById('ladderGrid');
+    if (!el || !d) return;
+    const groups = {};
+    (d.trophees || []).filter(t => t.v2).forEach(t => { (groups[t.catKey] = groups[t.catKey] || []).push(t); });
+    const keys = Object.keys(groups);
+    if (!keys.length) { el.innerHTML = '<p class="text-gray-400 text-sm text-center py-6">Les niveaux apparaîtront après la prochaine mise à jour du serveur.</p>'; return; }
+    keys.sort((a, b) => groups[b].filter(t => t.unlocked).length - groups[a].filter(t => t.unlocked).length);
+    el.innerHTML = keys.map(k => {
+        const list = groups[k].sort((a, b) => a.palier - b.palier);
+        const done = list.filter(t => t.unlocked).length;
+        const next = list.find(t => !t.unlocked);
+        const prev = done ? list[done - 1].quantite : 0;
+        const cur = list[0].count || 0;
+        const pct = next ? Math.max(0, Math.min(100, Math.round((cur - prev) / (next.quantite - prev) * 100))) : 100;
+        const cs = CAT_STYLE[k] || CAT_STYLE.Special;
+        const topTier = done ? TIER_META[list[done - 1].tier] : null;
+        return `<div class="rounded-2xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center gap-4 hover:border-gray-200 transition" style="background:linear-gradient(90deg,${cs.c2}12,#fff 40%)">
+            <div class="lg:w-56 flex-shrink-0">
+                <p class="text-sm font-black text-gray-800">${escH(list[0].categorie)}</p>
+                <p class="text-[11px] font-bold mt-0.5" style="color:${topTier ? topTier.col : '#94a3b8'}">${done ? escH(list[done - 1].nom) + ' · ' + topTier.label : 'Aucun palier atteint'}</p>
+                <div class="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:linear-gradient(90deg,${cs.c1},${cs.c2})"></div></div>
+                <p class="text-[10px] text-gray-400 mt-1 font-semibold">${next ? cur.toLocaleString('fr') + ' / ' + next.quantite.toLocaleString('fr') + ' → « ' + escH(next.nom) + ' »' : 'Tous les paliers débloqués ✨'}</p>
+            </div>
+            <div class="flex-1 grid grid-cols-6 gap-1 sm:gap-2">
+                ${list.map(t => `<div class="ladder-step text-center cursor-pointer" onclick="openTropheeById('${escH(t.id)}')" title="${escH(t.nom)} — ${escH(t.description || '')}">
+                    <div class="flex justify-center">${badgeSVG(t, 50, !t.unlocked)}</div>
+                    <p class="text-[10px] font-bold leading-tight mt-1 ${t.unlocked ? 'text-gray-700' : 'text-gray-300'} truncate">${escH(t.nom)}</p>
+                </div>`).join('')}
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function buildCatFilter(d) {
@@ -730,14 +833,16 @@ function filterActions() {
 
 function openTropheeDetail(t) {
     const pct = t.quantite > 0 ? Math.min(100, Math.round(t.count / t.quantite * 100)) : 100;
-    const tierLabel = {bronze:'Bronze',argent:'Argent',or:'Or','arc-en-ciel':'Arc-en-ciel'}[(t.tier||'').toLowerCase()] || '';
-    const tierColor = {bronze:'text-amber-700',argent:'text-slate-400',or:'text-amber-400','arc-en-ciel':'level-rainbow'}[(t.tier||'').toLowerCase()] || 'text-amber-400';
+    const _tm = TIER_META[(t.tier||'').toLowerCase()];
+    const tierLabel = _tm ? _tm.label + (t.palier ? ' · palier ' + t.palier + '/' + (t.nbPaliers || 6) : '') : '';
+    const tierColor = (t.tier||'').toLowerCase() === 'arc-en-ciel' ? 'level-rainbow' : '';
 
     // Header zone
     document.getElementById('tropheeDetailNom').textContent = t.unlocked ? t.nom : '???';
     const tierEl = document.getElementById('tropheeDetailTier');
     tierEl.textContent = tierLabel;
     tierEl.className = 'text-xs font-bold uppercase tracking-widest mt-1 ' + tierColor;
+    tierEl.style.color = tierColor ? '' : (_tm ? _tm.col : '#f59e0b');
 
     // Large trophy image
     document.getElementById('tropheeDetailImgWrap').innerHTML = tropheeImg(t, true, 300);
@@ -745,6 +850,7 @@ function openTropheeDetail(t) {
     // Info body
     const isEmbleme = tropheeData && tropheeData.prefs && tropheeData.prefs.emblemeChoisi === t.id;
     document.getElementById('tropheeDetailBody').innerHTML = `
+        ${t.v2 && t.description ? `<p class="text-sm text-gray-600 text-center mb-4">🎯 ${escH(t.description)}</p>` : ''}
         ${t.isSpecial && t.description ? `
         <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
             <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">🏆 Comment ce trophée a été débloqué</p>
@@ -793,8 +899,8 @@ function openSalleRecompenses() {
             <div class="grid grid-cols-3 md:grid-cols-5 gap-3">`;
         cats[cat].forEach(t => {
             html += `<div class="trophy-card ${t.unlocked?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100'} border rounded-2xl p-3 text-center cursor-pointer ${t.unlocked?'':'trophy-locked'}" onclick="openTropheeById('${escH(t.id)}')">
-                <div class="mb-1 flex justify-center">${t.unlocked ? tropheeImg(t, false) : '<span class="text-3xl opacity-30">🏆</span>'}</div>
-                <p class="font-bold text-gray-800 text-xs leading-tight">${t.unlocked ? escH(t.nom) : '?'}</p>
+                <div class="mb-1 flex justify-center">${tropheeImg(t, false)}</div>
+                <p class="font-bold ${t.unlocked?'text-gray-800':'text-gray-400'} text-xs leading-tight">${escH(t.nom)}</p>
                 <p class="text-[9px] ${t.unlocked?'text-amber-600':'text-gray-400'} mt-0.5">${t.count}/${t.quantite}</p>
             </div>`;
         });

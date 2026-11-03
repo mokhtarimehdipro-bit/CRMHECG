@@ -22,6 +22,7 @@
         @keyframes fadeInUp { from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);} }
         .card-anim { animation: fadeInUp .18s ease both; }
     </style>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -425,8 +426,15 @@ async function aspirerMaintenant() {
     try {
         const res = await apiPost({action:'aspirerMissionsNow'});
         if (res.success) {
-            showToast(res.nb === 0 ? 'Aucun nouveau mail #mission.' : `✅ ${res.nb} mission(s) importée(s) !`, res.nb===0?'info':'success');
-            if (res.nb > 0) await loadMissions(true);
+            if (res.async) {
+                // L'aspiration tourne maintenant en arrière-plan côté serveur (voir code.gs) :
+                // on ne bloque plus le doPost dessus, donc on ne connaît pas encore le résultat.
+                showToast('📬 Aspiration lancée en arrière-plan…', 'info');
+                setTimeout(() => loadMissions(true), 20000);
+            } else {
+                showToast(res.nb === 0 ? 'Aucun nouveau mail #mission.' : `✅ ${res.nb} mission(s) importée(s) !`, res.nb===0?'info':'success');
+                if (res.nb > 0) await loadMissions(true);
+            }
         } else showToast('Erreur : ' + res.message, 'error');
     } catch(e) { showToast('Erreur réseau.', 'error'); }
     btn.disabled = false; btn.textContent = orig;
@@ -869,10 +877,14 @@ function exportCSV(global) {
     const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
     let csv = headers.map(esc).join(';') + '\n';
     liste.forEach(m => { csv += [m.id,m.date,m.heure,m.email,m.collab,m.cc,m.objet,m.corps,m.statut,m.notes,m.dateMaj,m.priorite,m.resume,m.emailCreateur].map(esc).join(';') + '\n'; });
+    const fileName = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global?'_GLOBAL':'_vue'}.csv`;
     const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global?'_GLOBAL':'_vue'}.csv`;
+    a.download = fileName;
     a.click();
+
+    apiPost({ action: 'logExport', exportType: 'Missions', fileName, mimeType: 'text/csv', content: csv, rowCount: liste.length })
+        .catch(e => console.error("Erreur envoi mail export :", e));
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────

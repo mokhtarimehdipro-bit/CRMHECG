@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>HECG - Vivier Prospects</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
     
@@ -87,12 +88,14 @@
             };
         })();
 
-        async function loadProspects() {
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getProspects' }) });
-            const data = await res.json();
+        // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
+        // que dashboard.html/offres.html/missions.html.
+        const PROSPECTS_CACHE_KEY = 'hecg_cache_prospects_v1';
+        const PROSPECTS_CACHE_TTL_MS = 90 * 1000;
+
+        function _applyProspectsPayload(data) {
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('prospectsTable').classList.remove('hidden');
-
             if(data.success) {
                 document.getElementById('prospectList').innerHTML = data.data.map(p => `
                     <tr class="hover:bg-gray-50 transition">
@@ -106,6 +109,37 @@
                 `).join('') || `<tr><td colspan="4" class="p-8 text-center text-gray-400 italic font-bold">Aucun prospect dans le vivier.</td></tr>`;
             }
         }
+
+        async function _fetchProspectsFresh() {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getProspects' }) });
+            const data = await res.json();
+            if (data.success) {
+                try { sessionStorage.setItem(PROSPECTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(eStore) {}
+                _applyProspectsPayload(data);
+            }
+            return data;
+        }
+
+        async function loadProspects(forceRefresh) {
+            if (!forceRefresh) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem(PROSPECTS_CACHE_KEY) || 'null');
+                    if (cached && (Date.now() - cached.ts) < PROSPECTS_CACHE_TTL_MS) {
+                        _applyProspectsPayload(cached.data);
+                        _fetchProspectsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
+                        return;
+                    }
+                } catch(eCache) {}
+            }
+            await _fetchProspectsFresh();
+        }
+
+        // Rafraîchissement périodique silencieux tant que l'onglet est visible
+        setInterval(function() {
+            if (document.visibilityState === 'visible') {
+                _fetchProspectsFresh().catch(function(e){ console.error(e); });
+            }
+        }, PROSPECTS_CACHE_TTL_MS);
 
         let _motifCallback = null;
         function askMotif(description, callback) {
@@ -131,7 +165,7 @@
             askMotif('Supprimer ce prospect définitivement ?', async (motif) => {
                 const u = JSON.parse(localStorage.getItem('user') || '{}');
                 await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProspect', id: id, motif: motif, idAuteur: u.nom || "Inconnu", emailAuteur: u.email || "", sessionToken: u.sessionToken || "" }) });
-                loadProspects();
+                loadProspects(true);
             });
         }
 
