@@ -42,14 +42,58 @@ function getPersonnelDataCached_(ss) {
  * Utilisé sur les endpoints de lecture les plus sollicités (dashboard, stats...)
  * pour absorber les pics d'appels concurrents. TTL volontairement court.
  */
-function getCachedJsonResponse_(cacheKey, ttlSeconds, buildFn) {
+// ── Cache v2 (nov. 2026) ─────────────────────────────────────────────────────
+// CacheService limite chaque valeur à 100 Ko : l'ancien cache échouait en silence
+// sur toutes les grosses réponses (stats 208 Ko, entreprises 435 Ko, offres 2,4 Mo…),
+// qui étaient donc recalculées à chaque appel. Désormais :
+//   - la réponse est compressée (gzip, ~8-10× sur du JSON) puis découpée en morceaux ;
+//   - toutes les clés incluent une « version globale des données », incrémentée après
+//     chaque action d'écriture (voir doPost) → aucune donnée périmée après une modif CRM ;
+//   - durée minimale CACHE_MIN_TTL (les modifs faites directement dans le Google Sheet
+//     ou par les synchros automatiques apparaissent au plus tard après ce délai).
+var CACHE_MIN_TTL = 180;
+var CACHE_CHUNK = 90000;
+
+function getDataVersion_() {
+  try { return CacheService.getScriptCache().get('hecg_data_version') || '0'; } catch (e) { return '0'; }
+}
+function bumpDataVersion_() {
+  try { CacheService.getScriptCache().put('hecg_data_version', String(Date.now()), 21600); } catch (e) {}
+}
+function cachePutBig_(key, str, ttl) {
   var cache = CacheService.getScriptCache();
+  var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(str, 'application/json')).getBytes());
+  var n = Math.ceil(b64.length / CACHE_CHUNK) || 1;
+  if (n > 60) return; // > ~5 Mo compressés : on ne met pas en cache
+  var map = {};
+  for (var i = 0; i < n; i++) map[key + '#' + i] = b64.substr(i * CACHE_CHUNK, CACHE_CHUNK);
+  map[key + '#n'] = String(n);
+  cache.putAll(map, ttl);
+}
+function cacheGetBig_(key) {
+  var cache = CacheService.getScriptCache();
+  var n = parseInt(cache.get(key + '#n') || '0', 10);
+  if (!n) return null;
+  var keys = [];
+  for (var i = 0; i < n; i++) keys.push(key + '#' + i);
+  var got = cache.getAll(keys);
+  var b64 = '';
+  for (var j = 0; j < n; j++) { if (got[keys[j]] == null) return null; b64 += got[keys[j]]; }
+  return Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(b64), 'application/x-gzip')).getDataAsString();
+}
+
+function getCachedJsonResponse_(cacheKey, ttlSeconds, buildFn) {
+  var key = 'c2_' + getDataVersion_() + '_' + cacheKey;
   try {
-    var hit = cache.get(cacheKey);
+    var hit = cacheGetBig_(key);
     if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
-  } catch(e) {}
+  } catch(e) { console.error('cache.get failed (' + cacheKey + '): ' + e); }
   var response = buildFn();
-  try { cache.put(cacheKey, response.getContent(), ttlSeconds); } catch(e) { console.error('cache.put failed (' + cacheKey + '): ' + e); }
+  try {
+    var content = response.getContent();
+    // On ne met jamais en cache une réponse d'erreur
+    if (content.indexOf('"success":false') === -1) cachePutBig_(key, content, Math.max(ttlSeconds || 0, CACHE_MIN_TTL));
+  } catch(e) { console.error('cache.put failed (' + cacheKey + '): ' + e); }
   return response;
 }
 
@@ -158,7 +202,20 @@ function fixStatutDataValidation() {
 // ==========================================
 // DISPATCHER PRINCIPAL
 // ==========================================
+// Point d'entrée : exécute l'action puis, si c'est une écriture, invalide tout le cache de
+// lecture (version globale des données). Les lectures restent servies depuis le cache.
+var READ_ACTION_RE = /^(get|check|list|preview|ged(List|Get|Scan)|login|search|export|count)/;
 function doPost(e) {
+  var action = "";
+  try { action = String(JSON.parse(e.postData.contents).action || ""); } catch (eA) {}
+  var out = doPostInner_(e);
+  if (action && !READ_ACTION_RE.test(action)) {
+    try { if (String(out.getContent()).indexOf('"success":false') === -1) bumpDataVersion_(); } catch (eB) { bumpDataVersion_(); }
+  }
+  return out;
+}
+
+function doPostInner_(e) {
   try {
     const params = JSON.parse(e.postData.contents);
     const action = params.action;

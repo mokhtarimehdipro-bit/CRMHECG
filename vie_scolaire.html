@@ -1896,7 +1896,8 @@ const VS_CACHEABLE_ACTIONS = new Set([
   'getClassesInfo','getFormateurs','getPlanningTaches','getRefTaches','getQualiopiPreuves',
   'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
   'getStatsMatieres','getMailsLog','getSalles','getSimulations','getSuiviEXB','getMMOK',
-  'getReleveNotes','getQuestionnaireLinks','getStatsExclusions','getRelanceConfig'
+  'getReleveNotes','getQuestionnaireLinks','getStatsExclusions','getRelanceConfig',
+  'getCubeData','getTableauxSuivi','getSuiviImportOptions','previewSuiviImport'
 ]);
 
 function _vsCacheKey(action, extra) { return 'hecg_cache_vs_v1_' + action + '_' + JSON.stringify(extra || {}); }

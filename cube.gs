@@ -173,8 +173,14 @@ function _cubeBuild_(ss, sources, join, cache, allowActivite) {
 function handleGetCubeData(p, ss) {
   if (!_tabSuiviCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
   try {
-    const data = _cubeBuild_(ss, p.sources, p.join === true, {}, _cubeCanSeeActivite_(p));
-    return createJsonResponse({ success: true, fields: data.fields, rows: data.rows, activiteAutorisee: _cubeCanSeeActivite_(p) });
+    const act = _cubeCanSeeActivite_(p);
+    const srcs = (p.sources || []).filter(function(s) { return CUBE_SOURCES[s]; }).slice().sort();
+    const key = 'cube_v1_' + srcs.join('+') + '_' + (p.join === true ? 'j' : 'n') + '_' + (act ? 'a' : 'u');
+    // Jeu de données mis en cache 5 min (compressé, cf. getCachedJsonResponse_), invalidé à chaque écriture CRM
+    return getCachedJsonResponse_(key, 300, function() {
+      const data = _cubeBuild_(ss, srcs, p.join === true, {}, act);
+      return createJsonResponse({ success: true, fields: data.fields, rows: data.rows, activiteAutorisee: act, genereLe: new Date().toISOString() });
+    });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
