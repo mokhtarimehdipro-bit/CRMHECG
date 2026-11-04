@@ -144,10 +144,73 @@
   @keyframes tkSk{to{background-position:-200% 0}}
   @media(max-width:1100px){.tk-grid{grid-template-columns:44px minmax(200px,1fr) 140px 108px 52px 140px}.tk-grid>.c-mandat,.tk-grid>.c-com{display:none}}
   @media(max-width:720px){.tk-grid{grid-template-columns:44px 1fr 100px 46px}.tk-grid>.c-who,.tk-grid>.c-cat{display:none}.tk-search input{width:150px}}
+
+  /* ═════ v2 : plus aéré, dégradés & ombres douces (nov. 2026) ═════ */
+  body.tk-page{background:radial-gradient(1200px 520px at 105% -12%,rgba(26,78,138,.12),transparent 60%),radial-gradient(900px 480px at -8% 108%,rgba(242,101,34,.08),transparent 62%),linear-gradient(180deg,#f2f5fa,#eef2f8) !important;background-attachment:fixed !important}
+  .tk-hero{position:relative;border-radius:26px;padding:30px 34px 0;margin-bottom:26px;background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(243,247,252,.86));border:1px solid rgba(220,229,241,.9);box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 30px 60px -40px rgba(26,78,138,.45);backdrop-filter:blur(10px);overflow:hidden}
+  .tk-hero::before{content:'';position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,#1A4E8A,#3f7cc4 45%,#F26522)}
+  .tk-hero::after{content:'';position:absolute;right:-120px;top:-140px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(26,78,138,.10),transparent 70%);pointer-events:none}
+  .tk-h1{font-size:30px}
+  .tk-crumb{font-size:13px}
+  .tk-btn{height:42px;padding:0 18px;border-radius:13px;background:linear-gradient(180deg,#ffffff,#f3f6fb);border-color:#dfe6f0;box-shadow:0 1px 0 #fff inset,0 6px 14px -10px rgba(14,26,43,.35)}
+  .tk-btn:hover{background:linear-gradient(180deg,#ffffff,#eaf0f8);box-shadow:0 1px 0 #fff inset,0 14px 24px -14px rgba(26,78,138,.5)}
+  .tk-btn.ico{width:42px}
+  .tk-btn.dark{background:linear-gradient(180deg,#2d64a8,#1A4E8A 60%,#163f73);box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 14px 26px -12px rgba(26,78,138,.85)}
+  .tk-btn.dark:hover{background:linear-gradient(180deg,#336db3,#1d5596 60%,#164378)}
+  .tk-switch{height:42px;padding:0 14px 0 12px;border-radius:13px;background:linear-gradient(180deg,#fff,#f3f6fb);border-color:#dfe6f0;box-shadow:0 6px 14px -10px rgba(14,26,43,.35)}
+  .tk-tabs{border-bottom:none;gap:8px;padding:22px 0 20px;margin-top:6px}
+  .tk-tab{padding:10px 16px;border-radius:999px;background:rgba(255,255,255,.55);border:1px solid #e3e9f2;font-size:13.5px;transition:all .18s}
+  .tk-tab:hover{background:#fff;box-shadow:0 8px 18px -14px rgba(14,26,43,.45)}
+  .tk-tab.on{background:linear-gradient(135deg,#24589a,#1A4E8A);border-color:#1A4E8A;color:#fff;box-shadow:0 12px 22px -12px rgba(26,78,138,.8)}
+  .tk-tab.on::after{display:none}
+  .tk-tab.on .n{background:rgba(255,255,255,.22);color:#fff}
+  .tk-tools{gap:10px}
+  .tk-search input,.tk-sel{height:40px;border-radius:12px;background:linear-gradient(180deg,#fff,#f6f8fc);border-color:#dfe6f0;box-shadow:0 1px 0 #fff inset}
+  .tk-search input{width:260px}
+  .tk-card{border-radius:24px;border:1px solid rgba(220,229,241,.95);background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(247,249,253,.94));box-shadow:0 1px 0 #fff inset,0 34px 70px -46px rgba(14,26,43,.55)}
+  .tk-zone+.tk-zone{border-top:1px solid #e9eef5}
+  .tk-zh{padding:22px 28px 14px;gap:12px}
+  .tk-zh b{font-size:15.5px}
+  .tk-zh .n{background:#e9eef6;color:#516178;border-radius:999px;padding:2px 9px;font-size:12px}
+  .tk-zone[data-z=A] .tk-zh{background:linear-gradient(90deg,rgba(242,101,34,.07),transparent 55%)}
+  .tk-zone[data-z=B] .tk-zh{background:linear-gradient(90deg,rgba(26,78,138,.07),transparent 55%)}
+  .tk-zone[data-z=C] .tk-zh{background:linear-gradient(90deg,rgba(22,163,74,.07),transparent 55%)}
+  .tk-head{height:40px;padding:0 16px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:#8a96a8;background:rgba(241,245,250,.7)}
+  .tk-row{min-height:66px;padding:0 16px;margin:0 10px;border-radius:14px;border-bottom:none;transition:background .18s,box-shadow .18s,transform .18s}
+  .tk-row+.tk-row{margin-top:4px}
+  .tk-row>div{padding:12px 10px}
+  .tk-row:hover{background:linear-gradient(90deg,#f4f8fd,#fafcfe);box-shadow:0 10px 22px -18px rgba(26,78,138,.55)}
+  .tk-row.urg{background:linear-gradient(90deg,#ffecec,#fff6f6 55%,#fffafa);box-shadow:0 12px 24px -20px rgba(229,72,77,.7)}
+  .tk-row.urg::before{top:10px;bottom:10px;width:4px}
+  .tt{font-size:14.5px}
+  .td{font-size:12.5px;margin-top:3px}
+  .tk-check{width:26px;height:26px;background:linear-gradient(180deg,#fff,#f1f4f8);box-shadow:0 2px 5px -2px rgba(14,26,43,.25)}
+  .tk-check.on{background:linear-gradient(180deg,#22c55e,#16a34a)}
+  .tk-flag{width:36px;height:36px;border-radius:11px}
+  .tk-flag.on{background:linear-gradient(180deg,#f2666b,#e5484d)}
+  .tk-cat{padding:5px 12px;font-size:12.5px;box-shadow:0 1px 0 rgba(255,255,255,.8) inset}
+  .tk-mandat{padding:5px 11px;border-radius:10px;background:linear-gradient(180deg,#f7f9fc,#eef2f7);font-size:12.5px}
+  .tk-add{padding:16px 30px 20px}
+  .tk-empty{padding:26px 30px}
+  .tk-foot{padding:14px 28px;background:linear-gradient(180deg,rgba(246,248,252,.6),rgba(240,244,249,.9))}
+  .av{width:30px;height:30px;font-size:11px}
+  /* fenêtres plus grandes et plus douces */
+  .tk-modal .box{max-width:820px;padding:36px 40px;border-radius:28px;background:linear-gradient(180deg,#ffffff,#f6f8fc);border:1px solid #e6ecf4}
+  .tk-modal h2{font-size:24px}
+  .tk-in{min-height:48px;border-radius:13px;background:linear-gradient(180deg,#fff,#f8fafd);border-color:#dfe6f0;font-size:14.5px}
+  textarea.tk-in{min-height:130px}
+  .tk-2{gap:0 18px}
+  .tk-drawer{width:min(740px,100%);background:linear-gradient(180deg,#ffffff,#f5f8fc)}
+  .tk-drawer .hd{padding:20px 30px;background:linear-gradient(90deg,rgba(26,78,138,.06),transparent)}
+  .tk-drawer .bd{padding:28px 32px}
+  .tk-meta{grid-template-columns:150px 1fr;gap:16px 18px;padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#f7f9fc,#f0f4f9);border:1px solid #e6ecf4}
+  .tk-pop{border-radius:16px;padding:8px;background:linear-gradient(180deg,#fff,#f8fafd);min-width:300px;max-height:420px}
+  .tk-pop .it{padding:10px 12px}
+  .tk-catrow{padding:10px 12px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd)}
 </style>
 <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50 min-h-screen tk-page">
 
 <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
     <div class="flex items-center space-x-4">
@@ -170,8 +233,9 @@
 </nav>
 <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.role==='Administrateur'){var h=document.getElementById('navHistorique');if(h)h.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
-<main class="tk max-w-[1480px] mx-auto px-8 py-7">
-  <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+<main class="tk max-w-[1520px] mx-auto px-10 py-9">
+  <div class="tk-hero">
+  <div class="flex flex-wrap items-end justify-between gap-4">
     <div>
       <div class="tk-crumb">Espace équipe <span style="color:#cbd5e1">›</span> <span id="crumbScope">Tâches de l'équipe</span></div>
       <h1 class="tk-h1" id="pageTitle">Tâches de l'équipe</h1>
@@ -179,13 +243,14 @@
     <div class="flex flex-wrap items-center gap-2" id="headActions"></div>
   </div>
 
-  <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="tk-tabs flex-1 min-w-0" id="tabs"></div>
     <div class="tk-tools pb-2">
       <div class="tk-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg><input id="fSearch" placeholder="Rechercher une tâche" oninput="render()"></div>
       <select id="fCat" class="tk-sel" onchange="render()"><option value="">Toutes catégories</option></select>
       <label class="tk-chk"><input type="checkbox" id="fDone" onchange="render()"> Terminées</label>
     </div>
+  </div>
   </div>
 
   <div class="tk-card" id="board">
@@ -308,7 +373,7 @@ function render() {
   const head = `<div class="tk-grid tk-head"><div></div><div>Tâche</div><div class="c-who">Titulaire</div><div>Échéance</div><div style="text-align:center">Urgent</div><div class="c-cat">Catégorie</div><div class="c-mandat">Mandat lié</div><div class="c-com">Commentaire</div></div>`;
   const zone = (k, titre, rows, tagHtml, canAdd) => {
     const closed = S.closed[k];
-    return `<section class="tk-zone">
+    return `<section class="tk-zone" data-z="${k}">
       <div class="tk-zh ${closed ? 'closed' : ''}" onclick="toggleZone('${k}')"><span class="chev">${svg('chev',16,2.4)}</span><b>${titre}</b><span class="n">${rows.length}</span>${tagHtml || ''}</div>
       ${closed ? '' : head + (rows.length ? rows.map(rowHtml).join('') : `<div class="tk-empty">Aucune tâche ici.</div>`)
         + (canAdd && IS_ADMIN ? `<div class="tk-add" onclick="quickAdd(this,'${k}')">${svg('plus',15,2.4)} Ajouter une tâche</div>` : '')}
@@ -387,9 +452,9 @@ function openPop(anchor, html, minW) {
 }
 function popWho(ev, id, cb) {
   ev.stopPropagation();
-  const list = S.equipe.filter(e => e.email);
+  const list = S.equipe.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   const p = openPop(ev.currentTarget, `<input placeholder="Rechercher un membre" oninput="filterPop(this)">` + list.map(e =>
-    `<div class="it" data-s="${esc(norm(e.nom))}" data-email="${esc(e.email)}" data-nom="${esc(e.nom)}">${avatar(e.nom, e.email)}${esc(e.nom)}<span class="sub">${esc(e.role)}</span></div>`).join(''), 260);
+    `<div class="it" data-s="${esc(norm(e.nom))}" data-email="${esc(e.email)}" data-nom="${esc(e.nom)}">${avatar(e.nom, e.email)}${esc(e.nom)}<span class="sub">${esc(e.role || '')}${e.sansEmail ? ' · sans mail' : ''}</span></div>`).join('') + (list.length ? '' : '<div class="grp">Liste du personnel indisponible (serveur pas à jour ?)</div>'), 300);
   p.querySelector('input').focus();
   p.addEventListener('click', e => { const it = e.target.closest('.it'); if (!it) return; closePop();
     if (cb) cb(it.dataset.email, it.dataset.nom); else patch(id, { email: it.dataset.email, collab: it.dataset.nom }, 'Tâche réattribuée à ' + it.dataset.nom); });

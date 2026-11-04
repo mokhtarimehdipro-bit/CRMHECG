@@ -418,6 +418,8 @@ function doPostInner_(e) {
       // --- VIE SCOLAIRE : mémoires, frises, prospects salon (voir vs_extras.gs) ---
       case 'getMemoires':        return handleGetMemoires(params, ss);
       case 'saveMemoire':        return handleSaveMemoire(params, ss);
+      case 'uploadMemoireDoc':   return handleUploadMemoireDoc(params, ss);
+      case 'archiveMemoireDoc':  return handleArchiveMemoireDoc(params, ss);
       case 'getFrises':          return handleGetFrises(params, ss);
       case 'saveFrise':          return handleSaveFrise(params, ss);
       case 'toggleEtapeFrise':   return handleToggleEtapeFrise(params, ss);

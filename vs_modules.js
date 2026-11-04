@@ -23,7 +23,8 @@ const IC = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M8 7h8M8 11h6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', pin: '<path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
+  flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
 };
 const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 const PALETTE = ['#1A4E8A', '#F26522', '#16a34a', '#6d28d9', '#0f766e', '#db2777', '#0891b2', '#b45309', '#e5484d', '#475569'];
@@ -34,6 +35,7 @@ function csvDownload(name, rows) {
   const L = a => a.map(v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(';');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + rows.map(L).join('\n')], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click();
 }
+const errTxt = m => /inconnue/i.test(String(m || '')) ? "le serveur n'est pas encore à jour (mise en production en attente)" : String(m || 'erreur inconnue');
 function modal(html, w = 640) {
   const m = document.createElement('div'); m.className = 'vx-modal vx';
   m.innerHTML = `<div class="box" style="max-width:${w}px">${html}</div>`;
@@ -177,6 +179,93 @@ function injectCss() {
   .vx-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--li)}
   .vx-dot.on{box-shadow:0 0 0 2px var(--ink)}
   @media(max-width:760px){.vx .g2{grid-template-columns:1fr}.fr-step{grid-template-columns:1fr 1fr}}
+
+  /* ═════ v2 : plus aéré, dégradés & ombres (nov. 2026) ═════ */
+  .vx{font-size:14px}
+  .vx-hd{margin-bottom:28px;padding:28px 32px;border-radius:26px;background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(242,246,252,.9));border:1px solid #e3eaf3;box-shadow:0 1px 0 #fff inset,0 30px 60px -42px rgba(26,78,138,.5);position:relative;overflow:hidden}
+  .vx-hd::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#1A4E8A,#3f7cc4 45%,#F26522)}
+  .vx-hd h1{font-size:30px}
+  .vx-btn{height:42px;padding:0 18px;border-radius:13px;background:linear-gradient(180deg,#fff,#f2f5fa);border-color:#dfe6f0;box-shadow:0 1px 0 #fff inset,0 8px 16px -12px rgba(14,26,43,.4)}
+  .vx-btn:hover{background:linear-gradient(180deg,#fff,#e9eff8)}
+  .vx-btn.pri{background:linear-gradient(180deg,#2d64a8,#1A4E8A 60%,#163f73);box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 14px 26px -12px rgba(26,78,138,.85)}
+  .vx-btn.ora{background:linear-gradient(180deg,#f7844a,#F26522 60%,#e2571a);box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 14px 26px -12px rgba(242,101,34,.9)}
+  .vx-btn.sm{height:36px}.vx-btn.ico{width:38px;height:38px}
+  .vx-kpis{gap:18px;margin-bottom:24px}
+  .vx-kpi{padding:20px 22px;border-radius:20px;background:linear-gradient(160deg,#ffffff,#f3f6fb);border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 20px 40px -32px rgba(14,26,43,.5)}
+  .vx-kpi b{font-size:30px;background:linear-gradient(90deg,#1A4E8A,#3f7cc4);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .vx-bar{padding:14px 16px;border-radius:20px;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(245,248,252,.95));border-color:#e3eaf3;box-shadow:0 18px 36px -30px rgba(14,26,43,.45);margin-bottom:20px}
+  .vx .vx-search input,.vx select.vx-sel{height:40px;border-radius:12px;background:linear-gradient(180deg,#fff,#f6f8fc);border-color:#dfe6f0}
+  .vx-cards{gap:22px}
+  .vx-card{padding:24px 24px 20px;border-radius:22px;gap:14px;background:linear-gradient(165deg,#ffffff 0%,#f6f9fd 100%);border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 22px 44px -34px rgba(14,26,43,.55)}
+  .vx-card::before{content:'';position:absolute;left:24px;right:24px;top:0;height:3px;border-radius:0 0 4px 4px;background:linear-gradient(90deg,#1A4E8A,#F26522);opacity:.0;transition:opacity .2s}
+  .vx-card:hover::before{opacity:1}
+  .vx-card .nm{font-size:16px}
+  .vx-card .sujet{font-size:14.5px}
+  .vx-card .ft{padding-top:14px}
+  .vx-docchip{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#475569;padding:8px 12px;border-radius:12px;background:linear-gradient(90deg,#eef3fa,#f7f9fc)}
+  .vx-docchip b{color:var(--b)}
+  .vx-grp{margin:30px 0 14px;font-size:14px}
+  .vx-table{border-radius:20px;background:linear-gradient(180deg,#fff,#f8fafd);box-shadow:0 20px 40px -32px rgba(14,26,43,.5)}
+  .vx-table td{padding:15px 16px}
+  .vx-empty{border-radius:24px;padding:60px 28px;background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(244,247,251,.9))}
+  .vx-modal .box{border-radius:28px;padding:36px 40px;background:linear-gradient(180deg,#ffffff,#f5f8fc);border:1px solid #e6ecf4}
+  .vx-modal h2{font-size:24px}
+  .vx .in{min-height:48px;border-radius:13px;background:linear-gradient(180deg,#fff,#f8fafd);border-color:#dfe6f0;font-size:14.5px}
+  .vx .g2{gap:0 18px}
+  .vx .g3{display:grid;grid-template-columns:110px 170px 1fr;gap:0 12px}
+  .vx-tags{min-height:50px;border-radius:13px;background:linear-gradient(180deg,#fff,#f8fafd);border-color:#dfe6f0}
+  .vx-note{display:flex;align-items:center;gap:8px;font-size:13px;color:#64748b;padding:12px 14px;border-radius:12px;background:linear-gradient(90deg,#f1f5fa,#f8fafc);border:1px dashed #d8e1ec}
+  .vx-docs{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;position:relative}
+  .vx-doc{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:linear-gradient(180deg,#fff,#f6f9fc);border:1px solid #e3eaf3;box-shadow:0 10px 20px -18px rgba(14,26,43,.5)}
+  .vx-doc .ver{min-width:46px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,#3f7cc4,#1A4E8A);box-shadow:0 8px 14px -8px rgba(26,78,138,.8)}
+  .vx-doc:first-child .ver{background:linear-gradient(135deg,#f7844a,#F26522);box-shadow:0 8px 14px -8px rgba(242,101,34,.9)}
+  .vx-doc .in2{flex:1;min-width:0}
+  .vx-doc a{display:block;font-weight:700;color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vx-doc a:hover{color:var(--b)}
+  .vx-doc small{font-size:12px;color:var(--mu)}
+  .vx-drop .dz{display:flex;align-items:center;gap:14px;padding:18px 20px;border-radius:16px;border:2px dashed #cdd9e8;background:linear-gradient(135deg,#f5f8fd,#fbfcfe);color:var(--b);cursor:pointer;transition:all .18s}
+  .vx-drop .dz:hover,.vx-drop .dz.over{border-color:var(--o);background:linear-gradient(135deg,#fff4ed,#fffaf6);color:var(--o)}
+  .vx-drop .dz b{display:block;font-size:14px;color:var(--ink)}
+  .vx-drop .dz span{font-size:12.5px;color:var(--mu)}
+  .vx-upl{padding:16px 18px;border-radius:16px;background:linear-gradient(180deg,#f7f9fc,#eff3f9);border:1px solid #e3eaf3}
+  .vx-upl .fn{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink)}
+  .vx-upl .fn span{color:var(--mu);font-size:12px}
+  .vx-acl{border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd);max-height:300px}
+  /* frises */
+  .fr-list{gap:18px;margin-bottom:28px}
+  .fr-item{padding:20px 22px 18px;border-radius:20px;background:linear-gradient(160deg,#ffffff,color-mix(in srgb,var(--c) 5%,#f6f8fc));border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 18px 36px -30px rgba(14,26,43,.5)}
+  .fr-item::before{width:5px}
+  .fr-item h4{font-size:15.5px}
+  .fr-prog{height:8px;margin-top:14px;background:#e9eef5}
+  .fr-prog i{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 70%,#fff),var(--c))}
+  .fr-board{padding:34px 38px;border-radius:28px;background:linear-gradient(170deg,#ffffff 0%,#f6f9fd 60%,color-mix(in srgb,var(--c) 5%,#f4f7fb) 100%);border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 40px 80px -56px rgba(14,26,43,.6)}
+  .fr-head h2{font-size:25px}
+  .fr-head h2 i{width:14px;height:14px;box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 18%,transparent)}
+  .fr-next{margin-top:24px;padding:18px 22px;border-radius:18px;background:linear-gradient(100deg,color-mix(in srgb,var(--c) 12%,#fff),rgba(255,255,255,.6) 70%);border:1px solid color-mix(in srgb,var(--c) 18%,#e3eaf3);box-shadow:0 18px 34px -28px var(--c)}
+  .fr-cd{min-width:86px;padding:12px;border-radius:16px;background:linear-gradient(160deg,color-mix(in srgb,var(--c) 75%,#fff),var(--c));box-shadow:0 14px 26px -12px var(--c)}
+  .fr-cd b{font-size:26px}
+  .fr-scroll{padding:22px 8px 12px;margin-top:18px}
+  .fr-track{height:420px}
+  .fr-line{top:206px;height:6px;background:linear-gradient(90deg,#e6ebf2,#dfe6ef)}
+  .fr-line i{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 50%,#fff),var(--c));opacity:.55 !important}
+  .fr-today{top:150px;height:120px;border-left:2px dashed var(--o)}
+  .fr-today span{top:auto;bottom:-26px;background:linear-gradient(180deg,#fff4ed,#ffe9dc);box-shadow:0 6px 12px -8px rgba(242,101,34,.8)}
+  .fr-pt{top:194px;width:30px;height:30px;margin-left:-15px;border-width:4px;box-shadow:0 8px 16px -6px rgba(14,26,43,.45)}
+  .fr-pt.done{background:linear-gradient(160deg,#22c55e,#16a34a)}
+  .fr-pt.next{box-shadow:0 0 0 8px color-mix(in srgb,var(--c) 20%,transparent),0 8px 16px -6px rgba(14,26,43,.45);animation:frPulse 2.2s ease-in-out infinite}
+  @keyframes frPulse{50%{box-shadow:0 0 0 14px color-mix(in srgb,var(--c) 8%,transparent),0 8px 16px -6px rgba(14,26,43,.45)}}
+  .fr-card{width:230px;margin-left:-115px;padding:15px 17px;border-radius:18px;background:linear-gradient(170deg,#ffffff,#f6f9fd);border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 20px 36px -24px rgba(14,26,43,.55);font-size:13px}
+  .fr-card.up{bottom:242px}.fr-card.dn{top:248px}
+  .fr-card::after{height:22px;width:2px;background:linear-gradient(180deg,#dfe6ef,#cbd6e4)}
+  .fr-card .t{font-size:14.5px}
+  .fr-card .j{margin-top:9px;padding:3px 10px}
+  .fr-steps{gap:10px}
+  .fr-step{grid-template-columns:170px 1fr 1fr 40px;gap:10px;padding:10px;border-radius:14px;background:linear-gradient(180deg,#fff,#f6f9fc);border:1px solid #e3eaf3}
+  .fr-rem{gap:8px}
+  .fr-rem label{padding:8px 14px;background:linear-gradient(180deg,#fff,#f5f8fc);border-color:#dfe6f0}
+  .fr-rem label:has(input:checked){background:linear-gradient(180deg,#2d64a8,#1A4E8A);box-shadow:0 8px 16px -10px rgba(26,78,138,.8)}
+  .vx-dot{width:26px;height:26px}
+  @media(max-width:760px){.vx .g3{grid-template-columns:1fr}}
   `;
   document.head.appendChild(st);
 }
@@ -184,12 +273,13 @@ function injectCss() {
 // ═══════════════════════════ MÉMOIRES ═══════════════════════════
 const MEM_KW = ['Fiscalité', 'CDG', 'IA', 'Dématérialisation', 'Comptabilité', 'Audit', 'Finance', 'Paie', 'Droit social', 'RH', 'Marketing', 'RSE', 'Gestion de trésorerie', 'Consolidation', 'Digitalisation'];
 const MEM_ST = { 'En cours': ['#e8eff8', '#1A4E8A'], 'Sujet validé': ['#fff4ed', '#c2410c'], 'Rendu': ['#ede9fe', '#6d28d9'], 'Soutenu': ['#e8f6ee', '#15803d'] };
-const M = { data: [], etudiants: [], personnel: [], view: 'cards', sort: 'classe', kw: '', sortCol: 'classe', sortDir: 1 };
+const M = { data: [], etudiants: [], personnel: [], formateurs: [], view: 'cards', sort: 'classe', kw: '', sortCol: 'classe', sortDir: 1 };
 
 async function memLoad(force) {
   const r = await api('getMemoires', {}, force ? { forceRefresh: true } : {});
-  if (!r.success) { $('memBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(r.message)}</p></div>`; return; }
-  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || [];
+  if (!r.success) { $('memBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || [];
+  M.data.forEach(m => { m.docs = m.docs || []; });
   memRender();
 }
 function memInit() {
@@ -260,6 +350,7 @@ function memCard(m) {
       <div class="meta"><span class="vx-chip b">${esc(m.classe || '—')}</span><span class="vx-chip">${svg('pin', 11)} ${esc(m.campus || '—')}</span><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></div></div></div>
     <div class="sujet ${m.sujet ? '' : 'empty'}">${esc(m.sujet || 'Sujet à définir')}</div>
     ${m.motsCles.length ? `<div class="kws">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}" onclick="event.stopPropagation();VX.memKw('${jsq(k)}')">${esc(k)}</span>`).join('')}</div>` : ''}
+    ${m.docs.length ? `<div class="vx-docchip">${svg('file', 13)} ${m.docs.length} document${m.docs.length > 1 ? 's' : ''} · dernière version <b>${esc(m.docs[m.docs.length - 1].version)}</b> du ${fmtD(m.docs[m.docs.length - 1].date)}</div>` : ''}
     <div class="ft">${m.formateur ? avatar(m.formateur, 24) + `<span>Référent <b>${esc(m.formateur)}</b></span>` : `<span style="color:#c2410c;font-weight:600">${svg('user', 13)} Sans formateur référent</span>`}</div>
   </div>`;
 }
@@ -277,7 +368,7 @@ function memTable(list) {
 }
 function memEdit(id) {
   const m = id ? M.data.find(x => x.id === id) : null;
-  const E = { id: m ? m.id : '', etuId: m ? m.etuId : '', motsCles: m ? m.motsCles.slice() : [] };
+  const E = { id: m ? m.id : '', etuId: m ? m.etuId : '', motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '' };
   const etuLabel = e => e ? `${e.prenom} ${e.nom}` : '';
   const dlg = modal(`
     <h2>${m ? 'Modifier le mémoire' : 'Nouveau mémoire'}</h2><p class="sub">La classe et le campus sont repris automatiquement de la fiche étudiant.</p>
@@ -289,14 +380,23 @@ function memEdit(id) {
     <div class="vx-tags" id="meTags" onclick="document.getElementById('meKwIn').focus()"></div>
     <div class="vx-sugg" id="meSugg"></div>
     <div class="g2">
-      <div><label class="fl">Formateur référent</label><select class="in" id="meForm"><option value="">— Choisir —</option>${M.personnel.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map(p => `<option value="${esc(p.ref)}" ${m && m.formateurRef === p.ref ? 'selected' : ''}>${esc(p.nom)}${p.role ? ' · ' + esc(p.role) : ''}</option>`).join('')}</select></div>
+      <div><label class="fl">Formateur référent</label><div class="vx-ac"><input class="in" id="meForm" autocomplete="off" placeholder="Choisir ou saisir prénom + nom" value="${esc(m ? m.formateur : '')}"><div class="vx-acl" id="meFormL" style="display:none"></div></div></div>
       <div><label class="fl">Statut</label><select class="in" id="meSt">${Object.keys(MEM_ST).map(s => `<option ${m && m.statut === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     </div>
     <label class="fl">Notes</label><textarea class="in" id="meNotes" style="min-height:60px" placeholder="Facultatif">${esc(m ? m.notes : '')}</textarea>
+    <label class="fl">Documents & versions</label>
+    ${m ? `<div class="vx-docs" id="meDocs"></div>
+      <div class="vx-drop" id="meDrop"><input type="file" id="meFile" hidden>
+        <div class="dz" id="meDz">${svg('upload', 22)}<div><b>Déposer un document</b><span>Glissez un fichier ici ou cliquez — PDF, Word, etc. (20 Mo max)</span></div></div>
+        <div class="vx-upl" id="meUpl" style="display:none">
+          <div class="fn" id="meFn"></div>
+          <div class="g3"><div><label class="fl" style="margin-top:8px">Version</label><input class="in" id="meVer"></div><div><label class="fl" style="margin-top:8px">Date</label><input type="date" class="in" id="meDate"></div><div><label class="fl" style="margin-top:8px">Commentaire</label><input class="in" id="meCom" placeholder="Facultatif"></div></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="vx-btn sm" id="meUplCancel">Annuler</button><button class="vx-btn pri sm" id="meUplGo">${svg('upload', 14)} Déposer</button></div>
+        </div></div>` : `<div class="vx-note">${svg('file', 14)} Enregistrez d'abord le mémoire : vous pourrez ensuite y déposer les versions (V1, V2…) datées.</div>`}
     <div class="mft">${m ? `<button class="vx-btn danger" style="margin-right:auto" id="meDel">${svg('trash', 14)} Retirer</button>` : ''}
       <button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button>
       ${m ? '' : `<button class="vx-btn" id="meSaveNext">Enregistrer et ajouter un autre</button>`}
-      <button class="vx-btn pri" id="meSave">Enregistrer</button></div>`, 680);
+      <button class="vx-btn pri" id="meSave">Enregistrer</button></div>`, 860);
   const fix = () => {
     const e = M.etudiants.find(x => x.id === E.etuId);
     $('meFix').innerHTML = e ? `<span class="vx-chip b">${esc(e.classe || 'Classe ?')}</span><span class="vx-chip">${svg('pin', 11)} ${esc(e.campus || 'Campus ?')}</span>` : '';
@@ -310,7 +410,7 @@ function memEdit(id) {
     const w = q.split(/\s+/);
     items = M.etudiants.filter(e => w.every(x => norm(e.prenom + ' ' + e.nom + ' ' + e.classe).includes(x))).slice(0, 12);
     act = 0;
-    L.innerHTML = items.length ? items.map((e, i) => `<div class="it ${i === act ? 'act' : ''}" data-i="${i}">${avatar(etuLabel(e), 24)}${esc(etuLabel(e))}<small>${esc(e.classe)} · ${esc(e.campus)}</small></div>`).join('') : '<div class="it" style="color:var(--mu)">Aucun étudiant trouvé</div>';
+    L.innerHTML = items.length ? items.map((e, i) => `<div class="it ${i === act ? 'act' : ''}" data-i="${i}">${avatar(etuLabel(e), 24)}${esc(etuLabel(e))}<small>${esc(e.classe)} · ${esc(e.campus)}</small></div>`).join('') : `<div class="it" style="color:var(--mu)">${M.etudiants.length ? 'Aucun étudiant trouvé' : 'Liste des étudiants indisponible (serveur pas à jour)'}</div>`;
     L.style.display = 'block';
   };
   const pick = e => { if (!e) return; E.etuId = e.id; inp.value = etuLabel(e); L.style.display = 'none'; fix(); $('meSujet').focus(); };
@@ -343,22 +443,89 @@ function memEdit(id) {
     const ad = ev.target.closest('[data-add]'); if (ad) addKw(ad.dataset.add);
   });
   drawTags();
+  // formateur : combobox (formateurs actifs + équipe) avec saisie libre
+  const fIn = $('meForm'), fL = $('meFormL');
+  const fPool = () => M.formateurs.map(x => ({ ...x, t: 'Formateur', s: x.matieres })).concat(M.personnel.map(x => ({ ...x, t: 'Équipe', s: x.role })));
+  let fItems = [];
+  const fDraw = () => {
+    const q = norm(fIn.value).trim();
+    fItems = fPool().filter(x => !q || norm(x.nom).includes(q)).slice(0, 40);
+    fL.innerHTML = (fItems.length ? fItems.map((x, i) => `<div class="it" data-fi="${i}">${avatar(x.nom, 24)}${esc(x.nom)}<small>${esc(x.t)}${x.s ? ' · ' + esc(String(x.s).slice(0, 40)) : ''}</small></div>`).join('') : '')
+      + (fIn.value.trim() && !fItems.some(x => norm(x.nom) === q) ? `<div class="it" data-free="1" style="color:var(--b)">${svg('plus', 13, 2.4)} Utiliser « ${esc(fIn.value.trim())} »</div>` : '')
+      + (!fPool().length ? `<div class="it" style="color:var(--mu)">Liste des formateurs indisponible — saisissez le nom</div>` : '');
+    fL.style.display = 'block';
+  };
+  fIn.addEventListener('focus', fDraw);
+  fIn.addEventListener('input', () => { E.formateurRef = ''; E.formateurNom = fIn.value.trim(); fDraw(); });
+  fL.addEventListener('mousedown', ev => { ev.preventDefault();
+    const it = ev.target.closest('.it'); if (!it) return;
+    if (it.dataset.fi !== undefined) { const x = fItems[+it.dataset.fi]; E.formateurRef = x.ref; E.formateurNom = x.nom; fIn.value = x.nom; }
+    else { E.formateurRef = ''; E.formateurNom = fIn.value.trim(); }
+    fL.style.display = 'none'; });
+  fIn.addEventListener('blur', () => setTimeout(() => fL.style.display = 'none', 150));
+  // documents
+  if (m) {
+    const drawDocs = () => {
+      $('meDocs').innerHTML = m.docs.length ? m.docs.slice().reverse().map(d => `<div class="vx-doc">
+        <span class="ver">${esc(d.version)}</span>
+        <div class="in2"><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.nom)} ${svg('ext', 12)}</a><small>${fmtLong(d.date)}${d.par ? ' · déposé par ' + esc(d.par) : ''}${d.commentaire ? ' · ' + esc(d.commentaire) : ''}</small></div>
+        <button class="vx-btn ico sm danger" data-docdel="${esc(d.id)}" title="Retirer de la liste (le fichier reste dans Drive)">${svg('trash', 13)}</button></div>`).join('')
+        : `<div class="vx-note">${svg('file', 14)} Aucun document pour l'instant.</div>`;
+    };
+    drawDocs();
+    let fileSel = null;
+    const nextVer = () => 'V' + (m.docs.reduce((mx, d) => Math.max(mx, parseInt(String(d.version).replace(/\D/g, ''), 10) || 0), 0) + 1);
+    const choose = file => {
+      if (!file) return;
+      if (file.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (20 Mo max)', false); return; }
+      fileSel = file; $('meFn').innerHTML = `${svg('file', 15)} <b>${esc(file.name)}</b> <span>${(file.size / 1024 / 1024).toFixed(2)} Mo</span>`;
+      $('meVer').value = nextVer(); $('meDate').value = todayISO(); $('meCom').value = '';
+      $('meDz').style.display = 'none'; $('meUpl').style.display = 'block';
+    };
+    const dz = $('meDz');
+    dz.onclick = () => $('meFile').click();
+    $('meFile').onchange = e => choose(e.target.files[0]);
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); choose(e.dataTransfer.files[0]); });
+    $('meUplCancel').onclick = () => { fileSel = null; $('meFile').value = ''; $('meUpl').style.display = 'none'; $('meDz').style.display = 'flex'; };
+    $('meUplGo').onclick = async () => {
+      if (!fileSel) return;
+      const btn = $('meUplGo'); btn.disabled = true; btn.innerHTML = 'Envoi…';
+      try {
+        const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.onerror = rej; fr.readAsDataURL(fileSel); });
+        const r = await api('uploadMemoireDoc', { memoireId: m.id, data: b64, fileName: fileSel.name, mimeType: fileSel.type || 'application/octet-stream', version: $('meVer').value.trim(), date: $('meDate').value, commentaire: $('meCom').value.trim() });
+        if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+        m.docs.push({ ...r.doc, par: user.nom || '' });
+        drawDocs(); $('meUplCancel').click(); toast('Document ' + r.doc.version + ' déposé ✓'); memRender();
+      } catch (e) { toast('Envoi impossible : ' + e, false); }
+      finally { btn.disabled = false; btn.innerHTML = svg('upload', 14) + ' Déposer'; }
+    };
+    dlg.addEventListener('click', async ev => {
+      const del = ev.target.closest('[data-docdel]'); if (!del) return;
+      if (!confirm('Retirer ce document de la liste ? Le fichier reste dans le dossier Drive de l\'étudiant.')) return;
+      const r = await api('archiveMemoireDoc', { id: del.dataset.docdel });
+      if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+      m.docs = m.docs.filter(d => d.id !== del.dataset.docdel); drawDocs(); memRender();
+    });
+  }
   const save = async next => {
     const k = $('meKwIn').value.trim(); if (k) addKw(k);
-    if (!E.etuId) { toast('Choisissez un étudiant dans la liste', false); inp.focus(); return; }
-    const payload = { id: E.id, etuId: E.etuId, sujet: $('meSujet').value.trim(), motsCles: E.motsCles, formateurRef: $('meForm').value, statut: $('meSt').value, notes: $('meNotes').value.trim() };
+    if (!E.etuId) { toast(M.etudiants.length ? 'Choisissez un étudiant dans la liste' : "Liste des étudiants indisponible : " + errTxt('Action inconnue'), false); inp.focus(); return; }
+    const fNom = $('meForm').value.trim();
+    const payload = { id: E.id, etuId: E.etuId, sujet: $('meSujet').value.trim(), motsCles: E.motsCles, formateurRef: fNom && fNom === E.formateurNom ? E.formateurRef : '', formateur: fNom, statut: $('meSt').value, notes: $('meNotes').value.trim() };
     const r = await api('saveMemoire', { memoire: payload });
-    if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     toast(m ? 'Mémoire mis à jour ✓' : 'Mémoire ajouté ✓');
     dlg.remove(); await memLoad(true);
-    if (next) memEdit();
+    if (next) memEdit(); else if (!m && r.id) { memEdit(r.id); toast('Vous pouvez maintenant déposer les documents du mémoire'); }
   };
   $('meSave').onclick = () => save(false);
   if ($('meSaveNext')) $('meSaveNext').onclick = () => save(true);
   if ($('meDel')) $('meDel').onclick = async () => {
     if (!confirm('Retirer ce mémoire du suivi ? (il reste archivé dans la feuille MEMOIRES)')) return;
     const r = await api('saveMemoire', { memoire: { id: m.id, etuId: m.etuId, sujet: m.sujet, motsCles: m.motsCles, formateurRef: m.formateurRef, statut: m.statut, notes: m.notes, archiver: true } });
-    if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     dlg.remove(); toast('Mémoire retiré'); memLoad(true);
   };
   if (!m) inp.focus();
@@ -375,7 +542,7 @@ const REMS = [[30, 'J-30'], [14, 'J-14'], [7, 'J-7'], [3, 'J-3'], [2, 'J-2'], [1
 
 async function frLoad(force) {
   const r = await api('getFrises', {}, force ? { forceRefresh: true } : {});
-  if (!r.success) { $('frBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(r.message)}</p></div>`; return; }
+  if (!r.success) { $('frBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('clock', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
   F.data = r.data || [];
   if (!F.data.find(f => f.id === F.cur)) F.cur = (F.data[0] || {}).id || null;
   frRender();
@@ -417,10 +584,10 @@ function frBoard(f) {
   const dates = steps.map(s => s.date).concat([today]).sort();
   const t0 = new Date(dates[0] + 'T12:00:00'), t1 = new Date(dates[dates.length - 1] + 'T12:00:00');
   const span = Math.max(1, (t1 - t0) / 86400000);
-  const W = Math.max(steps.length * 230, 900), PAD = 120;
+  const W = Math.max(steps.length * 260, 980), PAD = 140;
   const x = iso => PAD + ((new Date(iso + 'T12:00:00') - t0) / 86400000) / span * (W - 2 * PAD);
   // décale les points trop proches pour éviter les chevauchements
-  const xs = []; steps.forEach((s, i) => { let v = x(s.date); if (i && v - xs[i - 1] < 110) v = xs[i - 1] + 110; xs.push(v); });
+  const xs = []; steps.forEach((s, i) => { let v = x(s.date); if (i && v - xs[i - 1] < 130) v = xs[i - 1] + 130; xs.push(v); });
   const width = Math.max(W, xs[xs.length - 1] + PAD);
   const doneCount = steps.filter(s => s.statut === 'Rendu').length;
   const progX = Math.min(x(today), width);
@@ -448,7 +615,7 @@ async function frToggle(id, rendu) {
   if (!e) return;
   e.statut = rendu ? 'Rendu' : 'À faire'; e.renduLe = rendu ? todayISO() : ''; frRender();
   const r = await api('toggleEtapeFrise', { id, rendu });
-  if (!r.success) { e.statut = rendu ? 'À faire' : 'Rendu'; frRender(); toast('Erreur : ' + r.message, false); return; }
+  if (!r.success) { e.statut = rendu ? 'À faire' : 'Rendu'; frRender(); toast('Erreur : ' + errTxt(r.message), false); return; }
   toast(rendu ? 'Étape marquée rendue ✓' : 'Étape remise à faire');
 }
 function frEdit(id) {
@@ -462,7 +629,7 @@ function frEdit(id) {
     <button class="vx-btn sm" style="margin-top:10px" id="frAdd">${svg('plus', 14, 2.4)} Ajouter une échéance</button>
     <label class="fl">Rappels par mail</label><div class="fr-rem" id="frR">${REMS.map(([n, l]) => `<label><input type="checkbox" value="${n}" ${E.rappels.includes(n) ? 'checked' : ''}>${l}</label>`).join('')}</div>
     <label class="fl">Destinataires des rappels</label><input class="in" id="frDest" value="${esc(f ? f.destinataires : (user.email || ''))}" placeholder="email1@hecg.fr, email2@hecg.fr">
-    <div class="mft">${f ? `<button class="vx-btn danger" style="margin-right:auto" id="frDel">${svg('trash', 14)} Supprimer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frSave">Enregistrer</button></div>`, 760);
+    <div class="mft">${f ? `<button class="vx-btn danger" style="margin-right:auto" id="frDel">${svg('trash', 14)} Supprimer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frSave">Enregistrer</button></div>`, 900);
   const drawC = () => { $('frC').innerHTML = PALETTE.map(c => `<span class="vx-dot ${c === E.couleur ? 'on' : ''}" style="background:${c}" data-c="${c}"></span>`).join(''); };
   const readSteps = () => { dlg.querySelectorAll('.fr-step').forEach((row, i) => { E.etapes[i].date = row.querySelector('[data-k=date]').value; E.etapes[i].titre = row.querySelector('[data-k=titre]').value; E.etapes[i].aRendre = row.querySelector('[data-k=ar]').value; }); };
   const drawS = () => {
@@ -481,13 +648,13 @@ function frEdit(id) {
     if (incompletes.length) { toast('Chaque échéance doit avoir une date et un titre', false); return; }
     const rappels = [...dlg.querySelectorAll('#frR input:checked')].map(i => i.value).join(',');
     const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
-    if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     dlg.remove(); F.cur = r.id; toast(f ? 'Frise mise à jour ✓' : 'Frise créée ✓ — rappels activés'); frLoad(true);
   };
   if ($('frDel')) $('frDel').onclick = async () => {
     if (!confirm('Supprimer cette frise ? Les rappels s\'arrêteront (elle reste archivée dans la feuille FRISES).')) return;
     const r = await api('saveFrise', { frise: { id: f.id, titre: f.titre, archiver: true } });
-    if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     dlg.remove(); toast('Frise supprimée'); frLoad(true);
   };
   if (!f) $('frT').focus();

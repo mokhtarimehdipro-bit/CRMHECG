@@ -30,7 +30,22 @@ function _vsxRef_(ss) {
   const dP = getPersonnelDataCached_(ss);
   const personnel = [];
   for (let r = 1; r < dP.length; r++) if (dP[r][0]) personnel.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), role: String(dP[r][5] || ""), email: String(dP[r][6] || "").trim().toLowerCase() });
-  return { etudiants: etudiants, personnel: personnel };
+  // Formateurs actifs : feuille « Adultes » (ou FORMATEURS), état formateur = OUI, pas sorti
+  const formateurs = [];
+  try {
+    let wa; try { wa = getSheetSafe(ss, "Adultes"); } catch (eA) { wa = getSheetSafe(ss, "FORMATEURS"); }
+    const dA = wa.getDataRange().getValues();
+    const now = new Date();
+    for (let r = 1; r < dA.length; r++) {
+      if (!dA[r][0]) continue;
+      if (String(dA[r][12] || "NON").trim().toUpperCase() !== "OUI") continue;
+      const ds = dA[r][10];
+      if (ds instanceof Date && ds < now) continue;
+      formateurs.push({ ref: "A:" + String(dA[r][0]), nom: (String(dA[r][2] || "") + " " + String(dA[r][1] || "").toUpperCase()).trim(), matieres: String(dA[r][8] || "") });
+    }
+  } catch (eF) { Logger.log("Formateurs : " + eF); }
+  formateurs.sort(function(a, b) { return a.nom.localeCompare(b.nom); });
+  return { etudiants: etudiants, personnel: personnel, formateurs: formateurs };
 }
 
 // ═══════════════════════════ MÉMOIRES ═══════════════════════════
@@ -54,7 +69,9 @@ function handleGetMemoires(p, ss) {
           creeLe: d[i][11] instanceof Date ? Utilities.formatDate(d[i][11], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][11] || ""),
           majLe: d[i][13] instanceof Date ? Utilities.formatDate(d[i][13], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][13] || "") });
       }
-      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel });
+      const docs = _memDocsByMemoire_(ss);
+      list.forEach(function(m) { m.docs = docs[m.id] || []; });
+      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
 }
@@ -67,11 +84,11 @@ function handleSaveMemoire(p, ss) {
     if (!m.etuId) return createJsonResponse({ success: false, message: "Choisissez un étudiant." });
     const ref = _vsxRef_(ss);
     const e = ref.etudiants.filter(function(x) { return x.id === String(m.etuId); })[0] || {};
-    const f = ref.personnel.filter(function(x) { return x.ref === String(m.formateurRef); })[0] || {};
+    const f = ref.formateurs.concat(ref.personnel).filter(function(x) { return x.ref === String(m.formateurRef); })[0] || {};
     const mots = (Array.isArray(m.motsCles) ? m.motsCles : String(m.motsCles || "").split(",")).map(function(s) { return String(s).trim(); }).filter(Boolean).join(", ");
     const now = new Date();
     const rowVals = [m.id || ("MEM" + now.getTime()), String(m.etuId), ((e.prenom || "") + " " + (e.nom || "")).trim(), e.classe || "", e.campus || "",
-      String(m.sujet || ""), mots, String(m.formateurRef || ""), f.nom || String(m.formateur || ""), String(m.statut || "En cours"), String(m.notes || ""), now,
+      String(m.sujet || ""), mots, f.nom ? String(m.formateurRef || "") : "", f.nom || String(m.formateur || "").trim(), String(m.statut || "En cours"), String(m.notes || ""), now,
       String(p.nomAuteur || p.emailAuteur || ""), now, ""];
     if (m.id) {
       const d = ws.getDataRange().getValues();
@@ -307,4 +324,80 @@ function handleGetSalonRef(p, ss) {
       return createJsonResponse({ success: true, classes: Object.keys(cl).sort() });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
+}
+
+
+// ── Documents de mémoire (versions V1, V2… datées, un dossier Drive par étudiant) ──
+var MEMDOC_HEADERS = ["ID", "ID mémoire", "ID étudiant", "Version", "Date", "Nom du fichier", "ID fichier", "URL", "Commentaire", "Déposé par", "Déposé le", "Archivé"];
+
+function _memDocsFolder_(etudiantNom) {
+  const props = PropertiesService.getScriptProperties();
+  let rootId = props.getProperty("MEMOIRES_FOLDER_ID"), root = null;
+  if (rootId) { try { root = DriveApp.getFolderById(rootId); } catch (e) { root = null; } }
+  if (!root) { root = DriveApp.createFolder("CRM HECG — Mémoires étudiants"); props.setProperty("MEMOIRES_FOLDER_ID", root.getId()); }
+  const nom = String(etudiantNom || "Sans nom").replace(/[\\/:*?"<>|]/g, " ").trim();
+  const it = root.getFoldersByName(nom);
+  return it.hasNext() ? it.next() : root.createFolder(nom);
+}
+
+function _memDocsByMemoire_(ss) {
+  const out = {};
+  const ws = ss.getSheetByName("MEMOIRES_DOCS");
+  if (!ws) return out;
+  const tz = Session.getScriptTimeZone();
+  const d = ws.getDataRange().getValues();
+  for (let i = 1; i < d.length; i++) {
+    if (!d[i][0] || String(d[i][11]) === "Oui") continue;
+    (out[String(d[i][1])] = out[String(d[i][1])] || []).push({ id: String(d[i][0]), version: String(d[i][3] || ""),
+      date: d[i][4] instanceof Date ? Utilities.formatDate(d[i][4], tz, "yyyy-MM-dd") : String(d[i][4] || ""),
+      nom: String(d[i][5] || ""), url: String(d[i][7] || ""), commentaire: String(d[i][8] || ""), par: String(d[i][9] || "") });
+  }
+  const num = function(v) { return parseInt(String(v).replace(/\D/g, ""), 10) || 0; };
+  Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return num(a.version) - num(b.version) || (a.date < b.date ? -1 : 1); }); });
+  return out;
+}
+
+/** Dépose un document de mémoire : version auto (V1, V2…) ou saisie, date choisie, renommé proprement. */
+function handleUploadMemoireDoc(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    if (!p.memoireId || !p.data) return createJsonResponse({ success: false, message: "Fichier ou mémoire manquant." });
+    const md = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS).getDataRange().getValues();
+    let mem = null;
+    for (let i = 1; i < md.length; i++) if (String(md[i][0]) === String(p.memoireId)) { mem = md[i]; break; }
+    if (!mem) return createJsonResponse({ success: false, message: "Mémoire introuvable." });
+    const ws = _vsxSheet_(ss, "MEMOIRES_DOCS", MEMDOC_HEADERS);
+    const existants = (_memDocsByMemoire_(ss)[String(p.memoireId)] || []);
+    let version = String(p.version || "").trim().toUpperCase();
+    if (!version) {
+      const max = existants.reduce(function(m, d) { return Math.max(m, parseInt(String(d.version).replace(/\D/g, ""), 10) || 0); }, 0);
+      version = "V" + (max + 1);
+    }
+    const date = String(p.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"));
+    const orig = String(p.fileName || "document");
+    const ext = orig.indexOf(".") !== -1 ? orig.slice(orig.lastIndexOf(".")) : "";
+    const etu = String(mem[2] || "Étudiant");
+    const nomFichier = etu + " — Mémoire " + version + " — " + date + ext;
+    const blob = Utilities.newBlob(Utilities.base64Decode(String(p.data)), String(p.mimeType || "application/octet-stream"), nomFichier);
+    const file = _memDocsFolder_(etu).createFile(blob);
+    const id = "MDOC" + Date.now();
+    ws.appendRow([id, String(p.memoireId), String(mem[1] || ""), version, "", nomFichier, file.getId(), file.getUrl(), String(p.commentaire || ""), String(p.nomAuteur || p.emailAuteur || ""), new Date(), ""]);
+    ws.getRange(ws.getLastRow(), 5).setNumberFormat("@").setValue(date);
+    logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", "Création", "Vie scolaire", String(p.memoireId), "Document mémoire " + version + " déposé pour " + etu);
+    return createJsonResponse({ success: true, doc: { id: id, version: version, date: date, nom: nomFichier, url: file.getUrl(), commentaire: String(p.commentaire || "") } });
+  } catch (e) { return createJsonResponse({ success: false, message: "Dépôt impossible : " + e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+/** Retire un document de la liste (le fichier reste dans Drive). */
+function handleArchiveMemoireDoc(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  try {
+    const ws = _vsxSheet_(ss, "MEMOIRES_DOCS", MEMDOC_HEADERS);
+    const d = ws.getDataRange().getValues();
+    for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(p.id)) { ws.getRange(i + 1, 12).setValue("Oui"); return createJsonResponse({ success: true }); }
+    return createJsonResponse({ success: false, message: "Document introuvable." });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }

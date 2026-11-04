@@ -102,7 +102,7 @@ function handleGetTachesRef(p, ss) {
       for (let r = 1; r < dP.length; r++) {
         const email = String(dP[r][6] || "").trim().toLowerCase();
         if (!dP[r][0]) continue;
-        equipe.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), email: email, role: String(dP[r][5] || "") });
+        equipe.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), email: email || ("ref:" + String(dP[r][0]).toLowerCase()), role: String(dP[r][5] || ""), sansEmail: !email });
       }
       const cd = _tacheCatSheet_(ss).getDataRange().getValues();
       const cats = [];
@@ -200,7 +200,7 @@ function handleSaveTache(p, ss) {
       logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Création", "Missions", id, "Tâche : " + titre.substring(0, 80) + " | Pour : " + (c.collab || email));
       _tacheInvalidate_(email);
       let mail = false;
-      if (_tacheParams_(ss).values.notifMail !== "Non" && email && email !== me) mail = _tacheNotifier_(email, row, ss);
+      if (_tacheParams_(ss).values.notifMail !== "Non" && email && email.indexOf("@") > 0 && email !== me) mail = _tacheNotifier_(email, row, ss);
       return createJsonResponse({ success: true, id: id, tache: _tacheRowToObj_(row), mailEnvoye: mail });
     }
 
