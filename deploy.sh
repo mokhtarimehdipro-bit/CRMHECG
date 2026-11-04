@@ -17,6 +17,9 @@ cd "$(dirname "$0")"
 
 PROD_DEPLOYMENT_ID="AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb"
 MSG="${1:-Mise à jour CRM $(date '+%Y-%m-%d %H:%M')}"
+# Profil clasp dédié au compte propriétaire du script (m.mokhtari@hecg.fr), indépendant
+# du compte clasp « par défaut » qu'un autre outil pourrait reconnecter.
+CLASP="clasp --user hecg"
 ONLY="${2:-all}"   # all | front | back
 
 log() { printf '\n\033[1;34m▶ %s\033[0m\n' "$*"; }
@@ -57,13 +60,13 @@ fi
 
 if [ "$ONLY" != "front" ]; then
   # 5. Apps Script
-  clasp push -f
-  VERSION=$(clasp create-version "$MSG" 2>&1 | grep -o '[0-9]\+' | tail -1)
+  $CLASP push -f
+  VERSION=$($CLASP create-version "$MSG" 2>&1 | grep -o '[0-9]\+' | tail -1)
   log "Apps Script : version $VERSION créée"
-  if ! OUT=$(clasp update-deployment "$PROD_DEPLOYMENT_ID" -V "$VERSION" -d "$MSG" 2>&1) || echo "$OUT" | grep -qi "only users\|error"; then
+  if ! OUT=$($CLASP update-deployment "$PROD_DEPLOYMENT_ID" -V "$VERSION" -d "$MSG" 2>&1) || echo "$OUT" | grep -qi "only users\|error"; then
     echo "$OUT"
     echo "❌ Mise en production refusée par Google : clasp n'est pas connecté avec le compte propriétaire du script."
-    echo "   → une seule fois : clasp login (choisir le compte propriétaire), puis relancer : bash deploy.sh \"$MSG\" back"
+    echo "   → une seule fois : clasp --user hecg login (compte m.mokhtari@hecg.fr), puis relancer : bash deploy.sh \"$MSG\" back"
     exit 3
   fi
   log "Apps Script : déploiement de production → version $VERSION"
