@@ -10,8 +10,8 @@
 
 var TACHE_COL = { ID:0, DATE:1, HEURE:2, EMAIL:3, COLLAB:4, CC:5, OBJET:6, CORPS:7, STATUT:8, NOTES:9, MAJ:10, PRIO:11, RESUME:12,
                   CREATEUR:13, ECHEANCE:14, URGENT:15, CATEGORIE:16, MANDAT_TYPE:17, MANDAT_ID:18, MANDAT_LABEL:19, COMMENTAIRE:20,
-                  FAIT_PAR:21, FAIT_LE:22 };
-var TACHE_EXTRA_HEADERS = ["Échéance", "Urgent", "Catégorie", "Type mandat", "ID mandat", "Mandat lié", "Commentaire", "Terminée par", "Terminée le"];
+                  FAIT_PAR:21, FAIT_LE:22, ARCHIVE:23 };
+var TACHE_EXTRA_HEADERS = ["Échéance", "Urgent", "Catégorie", "Type mandat", "ID mandat", "Mandat lié", "Commentaire", "Terminée par", "Terminée le", "Archivée le"];
 var TACHE_DEFAULT_CATS = [
   ["CAT1", "Suivi étudiant", "#1A4E8A", 1], ["CAT2", "Entreprises", "#6d28d9", 2], ["CAT3", "Administratif", "#0f766e", 3],
   ["CAT4", "Communication", "#F26522", 4], ["CAT5", "Pédagogie", "#b45309", 5]
@@ -24,9 +24,10 @@ function _tacheIsAdmin_(p) {
 function _tacheSheet_(ss) {
   const ws = getSheetSafe(ss, "MISSIONS");
   // En-têtes des nouvelles colonnes (une seule fois)
-  if (ws.getMaxColumns() < 23) ws.insertColumnsAfter(ws.getMaxColumns(), 23 - ws.getMaxColumns());
+  if (ws.getMaxColumns() < 24) ws.insertColumnsAfter(ws.getMaxColumns(), 24 - ws.getMaxColumns());
   const h = ws.getRange(1, 15, 1, TACHE_EXTRA_HEADERS.length).getValues()[0];
-  if (String(h[0] || "") !== TACHE_EXTRA_HEADERS[0]) ws.getRange(1, 15, 1, TACHE_EXTRA_HEADERS.length).setValues([TACHE_EXTRA_HEADERS]).setFontWeight("bold");
+  if (String(h[0] || "") !== TACHE_EXTRA_HEADERS[0] || String(h[TACHE_EXTRA_HEADERS.length - 1] || "") !== TACHE_EXTRA_HEADERS[TACHE_EXTRA_HEADERS.length - 1])
+    ws.getRange(1, 15, 1, TACHE_EXTRA_HEADERS.length).setValues([TACHE_EXTRA_HEADERS]).setFontWeight("bold");
   return ws;
 }
 
@@ -83,7 +84,7 @@ function handleGetTaches(p, ss) {
       for (let i = 1; i < d.length; i++) {
         if (!d[i][0]) continue;
         const st = String(d[i][TACHE_COL.STATUT] || "");
-        if (st === "Annulé") continue;
+        if (st === "Annulé" || d[i][TACHE_COL.ARCHIVE]) continue;
         if (!isAdmin && String(d[i][TACHE_COL.EMAIL] || "").toLowerCase() !== me) continue;
         list.push(_tacheRowToObj_(d[i]));
       }
@@ -313,4 +314,37 @@ function handleSaveTachesParams(p, ss) {
     logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Modification", "Missions", "PARAMS", "Paramètres des tâches mis à jour");
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+
+/**
+ * Purge en masse (admin) : archive les tâches choisies sans les supprimer.
+ * La date d'archivage est écrite en colonne X ; le statut est conservé
+ * (une tâche terminée continue de compter pour les trophées).
+ */
+function handlePurgeTaches(p, ss) {
+  if (!_tacheIsAdmin_(p)) return createJsonResponse({ success: false, message: "Seul l'administrateur peut purger des tâches." });
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    const ids = {}; (Array.isArray(p.ids) ? p.ids : []).forEach(function(id) { ids[String(id)] = true; });
+    const n = Object.keys(ids).length;
+    if (!n) return createJsonResponse({ success: false, message: "Aucune tâche sélectionnée." });
+    const ws = _tacheSheet_(ss);
+    const d = ws.getDataRange().getValues();
+    const col = ws.getRange(2, TACHE_COL.ARCHIVE + 1, Math.max(1, d.length - 1), 1).getValues();
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+    const emails = {};
+    let count = 0;
+    for (let i = 1; i < d.length; i++) {
+      if (!ids[String(d[i][0])] || col[i - 1][0]) continue;
+      col[i - 1][0] = now; count++;
+      emails[String(d[i][TACHE_COL.EMAIL] || "").toLowerCase()] = true;
+    }
+    if (count) ws.getRange(2, TACHE_COL.ARCHIVE + 1, col.length, 1).setValues(col);
+    Object.keys(emails).forEach(function(e) { _tacheInvalidate_(e); });
+    logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Modification", "Missions", "PURGE", count + " tâche(s) archivée(s) (purge en masse)");
+    return createJsonResponse({ success: true, archivees: count });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
 }

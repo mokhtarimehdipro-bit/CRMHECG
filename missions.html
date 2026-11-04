@@ -207,6 +207,21 @@
   .tk-pop{border-radius:16px;padding:8px;background:linear-gradient(180deg,#fff,#f8fafd);min-width:300px;max-height:420px}
   .tk-pop .it{padding:10px 12px}
   .tk-catrow{padding:10px 12px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd)}
+
+  /* sélection multiple + purge */
+  .tk-sbox{width:24px;height:24px;margin-left:7px;border-radius:8px;border:1.8px solid #c3ccd8;background:linear-gradient(180deg,#fff,#f1f4f8);display:flex;align-items:center;justify-content:center;color:transparent;cursor:pointer;transition:all .15s;box-shadow:0 2px 5px -2px rgba(14,26,43,.25)}
+  .tk-sbox:hover{border-color:var(--b)}
+  .tk-sbox.on{background:linear-gradient(180deg,#2d64a8,#1A4E8A);border-color:#1A4E8A;color:#fff;box-shadow:0 6px 12px -6px rgba(26,78,138,.8)}
+  .tk-row.sel{background:linear-gradient(90deg,#e6eef9,#f3f7fc 60%) !important;box-shadow:inset 0 0 0 1.5px rgba(26,78,138,.35)}
+  .tk-zsel{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--b);padding:6px 12px;border-radius:999px;background:rgba(26,78,138,.08);cursor:pointer}
+  .tk-zsel:hover{background:rgba(26,78,138,.14)}
+  .tk-bulk{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:14px;padding:12px 14px 12px 22px;border-radius:18px;background:linear-gradient(135deg,#123865,#1A4E8A 55%,#24589a);color:#fff;box-shadow:0 26px 50px -18px rgba(14,26,43,.7);font:600 14px 'Plus Jakarta Sans',Inter,sans-serif;animation:tkIn .2s}
+  .tk-bulk b{font-size:16px}
+  .tk-bulk .tk-btn{height:40px}
+  .tk-btn.purge{background:linear-gradient(180deg,#f7844a,#F26522 60%,#e2571a);border-color:#e2571a;color:#fff;box-shadow:0 12px 22px -10px rgba(242,101,34,.9)}
+  .tk-btn.ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff;box-shadow:none}
+  .tk-btn.ghost:hover{background:rgba(255,255,255,.2);color:#fff}
+  .tk-btn.on{background:linear-gradient(180deg,#2d64a8,#1A4E8A);border-color:#1A4E8A;color:#fff}
 </style>
 <link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
@@ -272,14 +287,14 @@ const ICO = {
   check:'<path d="M20 6 9 17l-5-5"/>', flag:'<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>', chev:'<path d="m6 9 6 6 6-6"/>',
   plus:'<path d="M12 5v14M5 12h14"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   down:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>', mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
-  x:'<path d="M18 6 6 18M6 6l12 12"/>', trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>', sq:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/>', archive:'<rect x="2" y="4" width="20" height="5" rx="1.5"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/>', trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   up:'<path d="m18 15-6-6-6 6"/>', ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'
 };
 const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${ICO[k]}</svg>`;
 const PALETTE = ['#1A4E8A','#F26522','#16a34a','#6d28d9','#0f766e','#b45309','#db2777','#0891b2','#e5484d','#475569'];
 const MTYPE = { etudiant:'Étudiant', entreprise:'Entreprise', contact:'Contact', personnel:'Équipe', classe:'Classe', offre:'Offre', autre:'Autre' };
 
-let S = { taches: [], equipe: [], cats: [], params: {}, mandats: [], tab: IS_ADMIN ? 'all' : ME, closed: { C: true }, loaded: false };
+let S = { taches: [], equipe: [], cats: [], params: {}, mandats: [], tab: IS_ADMIN ? 'all' : ME, closed: { C: true }, loaded: false, selMode: false, sel: new Set(), zoneIds: {} };
 
 // ── utilitaires ──────────────────────────────────────────────────────────
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -330,6 +345,7 @@ function renderHead() {
     html += `<button class="tk-btn ico" title="Paramètres : catégories" onclick="openSettings()">${svg('gear',17)}</button>`;
     html += `<button class="tk-btn ico" title="Importer les missions envoyées par mail (#mission)" onclick="aspirer(this)">${svg('inbox',17)}</button>`;
   }
+  if (IS_ADMIN) html += `<button class="tk-btn ${S.selMode ? 'on' : ''}" title="Sélectionner plusieurs tâches pour les purger" onclick="toggleSelMode()">${svg('sq',16)} ${S.selMode ? 'Terminer la sélection' : 'Sélectionner'}</button>`;
   html += `<button class="tk-btn ico" title="Exporter en CSV" onclick="exportCsv()">${svg('down',17)}</button>`;
   if (IS_ADMIN) html += `<button class="tk-btn dark" onclick="openNew()">${svg('plus',16,2.4)} Ajouter une tâche</button>`;
   h.innerHTML = html;
@@ -353,7 +369,7 @@ function renderTabs() {
   } else tabs = [{ k: ME, l: 'Mes tâches', n: S.taches.filter(open).length }];
   document.getElementById('tabs').innerHTML = tabs.map(t => `<button class="tk-tab ${S.tab === t.k ? 'on' : ''}" onclick="setTab('${jsq(t.k)}')">${t.av || ''}${esc(t.l)}<span class="n">${t.n}</span></button>`).join('');
 }
-function setTab(k) { S.tab = k; renderTabs(); render(); }
+function setTab(k) { S.tab = k; renderTabs(); render(); renderBulk(); }
 
 // ── liste ───────────────────────────────────────────────────────────────
 function visible() {
@@ -373,8 +389,11 @@ function render() {
   const head = `<div class="tk-grid tk-head"><div></div><div>Tâche</div><div class="c-who">Titulaire</div><div>Échéance</div><div style="text-align:center">Urgent</div><div class="c-cat">Catégorie</div><div class="c-mandat">Mandat lié</div><div class="c-com">Commentaire</div></div>`;
   const zone = (k, titre, rows, tagHtml, canAdd) => {
     const closed = S.closed[k];
+    S.zoneIds[k] = rows.map(t => t.id);
+    const allSel = rows.length && rows.every(t => S.sel.has(t.id));
+    const zsel = S.selMode && rows.length ? `<span class="tk-zsel" onclick="event.stopPropagation();selectZone('${k}')">${allSel ? 'Tout désélectionner' : 'Tout sélectionner'}</span>` : '';
     return `<section class="tk-zone" data-z="${k}">
-      <div class="tk-zh ${closed ? 'closed' : ''}" onclick="toggleZone('${k}')"><span class="chev">${svg('chev',16,2.4)}</span><b>${titre}</b><span class="n">${rows.length}</span>${tagHtml || ''}</div>
+      <div class="tk-zh ${closed ? 'closed' : ''}" onclick="toggleZone('${k}')"><span class="chev">${svg('chev',16,2.4)}</span><b>${titre}</b><span class="n">${rows.length}</span>${tagHtml || ''}${zsel}</div>
       ${closed ? '' : head + (rows.length ? rows.map(rowHtml).join('') : `<div class="tk-empty">Aucune tâche ici.</div>`)
         + (canAdd && IS_ADMIN ? `<div class="tk-add" onclick="quickAdd(this,'${k}')">${svg('plus',15,2.4)} Ajouter une tâche</div>` : '')}
     </section>`;
@@ -388,6 +407,31 @@ function render() {
 }
 function toggleZone(k) { S.closed[k] = !S.closed[k]; render(); }
 
+// ── sélection multiple & purge ─────────────────────────────────────────
+function toggleSelMode() { S.selMode = !S.selMode; if (!S.selMode) S.sel.clear(); renderHead(); render(); renderBulk(); }
+function toggleSel(id) { if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id); render(); renderBulk(); }
+function selectZone(k) { const ids = S.zoneIds[k] || []; const all = ids.every(id => S.sel.has(id)); ids.forEach(id => all ? S.sel.delete(id) : S.sel.add(id)); render(); renderBulk(); }
+function renderBulk() {
+  let bar = document.getElementById('tkBulk');
+  if (!S.selMode || !S.sel.size) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'tkBulk'; bar.className = 'tk-bulk tk'; document.body.appendChild(bar); }
+  bar.innerHTML = `<span><b>${S.sel.size}</b> tâche${S.sel.size > 1 ? 's' : ''} sélectionnée${S.sel.size > 1 ? 's' : ''}</span>
+    <button class="tk-btn ghost" onclick="S.sel.clear();render();renderBulk()">Tout désélectionner</button>
+    <button class="tk-btn purge" onclick="purge()">${svg('archive',16)} Purger (archiver)</button>`;
+}
+async function purge() {
+  const ids = [...S.sel];
+  if (!confirm(`Purger ${ids.length} tâche(s) ?\n\nElles disparaissent de la liste mais restent archivées dans la feuille MISSIONS (colonne « Archivée le ») : rien n'est supprimé.`)) return;
+  const avant = S.taches.slice();
+  S.taches = S.taches.filter(t => !S.sel.has(t.id)); S.sel.clear(); renderTabs(); render(); renderBulk();
+  try {
+    const r = await api({ action: 'purgeTaches', ids });
+    if (!r.success) throw new Error(r.message);
+    sessionStorage.removeItem(CK);
+    toast(`${r.archivees} tâche(s) archivée(s) ✓`);
+  } catch (e) { S.taches = avant; renderTabs(); render(); toast('Erreur : ' + (e.message || e), true); }
+}
+
 function rowHtml(t) {
   const today = todayISO(), done = t.statut === 'Clôturé';
   const isMine = t.email === ME, canTick = IS_ADMIN || isMine, canCom = IS_ADMIN || isMine;
@@ -396,8 +440,11 @@ function rowHtml(t) {
   const dTxt = !t.echeance ? '—' : (t.echeance === today ? "Aujourd'hui" : fmtD(t.echeance));
   const ed = IS_ADMIN ? 'tk-edit tk-cell' : '';
   const id = jsq(t.id);
-  return `<div class="tk-grid tk-row ${t.urgent && !done ? 'urg' : ''} ${done ? 'done' : ''}" data-id="${esc(t.id)}">
-    <div><span class="tk-check ${done ? 'on' : ''} ${canTick ? '' : 'ro'}" title="${done ? 'Terminée' + (t.faitPar ? ' par ' + esc(t.faitPar) : '') : 'Marquer comme terminée'}" ${canTick ? `onclick="toggleDone('${id}')"` : ''}>${svg('check',13,3)}</span></div>
+  const firstCell = S.selMode
+    ? `<div><span class="tk-sbox ${S.sel.has(t.id) ? 'on' : ''}" onclick="toggleSel('${id}')" title="Sélectionner">${svg('check',13,3)}</span></div>`
+    : null;
+  return `<div class="tk-grid tk-row ${t.urgent && !done ? 'urg' : ''} ${done ? 'done' : ''} ${S.sel.has(t.id) ? 'sel' : ''}" data-id="${esc(t.id)}">
+    ${firstCell || `<div><span class="tk-check ${done ? 'on' : ''} ${canTick ? '' : 'ro'}" title="${done ? 'Terminée' + (t.faitPar ? ' par ' + esc(t.faitPar) : '') : 'Marquer comme terminée'}" ${canTick ? `onclick="toggleDone('${id}')"` : ''}>${svg('check',13,3)}</span></div>`}
     <div><span class="tt" onclick="openTask('${id}')" title="${esc(t.titre)}">${esc(t.titre || '(sans titre)')}</span>${t.detail ? `<div class="td">${esc(t.detail.replace(/\s+/g,' ').slice(0,160))}</div>` : ''}</div>
     <div class="c-who ${ed}" ${IS_ADMIN ? `onclick="popWho(event,'${id}')"` : ''}><div class="tk-who">${avatar(nomDe(t), t.email)}<span>${esc(nomDe(t))}</span></div></div>
     <div class="${ed}" ${IS_ADMIN ? `onclick="editDate(event,'${id}')"` : ''}><span class="tk-date ${dCls}">${dTxt}</span></div>

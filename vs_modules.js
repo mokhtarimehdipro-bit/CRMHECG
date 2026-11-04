@@ -231,6 +231,9 @@ function injectCss() {
   .vx-upl .fn{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink)}
   .vx-upl .fn span{color:var(--mu);font-size:12px}
   .vx-acl{border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd);max-height:300px}
+  .vx-link{display:inline-flex;align-items:center;gap:6px;margin-top:8px;border:none;background:none;padding:2px 0;font:600 12.5px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--o);cursor:pointer}
+  .vx-link:hover{text-decoration:underline}
+  .vx-autre{grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding:12px;border-radius:14px;background:linear-gradient(135deg,#fff4ed,#fffaf6);border:1px solid #fcd9c2}
   /* frises */
   .fr-list{gap:18px;margin-bottom:28px}
   .fr-item{padding:20px 22px 18px;border-radius:20px;background:linear-gradient(160deg,#ffffff,color-mix(in srgb,var(--c) 5%,#f6f8fc));border-color:#e3eaf3;box-shadow:0 1px 0 #fff inset,0 18px 36px -30px rgba(14,26,43,.5)}
@@ -380,7 +383,9 @@ function memEdit(id) {
     <div class="vx-tags" id="meTags" onclick="document.getElementById('meKwIn').focus()"></div>
     <div class="vx-sugg" id="meSugg"></div>
     <div class="g2">
-      <div><label class="fl">Formateur référent</label><div class="vx-ac"><input class="in" id="meForm" autocomplete="off" placeholder="Choisir ou saisir prénom + nom" value="${esc(m ? m.formateur : '')}"><div class="vx-acl" id="meFormL" style="display:none"></div></div></div>
+      <div><label class="fl">Formateur référent</label><div class="vx-ac"><input class="in" id="meForm" autocomplete="off" placeholder="Rechercher un formateur…" value="${esc(m ? m.formateur : '')}"><div class="vx-acl" id="meFormL" style="display:none"></div></div>
+        <button type="button" class="vx-link" id="meAutreBtn">${svg('plus', 13, 2.4)} Autre référent : préciser nom et prénom</button>
+        <div class="vx-autre" id="meAutre" style="display:none"><input class="in" id="meAPrenom" placeholder="Prénom"><input class="in" id="meANom" placeholder="Nom"></div></div>
       <div><label class="fl">Statut</label><select class="in" id="meSt">${Object.keys(MEM_ST).map(s => `<option ${m && m.statut === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     </div>
     <label class="fl">Notes</label><textarea class="in" id="meNotes" style="min-height:60px" placeholder="Facultatif">${esc(m ? m.notes : '')}</textarea>
@@ -452,6 +457,7 @@ function memEdit(id) {
     fItems = fPool().filter(x => !q || norm(x.nom).includes(q)).slice(0, 40);
     fL.innerHTML = (fItems.length ? fItems.map((x, i) => `<div class="it" data-fi="${i}">${avatar(x.nom, 24)}${esc(x.nom)}<small>${esc(x.t)}${x.s ? ' · ' + esc(String(x.s).slice(0, 40)) : ''}</small></div>`).join('') : '')
       + (fIn.value.trim() && !fItems.some(x => norm(x.nom) === q) ? `<div class="it" data-free="1" style="color:var(--b)">${svg('plus', 13, 2.4)} Utiliser « ${esc(fIn.value.trim())} »</div>` : '')
+      + `<div class="it" data-autre="1" style="color:var(--o)">${svg('user', 13)} Autre… préciser nom et prénom</div>`
       + (!fPool().length ? `<div class="it" style="color:var(--mu)">Liste des formateurs indisponible — saisissez le nom</div>` : '');
     fL.style.display = 'block';
   };
@@ -459,10 +465,26 @@ function memEdit(id) {
   fIn.addEventListener('input', () => { E.formateurRef = ''; E.formateurNom = fIn.value.trim(); fDraw(); });
   fL.addEventListener('mousedown', ev => { ev.preventDefault();
     const it = ev.target.closest('.it'); if (!it) return;
+    if (it.dataset.autre) { fL.style.display = 'none'; openAutre(); return; }
     if (it.dataset.fi !== undefined) { const x = fItems[+it.dataset.fi]; E.formateurRef = x.ref; E.formateurNom = x.nom; fIn.value = x.nom; }
     else { E.formateurRef = ''; E.formateurNom = fIn.value.trim(); }
     fL.style.display = 'none'; });
   fIn.addEventListener('blur', () => setTimeout(() => fL.style.display = 'none', 150));
+  // « Autre » : deux champs prénom / nom → « Prénom NOM »
+  const openAutre = () => {
+    const box = $('meAutre'); box.style.display = 'grid'; $('meAutreBtn').style.display = 'none';
+    E.formateurRef = '';
+    const parts = (E.formateurNom || '').trim().split(/\s+/);
+    if (parts.length > 1 && !$('meAPrenom').value && !$('meANom').value) { $('meAPrenom').value = parts[0]; $('meANom').value = parts.slice(1).join(' '); }
+    $('meAPrenom').focus();
+  };
+  const syncAutre = () => {
+    const p = $('meAPrenom').value.trim(), n = $('meANom').value.trim().toUpperCase();
+    fIn.value = (p + ' ' + n).trim(); E.formateurRef = ''; E.formateurNom = fIn.value;
+  };
+  $('meAutreBtn').onclick = openAutre;
+  $('meAPrenom').addEventListener('input', syncAutre);
+  $('meANom').addEventListener('input', syncAutre);
   // documents
   if (m) {
     const drawDocs = () => {
@@ -594,7 +616,7 @@ function frBoard(f) {
   return `<div class="fr-board" style="--c:${esc(f.couleur)}">
     <div class="fr-head"><div><h2><i></i>${esc(f.titre)}</h2>${f.description ? `<p style="margin:6px 0 0;color:var(--mu)">${esc(f.description)}</p>` : ''}
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"><span class="vx-chip">${svg('bell', 12)} Rappels : ${String(f.rappels).split(',').map(r => +r === 0 ? 'jour J' : (+r === 1 ? 'veille' : 'J-' + r)).join(', ')}</span><span class="vx-chip">${svg('mail', 12)} ${esc(f.destinataires || f.emailCreateur)}</span><span class="vx-chip b">${doneCount}/${steps.length} rendue(s)</span></div></div>
-      <div style="display:flex;gap:8px"><button class="vx-btn" onclick="VX.frEdit('${jsq(f.id)}')">${svg('edit', 14)} Modifier</button></div></div>
+      <div style="display:flex;gap:8px"><button class="vx-btn" onclick="VX.frPdf('${jsq(f.id)}')">${svg('down', 14)} Exporter en PDF</button><button class="vx-btn" onclick="VX.frEdit('${jsq(f.id)}')">${svg('edit', 14)} Modifier</button></div></div>
     ${n ? `<div class="fr-next"><div class="fr-cd"><b>${daysTo(n.date) < 0 ? '!' : (daysTo(n.date) === 0 ? 'J' : 'J-' + daysTo(n.date))}</b><span>${daysTo(n.date) < 0 ? 'retard' : (daysTo(n.date) === 0 ? "aujourd'hui" : 'jours')}</span></div>
       <div><div style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--mu)">Prochaine échéance · ${fmtLong(n.date)}</div><div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">${esc(n.titre)}</div>${n.aRendre ? `<div style="color:var(--tx);margin-top:2px">À rendre : ${esc(n.aRendre)}</div>` : ''}</div>
       <button class="vx-btn sm" style="margin-left:auto" onclick="VX.frToggle('${jsq(n.id)}',true)">${svg('check', 14, 2.4)} Marquer rendu</button></div>` : ''}
@@ -610,6 +632,76 @@ function frBoard(f) {
     </div></div></div>`;
 }
 function frSel(id) { F.cur = id; frRender(); }
+
+// Export PDF : document A4 paysage mis en page (frise + tableau détaillé), puis impression
+// « Enregistrer au format PDF » du navigateur.
+function frPdf(id) {
+  const f = F.data.find(x => x.id === id); if (!f) return;
+  const steps = f.etapes.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const c = f.couleur || '#1A4E8A';
+  const today = todayISO();
+  const dates = steps.map(s => s.date).concat([today]).sort();
+  const t0 = new Date(dates[0] + 'T12:00:00'), t1 = new Date(dates[dates.length - 1] + 'T12:00:00');
+  const span = Math.max(1, (t1 - t0) / 86400000);
+  const pos = iso => 4 + ((new Date(iso + 'T12:00:00') - t0) / 86400000) / span * 92;
+  const xs = []; steps.forEach((s, i) => { let v = pos(s.date); if (i && v - xs[i - 1] < 9) v = xs[i - 1] + 9; xs.push(Math.min(v, 98)); });
+  const done = steps.filter(s => s.statut === 'Rendu').length;
+  const n = nextStep(f);
+  const etat = s => { const j = daysTo(s.date); return s.statut === 'Rendu' ? ['Rendu' + (s.renduLe ? ' le ' + fmtD(s.renduLe) : ''), '#15803d', '#e8f6ee'] : (j < 0 ? ['En retard de ' + (-j) + ' j', '#c62828', '#fde8e8'] : (j === 0 ? ["Aujourd'hui", '#c2410c', '#fff1e8'] : ['Dans ' + j + ' j', '#475569', '#eef2f7'])); };
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>${esc(f.titre)} — frise chronologique</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <style>
+    @page{size:A4 landscape;margin:14mm}
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{margin:0;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;color:#0e1a2b;font-size:12px}
+    .hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid ${c};padding-bottom:10px}
+    .hd h1{margin:0;font-size:24px;letter-spacing:-.02em}
+    .hd p{margin:4px 0 0;color:#64748b;font-size:12.5px}
+    .hd .r{text-align:right;color:#64748b;font-size:11px}
+    .hd img{height:30px;margin-bottom:6px}
+    .kp{display:flex;gap:10px;margin:14px 0 6px}
+    .kp div{flex:1;padding:9px 12px;border-radius:10px;background:#f4f7fb;border:1px solid #e3eaf3}
+    .kp span{display:block;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7d8a9c}
+    .kp b{font-size:15px}
+    .tl{position:relative;height:230px;margin:10px 0 4px}
+    .ln{position:absolute;left:2%;right:1%;top:112px;height:5px;border-radius:5px;background:#e3e9f1}
+    .td{position:absolute;top:84px;height:60px;border-left:2px dashed #F26522}
+    .td{z-index:3}
+    .td span{position:absolute;bottom:-17px;left:-34px;width:68px;text-align:center;font-size:9px;font-weight:800;color:#F26522;background:#fff4ed;border-radius:99px;padding:1px 0;z-index:3}
+    .pt{position:absolute;top:104px;width:21px;height:21px;margin-left:-10.5px;border-radius:50%;border:4px solid ${c};background:#fff}
+    .pt.ok{background:#16a34a;border-color:#16a34a}.pt.late{border-color:#e5484d;background:#fff1f1}
+    .cd{position:absolute;width:138px;margin-left:-69px;padding:7px 9px;border-radius:9px;background:#fff;border:1px solid #dfe6ef;box-shadow:0 4px 10px -6px rgba(14,26,43,.35)}
+    .cd.up{bottom:132px}.cd.dn{top:136px}
+    .cd .d{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:${c}}
+    .cd .t{font-size:11px;font-weight:700;margin-top:1px;line-height:1.25}
+    .cd .s{font-size:9px;font-weight:700;display:inline-block;margin-top:4px;padding:1px 6px;border-radius:99px}
+    table{width:100%;border-collapse:collapse;margin-top:14px;font-size:11.5px}
+    th{text-align:left;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:#7d8a9c;padding:7px 9px;border-bottom:2px solid #e3eaf3;background:#f7f9fc}
+    td{padding:8px 9px;border-bottom:1px solid #edf1f6;vertical-align:top}
+    tr{page-break-inside:avoid}
+    .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+    .ft{margin-top:12px;font-size:9.5px;color:#94a3b8;display:flex;justify-content:space-between}
+  </style></head><body>
+  <div class="hd"><div><img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" onerror="this.remove()"><h1>${esc(f.titre)}</h1>${f.description ? `<p>${esc(f.description)}</p>` : ''}</div>
+    <div class="r">Frise chronologique<br>Édition du ${fmtLong(today)}</div></div>
+  <div class="kp"><div><span>Échéances</span><b>${steps.length}</b></div><div><span>Rendues</span><b>${done} / ${steps.length}</b></div>
+    <div><span>Prochaine échéance</span><b>${n ? esc(n.titre) + ' · ' + fmtLong(n.date) : 'Aucune'}</b></div>
+    <div><span>Période</span><b>${steps.length ? fmtLong(steps[0].date) + ' → ' + fmtLong(steps[steps.length - 1].date) : '—'}</b></div></div>
+  <div class="tl"><div class="ln"></div>
+    ${today >= dates[0] && today <= dates[dates.length - 1] ? `<div class="td" style="left:${pos(today)}%"><span>Aujourd'hui</span></div>` : ''}
+    ${steps.map((s, i) => { const e = etat(s); return `<div class="pt ${s.statut === 'Rendu' ? 'ok' : (daysTo(s.date) < 0 ? 'late' : '')}" style="left:${xs[i]}%"></div>
+      <div class="cd ${i % 2 ? 'dn' : 'up'}" style="left:${Math.max(7, Math.min(93, xs[i]))}%"><div class="d">${fmtLong(s.date)}</div><div class="t">${esc(s.titre)}</div><span class="s" style="color:${e[1]};background:${e[2]}">${e[0]}</span></div>`; }).join('')}
+  </div>
+  <table><thead><tr><th style="width:110px">Date</th><th>Échéance</th><th>À rendre</th><th style="width:150px">Statut</th></tr></thead><tbody>
+    ${steps.map(s => { const e = etat(s); return `<tr><td><b>${fmtLong(s.date)}</b></td><td>${esc(s.titre)}</td><td>${esc(s.aRendre || '—')}</td><td><span class="badge" style="color:${e[1]};background:${e[2]}">${e[0]}</span></td></tr>`; }).join('')}
+  </tbody></table>
+  <div class="ft"><span>Rappels automatiques : ${String(f.rappels).split(',').map(r => +r === 0 ? 'jour J' : (+r === 1 ? 'veille' : 'J-' + r)).join(', ')}</span><span>CRM HECG</span></div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},450);};<\/script>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('Autorisez les fenêtres pop-up pour exporter le PDF', false); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 async function frToggle(id, rendu) {
   const f = F.data.find(x => x.etapes.some(e => e.id === id)); const e = f && f.etapes.find(x => x.id === id);
   if (!e) return;
@@ -664,6 +756,6 @@ window.VX = {
   memInit, memRender, memEdit, memExport,
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
-  frInit, frSel, frToggle, frEdit
+  frInit, frSel, frToggle, frEdit, frPdf
 };
 })();

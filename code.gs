@@ -415,6 +415,7 @@ function doPostInner_(e) {
       case 'getTachesRef':      return handleGetTachesRef(params, ss);
       case 'saveTache':         return handleSaveTache(params, ss);
       case 'saveTachesParams':  return handleSaveTachesParams(params, ss);
+      case 'purgeTaches':       return handlePurgeTaches(params, ss);
       // --- VIE SCOLAIRE : mémoires, frises, prospects salon (voir vs_extras.gs) ---
       case 'getMemoires':        return handleGetMemoires(params, ss);
       case 'saveMemoire':        return handleSaveMemoire(params, ss);
