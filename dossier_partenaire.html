@@ -17,6 +17,7 @@
                         <div class="flex items-center gap-3 mb-1">
                             <h1 id="entNom" class="text-4xl font-black text-[#1A4E8A]">Entreprise</h1>
                             <button onclick="editEntrepriseName()" class="text-gray-400 hover:text-[#1A4E8A] text-lg" title="Renommer l'entreprise">✏️</button>
+                            <span id="entCode" class="code-chip" title="Code entreprise — cliquer pour copier" onclick="copyCode(this.dataset.code)"></span>
                         </div>
                         <div class="flex items-center gap-2 mt-1">
                             <p id="entAdresse" class="text-sm text-gray-400 font-medium"></p>
@@ -346,6 +347,8 @@
                     
                     nomEntrepriseActuelle = d.info.entreprise;
                     document.getElementById('entNom').innerText = d.info.entreprise;
+                    const codeEl = document.getElementById('entCode');
+                    if (codeEl && partId) { codeEl.dataset.code = partId.toUpperCase(); codeEl.innerHTML = '<span class="code-lbl">Code</span>' + partId.toUpperCase(); }
                     adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
                     const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
                     document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
@@ -503,6 +506,13 @@
             loadDetails(true);
         }
 
+        function copyCode(code) {
+            if (!code) return;
+            (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(
+                () => { const t = document.createElement('div'); t.textContent = 'Code ' + code + ' copié'; t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1A4E8A] text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg z-[200]'; document.body.appendChild(t); setTimeout(() => t.remove(), 1600); },
+                () => prompt('Code :', code));
+        }
+
         function renderContacts() {
             const el = document.getElementById('contactsList');
             if (!contactsData || contactsData.length === 0) {
@@ -524,7 +534,9 @@
 
                 return '<div class="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
                     + '<div class="text-sm space-y-0.5">'
-                    + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge + '</div>'
+                    + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge
+                    + (c.id_contact ? '<span class="code-chip sm" title="Code contact — cliquer pour copier" onclick="copyCode('' + String(c.id_contact).replace(/'/g, '') + '')"><span class="code-lbl">Code</span>' + c.id_contact + '</span>' : '')
+                    + '</div>'
                     + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
                     + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
                     + (c.dateCreation ? '<p class="text-[10px] text-gray-400">🗓️ Contact créé le ' + c.dateCreation + '</p>' : '')
@@ -836,6 +848,12 @@
         loadDetails();
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
-    <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</style>
+    <style>.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }        .code-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px 4px 4px; border-radius:999px; background:#eef3fa; color:#1A4E8A; font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.02em; cursor:pointer; border:1px solid #dce7f5; transition:all .15s; user-select:all; }
+        .code-chip:hover { background:#1A4E8A; color:#fff; border-color:#1A4E8A; }
+        .code-chip .code-lbl { font:800 9px/1 Inter,sans-serif; text-transform:uppercase; letter-spacing:.08em; background:#fff; color:#1A4E8A; padding:4px 6px; border-radius:999px; }
+        .code-chip.sm { font-size:10.5px; padding:2px 8px 2px 2px; }
+        .code-chip.sm .code-lbl { font-size:8px; padding:3px 5px; }
+        .code-chip:empty { display:none; }
+    </style>
 </body>
 </html>

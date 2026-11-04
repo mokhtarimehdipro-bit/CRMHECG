@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1A4E8A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HECG Salon">
+<title>HECG · Prospects salon</title>
+<link rel="manifest" href="salon.webmanifest">
+<link rel="icon" href="salon-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="salon-icon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--b:#1A4E8A;--b6:#164378;--b1:#e8eff8;--o:#F26522;--ink:#0e1a2b;--tx:#3b4859;--mu:#7d8a9c;--li:#e3e9f1;--ok:#16a34a;--red:#e5484d}
+  html,body{margin:0;min-height:100%;background:#f3f6fb;font-family:'Plus Jakarta Sans',-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased}
+  body{background:radial-gradient(900px 420px at 100% -10%,rgba(26,78,138,.12),transparent 60%),radial-gradient(700px 380px at -10% 110%,rgba(242,101,34,.08),transparent 60%),#f3f6fb;background-attachment:fixed}
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top)) 18px 12px;background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid var(--li)}
+  header img{height:32px}
+  header .t{flex:1;line-height:1.15}
+  header .t b{display:block;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+  header .t span{font-size:12px;color:var(--mu);font-weight:500}
+  .net{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:6px 11px;border-radius:999px;white-space:nowrap}
+  .net i{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .net.on{background:#e8f6ee;color:#15803d}.net.off{background:#fff1e8;color:#c2410c}
+  main{max-width:560px;margin:0 auto;padding:18px 16px calc(40px + env(safe-area-inset-bottom))}
+  .card{background:#fff;border:1px solid var(--li);border-radius:22px;padding:20px;box-shadow:0 1px 2px rgba(14,26,43,.04),0 24px 50px -36px rgba(14,26,43,.45)}
+  .salon{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:12px 14px;border-radius:16px;background:#fff;border:1px solid var(--li)}
+  .salon label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);white-space:nowrap}
+  .salon input{flex:1;border:none;outline:none;font:700 15px 'Plus Jakarta Sans',sans-serif;color:var(--ink);background:none;min-width:0}
+  h1{margin:0 0 4px;font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .sub{margin:0 0 14px;color:var(--mu);font-size:13.5px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .f{margin-top:14px}
+  .f label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:7px}
+  .f input,.f select{width:100%;height:52px;border:1.5px solid var(--li);border-radius:14px;padding:0 15px;font:600 16px 'Plus Jakarta Sans',sans-serif;color:var(--ink);background:#fff;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+  .f select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237d8a9c' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 15px center;padding-right:40px}
+  .f input:focus,.f select:focus{border-color:var(--b);box-shadow:0 0 0 4px rgba(26,78,138,.12)}
+  .f input.err{border-color:var(--red);box-shadow:0 0 0 4px rgba(229,72,77,.1)}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .seg button{height:52px;border-radius:14px;border:1.5px solid var(--li);background:#fff;font:700 15px 'Plus Jakarta Sans',sans-serif;color:var(--tx);cursor:pointer;transition:all .15s}
+  .seg button.on{background:var(--b1);border-color:var(--b);color:var(--b);box-shadow:0 0 0 3px rgba(26,78,138,.1)}
+  .go{width:100%;height:58px;margin-top:22px;border:none;border-radius:16px;background:linear-gradient(180deg,#f47637,#F26522);color:#fff;font:800 17px 'Plus Jakarta Sans',sans-serif;letter-spacing:.01em;cursor:pointer;box-shadow:0 14px 28px -14px rgba(242,101,34,.95),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .12s}
+  .go:active{transform:scale(.98)}
+  .hint{margin:10px 0 0;font-size:12px;color:var(--mu);text-align:center}
+  .q{margin-top:18px}
+  .q h2{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--ink);margin:0 0 10px}
+  .q h2 span{margin-left:auto;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px}
+  .pend{background:#fff1e8;color:#c2410c}.sync{background:#e8f6ee;color:#15803d}
+  .it{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid #eef2f7}
+  .it:last-child{border-bottom:none}
+  .it .av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;flex-shrink:0}
+  .it .n{flex:1;min-width:0}
+  .it .n b{display:block;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it .n small{font-size:12px;color:var(--mu)}
+  .st{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:999px;white-space:nowrap}
+  .st.p{background:#fff1e8;color:#c2410c}.st.s{background:#e8f6ee;color:#15803d}.st.e{background:#e8eff8;color:var(--b)}.st.x{background:#fde8e8;color:#c62828}
+  .btn2{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 16px;border-radius:12px;border:1px solid var(--li);background:#fff;font:700 13.5px 'Plus Jakarta Sans',sans-serif;color:var(--tx);cursor:pointer}
+  .ok-overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(243,246,251,.7);backdrop-filter:blur(4px);animation:fade .2s}
+  .ok-box{background:#fff;border-radius:24px;padding:28px 34px;text-align:center;box-shadow:0 30px 70px -24px rgba(14,26,43,.45);animation:pop .35s cubic-bezier(.34,1.56,.64,1)}
+  .ok-box .c{width:68px;height:68px;margin:0 auto 12px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 28px -12px rgba(22,163,74,.9)}
+  .ok-box b{display:block;font-size:18px;color:var(--ink)}
+  .ok-box span{font-size:13px;color:var(--mu)}
+  @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+  @keyframes fade{from{opacity:0}}
+  .banner{margin-bottom:14px;padding:12px 14px;border-radius:14px;font-size:13.5px;font-weight:600;line-height:1.45}
+  html,body{overflow-x:hidden}
+  .row>*,.seg>*{min-width:0}
+  .banner.warn{background:#fff1e8;color:#9a3412}
+  .banner a{color:inherit;font-weight:800}
+  .empty{padding:14px 4px;color:var(--mu);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="HECG" onerror="this.style.display='none'">
+  <div class="t"><b>Prospects salon</b><span id="who">—</span></div>
+  <span class="net" id="net"><i></i><span></span></span>
+</header>
+
+<main>
+  <div id="banner"></div>
+  <div class="salon"><label>Salon</label><input id="salon" placeholder="Nom du salon (ex : Studyrama Marseille)" autocomplete="off"></div>
+
+  <form class="card" id="form" autocomplete="off" novalidate>
+    <h1>Nouveau prospect</h1>
+    <p class="sub">Enregistré même sans réseau — envoyé automatiquement dès que la connexion revient.</p>
+    <div class="row">
+      <div class="f"><label>Prénom</label><input id="prenom" autocapitalize="words" enterkeyhint="next"></div>
+      <div class="f"><label>Nom</label><input id="nom" autocapitalize="characters" enterkeyhint="next"></div>
+    </div>
+    <div class="f"><label>Téléphone</label><input id="tel" type="tel" inputmode="tel" placeholder="06 12 34 56 78" enterkeyhint="next"></div>
+    <div class="f"><label>Email</label><input id="mail" type="email" inputmode="email" autocapitalize="off" placeholder="prenom.nom@mail.com" enterkeyhint="next"></div>
+    <div class="f"><label>Formation souhaitée</label><select id="classe"><option value="">— Choisir —</option></select></div>
+    <div class="f"><label>Campus</label><div class="seg" id="campus"><button type="button" data-v="HECG" class="on">Marseille</button><button type="button" data-v="HECG_AIX">Aix-en-Provence</button></div></div>
+    <button class="go" type="submit">Enregistrer le prospect</button>
+    <p class="hint">Prénom ou nom + téléphone ou email obligatoires.</p>
+  </form>
+
+  <section class="card q">
+    <h2>Saisies de cet appareil <span id="qState"></span></h2>
+    <div id="qList"></div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button class="btn2" id="syncBtn" type="button">Envoyer maintenant</button>
+      <button class="btn2" id="clearBtn" type="button">Vider l'historique envoyé</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const QK = 'hecg_salon_queue_v1', CK = 'hecg_salon_classes_v1', SK = 'hecg_salon_nom_v1';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let user = JSON.parse(localStorage.getItem('user') || '{}');
+let campus = localStorage.getItem('hecg_salon_campus') || 'HECG';
+let syncing = false, authKo = false;
+
+// File des saisies : en mémoire + localStorage + IndexedDB. IndexedDB survit au
+// localStorage.clear() fait par les autres pages du CRM (déconnexion, inactivité 6 h).
+let Q = (() => { try { return JSON.parse(localStorage.getItem(QK) || '[]'); } catch (e) { return []; } })();
+const idb = (() => {
+  const open = () => new Promise((res, rej) => { const r = indexedDB.open('hecg_salon', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  return {
+    get: k => open().then(db => new Promise(res => { const t = db.transaction('kv').objectStore('kv').get(k); t.onsuccess = () => res(t.result); t.onerror = () => res(undefined); })).catch(() => undefined),
+    set: (k, v) => open().then(db => new Promise(res => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; })).catch(() => {})
+  };
+})();
+const loadQ = () => Q.map(x => ({ ...x }));
+const saveQ = q => { Q = q; try { localStorage.setItem(QK, JSON.stringify(q)); } catch (e) {} idb.set('queue', q); };
+async function restoreQ() {
+  const fromDb = await idb.get('queue');
+  if (Array.isArray(fromDb)) {
+    const byCid = {}; Q.forEach(x => byCid[x.cid] = x);
+    fromDb.forEach(x => { if (!byCid[x.cid]) byCid[x.cid] = x; });
+    Q = Object.values(byCid).sort((a, b) => a.at - b.at);
+  }
+  saveQ(Q);
+}
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+// ── service worker : l'application s'ouvre même sans réseau ─────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('salon-sw.js').catch(e => console.warn('SW', e));
+
+function renderNet() {
+  const on = navigator.onLine, el = $('net');
+  el.className = 'net ' + (on ? 'on' : 'off');
+  el.querySelector('span').textContent = on ? 'En ligne' : 'Hors ligne';
+}
+function renderBanner() {
+  const b = $('banner');
+  if (!user.email) b.innerHTML = `<div class="banner warn">Vous n'êtes pas connecté au CRM. Les saisies sont gardées sur l'appareil ; <a href="index.html">connectez-vous</a> (avec réseau) pour les envoyer, puis revenez sur cette page.</div>`;
+  else if (authKo) b.innerHTML = `<div class="banner warn">Session expirée : <a href="index.html">reconnectez-vous</a> pour envoyer les saisies en attente. Rien n'est perdu.</div>`;
+  else b.innerHTML = '';
+  $('who').textContent = user.email ? (user.nom || user.email) : 'Non connecté';
+}
+function renderQ() {
+  const q = loadQ(), pend = q.filter(x => x.st === 'p' || x.st === 'x').length;
+  $('qState').className = pend ? 'pend' : 'sync';
+  $('qState').textContent = pend ? `${pend} en attente d'envoi` : (q.length ? 'Tout est envoyé ✓' : '');
+  const lab = { p: ['p', 'En attente'], s: ['s', 'Ajouté au CRM'], e: ['e', 'Déjà dans le CRM'], x: ['x', 'Erreur — nouvel essai'] };
+  $('qList').innerHTML = q.length ? q.slice().reverse().slice(0, 60).map(x => {
+    const nom = (x.prenom + ' ' + x.nom).trim() || '—';
+    const h = [...nom].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 0);
+    return `<div class="it"><div class="av" style="background:hsl(${h},55%,48%)">${esc(nom.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase())}</div>
+      <div class="n"><b>${esc(nom)}</b><small>${esc([x.tel, x.mail].filter(Boolean).join(' · '))}${x.classe ? ' · ' + esc(x.classe) : ''}</small></div>
+      <span class="st ${lab[x.st][0]}" title="${esc(x.msg || '')}">${lab[x.st][1]}</span></div>`;
+  }).join('') : '<div class="empty">Aucune saisie pour l\'instant.</div>';
+}
+
+// ── classes (mises en cache pour le hors-ligne) ──────────────────────────
+function fillClasses(list) {
+  const sel = $('classe'), v = sel.value;
+  sel.innerHTML = '<option value="">— Choisir —</option>' + list.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="Indécis">Ne sait pas encore</option>';
+  sel.value = v;
+}
+async function api(payload) {
+  payload.idAuteur = user.nom || ''; payload.nomAuteur = user.nom || ''; payload.roleAuteur = user.role || ''; payload.emailAuteur = user.email || ''; payload.sessionToken = user.sessionToken || '';
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 45000);
+  try { const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: ctrl.signal }); return await r.json(); }
+  finally { clearTimeout(to); }
+}
+async function refreshClasses() {
+  try { fillClasses(JSON.parse(localStorage.getItem(CK) || '[]')); } catch (e) {}
+  if (!navigator.onLine || !user.email) return;
+  try { const r = await api({ action: 'getSalonRef' }); if (r.success) { localStorage.setItem(CK, JSON.stringify(r.classes || [])); fillClasses(r.classes || []); } } catch (e) {}
+}
+
+// ── synchronisation ──────────────────────────────────────────────────────
+async function sync() {
+  if (syncing || !navigator.onLine || !user.email) return;
+  const pending = loadQ().filter(x => x.st === 'p' || x.st === 'x');
+  if (!pending.length) return;
+  syncing = true;
+  try {
+    const r = await api({ action: 'addProspectsSalon', prospects: pending.map(x => ({ cid: x.cid, nom: x.nom, prenom: x.prenom, tel: x.tel, mail: x.mail, classe: x.classe, campus: x.campus, salon: x.salon })) });
+    if (r.sessionExpired) { authKo = true; renderBanner(); return; }
+    authKo = false; renderBanner();
+    if (!r.success) throw new Error(r.message);
+    const byCid = {}; (r.resultats || []).forEach(x => byCid[x.cid] = x);
+    const q = loadQ();
+    q.forEach(x => { const res = byCid[x.cid]; if (!res) return;
+      if (res.statut === 'ajoute' || res.statut === 'deja') { x.st = 's'; x.id = res.id; }
+      else if (res.statut === 'existant') { x.st = 'e'; x.id = res.id; }
+      else { x.st = 'x'; x.msg = res.message || ''; } });
+    saveQ(q);
+  } catch (e) {
+    const q = loadQ(); q.forEach(x => { if (x.st === 'p') x.st = 'p'; }); saveQ(q); console.warn('sync', e);
+  } finally { syncing = false; renderQ(); }
+}
+
+// ── formulaire ───────────────────────────────────────────────────────────
+$('campus').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; campus = b.dataset.v; localStorage.setItem('hecg_salon_campus', campus); paintCampus(); });
+function paintCampus() { $('campus').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === campus)); }
+$('salon').value = localStorage.getItem(SK) || '';
+$('salon').addEventListener('input', e => localStorage.setItem(SK, e.target.value));
+['prenom', 'nom', 'tel', 'mail'].forEach((id, i, a) => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const n = a[i + 1]; if (n) $(n).focus(); else $('classe').focus(); } }));
+
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = id => $(id).value.trim();
+  ['prenom', 'nom', 'tel', 'mail'].forEach(id => $(id).classList.remove('err'));
+  const tel = v('tel'), mail = v('mail').toLowerCase();
+  let ok = true;
+  if (!v('prenom') && !v('nom')) { $('prenom').classList.add('err'); $('nom').classList.add('err'); ok = false; }
+  if (!tel && !mail) { $('tel').classList.add('err'); $('mail').classList.add('err'); ok = false; }
+  if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { $('mail').classList.add('err'); ok = false; }
+  if (tel && tel.replace(/\D/g, '').length < 9) { $('tel').classList.add('err'); ok = false; }
+  if (!ok) { if (navigator.vibrate) navigator.vibrate(80); return; }
+  const q = loadQ();
+  q.push({ cid: uid(), prenom: v('prenom'), nom: v('nom').toUpperCase(), tel, mail, classe: $('classe').value, campus, salon: v('salon'), at: Date.now(), st: 'p' });
+  saveQ(q);
+  $('form').reset(); paintCampus();
+  const o = document.createElement('div'); o.className = 'ok-overlay';
+  o.innerHTML = `<div class="ok-box"><div class="c"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><b>Prospect enregistré</b><span>${navigator.onLine && user.email ? 'Envoi au CRM…' : 'Sera envoyé au retour du réseau'}</span></div>`;
+  document.body.appendChild(o); setTimeout(() => o.remove(), 1100);
+  renderQ(); sync();
+  setTimeout(() => $('prenom').focus(), 1150);
+});
+$('syncBtn').onclick = () => { if (!navigator.onLine) { alert('Pas de réseau pour le moment : les saisies seront envoyées automatiquement.'); return; } sync(); };
+$('clearBtn').onclick = () => { if (!confirm('Retirer de cet appareil les saisies déjà envoyées ? (les saisies en attente sont conservées)')) return; saveQ(loadQ().filter(x => x.st === 'p' || x.st === 'x')); renderQ(); };
+
+window.addEventListener('online', () => { renderNet(); refreshClasses(); sync(); });
+window.addEventListener('offline', renderNet);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { user = JSON.parse(localStorage.getItem('user') || '{}'); renderBanner(); sync(); } });
+setInterval(sync, 20000);
+
+paintCampus(); renderNet(); renderBanner(); renderQ(); restoreQ().then(() => { renderQ(); refreshClasses(); sync(); });
+</script>
+</body>
+</html>

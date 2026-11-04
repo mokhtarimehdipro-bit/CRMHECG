@@ -1,0 +1,12 @@
+{
+  "name": "HECG — Prospects salon",
+  "short_name": "HECG Salon",
+  "start_url": "salon.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#1A4E8A",
+  "icons": [
+    { "src": "salon-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

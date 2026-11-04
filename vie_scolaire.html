@@ -99,7 +99,7 @@
       <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
       <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
       <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
-      <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Missions</a>
+      <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Tâches</a>
       <a href="vie_scolaire.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">🏫 Vie Scolaire</a>
       <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
     </div>
@@ -139,6 +139,8 @@
     <button onclick="showModule('suiviexb')"   id="nav-suiviexb"    class="nav-btn hidden">📋 Suivi EXB</button>
     <button onclick="showModule('mmok')"       id="nav-mmok"        class="nav-btn hidden">📱 MMOK</button>
     <button onclick="showModule('suivis')"     id="nav-suivis"      class="nav-btn hidden">📊 Tableaux de suivis Excel</button>
+    <button onclick="showModule('memoires')"   id="nav-memoires"    class="nav-btn hidden">🎓 Suivi des mémoires</button>
+    <button onclick="showModule('frises')"     id="nav-frises"      class="nav-btn hidden">🗓️ Frises chronologiques</button>
   </aside>
 
   <!-- CONTENT -->
@@ -777,6 +779,10 @@
       </div>
     </div>
 
+
+    <!-- ===================== SUIVI DES MÉMOIRES / FRISES (vs_modules.js) ===================== -->
+    <div id="section-memoires" class="section"></div>
+    <div id="section-frises" class="section"></div>
 
     <!-- ===================== TABLEAUX DE SUIVIS EXCEL ===================== -->
     <div id="section-suivis" class="section">
@@ -1822,6 +1828,8 @@ const ACCESS = {
   suiviexb:    ['Super-admin','Pédagogie','Administratif'],
   mmok:        ['Super-admin'],
   suivis:      ['Super-admin','Pédagogie','Administratif'],
+  memoires:    ['Super-admin','Pédagogie','Administratif'],
+  frises:      ['Super-admin','Pédagogie','Administratif'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -1836,6 +1844,8 @@ const WRITE = {
   suiviexb:    ['Super-admin','Pédagogie'],
   mmok:        ['Super-admin'],
   suivis:      ['Super-admin','Pédagogie','Administratif'],
+  memoires:    ['Super-admin','Pédagogie','Administratif'],
+  frises:      ['Super-admin','Pédagogie','Administratif'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -1897,7 +1907,7 @@ const VS_CACHEABLE_ACTIONS = new Set([
   'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
   'getStatsMatieres','getMailsLog','getSalles','getSimulations','getSuiviEXB','getMMOK',
   'getReleveNotes','getQuestionnaireLinks','getStatsExclusions','getRelanceConfig',
-  'getCubeData','getTableauxSuivi','getSuiviImportOptions','previewSuiviImport'
+  'getCubeData','getTableauxSuivi','getSuiviImportOptions','previewSuiviImport','getMemoires','getFrises'
 ]);
 
 function _vsCacheKey(action, extra) { return 'hecg_cache_vs_v1_' + action + '_' + JSON.stringify(extra || {}); }
@@ -2026,7 +2036,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
@@ -2071,6 +2081,8 @@ function showModule(m){
   if (m==='suiviexb')    { if(canWrite('suiviexb')) show('btnAddSuiviEXB'); }
   if (m==='mmok')        loadMMOK();
   if (m==='suivis')      loadTableauxSuivi();
+  if (m==='memoires')    VX.memInit();
+  if (m==='frises')      VX.frInit();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -8296,5 +8308,6 @@ async function importSuiviData(){
 }
 </script>
 <script src="cube.js?v=2"></script>
+<script src="vs_modules.js?v=1"></script>
 </body>
 </html>

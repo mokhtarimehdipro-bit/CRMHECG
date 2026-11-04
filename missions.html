@@ -1,32 +1,154 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HECG - Pilotage des Missions</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        /* Board */
-        .board-wrap { display:flex; gap:1rem; overflow-x:auto; padding-bottom:1.5rem; align-items:flex-start; }
-        .board-col { min-width:270px; max-width:300px; flex-shrink:0; background:#f1f5f9; border-radius:1rem; padding:0.75rem; }
-        .board-col-body { min-height:60px; transition: background .15s; }
-        .board-col.drag-over .board-col-body { background:rgba(59,130,246,.08); border-radius:.5rem; outline:2px dashed #93c5fd; }
-        /* Cards */
-        .card-mission { transition: box-shadow .15s; cursor:pointer; }
-        .card-mission:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
-        .card-mission.dragging { opacity:.3; }
-        .card-grid { transition: transform .15s, box-shadow .15s; }
-        .card-grid:hover { transform:translateY(-3px); box-shadow:0 8px 30px rgba(0,0,0,.10); }
-        @keyframes fadeInUp { from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);} }
-        .card-anim { animation: fadeInUp .18s ease both; }
-    </style>
-    <link rel="stylesheet" href="hecg-theme.css?v=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HECG - Tâches de l'équipe</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{--b:#1A4E8A;--b6:#164378;--b1:#e8eff8;--b0:#f3f7fc;--o:#F26522;--ink:#0e1a2b;--tx:#3b4859;--mu:#7d8a9c;--li:#e7ecf3;--li2:#f1f4f8;--ok:#16a34a;--red:#e5484d}
+  .tk{font-family:'Plus Jakarta Sans',Inter,ui-sans-serif,system-ui,sans-serif;color:var(--tx);font-size:13.5px}
+  .tk svg{display:inline-block;vertical-align:-2px;flex-shrink:0}
+  .tk-crumb{font-size:12.5px;color:var(--mu);font-weight:500;display:flex;align-items:center;gap:6px}
+  .tk-h1{font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.025em;margin:2px 0 0}
+  .tk-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 15px;border-radius:11px;border:1px solid var(--li);background:#fff;color:var(--tx);font:600 13px 'Plus Jakarta Sans',Inter,sans-serif;cursor:pointer;transition:all .18s;white-space:nowrap;box-shadow:0 1px 2px rgba(14,26,43,.04)}
+  .tk-btn:hover{border-color:#cdd8e6;color:var(--b);box-shadow:0 6px 16px -10px rgba(14,26,43,.35);transform:translateY(-1px)}
+  .tk-btn:active{transform:translateY(0) scale(.98)}
+  .tk-btn.dark{background:linear-gradient(180deg,#24589a,#1A4E8A);border-color:#164378;color:#fff;box-shadow:0 8px 18px -10px rgba(26,78,138,.9),inset 0 1px 0 rgba(255,255,255,.15)}
+  .tk-btn.dark:hover{background:#164378;color:#fff}
+  .tk-btn.ora{background:linear-gradient(180deg,#f47637,#F26522);border-color:#e85d1c;color:#fff;box-shadow:0 8px 18px -10px rgba(242,101,34,.9)}
+  .tk-btn.ico{width:38px;padding:0;justify-content:center}
+  .tk-btn.sm{height:32px;padding:0 11px;font-size:12.5px;border-radius:9px}
+  .tk-switch{display:inline-flex;align-items:center;gap:9px;height:38px;padding:0 12px 0 10px;border-radius:11px;border:1px solid var(--li);background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;user-select:none;box-shadow:0 1px 2px rgba(14,26,43,.04)}
+  .tk-switch input{display:none}
+  .tk-switch .tg{width:34px;height:20px;border-radius:999px;background:#cfd8e4;position:relative;transition:background .2s}
+  .tk-switch .tg::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+  .tk-switch input:checked+.tg{background:var(--ok)}
+  .tk-switch input:checked+.tg::after{transform:translateX(14px)}
+
+  .tk-tabs{display:flex;gap:4px;border-bottom:1px solid var(--li);overflow-x:auto;scrollbar-width:none}
+  .tk-tab{position:relative;display:inline-flex;align-items:center;gap:8px;padding:12px 14px;font-size:13.5px;font-weight:600;color:var(--mu);cursor:pointer;white-space:nowrap;border:none;background:none;transition:color .15s}
+  .tk-tab:hover{color:var(--ink)}
+  .tk-tab.on{color:var(--ink)}
+  .tk-tab.on::after{content:'';position:absolute;left:10px;right:10px;bottom:-1px;height:2.5px;border-radius:3px;background:var(--b)}
+  .tk-tab .n{font-size:11px;font-weight:700;background:var(--li2);color:var(--mu);border-radius:999px;padding:1px 7px}
+  .tk-tab.on .n{background:var(--b);color:#fff}
+  .tk-tab .av{width:22px;height:22px;font-size:9.5px}
+
+  .tk-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tk-search{position:relative}
+  .tk-search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--mu)}
+  .tk-search input,.tk-sel{height:34px;border:1px solid var(--li);border-radius:10px;background:#fff;font:500 13px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--ink);outline:none}
+  .tk-search input{width:230px;padding:0 12px 0 33px}
+  .tk-sel{padding:0 30px 0 10px}
+  .tk-search input:focus,.tk-sel:focus{border-color:var(--b);box-shadow:0 0 0 4px rgba(26,78,138,.1)}
+  .tk-chk{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--tx);cursor:pointer;user-select:none}
+  .tk-chk input{accent-color:var(--b);width:15px;height:15px}
+
+  .tk-card{background:#fff;border:1px solid var(--li);border-radius:18px;box-shadow:0 1px 2px rgba(14,26,43,.03),0 18px 40px -30px rgba(14,26,43,.35);overflow:hidden}
+  .tk-zone{border-top:1px solid var(--li2)}
+  .tk-zone:first-child{border-top:none}
+  .tk-zh{display:flex;align-items:center;gap:10px;padding:16px 20px 10px;cursor:pointer;user-select:none}
+  .tk-zh .chev{color:var(--mu);transition:transform .2s}
+  .tk-zh.closed .chev{transform:rotate(-90deg)}
+  .tk-zh b{font-size:14.5px;font-weight:700;color:var(--ink)}
+  .tk-zh .n{font-size:12px;font-weight:600;color:var(--mu)}
+  .tk-zh .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .tk-grid{display:grid;grid-template-columns:52px minmax(240px,2.2fr) 170px 118px 62px 158px minmax(170px,1.2fr) minmax(150px,1fr);align-items:center}
+  .tk-head{padding:0 8px;height:34px;font-size:11.5px;font-weight:600;color:var(--mu);border-bottom:1px solid var(--li2)}
+  .tk-head>div{padding:0 8px}
+  .tk-row{position:relative;padding:0 8px;min-height:52px;border-bottom:1px solid var(--li2);transition:background .15s}
+  .tk-row:hover{background:#f8fafd}
+  .tk-row>div{padding:8px 8px;min-width:0}
+  .tk-row.urg{background:linear-gradient(90deg,#fff1f1,#fff8f8 60%,#fff)}
+  .tk-row.urg::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:0 3px 3px 0;background:var(--red)}
+  .tk-row.done .tt{color:#9aa6b6;text-decoration:line-through;text-decoration-color:#c3ccd8}
+  .tk-row.flash{animation:tkFlash 1s}
+  @keyframes tkFlash{0%{background:#e8f6ee}100%{background:transparent}}
+  .tk-check{width:24px;height:24px;border-radius:50%;border:1.8px solid #c3ccd8;background:#fff;display:flex;align-items:center;justify-content:center;color:transparent;cursor:pointer;transition:all .18s;margin-left:6px}
+  .tk-check:hover{border-color:var(--ok);color:#9fd8b3}
+  .tk-check.on{background:var(--ok);border-color:var(--ok);color:#fff;box-shadow:0 6px 14px -6px rgba(22,163,74,.8);transform:scale(1.04)}
+  .tk-check.ro{cursor:default}
+  .tt{font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+  .tt:hover{color:var(--b)}
+  .td{font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+  .tk-cell{cursor:pointer;border-radius:8px;transition:background .15s}
+  .tk-edit:hover{background:var(--li2)}
+  .tk-who{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink)}
+  .tk-who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .av{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#fff;flex-shrink:0;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)}
+  .tk-date{font-size:13px;font-weight:500;color:var(--ink);font-feature-settings:'tnum'}
+  .tk-date.late{color:var(--red);font-weight:700}
+  .tk-date.today{color:var(--o);font-weight:700}
+  .tk-date.none{color:#c3ccd8}
+  .tk-flag{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#c3ccd8;cursor:pointer;transition:all .18s;border:1px solid transparent}
+  .tk-flag:hover{color:var(--red);background:#fff1f1}
+  .tk-flag.on{color:#fff;background:var(--red);box-shadow:0 6px 14px -6px rgba(229,72,77,.9)}
+  .tk-flag.ro{cursor:default}
+  .tk-cat{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tk-cat i{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .tk-mandat{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 10px;border-radius:8px;background:#f2f4f8;border:1px solid #e6ebf2;font-size:12px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tk-mandat .ty{font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+  .tk-ph{font-size:12.5px;color:#c3ccd8;font-weight:500}
+  .tk-com{font-size:12.5px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+  .tk-inline{width:100%;height:32px;border:1px solid var(--b);border-radius:8px;padding:0 9px;font:500 13px 'Plus Jakarta Sans',Inter,sans-serif;outline:none;box-shadow:0 0 0 4px rgba(26,78,138,.1)}
+  .tk-add{display:flex;align-items:center;gap:10px;padding:12px 24px;color:var(--mu);font-size:13px;font-weight:600;cursor:pointer;transition:color .15s}
+  .tk-add:hover{color:var(--b)}
+  .tk-empty{padding:22px 24px;font-size:13px;color:#a3aebd}
+  .tk-foot{padding:10px 20px;font-size:12px;color:var(--mu);border-top:1px solid var(--li2);background:#fafbfd}
+
+  .tk-pop{position:fixed;z-index:120;min-width:240px;max-width:360px;max-height:360px;overflow:auto;background:#fff;border:1px solid var(--li);border-radius:14px;box-shadow:0 24px 60px -16px rgba(14,26,43,.35);padding:6px;font-family:'Plus Jakarta Sans',Inter,sans-serif;animation:tkIn .14s}
+  @keyframes tkIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .tk-pop .it{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer}
+  .tk-pop .it:hover,.tk-pop .it.act{background:var(--b0);color:var(--b)}
+  .tk-pop .sub{font-size:11.5px;color:var(--mu);margin-left:auto;padding-left:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  .tk-pop .grp{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#a3aebd;padding:8px 10px 4px}
+  .tk-pop input{width:100%;height:36px;border:1px solid var(--li);border-radius:9px;padding:0 10px;font:500 13px 'Plus Jakarta Sans',Inter,sans-serif;outline:none;margin-bottom:4px}
+  .tk-pop input:focus{border-color:var(--b)}
+  .mty{font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:var(--li2);color:var(--mu);flex-shrink:0;width:72px;text-align:center}
+
+  .tk-modal{position:fixed;inset:0;z-index:110;background:rgba(14,26,43,.42);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .tk-modal .box{width:100%;max-width:620px;max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 40px 90px -24px rgba(14,26,43,.5);padding:28px;animation:tkIn .2s}
+  .tk-modal h2{margin:0;font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .tk-modal .sub{font-size:13px;color:var(--mu);margin:4px 0 0}
+  .tk-fl{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin:16px 0 7px}
+  .tk-in{width:100%;min-height:42px;border:1px solid var(--li);border-radius:11px;padding:10px 12px;font:500 14px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--ink);outline:none;background:#fff;transition:all .15s}
+  .tk-in:focus{border-color:var(--b);box-shadow:0 0 0 4px rgba(26,78,138,.1)}
+  textarea.tk-in{min-height:96px;resize:vertical;line-height:1.5}
+  .tk-2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  .tk-ft{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+
+  .tk-drawer{position:fixed;top:0;right:0;bottom:0;z-index:105;width:min(560px,100%);background:#fff;box-shadow:-30px 0 80px -30px rgba(14,26,43,.45);display:flex;flex-direction:column;animation:tkSlide .25s cubic-bezier(.2,.7,.2,1)}
+  @keyframes tkSlide{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  .tk-drawer .hd{display:flex;align-items:center;gap:10px;padding:16px 22px;border-bottom:1px solid var(--li2)}
+  .tk-drawer .bd{flex:1;overflow:auto;padding:22px}
+  .tk-meta{display:grid;grid-template-columns:130px 1fr;gap:12px 14px;align-items:center;margin-top:18px;font-size:13px}
+  .tk-meta dt{color:var(--mu);font-weight:600}
+  .tk-notes{margin-top:22px;border-top:1px solid var(--li2);padding-top:16px}
+  .tk-note{font-size:12.5px;color:var(--tx);padding:8px 12px;border-radius:10px;background:#f7f9fc;margin-bottom:6px;white-space:pre-line}
+  .tk-backdrop{position:fixed;inset:0;z-index:104;background:rgba(14,26,43,.18)}
+
+  .tk-catrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--li);border-radius:12px;margin-bottom:8px;background:#fff}
+  .tk-catrow input{flex:1;border:none;outline:none;font:600 13.5px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--ink)}
+  .tk-dots{display:flex;gap:5px}
+  .tk-dot{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--li);transition:transform .12s}
+  .tk-dot:hover{transform:scale(1.15)}
+  .tk-dot.on{box-shadow:0 0 0 2px var(--ink)}
+  .tk-mini{width:28px;height:28px;border-radius:8px;border:1px solid var(--li);background:#fff;color:var(--mu);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .tk-mini:hover{color:var(--red);border-color:#f3c4c6}
+
+  .tk-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;background:var(--ink);color:#fff;font:600 13px 'Plus Jakarta Sans',Inter,sans-serif;padding:11px 18px;border-radius:12px;box-shadow:0 18px 40px -12px rgba(14,26,43,.5);animation:tkIn .2s}
+  .tk-toast.err{background:var(--red)}
+  .tk-skel{height:12px;border-radius:6px;background:linear-gradient(90deg,#eef2f7,#f7f9fc,#eef2f7);background-size:200% 100%;animation:tkSk 1.2s infinite}
+  @keyframes tkSk{to{background-position:-200% 0}}
+  @media(max-width:1100px){.tk-grid{grid-template-columns:44px minmax(200px,1fr) 140px 108px 52px 140px}.tk-grid>.c-mandat,.tk-grid>.c-com{display:none}}
+  @media(max-width:720px){.tk-grid{grid-template-columns:44px 1fr 100px 46px}.tk-grid>.c-who,.tk-grid>.c-cat{display:none}.tk-search input{width:150px}}
+</style>
+<link rel="stylesheet" href="hecg-theme.css?v=1">
 </head>
 <body class="bg-gray-50 min-h-screen">
 
-<!-- NAV -->
 <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
     <div class="flex items-center space-x-4">
         <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
@@ -38,7 +160,7 @@
             <a href="statistiques.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Stats</a>
             <a href="campagnes.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Campagnes</a>
             <a href="communication.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Com & Événements</a>
-            <a href="missions.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Missions</a>
+            <a href="missions.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Tâches</a>
             <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
             <a href="historique.html" id="navHistorique" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
             <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
@@ -46,850 +168,473 @@
     </div>
     <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
 </nav>
-<script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
+<script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(u.vieScRole){var e=document.getElementById('navVieScolaire');if(e)e.classList.remove('hidden');}if(u.role==='Administrateur'){var h=document.getElementById('navHistorique');if(h)h.classList.remove('hidden');}if(u.email){var t=document.getElementById('navTrophees');if(t){t.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var b=document.getElementById('navTropheesBadge');if(b)b.style.display='inline-block';}}}})();</script>
 
-<main class="max-w-screen-xl mx-auto p-8">
-
-    <!-- TITRE + ACTIONS -->
-    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <div>
-            <h1 class="text-3xl font-black text-[#1A4E8A]">Pilotage des Missions</h1>
-            <p id="subtitleCollab" class="text-sm text-gray-400 font-bold mt-1">Toutes les missions</p>
-        </div>
-        <div class="flex gap-3 flex-wrap">
-            <button onclick="loadMissions()" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-200 transition text-sm">🔄 Rafraîchir</button>
-            <button id="btnAspirer" onclick="aspirerMaintenant()" class="hidden bg-amber-500 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-amber-600 transition text-sm">📬 Aspirer mes mails</button>
-            <button onclick="openNouveauMission()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-blue-800 transition text-sm">+ Nouvelle mission</button>
-            <button id="btnExportCurrent" onclick="exportCSV(false)" class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition text-sm">📥 Export vue</button>
-            <button id="btnExportAll" onclick="exportCSV(true)" class="hidden bg-gray-700 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-gray-800 transition text-sm">📦 Export global</button>
-        </div>
+<main class="tk max-w-[1480px] mx-auto px-8 py-7">
+  <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+    <div>
+      <div class="tk-crumb">Espace équipe <span style="color:#cbd5e1">›</span> <span id="crumbScope">Tâches de l'équipe</span></div>
+      <h1 class="tk-h1" id="pageTitle">Tâches de l'équipe</h1>
     </div>
+    <div class="flex flex-wrap items-center gap-2" id="headActions"></div>
+  </div>
 
-    <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('')">
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
-            <p class="text-3xl font-black text-[#1A4E8A] mt-1" id="kpiTotal">0</p>
-        </div>
-        <div class="bg-amber-50 p-5 rounded-2xl shadow-sm border border-amber-200 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Attribué')">
-            <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">En cours</p>
-            <p class="text-3xl font-black text-amber-700 mt-1" id="kpiAttribue">0</p>
-        </div>
-        <div class="bg-green-50 p-5 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Clôturé')">
-            <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Clôturées</p>
-            <p class="text-3xl font-black text-green-700 mt-1" id="kpiCloture">0</p>
-        </div>
-        <div class="bg-blue-50 p-5 rounded-2xl shadow-sm border border-blue-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Annulé')">
-            <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Annulées</p>
-            <p class="text-3xl font-black text-blue-700 mt-1" id="kpiAnnule">0</p>
-        </div>
-        <div class="bg-red-50 p-5 rounded-2xl shadow-sm border border-red-100 cursor-pointer hover:shadow-md transition" onclick="filterStatut('Problématique')">
-            <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Problématiques</p>
-            <p class="text-3xl font-black text-red-700 mt-1" id="kpiProbleme">0</p>
-        </div>
+  <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+    <div class="tk-tabs flex-1 min-w-0" id="tabs"></div>
+    <div class="tk-tools pb-2">
+      <div class="tk-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg><input id="fSearch" placeholder="Rechercher une tâche" oninput="render()"></div>
+      <select id="fCat" class="tk-sel" onchange="render()"><option value="">Toutes catégories</option></select>
+      <label class="tk-chk"><input type="checkbox" id="fDone" onchange="render()"> Terminées</label>
     </div>
+  </div>
 
-    <!-- FILTRES + TOGGLE -->
-    <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Recherche</label>
-                <input type="text" id="fSearch" placeholder="Objet, collaborateur, résumé…" oninput="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
-            </div>
-            <div id="wrapCollab">
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Collaborateur</label>
-                <select id="fCollab" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-                    <option value="">Tous</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Du</label>
-                <input type="date" id="fDateDebut" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Au</label>
-                <input type="date" id="fDateFin" onchange="applyFilters()" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-            </div>
-        </div>
-        <div class="flex flex-wrap gap-2 pt-3 border-t border-gray-50 items-center">
-            <span class="text-[10px] font-black text-gray-400 uppercase mr-1">Vue :</span>
-            <button id="btnVueBoard" onclick="setView('board')" class="px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 transition">🗂 Tableau</button>
-            <button id="btnVueGrille" onclick="setView('grid')" class="px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 transition">⊞ Grille</button>
-            <button onclick="resetFilters()" class="ml-auto px-4 py-2 bg-gray-100 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Réinitialiser</button>
-        </div>
-    </div>
-
-    <!-- LOADER -->
-    <div id="loader" class="text-center py-20 font-black text-[#1A4E8A] animate-pulse">Chargement des missions...</div>
-
-    <!-- BOARD TRELLO -->
-    <div id="boardView" class="hidden">
-        <div class="flex items-center gap-3 mb-4 flex-wrap">
-            <span class="text-xs font-black text-gray-400 uppercase">Sections :</span>
-            <button onclick="addSection()" class="px-3 py-1.5 text-[11px] font-black uppercase border-2 border-dashed border-gray-300 text-gray-400 rounded-xl hover:border-[#1A4E8A] hover:text-[#1A4E8A] transition">+ Nouvelle section</button>
-            <button onclick="resetBoard()" class="px-3 py-1.5 text-[11px] font-black uppercase border-2 border-dashed border-gray-300 text-gray-400 rounded-xl hover:border-red-400 hover:text-red-400 transition ml-auto">↺ Réinitialiser le tableau</button>
-        </div>
-        <div id="boardWrap" class="board-wrap"></div>
-    </div>
-
-    <!-- GRILLE -->
-    <div id="gridView" class="hidden">
-        <div id="emptyState" class="hidden text-center py-20">
-            <p class="text-5xl mb-4">📭</p>
-            <p class="text-gray-400 font-bold text-lg">Aucune mission dans cette catégorie.</p>
-        </div>
-        <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
-    </div>
-
+  <div class="tk-card" id="board">
+    <div style="padding:26px 24px"><div class="tk-skel" style="width:34%;margin-bottom:18px"></div><div class="tk-skel" style="width:88%;margin-bottom:14px"></div><div class="tk-skel" style="width:76%;margin-bottom:14px"></div><div class="tk-skel" style="width:82%"></div></div>
+  </div>
 </main>
-
-<!-- ══ MODALE DÉTAIL ══════════════════════════════════════════════════════════ -->
-<div id="modalDetail" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-8 px-4">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div id="modalHeader" class="p-6 rounded-t-3xl flex justify-between items-start gap-4">
-            <div class="flex-1 min-w-0">
-                <p class="text-[9px] font-black uppercase tracking-widest text-white/70 mb-1" id="modalCollab">—</p>
-                <h2 class="text-lg font-black text-white leading-tight" id="modalObjet">—</h2>
-                <p class="text-xs text-white/70 mt-1" id="modalMeta">—</p>
-            </div>
-            <button onclick="closeModal()" class="text-white/60 hover:text-white text-2xl font-black flex-shrink-0">✕</button>
-        </div>
-        <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5">
-            <div id="sectionCC" class="hidden">
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Copies (CC)</p>
-                <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCC">—</p>
-            </div>
-            <div id="sectionCreateur" class="hidden">
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-1">Créé par</p>
-                <p class="text-xs text-gray-600 font-medium bg-gray-50 rounded-xl px-3 py-2" id="modalCreateur">—</p>
-            </div>
-            <!-- Priorité -->
-            <div>
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Priorité</p>
-                <div id="modalPrioritySelector" class="flex gap-2 flex-wrap"></div>
-            </div>
-            <!-- Corps -->
-            <div>
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Corps du message</p>
-                <pre class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-2xl p-4 whitespace-pre-wrap font-sans border border-gray-100 max-h-40 overflow-y-auto custom-scrollbar" id="modalCorps">—</pre>
-            </div>
-            <!-- Résumé -->
-            <div>
-                <div class="flex items-center justify-between mb-2">
-                    <p class="text-[9px] font-black text-gray-400 uppercase">Résumé / To-do</p>
-                    <button id="btnSaveResume" onclick="saveResume()" class="hidden text-[10px] font-black text-[#1A4E8A] border border-[#1A4E8A] px-3 py-1 rounded-lg hover:bg-blue-50 transition">Enregistrer</button>
-                </div>
-                <textarea id="modalResume" rows="3" placeholder="Notes personnelles, to-do, résumé de la mission…" class="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
-            </div>
-            <!-- Statut admin -->
-            <div id="sectionStatut" class="hidden">
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Modifier le statut</p>
-                <div class="flex gap-2 flex-wrap">
-                    <button onclick="changeStatut('Attribué')"      class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">🟡 Attribué</button>
-                    <button onclick="changeStatut('Clôturé')"       class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition">✅ Clôturé</button>
-                    <button onclick="changeStatut('Annulé')"        class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition">🔵 Annulé</button>
-                    <button onclick="changeStatut('Problématique')" class="px-4 py-2 rounded-xl text-[11px] font-black border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition">🔴 Problématique</button>
-                </div>
-            </div>
-            <!-- Notes -->
-            <div>
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Notes & suivi</p>
-                <div id="modalNotes" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar"></div>
-            </div>
-            <div class="pt-3 border-t border-gray-100">
-                <p class="text-[9px] font-black text-gray-400 uppercase mb-2">Ajouter une note</p>
-                <div class="flex gap-2">
-                    <textarea id="inputNote" rows="2" placeholder="Ex : Mission complétée, retour client positif…" class="flex-1 px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
-                    <button onclick="saveNote()" id="btnSaveNote" class="bg-[#1A4E8A] text-white px-5 rounded-xl font-black text-sm hover:bg-blue-800 transition self-stretch">Envoyer</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══ MODALE NOUVELLE MISSION ════════════════════════════════════════════════ -->
-<div id="modalNouveauMission" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-8 px-4">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div class="p-6 bg-[#1A4E8A] rounded-t-3xl flex justify-between items-center">
-            <h2 class="text-lg font-black text-white">Nouvelle mission</h2>
-            <button onclick="closeNouveauMission()" class="text-white/60 hover:text-white text-2xl font-black">✕</button>
-        </div>
-        <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
-            <div id="nwCollabWrap" class="hidden">
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Pour le collaborateur</label>
-                <select id="nwCollab" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-white outline-none focus:border-[#1A4E8A]">
-                    <option value="">— Moi-même —</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Objet *</label>
-                <input type="text" id="nwObjet" placeholder="Titre de la mission…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Description</label>
-                <textarea id="nwCorps" rows="3" placeholder="Détails de la mission…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-2">Priorité</label>
-                <div id="nwPrioritySelector" class="flex gap-2 flex-wrap"></div>
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Résumé / To-do initial</label>
-                <textarea id="nwResume" rows="2" placeholder="Notes initiales optionnelles…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A] resize-none"></textarea>
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">CC (emails séparés par virgule)</label>
-                <input type="text" id="nwCC" placeholder="email1@hecg.fr, email2@…" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none focus:border-[#1A4E8A]">
-            </div>
-        </div>
-        <div class="p-5 border-t border-gray-100 flex gap-3 justify-end">
-            <button onclick="closeNouveauMission()" class="px-5 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Annuler</button>
-            <button id="btnCreateMission" onclick="saveNouveauMission()" class="px-6 py-2 bg-[#1A4E8A] text-white rounded-xl font-black text-sm hover:bg-blue-800 shadow-md transition">Créer la mission</button>
-        </div>
-    </div>
-</div>
-
-<!-- ══ MODALE SECTION ════════════════════════════════════════════════════════ -->
-<div id="modalSection" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center px-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-        <h3 class="text-base font-black text-gray-800 mb-4" id="modalSectionTitle">Modifier la section</h3>
-        <input type="hidden" id="modalSectionId">
-        <div class="mb-3">
-            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Nom</label>
-            <input type="text" id="modalSectionName" class="w-full px-4 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-[#1A4E8A]">
-        </div>
-        <div class="mb-4">
-            <label class="block text-[10px] font-black text-gray-400 uppercase mb-2">Couleur</label>
-            <div class="flex gap-2 flex-wrap" id="colorPicker"></div>
-        </div>
-        <div class="flex gap-2">
-            <button id="btnDeleteSection" onclick="deleteSection()" class="hidden px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl font-black text-sm hover:bg-red-100 transition">Supprimer</button>
-            <div class="flex-1"></div>
-            <button onclick="closeModalSection()" class="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-200 transition">Annuler</button>
-            <button onclick="saveSection()" class="px-5 py-2 bg-[#1A4E8A] text-white rounded-xl font-black text-sm hover:bg-blue-800 transition">Enregistrer</button>
-        </div>
-    </div>
-</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-// Fiabilise les appels au backend Apps Script : retente automatiquement en cas
-// d'erreur transitoire (quota/concurrence) avant de remonter l'erreur à l'appelant.
-(function() {
-    var _nativeFetch = window.fetch;
-    var RETRY_DELAYS_MS = [700, 1800];
-    window.fetch = function(input, init) {
-        var url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (url.indexOf('script.google.com/macros/s/') === -1) return _nativeFetch(input, init);
-        var attempt = 0;
-        function tryOnce() {
-            return _nativeFetch(input, init).then(function(res) {
-                if (!res.ok && attempt < RETRY_DELAYS_MS.length) {
-                    var delay = RETRY_DELAYS_MS[attempt++];
-                    return new Promise(function(r) { setTimeout(r, delay); }).then(tryOnce);
-                }
-                return res;
-            }, function(err) {
-                if (attempt < RETRY_DELAYS_MS.length) {
-                    var delay = RETRY_DELAYS_MS[attempt++];
-                    return new Promise(function(r) { setTimeout(r, delay); }).then(tryOnce);
-                }
-                throw err;
-            });
-        }
-        return tryOnce();
-    };
-})();
-const user    = JSON.parse(localStorage.getItem('user') || '{}');
-const isAdmin = user.role === "Administrateur" || (user.email || "").toLowerCase() === "m.mokhtari@hecg.fr";
-const BOARD_KEY = 'hecg_board_' + (user.email || 'default');
+// Retente automatiquement en cas d'erreur transitoire Apps Script
+(function(){var nf=window.fetch,D=[700,1800];window.fetch=function(i,o){var u=typeof i==='string'?i:(i&&i.url)||'';if(u.indexOf('script.google.com/macros/s/')===-1)return nf(i,o);var a=0;function t(){return nf(i,o).then(function(r){if(!r.ok&&a<D.length){var d=D[a++];return new Promise(function(x){setTimeout(x,d)}).then(t)}return r},function(e){if(a<D.length){var d=D[a++];return new Promise(function(x){setTimeout(x,d)}).then(t)}throw e})}return t()}})();
 
-let allMissions      = [];
-let filteredMissions = [];
-let personnelList    = []; // [{ref, nom, email, role}] — chargé au démarrage pour admin
-let currentView      = 'board';
-let currentStatutFilter = '';
-let currentMissionId = null;
-let dragSrcId        = null;
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+if (!user || !user.role) window.location.href = 'index.html';
+const ME = String(user.email || '').toLowerCase();
+const IS_ADMIN = user.role === 'Administrateur' || ME === 'm.mokhtari@hecg.fr';
 
-// ── PRIORITÉ ──────────────────────────────────────────────────────────────────
-const PRIO_LABELS = {1:'Faible', 2:'Normal', 3:'Moyen', 4:'Important', 5:'Urgent'};
-const PRIO_COLORS = {1:'#9ca3af', 2:'#60a5fa', 3:'#fbbf24', 4:'#fb923c', 5:'#f87171'};
-const PRIO_BG     = {1:'#f9fafb', 2:'#eff6ff', 3:'#fefce8', 4:'#fff7ed', 5:'#fef2f2'};
-
-function buildPrioritySelector(containerId, current, onClickFn) {
-    const el = document.getElementById(containerId);
-    if (!el) return;
-    el.innerHTML = [1,2,3,4,5].map(p => {
-        const active = p === current;
-        return `<button onclick="${onClickFn}(${p})" data-p="${p}"
-            style="display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.65rem;border-radius:0.6rem;border:2px solid ${active ? PRIO_COLORS[p] : '#e5e7eb'};background:${active ? PRIO_BG[p] : '#fff'};font-size:0.72rem;font-weight:700;cursor:pointer;transition:.12s"
-            title="${PRIO_LABELS[p]}">
-            <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};display:inline-block;flex-shrink:0"></span>
-            ${PRIO_LABELS[p]}
-        </button>`;
-    }).join('');
-}
-
-// ── BOARD DATA ────────────────────────────────────────────────────────────────
-const DEFAULT_SECTIONS = [
-    {id:'default-attribue',      name:'🟡 En cours',      color:'#f59e0b', isDefault:true, defaultStatut:'Attribué'},
-    {id:'default-cloture',       name:'✅ Clôturées',      color:'#16a34a', isDefault:true, defaultStatut:'Clôturé'},
-    {id:'default-annule',        name:'🔵 Annulées',       color:'#2563eb', isDefault:true, defaultStatut:'Annulé'},
-    {id:'default-problematique', name:'🔴 Problématiques', color:'#dc2626', isDefault:true, defaultStatut:'Problématique'},
-];
-function loadBoardData() {
-    try {
-        const raw = localStorage.getItem(BOARD_KEY);
-        if (!raw) return initBoardData();
-        const d = JSON.parse(raw);
-        DEFAULT_SECTIONS.forEach(def => { if (!d.sections.find(s => s.id === def.id)) d.sections.unshift({...def}); });
-        if (!d.placements) d.placements = {};
-        return d;
-    } catch(e) { return initBoardData(); }
-}
-function initBoardData() { return {sections: DEFAULT_SECTIONS.map(s => ({...s})), placements:{}}; }
-function saveBoardData(d) { localStorage.setItem(BOARD_KEY, JSON.stringify(d)); }
-function resetBoard() {
-    if (!confirm('Réinitialiser le tableau ? Les sections personnalisées et placements seront perdus.')) return;
-    saveBoardData(initBoardData());
-    renderBoard();
-    showToast('Tableau réinitialisé.', 'info');
-}
-function defaultSectionForStatut(statut) {
-    const def = DEFAULT_SECTIONS.find(s => s.defaultStatut === statut);
-    return def ? def.id : 'default-attribue';
-}
-function getSectionIdForMission(bd, m) { return bd.placements[m.id] || defaultSectionForStatut(m.statut); }
-
-// ── STATUT STYLE ──────────────────────────────────────────────────────────────
-const STATUT_STYLE = {
-    'Attribué':      {card:'border-amber-300', badge:'bg-amber-100 text-amber-800 border border-amber-300',   header:'bg-amber-500'},
-    'Clôturé':       {card:'border-green-300', badge:'bg-green-100 text-green-800 border border-green-300',   header:'bg-green-600'},
-    'Annulé':        {card:'border-blue-300',  badge:'bg-blue-100 text-blue-800 border border-blue-300',      header:'bg-blue-600'},
-    'Problématique': {card:'border-red-400',   badge:'bg-red-100 text-red-800 border border-red-400',          header:'bg-red-600'},
+const ICO = {
+  check:'<path d="M20 6 9 17l-5-5"/>', flag:'<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>', chev:'<path d="m6 9 6 6 6-6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  down:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>', mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>', trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  up:'<path d="m18 15-6-6-6 6"/>', ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'
 };
-const STATUT_ICON = {'Attribué':'🟡','Clôturé':'✅','Annulé':'🔵','Problématique':'🔴'};
+const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${ICO[k]}</svg>`;
+const PALETTE = ['#1A4E8A','#F26522','#16a34a','#6d28d9','#0f766e','#b45309','#db2777','#0891b2','#e5484d','#475569'];
+const MTYPE = { etudiant:'Étudiant', entreprise:'Entreprise', contact:'Contact', personnel:'Équipe', classe:'Classe', offre:'Offre', autre:'Autre' };
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
-window.onload = () => {
-    if (!user || !user.role) { window.location.href = 'index.html'; return; }
-    if (user.role === "Administrateur") {
-        document.getElementById('navHistorique').classList.remove('hidden');
-        document.getElementById('btnExportAll').classList.remove('hidden');
+let S = { taches: [], equipe: [], cats: [], params: {}, mandats: [], tab: IS_ADMIN ? 'all' : ME, closed: { C: true }, loaded: false };
+
+// ── utilitaires ──────────────────────────────────────────────────────────
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const jsq = s => String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const todayISO = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const fmtD = iso => { if (!iso) return ''; const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; };
+function hue(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+function avatar(nom, email) { const ini = String(nom||email||'?').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(); const h = hue(email||nom); return `<span class="av" style="background:linear-gradient(135deg,hsl(${h},55%,52%),hsl(${(h+30)%360},55%,40%))">${esc(ini)}</span>`; }
+function personne(email) { return S.equipe.find(e => e.email === email); }
+function nomDe(t) { const p = personne(t.email); return (p && p.nom) || t.collab || t.email; }
+function cat(id) { return S.cats.find(c => c.id === id); }
+function toast(msg, err) { const t = document.createElement('div'); t.className = 'tk-toast' + (err ? ' err' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
+
+async function api(payload) {
+  payload.idAuteur = user.nom || 'Inconnu'; payload.roleAuteur = user.role || ''; payload.emailAuteur = user.email || ''; payload.sessionToken = user.sessionToken || '';
+  const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
+  const res = await r.json();
+  if (res.sessionExpired) { localStorage.removeItem('user'); alert('Session expirée. Veuillez vous reconnecter.'); location.href = 'index.html'; }
+  return res;
+}
+
+// ── chargement (cache local + rafraîchissement silencieux) ───────────────
+const CK = 'hecg_cache_taches_v1_' + ME;
+async function load(fresh) {
+  if (!fresh) {
+    try { const c = JSON.parse(sessionStorage.getItem(CK) || 'null'); if (c && Date.now() - c.ts < 120000) { Object.assign(S, c.s, { loaded: true }); renderAll(); } } catch (e) {}
+  }
+  try {
+    const [t, r] = await Promise.all([api({ action:'getTaches' }), api({ action:'getTachesRef' })]);
+    if (!t.success) { toast('Erreur : ' + t.message, true); if (/inconnue/i.test(t.message)) document.getElementById('board').innerHTML = '<div class="tk-empty">Le serveur n\'est pas encore à jour.</div>'; return; }
+    S.taches = t.data || [];
+    if (r.success) { S.equipe = r.equipe || []; S.cats = r.categories || []; S.params = r.params || {}; S.mandats = r.mandats || []; }
+    S.loaded = true;
+    try { sessionStorage.setItem(CK, JSON.stringify({ ts: Date.now(), s: { taches: S.taches, equipe: S.equipe, cats: S.cats, params: S.params } })); } catch (e) {}
+    renderAll();
+  } catch (e) { console.error(e); toast('Connexion au serveur impossible', true); }
+}
+setInterval(() => { if (document.visibilityState === 'visible' && !document.querySelector('.tk-pop,.tk-modal,.tk-drawer,.tk-inline')) load(true); }, 90000);
+
+// ── en-tête ───────────────────────────────────────────────────────────────
+function renderHead() {
+  const h = document.getElementById('headActions');
+  let html = '';
+  if (IS_ADMIN) {
+    const on = S.params.notifMail !== 'Non';
+    html += `<label class="tk-switch" title="Envoyer un mail au titulaire à chaque nouvelle tâche"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleNotif(this.checked)"><span class="tg"></span>${svg('mail',15)} Notifications mail</label>`;
+    html += `<button class="tk-btn ico" title="Paramètres : catégories" onclick="openSettings()">${svg('gear',17)}</button>`;
+    html += `<button class="tk-btn ico" title="Importer les missions envoyées par mail (#mission)" onclick="aspirer(this)">${svg('inbox',17)}</button>`;
+  }
+  html += `<button class="tk-btn ico" title="Exporter en CSV" onclick="exportCsv()">${svg('down',17)}</button>`;
+  if (IS_ADMIN) html += `<button class="tk-btn dark" onclick="openNew()">${svg('plus',16,2.4)} Ajouter une tâche</button>`;
+  h.innerHTML = html;
+  document.getElementById('pageTitle').textContent = IS_ADMIN ? 'Tâches de l\'équipe' : 'Mes tâches';
+  document.getElementById('crumbScope').textContent = IS_ADMIN ? 'Tâches de l\'équipe' : 'Mes tâches';
+  const sel = document.getElementById('fCat'), v = sel.value;
+  sel.innerHTML = '<option value="">Toutes catégories</option>' + S.cats.map(c => `<option value="${esc(c.id)}">${esc(c.nom)}</option>`).join('');
+  sel.value = v;
+}
+
+function renderTabs() {
+  const open = t => t.statut !== 'Clôturé';
+  let tabs = [];
+  if (IS_ADMIN) {
+    const emails = new Set(S.taches.map(t => t.email).filter(Boolean));
+    const membres = [...emails].map(e => ({ email: e, nom: (personne(e) || {}).nom || (S.taches.find(t => t.email === e) || {}).collab || e }))
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    tabs = membres.map(m => ({ k: m.email, l: 'Tâches de ' + m.nom.split(' ')[0], av: avatar(m.nom, m.email), n: S.taches.filter(t => t.email === m.email && open(t)).length }));
+    tabs.push({ k: 'all', l: 'Toutes les tâches', n: S.taches.filter(open).length });
+    if (!tabs.find(t => t.k === S.tab)) S.tab = 'all';
+  } else tabs = [{ k: ME, l: 'Mes tâches', n: S.taches.filter(open).length }];
+  document.getElementById('tabs').innerHTML = tabs.map(t => `<button class="tk-tab ${S.tab === t.k ? 'on' : ''}" onclick="setTab('${jsq(t.k)}')">${t.av || ''}${esc(t.l)}<span class="n">${t.n}</span></button>`).join('');
+}
+function setTab(k) { S.tab = k; renderTabs(); render(); }
+
+// ── liste ───────────────────────────────────────────────────────────────
+function visible() {
+  const q = norm(document.getElementById('fSearch').value), fc = document.getElementById('fCat').value;
+  return S.taches.filter(t => (S.tab === 'all' || t.email === S.tab)
+    && (!fc || t.categorie === fc)
+    && (!q || norm(t.titre + ' ' + t.detail + ' ' + t.mandatLabel + ' ' + t.commentaire + ' ' + nomDe(t)).includes(q)));
+}
+const sorter = (a, b) => (b.urgent - a.urgent) || ((a.echeance || '9999') < (b.echeance || '9999') ? -1 : (a.echeance || '9999') > (b.echeance || '9999') ? 1 : 0) || (a.date < b.date ? 1 : -1);
+
+function render() {
+  if (!S.loaded) return;
+  const list = visible(), today = todayISO(), showDone = document.getElementById('fDone').checked;
+  const A = list.filter(t => t.statut !== 'Clôturé' && t.echeance && t.echeance <= today).sort(sorter);
+  const B = list.filter(t => t.statut !== 'Clôturé' && (!t.echeance || t.echeance > today)).sort(sorter);
+  const C = list.filter(t => t.statut === 'Clôturé').sort((a, b) => (b.faitLe || b.date) > (a.faitLe || a.date) ? 1 : -1).slice(0, 200);
+  const head = `<div class="tk-grid tk-head"><div></div><div>Tâche</div><div class="c-who">Titulaire</div><div>Échéance</div><div style="text-align:center">Urgent</div><div class="c-cat">Catégorie</div><div class="c-mandat">Mandat lié</div><div class="c-com">Commentaire</div></div>`;
+  const zone = (k, titre, rows, tagHtml, canAdd) => {
+    const closed = S.closed[k];
+    return `<section class="tk-zone">
+      <div class="tk-zh ${closed ? 'closed' : ''}" onclick="toggleZone('${k}')"><span class="chev">${svg('chev',16,2.4)}</span><b>${titre}</b><span class="n">${rows.length}</span>${tagHtml || ''}</div>
+      ${closed ? '' : head + (rows.length ? rows.map(rowHtml).join('') : `<div class="tk-empty">Aucune tâche ici.</div>`)
+        + (canAdd && IS_ADMIN ? `<div class="tk-add" onclick="quickAdd(this,'${k}')">${svg('plus',15,2.4)} Ajouter une tâche</div>` : '')}
+    </section>`;
+  };
+  const late = A.filter(t => t.echeance < today).length;
+  document.getElementById('board').innerHTML =
+    zone('A', 'A. Tâches du jour et en retard', A, late ? `<span class="tag" style="background:#fff1f1;color:#e5484d">${late} en retard</span>` : '', true)
+    + zone('B', 'B. Tâches à venir', B, '', true)
+    + (showDone ? zone('C', 'Terminées', C, '', false) : '')
+    + `<div class="tk-foot">${list.length} tâche${list.length > 1 ? 's' : ''} · ${list.filter(t => t.statut === 'Clôturé').length} terminée(s)</div>`;
+}
+function toggleZone(k) { S.closed[k] = !S.closed[k]; render(); }
+
+function rowHtml(t) {
+  const today = todayISO(), done = t.statut === 'Clôturé';
+  const isMine = t.email === ME, canTick = IS_ADMIN || isMine, canCom = IS_ADMIN || isMine;
+  const c = cat(t.categorie);
+  const dCls = !t.echeance ? 'none' : (done ? '' : (t.echeance < today ? 'late' : (t.echeance === today ? 'today' : '')));
+  const dTxt = !t.echeance ? '—' : (t.echeance === today ? "Aujourd'hui" : fmtD(t.echeance));
+  const ed = IS_ADMIN ? 'tk-edit tk-cell' : '';
+  const id = jsq(t.id);
+  return `<div class="tk-grid tk-row ${t.urgent && !done ? 'urg' : ''} ${done ? 'done' : ''}" data-id="${esc(t.id)}">
+    <div><span class="tk-check ${done ? 'on' : ''} ${canTick ? '' : 'ro'}" title="${done ? 'Terminée' + (t.faitPar ? ' par ' + esc(t.faitPar) : '') : 'Marquer comme terminée'}" ${canTick ? `onclick="toggleDone('${id}')"` : ''}>${svg('check',13,3)}</span></div>
+    <div><span class="tt" onclick="openTask('${id}')" title="${esc(t.titre)}">${esc(t.titre || '(sans titre)')}</span>${t.detail ? `<div class="td">${esc(t.detail.replace(/\s+/g,' ').slice(0,160))}</div>` : ''}</div>
+    <div class="c-who ${ed}" ${IS_ADMIN ? `onclick="popWho(event,'${id}')"` : ''}><div class="tk-who">${avatar(nomDe(t), t.email)}<span>${esc(nomDe(t))}</span></div></div>
+    <div class="${ed}" ${IS_ADMIN ? `onclick="editDate(event,'${id}')"` : ''}><span class="tk-date ${dCls}">${dTxt}</span></div>
+    <div style="display:flex;justify-content:center"><span class="tk-flag ${t.urgent ? 'on' : ''} ${IS_ADMIN ? '' : 'ro'}" title="${t.urgent ? 'Urgent' : 'Marquer urgent'}" ${IS_ADMIN ? `onclick="toggleUrgent('${id}')"` : ''}>${svg('flag',15,2.2)}</span></div>
+    <div class="c-cat ${ed}" ${IS_ADMIN ? `onclick="popCat(event,'${id}')"` : ''}>${c ? `<span class="tk-cat" style="background:${c.couleur}17;color:${c.couleur}"><i style="background:${c.couleur}"></i>${esc(c.nom)}</span>` : '<span class="tk-ph">—</span>'}</div>
+    <div class="c-mandat ${ed}" ${IS_ADMIN ? `onclick="popMandat(event,'${id}')"` : ''}>${t.mandatLabel ? `<span class="tk-mandat" title="${esc(MTYPE[t.mandatType] || '')} · ${esc(t.mandatLabel)}">${t.mandatType === 'entreprise' || t.mandatType === 'etudiant' ? `<span class="ty">${esc((t.mandatId || '').slice(0, 10))}</span>` : `<span class="ty">${esc(MTYPE[t.mandatType] || '')}</span>`}${esc(t.mandatLabel)}</span>` : '<span class="tk-ph">—</span>'}</div>
+    <div class="c-com ${canCom ? 'tk-edit tk-cell' : ''}" ${canCom ? `onclick="editCom(event,'${id}')"` : ''}>${t.commentaire ? `<span class="tk-com" title="${esc(t.commentaire)}">${esc(t.commentaire)}</span>` : '<span class="tk-ph">—</span>'}</div>
+  </div>`;
+}
+
+function renderAll() { renderHead(); renderTabs(); render(); }
+
+// ── mises à jour ─────────────────────────────────────────────────────────
+async function patch(id, champs, msgOk) {
+  const t = S.taches.find(x => x.id === id); if (!t) return;
+  const avant = { ...t };
+  // mise à jour optimiste
+  if ('fait' in champs) { t.statut = champs.fait ? 'Clôturé' : 'Attribué'; t.faitPar = champs.fait ? (user.nom || '') : ''; t.faitLe = champs.fait ? todayISO() : ''; }
+  ['titre','detail','email','collab','echeance','urgent','categorie','mandatType','mandatId','mandatLabel','commentaire'].forEach(k => { if (k in champs) t[k] = champs[k]; });
+  if (champs.supprimer) S.taches = S.taches.filter(x => x.id !== id);
+  renderTabs(); render();
+  const row = document.querySelector(`.tk-row[data-id="${CSS.escape(id)}"]`); if (row && 'fait' in champs && champs.fait) row.classList.add('flash');
+  try {
+    const r = await api({ action:'saveTache', id, champs });
+    if (!r.success) throw new Error(r.message);
+    if (r.tache) Object.assign(t, r.tache);
+    if (msgOk) toast(msgOk);
+    if (r.mailEnvoye) toast('Mail de notification envoyé ✓');
+    sessionStorage.removeItem(CK);
+  } catch (e) {
+    Object.assign(t, avant); if (champs.supprimer) S.taches.push(t);
+    renderTabs(); render(); toast('Erreur : ' + (e.message || e), true);
+  }
+}
+function toggleDone(id) { const t = S.taches.find(x => x.id === id); patch(id, { fait: t.statut !== 'Clôturé' }); }
+function toggleUrgent(id) { const t = S.taches.find(x => x.id === id); patch(id, { urgent: !t.urgent }); }
+
+// ── popovers ─────────────────────────────────────────────────────────────
+function closePop() { document.querySelectorAll('.tk-pop').forEach(p => p.remove()); document.removeEventListener('mousedown', outside); }
+function outside(e) { const p = document.querySelector('.tk-pop'); if (p && !p.contains(e.target)) closePop(); }
+function openPop(anchor, html, minW) {
+  closePop();
+  const p = document.createElement('div'); p.className = 'tk-pop'; p.innerHTML = html; if (minW) p.style.minWidth = minW + 'px';
+  document.body.appendChild(p);
+  const r = anchor.getBoundingClientRect();
+  let x = r.left, y = r.bottom + 6;
+  if (x + p.offsetWidth > innerWidth - 10) x = innerWidth - p.offsetWidth - 10;
+  if (y + p.offsetHeight > innerHeight - 10) y = Math.max(10, r.top - p.offsetHeight - 6);
+  p.style.left = x + 'px'; p.style.top = y + 'px';
+  setTimeout(() => document.addEventListener('mousedown', outside), 0);
+  return p;
+}
+function popWho(ev, id, cb) {
+  ev.stopPropagation();
+  const list = S.equipe.filter(e => e.email);
+  const p = openPop(ev.currentTarget, `<input placeholder="Rechercher un membre" oninput="filterPop(this)">` + list.map(e =>
+    `<div class="it" data-s="${esc(norm(e.nom))}" data-email="${esc(e.email)}" data-nom="${esc(e.nom)}">${avatar(e.nom, e.email)}${esc(e.nom)}<span class="sub">${esc(e.role)}</span></div>`).join(''), 260);
+  p.querySelector('input').focus();
+  p.addEventListener('click', e => { const it = e.target.closest('.it'); if (!it) return; closePop();
+    if (cb) cb(it.dataset.email, it.dataset.nom); else patch(id, { email: it.dataset.email, collab: it.dataset.nom }, 'Tâche réattribuée à ' + it.dataset.nom); });
+}
+function filterPop(inp) { const q = norm(inp.value); inp.parentElement.querySelectorAll('.it').forEach(it => it.style.display = !q || it.dataset.s.includes(q) ? '' : 'none'); }
+function popCat(ev, id, cb) {
+  ev.stopPropagation();
+  const p = openPop(ev.currentTarget, `<div class="it" data-id="">Aucune catégorie</div>` + S.cats.map(c =>
+    `<div class="it" data-id="${esc(c.id)}"><span class="tk-cat" style="background:${c.couleur}17;color:${c.couleur}"><i style="background:${c.couleur}"></i>${esc(c.nom)}</span></div>`).join('')
+    + (IS_ADMIN ? `<div class="it" style="color:var(--mu)" data-set="1">${svg('gear',14)} Gérer les catégories…</div>` : ''), 220);
+  p.addEventListener('click', e => { const it = e.target.closest('.it'); if (!it) return; closePop();
+    if (it.dataset.set) return openSettings();
+    if (cb) cb(it.dataset.id); else patch(id, { categorie: it.dataset.id }); });
+}
+function editDate(ev, id) {
+  ev.stopPropagation();
+  const cell = ev.currentTarget, t = S.taches.find(x => x.id === id);
+  cell.innerHTML = `<input type="date" class="tk-inline" value="${esc(t.echeance)}">`;
+  const inp = cell.querySelector('input'); inp.focus(); try { inp.showPicker(); } catch (e) {}
+  let done = false;
+  const fin = () => { if (done) return; done = true; if (inp.value !== t.echeance) patch(id, { echeance: inp.value }); else render(); };
+  inp.addEventListener('change', fin); inp.addEventListener('blur', () => setTimeout(fin, 120));
+  inp.addEventListener('keydown', e => { if (e.key === 'Escape') { done = true; render(); } });
+}
+function editCom(ev, id) {
+  ev.stopPropagation();
+  const cell = ev.currentTarget, t = S.taches.find(x => x.id === id);
+  if (cell.querySelector('input')) return;
+  cell.innerHTML = `<input class="tk-inline" value="${esc(t.commentaire)}" placeholder="Ajouter un commentaire">`;
+  const inp = cell.querySelector('input'); inp.focus(); inp.select();
+  let done = false;
+  const fin = save => { if (done) return; done = true; if (save && inp.value.trim() !== t.commentaire) patch(id, { commentaire: inp.value.trim() }); else render(); };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') fin(true); if (e.key === 'Escape') fin(false); });
+  inp.addEventListener('blur', () => fin(true));
+}
+
+// Mandat : saisie des premiers caractères → suggestions (étudiants, entreprises, contacts, équipe, classes, offres)
+function searchMandats(q) {
+  q = norm(q).trim(); if (q.length < 2) return [];
+  const words = q.split(/\s+/);
+  const out = [];
+  for (const m of S.mandats) {
+    const hay = norm(m[2] + ' ' + m[1] + ' ' + m[3]);
+    if (words.every(w => hay.includes(w))) { out.push(m); if (out.length >= 40) break; }
+  }
+  const rank = m => (norm(m[2]).startsWith(q) ? 0 : 1);
+  return out.sort((a, b) => rank(a) - rank(b)).slice(0, 14);
+}
+function popMandat(ev, id, cb) {
+  ev.stopPropagation();
+  const t = id ? S.taches.find(x => x.id === id) : null;
+  const p = openPop(ev.currentTarget, `<input placeholder="Étudiant, entreprise, contact, classe…" value="${esc(t ? t.mandatLabel : '')}"><div class="res"></div>`, 340);
+  const inp = p.querySelector('input'), res = p.querySelector('.res');
+  let items = [], act = 0;
+  const choose = m => { closePop(); const v = m ? { mandatType: m[0], mandatId: m[1], mandatLabel: m[2] } : { mandatType: inp.value.trim() ? 'autre' : '', mandatId: '', mandatLabel: inp.value.trim() }; if (cb) cb(v); else patch(id, v); };
+  const draw = () => {
+    items = searchMandats(inp.value); act = 0;
+    if (!S.mandats.length) { res.innerHTML = `<div class="grp">Suggestions indisponibles</div>`; return; }
+    res.innerHTML = (items.length ? items.map((m, i) => `<div class="it ${i === act ? 'act' : ''}" data-i="${i}"><span class="mty">${esc(MTYPE[m[0]] || m[0])}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m[2])}</span><span class="sub">${esc(m[3])}</span></div>`).join('')
+      : (inp.value.trim().length >= 2 ? `<div class="grp">Aucune correspondance</div>` : `<div class="grp">Tapez au moins 2 lettres</div>`))
+      + (inp.value.trim() ? `<div class="it" data-free="1" style="color:var(--mu)">Utiliser « ${esc(inp.value.trim())} » tel quel</div>` : '')
+      + (t && t.mandatLabel ? `<div class="it" data-clear="1" style="color:var(--red)">${svg('x',13)} Retirer le mandat</div>` : '');
+  };
+  inp.addEventListener('input', draw);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); act = Math.max(0, Math.min(items.length - 1, act + (e.key === 'ArrowDown' ? 1 : -1))); res.querySelectorAll('[data-i]').forEach((el, i) => el.classList.toggle('act', i === act)); }
+    if (e.key === 'Enter') { e.preventDefault(); choose(items[act] || null); }
+    if (e.key === 'Escape') closePop();
+  });
+  res.addEventListener('click', e => { const it = e.target.closest('.it'); if (!it) return;
+    if (it.dataset.clear) { closePop(); const v = { mandatType: '', mandatId: '', mandatLabel: '' }; if (cb) cb(v); else patch(id, v); return; }
+    choose(it.dataset.free ? null : items[+it.dataset.i]); });
+  inp.focus(); inp.select(); draw();
+}
+
+// ── ajout rapide + modale ───────────────────────────────────────────────
+function quickAdd(el, zone) {
+  el.outerHTML = `<div class="tk-add" style="cursor:default">${svg('plus',15,2.4)}<input class="tk-inline" style="max-width:520px" placeholder="Nom de la tâche puis Entrée" id="qaIn"></div>`;
+  const inp = document.getElementById('qaIn'); inp.focus();
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') render();
+    if (e.key === 'Enter' && inp.value.trim()) {
+      const email = S.tab !== 'all' ? S.tab : ME;
+      const p = personne(email) || { nom: user.nom || email };
+      const ech = zone === 'A' ? todayISO() : '';
+      createTask({ titre: inp.value.trim(), email, collab: p.nom, echeance: ech });
+      inp.value = '';
     }
-    if (isAdmin) document.getElementById('btnAspirer').classList.remove('hidden');
-    if (!isAdmin) {
-        document.getElementById('wrapCollab').classList.add('hidden');
-        document.getElementById('subtitleCollab').textContent = "Mes missions";
-    }
-    setView('board', false);
-    if (isAdmin) loadPersonnelList();
-    loadMissions();
-};
-
-async function loadPersonnelList() {
-    try {
-        const res = await apiPost({action:'getPersonnelList'});
-        if (res.success) personnelList = res.data || [];
-    } catch(e) { console.error('Personnel:', e); }
+  });
+  inp.addEventListener('blur', () => setTimeout(() => { if (document.getElementById('qaIn') === inp && !inp.value) render(); }, 150));
+}
+async function createTask(champs) {
+  const tmp = { id: 'tmp' + Date.now(), date: todayISO(), statut: 'Attribué', urgent: false, categorie: '', mandatType: '', mandatId: '', mandatLabel: '', commentaire: '', detail: '', ...champs };
+  S.taches.unshift(tmp); renderTabs(); render();
+  try {
+    const r = await api({ action:'saveTache', champs });
+    if (!r.success) throw new Error(r.message);
+    Object.assign(tmp, r.tache);
+    toast(r.mailEnvoye ? 'Tâche ajoutée · mail envoyé à ' + (champs.collab || champs.email) : 'Tâche ajoutée ✓');
+    sessionStorage.removeItem(CK);
+    renderTabs(); render();
+    if (document.getElementById('qaIn')) document.getElementById('qaIn').focus();
+  } catch (e) { S.taches = S.taches.filter(x => x !== tmp); renderTabs(); render(); toast('Erreur : ' + (e.message || e), true); }
 }
 
-function setView(v, rerender) {
-    currentView = v;
-    const onBoard = v === 'board';
-    document.getElementById('boardView').classList.toggle('hidden', !onBoard);
-    document.getElementById('gridView').classList.toggle('hidden',  onBoard);
-    const active  = 'px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-[#1A4E8A] text-white bg-[#1A4E8A] transition';
-    const passive = 'px-4 py-2 rounded-xl text-[11px] font-black uppercase border-2 border-gray-300 text-gray-500 bg-white transition';
-    document.getElementById('btnVueBoard').className  = onBoard  ? active : passive;
-    document.getElementById('btnVueGrille').className = !onBoard ? active : passive;
-    if (rerender !== false) { if (onBoard) renderBoard(); else renderGrid(filteredMissions); }
+let NW = {};
+function openNew() {
+  const email = S.tab !== 'all' ? S.tab : ME;
+  const p = personne(email) || { nom: user.nom || '' };
+  NW = { email, collab: p.nom, categorie: '', mandatType: '', mandatId: '', mandatLabel: '', urgent: false };
+  const m = document.createElement('div'); m.className = 'tk-modal tk'; m.id = 'mNew';
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  m.innerHTML = `<div class="box">
+    <h2>Nouvelle tâche</h2><p class="sub">Le titulaire la verra immédiatement dans « Mes tâches »${S.params.notifMail !== 'Non' ? ' et recevra un mail' : ''}.</p>
+    <label class="tk-fl">Nom de la tâche</label><input class="tk-in" id="nwT" placeholder="Ex : Relancer l'entreprise pour le contrat d'alternance">
+    <label class="tk-fl">Détail</label><textarea class="tk-in" id="nwD" placeholder="Ce qui est attendu, liens utiles…"></textarea>
+    <div class="tk-2">
+      <div><label class="tk-fl">Titulaire</label><button class="tk-in" style="text-align:left;cursor:pointer" id="nwWho"></button></div>
+      <div><label class="tk-fl">Échéance</label><input type="date" class="tk-in" id="nwE" value="${todayISO()}"></div>
+      <div><label class="tk-fl">Catégorie</label><button class="tk-in" style="text-align:left;cursor:pointer" id="nwC"></button></div>
+      <div><label class="tk-fl">Mandat lié</label><button class="tk-in" style="text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="nwM"></button></div>
+    </div>
+    <label class="tk-fl">Commentaire</label><input class="tk-in" id="nwCom" placeholder="Facultatif">
+    <label class="tk-chk" style="margin-top:16px"><input type="checkbox" id="nwU" onchange="NW.urgent=this.checked"> <span style="color:#e5484d">${svg('flag',14,2.2)}</span> Urgente</label>
+    <div class="tk-ft"><button class="tk-btn" onclick="this.closest('.tk-modal').remove()">Annuler</button><button class="tk-btn dark" onclick="saveNew()">Ajouter la tâche</button></div>
+  </div>`;
+  document.body.appendChild(m);
+  const paint = () => {
+    document.getElementById('nwWho').innerHTML = `<span class="tk-who">${avatar(NW.collab, NW.email)}<span>${esc(NW.collab || NW.email)}</span></span>`;
+    const c = cat(NW.categorie);
+    document.getElementById('nwC').innerHTML = c ? `<span class="tk-cat" style="background:${c.couleur}17;color:${c.couleur}"><i style="background:${c.couleur}"></i>${esc(c.nom)}</span>` : '<span class="tk-ph">Choisir…</span>';
+    document.getElementById('nwM').innerHTML = NW.mandatLabel ? `<span class="tk-mandat"><span class="ty">${esc(MTYPE[NW.mandatType] || '')}</span>${esc(NW.mandatLabel)}</span>` : '<span class="tk-ph">Rechercher…</span>';
+  };
+  paint();
+  document.getElementById('nwWho').onclick = e => popWho(e, null, (email, nom) => { NW.email = email; NW.collab = nom; paint(); });
+  document.getElementById('nwC').onclick = e => popCat(e, null, id => { NW.categorie = id; paint(); });
+  document.getElementById('nwM').onclick = e => popMandat(e, null, v => { Object.assign(NW, v); paint(); });
+  document.getElementById('nwT').focus();
+  document.getElementById('nwT').addEventListener('keydown', e => { if (e.key === 'Enter') saveNew(); });
+}
+function saveNew() {
+  const titre = document.getElementById('nwT').value.trim();
+  if (!titre) { toast('Donnez un nom à la tâche', true); return; }
+  const champs = { ...NW, titre, detail: document.getElementById('nwD').value.trim(), echeance: document.getElementById('nwE').value, commentaire: document.getElementById('nwCom').value.trim() };
+  document.getElementById('mNew').remove();
+  createTask(champs);
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
-async function apiPost(payload) {
-    payload.idAuteur    = user.nom    || "Inconnu";
-    payload.roleAuteur  = user.role   || "N/A";
-    payload.emailAuteur = user.email  || "";
-    payload.sessionToken = user.sessionToken || "";
-    const r = await fetch(API_URL, {method:'POST', headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
-    const result = await r.json();
-    if (result.sessionExpired) { localStorage.removeItem('user'); alert("Session expirée. Veuillez vous reconnecter."); window.location.href = 'index.html'; }
-    return result;
-}
-
-// ── ASPIRATION ────────────────────────────────────────────────────────────────
-async function aspirerMaintenant() {
-    const btn = document.getElementById('btnAspirer'), orig = btn.textContent;
-    btn.disabled = true; btn.textContent = '⏳ En cours…';
-    try {
-        const res = await apiPost({action:'aspirerMissionsNow'});
-        if (res.success) {
-            if (res.async) {
-                // L'aspiration tourne maintenant en arrière-plan côté serveur (voir code.gs) :
-                // on ne bloque plus le doPost dessus, donc on ne connaît pas encore le résultat.
-                showToast('📬 Aspiration lancée en arrière-plan…', 'info');
-                setTimeout(() => loadMissions(true), 20000);
-            } else {
-                showToast(res.nb === 0 ? 'Aucun nouveau mail #mission.' : `✅ ${res.nb} mission(s) importée(s) !`, res.nb===0?'info':'success');
-                if (res.nb > 0) await loadMissions(true);
-            }
-        } else showToast('Erreur : ' + res.message, 'error');
-    } catch(e) { showToast('Erreur réseau.', 'error'); }
-    btn.disabled = false; btn.textContent = orig;
-}
-
-function showToast(msg, type) {
-    const colors = {success:'bg-green-600', error:'bg-red-600', info:'bg-gray-600'};
-    const t = document.createElement('div');
-    t.className = `fixed bottom-6 right-6 z-[100] ${colors[type]||'bg-gray-700'} text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold`;
-    t.textContent = msg; document.body.appendChild(t);
-    setTimeout(() => t.remove(), 4000);
-}
-
-// ── CHARGEMENT (cache local + rafraîchissement silencieux) ────────────────────
-const MISSIONS_CACHE_KEY = 'hecg_cache_missions_v1';
-const MISSIONS_CACHE_TTL_MS = 90 * 1000;
-
-function _applyMissionsPayload(res) {
-    allMissions = res.data || [];
-    buildCollabFilter(); updateKPIs(); applyFilters();
-}
-
-function _persistMissionsCache() {
-    try {
-        const existing = JSON.parse(sessionStorage.getItem(MISSIONS_CACHE_KEY) || 'null');
-        const ts = existing ? existing.ts : Date.now();
-        sessionStorage.setItem(MISSIONS_CACHE_KEY, JSON.stringify({ ts, res: { success: true, data: allMissions } }));
-    } catch(e) {}
-}
-
-async function _fetchMissionsFresh() {
-    const res = await apiPost({action:'getMissions'});
-    if (res.success) {
-        try { sessionStorage.setItem(MISSIONS_CACHE_KEY, JSON.stringify({ ts: Date.now(), res })); } catch(eStore) {}
-        _applyMissionsPayload(res);
-    }
-    return res;
-}
-
-async function loadMissions(forceRefresh) {
-    if (!forceRefresh) {
-        try {
-            const cached = JSON.parse(sessionStorage.getItem(MISSIONS_CACHE_KEY) || 'null');
-            if (cached && (Date.now() - cached.ts) < MISSIONS_CACHE_TTL_MS) {
-                _applyMissionsPayload(cached.res);
-                document.getElementById('loader').classList.add('hidden');
-                if (currentView === 'board') document.getElementById('boardView').classList.remove('hidden');
-                else document.getElementById('gridView').classList.remove('hidden');
-                _fetchMissionsFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
-                return;
-            }
-        } catch(eCache) {}
-    }
-    document.getElementById('loader').classList.remove('hidden');
-    document.getElementById('boardView').classList.add('hidden');
-    document.getElementById('gridView').classList.add('hidden');
-    try {
-        await _fetchMissionsFresh();
-    } catch(e) { console.error(e); }
-    document.getElementById('loader').classList.add('hidden');
-    if (currentView === 'board') document.getElementById('boardView').classList.remove('hidden');
-    else document.getElementById('gridView').classList.remove('hidden');
-}
-
-// Rafraîchissement périodique silencieux tant que l'onglet est visible
-setInterval(function() {
-    if (document.visibilityState === 'visible') {
-        _fetchMissionsFresh().catch(function(e){ console.error(e); });
-    }
-}, MISSIONS_CACHE_TTL_MS);
-
-// ── FILTRES ───────────────────────────────────────────────────────────────────
-function buildCollabFilter() {
-    const collabs = [...new Set(allMissions.map(m => m.collab).filter(Boolean))].sort();
-    document.getElementById('fCollab').innerHTML = '<option value="">Tous</option>' + collabs.map(c => `<option value="${c}">${c}</option>`).join('');
-}
-function filterStatut(s) { currentStatutFilter = s; applyFilters(); }
-function applyFilters() {
-    const search = document.getElementById('fSearch').value.toLowerCase();
-    const collab = document.getElementById('fCollab').value;
-    const dd     = document.getElementById('fDateDebut').value;
-    const df     = document.getElementById('fDateFin').value;
-    const base   = currentStatutFilter ? allMissions.filter(m => m.statut === currentStatutFilter) : allMissions;
-    filteredMissions = base.filter(m => {
-        const txt = (m.objet+' '+m.collab+' '+m.corps+' '+m.notes+' '+(m.resume||'')).toLowerCase();
-        if (search && !txt.includes(search)) return false;
-        if (collab && m.collab !== collab) return false;
-        if (dd || df) {
-            const p = (m.date||'').split('/');
-            if (p.length === 3) {
-                const d = new Date(p[2], p[1]-1, p[0]);
-                if (dd && d < new Date(dd)) return false;
-                if (df && d > new Date(df+'T23:59:59')) return false;
-            }
-        }
-        return true;
-    });
-    if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
-    updateKPIs();
-}
-function resetFilters() {
-    document.getElementById('fSearch').value = '';
-    document.getElementById('fCollab').value = '';
-    document.getElementById('fDateDebut').value = '';
-    document.getElementById('fDateFin').value = '';
-    currentStatutFilter = '';
-    applyFilters();
-}
-
-// ── KPIs ──────────────────────────────────────────────────────────────────────
-function updateKPIs() {
-    const b = filteredMissions;
-    document.getElementById('kpiTotal').textContent    = b.length;
-    document.getElementById('kpiAttribue').textContent = b.filter(m => m.statut==='Attribué').length;
-    document.getElementById('kpiCloture').textContent  = b.filter(m => m.statut==='Clôturé').length;
-    document.getElementById('kpiAnnule').textContent   = b.filter(m => m.statut==='Annulé').length;
-    document.getElementById('kpiProbleme').textContent = b.filter(m => m.statut==='Problématique').length;
-}
-
-// ══ BOARD TRELLO ══════════════════════════════════════════════════════════════
-function renderBoard() {
-    const bd   = loadBoardData();
-    const wrap = document.getElementById('boardWrap');
-    if (!wrap) return;
-    wrap.innerHTML = bd.sections.map(sect => {
-        const cards = filteredMissions.filter(m => getSectionIdForMission(bd, m) === sect.id);
-        const cardsHtml = cards.length
-            ? cards.map((m,i) => renderBoardCard(m, i)).join('')
-            : '<div style="font-size:0.72rem;color:#cbd5e1;text-align:center;padding:1rem 0">Aucune carte</div>';
-        return `
-        <div class="board-col" id="col_${sect.id}" data-section-id="${sect.id}"
-             ondragover="onDragOver(event)" ondrop="onDrop(event,'${sect.id}')" ondragleave="onDragLeave(event)">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;padding:0 0.25rem">
-                <div style="display:flex;align-items:center;gap:0.4rem">
-                    <span style="width:11px;height:11px;border-radius:50%;background:${sect.color};display:inline-block;flex-shrink:0"></span>
-                    <span style="font-size:0.78rem;font-weight:900;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${escHtml(sect.name)}</span>
-                    <span style="font-size:0.7rem;font-weight:900;color:#9ca3af">${cards.length}</span>
-                </div>
-                <button onclick="openModalSection('${sect.id}')" style="color:#d1d5db;font-size:0.85rem;font-weight:900;background:none;border:none;cursor:pointer;padding:0.1rem 0.3rem;border-radius:0.3rem" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='#d1d5db'" title="Modifier">✏</button>
-            </div>
-            <div class="board-col-body" id="colBody_${sect.id}" style="display:flex;flex-direction:column;gap:0.5rem">${cardsHtml}</div>
-        </div>`;
-    }).join('');
-}
-
-function renderBoardCard(m, idx) {
-    const p  = m.priorite || 3;
-    const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
-    const nb = m.notes ? m.notes.split('\n').filter(l => l.trim().startsWith('[')).length : 0;
-    const resumePreview = m.resume ? escHtml(m.resume.substring(0,65)) + (m.resume.length>65?'…':'') : '';
-    return `
-    <div class="card-mission card-anim bg-white border-l-4 rounded-xl p-3 select-none"
-         style="animation-delay:${idx*15}ms;border-left-color:${PRIO_COLORS[p]};border-top:1px solid #f1f5f9;border-right:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9"
-         draggable="true" ondragstart="onDragStart(event,'${m.id}')" ondragend="onDragEnd(event)"
-         onclick="openModal('${m.id}')">
-        <div style="display:flex;align-items:flex-start;gap:0.4rem;margin-bottom:0.35rem">
-            <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};margin-top:3px;flex-shrink:0" title="${PRIO_LABELS[p]}"></span>
-            <span style="font-size:0.78rem;font-weight:900;color:#1f2937;line-height:1.3;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(m.objet)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:${resumePreview?'0.35rem':'0'}">
-            <span style="width:22px;height:22px;border-radius:50%;background:#1A4E8A;color:#fff;font-size:0.65rem;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${initials(m.collab)}</span>
-            <span style="font-size:0.72rem;font-weight:700;color:#6b7280;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.collab)}</span>
-            <span style="font-size:0.65rem">${STATUT_ICON[m.statut]||''}</span>
-        </div>
-        ${resumePreview ? `<div style="font-size:0.68rem;color:#9ca3af;background:#f9fafb;border-radius:0.4rem;padding:0.2rem 0.4rem;line-height:1.4">${resumePreview}</div>` : ''}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.3rem">
-            <span style="font-size:0.65rem;color:#d1d5db">${m.date}</span>
-            ${nb ? `<span style="font-size:0.65rem;color:#9ca3af;font-weight:900">💬 ${nb}</span>` : ''}
-        </div>
+// ── vue détaillée (clic sur une tâche) ──────────────────────────────────
+function openTask(id) {
+  const t = S.taches.find(x => x.id === id); if (!t) return;
+  closeTask();
+  const canEdit = IS_ADMIN, mine = t.email === ME;
+  const c = cat(t.categorie);
+  const bd = document.createElement('div'); bd.className = 'tk-backdrop'; bd.onclick = closeTask;
+  const d = document.createElement('aside'); d.className = 'tk-drawer tk';
+  const notes = String(t.notes || '').split('\n').filter(Boolean);
+  const lien = t.mandatType === 'etudiant' ? `dossier.html?id=${encodeURIComponent(t.mandatId)}` : (t.mandatType === 'entreprise' ? `dossier_partenaire.html?id=${encodeURIComponent(t.mandatId)}` : '');
+  d.innerHTML = `
+    <div class="hd"><span class="tk-check ${t.statut === 'Clôturé' ? 'on' : ''} ${IS_ADMIN || mine ? '' : 'ro'}" ${IS_ADMIN || mine ? `onclick="toggleDone('${jsq(id)}');openTask('${jsq(id)}')"` : ''}>${svg('check',13,3)}</span>
+      <span style="font-size:12.5px;font-weight:600;color:var(--mu)">${t.statut === 'Clôturé' ? 'Terminée' + (t.faitPar ? ' par ' + esc(t.faitPar) : '') + (t.faitLe ? ' le ' + fmtD(t.faitLe) : '') : 'À faire'}</span>
+      <span style="flex:1"></span>
+      ${canEdit ? `<button class="tk-btn sm" onclick="delTask('${jsq(id)}')" title="Supprimer">${svg('trash',14)}</button>` : ''}
+      <button class="tk-btn ico sm" style="width:32px" onclick="closeTask()">${svg('x',16)}</button></div>
+    <div class="bd">
+      ${canEdit ? `<input class="tk-in" id="dT" style="font-size:19px;font-weight:800;border-color:transparent;padding-left:0" value="${esc(t.titre)}">` : `<h2 style="font-size:20px;font-weight:800;color:var(--ink);margin:0">${esc(t.titre)}</h2>`}
+      ${canEdit ? `<textarea class="tk-in" id="dD" style="margin-top:8px;min-height:150px" placeholder="Détail de la tâche">${esc(t.detail)}</textarea>` : `<p style="white-space:pre-line;font-size:14px;line-height:1.6;margin-top:10px">${esc(t.detail) || '<span class="tk-ph">Pas de détail</span>'}</p>`}
+      <dl class="tk-meta">
+        <dt>Titulaire</dt><dd><span class="tk-who">${avatar(nomDe(t), t.email)}<span>${esc(nomDe(t))}</span></span></dd>
+        <dt>Échéance</dt><dd>${t.echeance ? fmtD(t.echeance) : '<span class="tk-ph">—</span>'}${t.urgent ? ` <span style="color:#e5484d;font-weight:700;margin-left:8px">${svg('flag',13,2.2)} Urgent</span>` : ''}</dd>
+        <dt>Catégorie</dt><dd>${c ? `<span class="tk-cat" style="background:${c.couleur}17;color:${c.couleur}"><i style="background:${c.couleur}"></i>${esc(c.nom)}</span>` : '<span class="tk-ph">—</span>'}</dd>
+        <dt>Mandat lié</dt><dd>${t.mandatLabel ? `<span class="tk-mandat"><span class="ty">${esc(MTYPE[t.mandatType] || '')}</span>${esc(t.mandatLabel)}</span>${lien ? ` <a href="${lien}" target="_blank" style="color:var(--b);margin-left:6px" title="Ouvrir la fiche">${svg('ext',14)}</a>` : ''}` : '<span class="tk-ph">—</span>'}</dd>
+        <dt>Créée le</dt><dd>${fmtD(t.date)}</dd>
+      </dl>
+      <label class="tk-fl">Commentaire</label>
+      ${IS_ADMIN || mine ? `<textarea class="tk-in" id="dC" style="min-height:70px">${esc(t.commentaire)}</textarea>` : `<p>${esc(t.commentaire) || '<span class="tk-ph">—</span>'}</p>`}
+      ${notes.length ? `<div class="tk-notes"><label class="tk-fl" style="margin-top:0">Historique</label>${notes.map(n => `<div class="tk-note">${esc(n)}</div>`).join('')}</div>` : ''}
+      ${IS_ADMIN || mine ? `<div class="tk-ft"><button class="tk-btn dark" onclick="saveDrawer('${jsq(id)}')">Enregistrer</button></div>` : ''}
     </div>`;
+  document.body.append(bd, d);
+}
+function closeTask() { document.querySelectorAll('.tk-drawer,.tk-backdrop').forEach(e => e.remove()); }
+function saveDrawer(id) {
+  const t = S.taches.find(x => x.id === id); const champs = {};
+  const T = document.getElementById('dT'), D = document.getElementById('dD'), C = document.getElementById('dC');
+  if (T && T.value.trim() !== t.titre) champs.titre = T.value.trim();
+  if (D && D.value !== t.detail) champs.detail = D.value;
+  if (C && C.value.trim() !== t.commentaire) champs.commentaire = C.value.trim();
+  closeTask();
+  if (Object.keys(champs).length) patch(id, champs, 'Tâche enregistrée ✓');
+}
+function delTask(id) { if (!confirm('Supprimer cette tâche ? Elle sera archivée (statut « Annulé ») dans la feuille MISSIONS.')) return; closeTask(); patch(id, { supprimer: true }, 'Tâche supprimée'); }
+
+// ── paramètres (admin) ───────────────────────────────────────────────────
+let CATS = [];
+function openSettings() {
+  CATS = S.cats.map(c => ({ ...c }));
+  const m = document.createElement('div'); m.className = 'tk-modal tk'; m.id = 'mSet';
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  m.innerHTML = `<div class="box"><h2>Paramètres des tâches</h2><p class="sub">Vos catégories et leurs couleurs. Elles apparaissent pour toute l'équipe.</p>
+    <label class="tk-fl">Catégories</label><div id="catList"></div>
+    <button class="tk-btn sm" onclick="CATS.push({id:'',nom:'',couleur:PALETTE[CATS.length%PALETTE.length]});drawCats(true)">${svg('plus',14,2.4)} Ajouter une catégorie</button>
+    <div class="tk-ft"><button class="tk-btn" onclick="this.closest('.tk-modal').remove()">Annuler</button><button class="tk-btn dark" onclick="saveSettings()">Enregistrer</button></div></div>`;
+  document.body.appendChild(m); drawCats();
+}
+function drawCats(focusLast) {
+  document.getElementById('catList').innerHTML = CATS.map((c, i) => `<div class="tk-catrow">
+    <span class="tk-cat" style="background:${c.couleur}17;color:${c.couleur};min-width:14px;padding:4px 6px"><i style="background:${c.couleur}"></i></span>
+    <input value="${esc(c.nom)}" placeholder="Nom de la catégorie" oninput="CATS[${i}].nom=this.value">
+    <div class="tk-dots">${PALETTE.map(p => `<span class="tk-dot ${p === c.couleur ? 'on' : ''}" style="background:${p}" onclick="CATS[${i}].couleur='${p}';drawCats()"></span>`).join('')}</div>
+    <button class="tk-mini" title="Monter" onclick="if(${i}>0){CATS.splice(${i - 1},0,CATS.splice(${i},1)[0]);drawCats()}">${svg('up',13)}</button>
+    <button class="tk-mini" title="Supprimer" onclick="CATS.splice(${i},1);drawCats()">${svg('trash',13)}</button></div>`).join('') || '<p class="tk-ph" style="margin-bottom:10px">Aucune catégorie.</p>';
+  if (focusLast) { const ins = document.querySelectorAll('#catList input'); if (ins.length) ins[ins.length - 1].focus(); }
+}
+async function saveSettings() {
+  const cats = CATS.filter(c => c.nom.trim()).map((c, i) => ({ ...c, id: c.id || ('CAT' + Date.now() + i), nom: c.nom.trim() }));
+  const r = await api({ action:'saveTachesParams', categories: cats });
+  if (!r.success) { toast('Erreur : ' + r.message, true); return; }
+  S.cats = cats; document.getElementById('mSet').remove(); sessionStorage.removeItem(CK); renderAll(); toast('Catégories enregistrées ✓');
+}
+async function toggleNotif(on) {
+  S.params.notifMail = on ? 'Oui' : 'Non';
+  const r = await api({ action:'saveTachesParams', notifMail: on });
+  if (!r.success) { toast('Erreur : ' + r.message, true); return; }
+  sessionStorage.removeItem(CK);
+  toast(on ? 'Notifications mail activées' : 'Notifications mail désactivées');
 }
 
-// ── DRAG & DROP ───────────────────────────────────────────────────────────────
-function onDragStart(e, id) {
-    dragSrcId = id; e.dataTransfer.effectAllowed = 'move';
-    e.currentTarget.classList.add('dragging');
+// ── divers ──────────────────────────────────────────────────────────────
+async function aspirer(btn) {
+  btn.disabled = true;
+  try { const r = await api({ action:'aspirerMissionsNow' }); toast(r.success ? (r.async ? 'Import des mails #mission lancé…' : (r.nb ? r.nb + ' tâche(s) importée(s)' : 'Aucun nouveau mail #mission')) : 'Erreur : ' + r.message, !r.success); if (r.success) setTimeout(() => load(true), r.async ? 20000 : 500); }
+  finally { btn.disabled = false; }
 }
-function onDragEnd(e) {
-    e.currentTarget.classList.remove('dragging');
-    document.querySelectorAll('.board-col').forEach(c => c.classList.remove('drag-over'));
+function exportCsv() {
+  const rows = visible();
+  const L = a => a.map(v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(';');
+  const csv = [L(['Terminée','Tâche','Détail','Titulaire','Échéance','Urgent','Catégorie','Mandat lié','Commentaire','Créée le'])]
+    .concat(rows.map(t => L([t.statut === 'Clôturé' ? 'Oui' : 'Non', t.titre, t.detail, nomDe(t), fmtD(t.echeance), t.urgent ? 'Oui' : '', (cat(t.categorie) || {}).nom || '', t.mandatLabel, t.commentaire, fmtD(t.date)]))).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8' })); a.download = 'Taches_HECG_' + todayISO() + '.csv'; a.click();
 }
-function onDragOver(e) {
-    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-    e.currentTarget.classList.add('drag-over');
-}
-function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
-function onDrop(e, sectionId) {
-    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
-    if (!dragSrcId) return;
-    const bd = loadBoardData();
-    bd.placements[dragSrcId] = sectionId;
-    saveBoardData(bd); dragSrcId = null; renderBoard();
-}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closePop(); closeTask(); } });
 
-// ── SECTION MODAL ─────────────────────────────────────────────────────────────
-const SECTION_COLORS = ['#f59e0b','#16a34a','#2563eb','#dc2626','#8b5cf6','#ec4899','#0891b2','#65a30d','#f97316','#0f172a','#6b7280','#1A4E8A'];
-let _sectionEditColor = '';
-
-function openModalSection(sectId) {
-    const bd = loadBoardData();
-    const sect = bd.sections.find(s => s.id === sectId);
-    if (!sect) return;
-    _sectionEditColor = sect.color;
-    document.getElementById('modalSectionId').value    = sectId;
-    document.getElementById('modalSectionName').value  = sect.name;
-    document.getElementById('modalSectionTitle').textContent = sect.isDefault ? 'Renommer la section' : 'Modifier la section';
-    document.getElementById('colorPicker').innerHTML = SECTION_COLORS.map(c => `
-        <button onclick="selectSectionColor('${c}')" data-col="${c}"
-            style="width:26px;height:26px;border-radius:50%;background:${c};border:3px solid ${c===sect.color?'#1f2937':'transparent'};cursor:pointer;transition:.1s"
-            id="cpBtn_${c.replace('#','')}"></button>`).join('');
-    document.getElementById('btnDeleteSection').classList.toggle('hidden', !!sect.isDefault);
-    document.getElementById('modalSection').classList.remove('hidden');
-}
-function selectSectionColor(c) {
-    _sectionEditColor = c;
-    document.querySelectorAll('#colorPicker button').forEach(b => {
-        b.style.border = `3px solid ${b.dataset.col === c ? '#1f2937' : 'transparent'}`;
-    });
-}
-function closeModalSection() { document.getElementById('modalSection').classList.add('hidden'); }
-function saveSection() {
-    const sectId = document.getElementById('modalSectionId').value;
-    const name   = document.getElementById('modalSectionName').value.trim();
-    if (!name) { showToast('Saisissez un nom.', 'error'); return; }
-    const bd   = loadBoardData();
-    const sect = bd.sections.find(s => s.id === sectId);
-    if (sect) { sect.name = name; sect.color = _sectionEditColor || sect.color; }
-    saveBoardData(bd); closeModalSection(); renderBoard();
-}
-function deleteSection() {
-    const sectId = document.getElementById('modalSectionId').value;
-    if (!confirm('Supprimer cette section ? Les cartes retourneront à leur section par défaut.')) return;
-    const bd = loadBoardData();
-    bd.sections = bd.sections.filter(s => s.id !== sectId);
-    Object.keys(bd.placements).forEach(k => { if (bd.placements[k] === sectId) delete bd.placements[k]; });
-    saveBoardData(bd); closeModalSection(); renderBoard();
-}
-function addSection() {
-    const name = prompt('Nom de la nouvelle section :');
-    if (!name || !name.trim()) return;
-    const bd = loadBoardData();
-    bd.sections.push({id:'sect_'+Date.now(), name:name.trim(), color:'#6b7280', isDefault:false});
-    saveBoardData(bd); renderBoard();
-}
-
-// ── GRILLE ────────────────────────────────────────────────────────────────────
-function renderGrid(missions) {
-    const grid = document.getElementById('cardsGrid'), empty = document.getElementById('emptyState');
-    if (!missions.length) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
-    empty.classList.add('hidden');
-    grid.innerHTML = missions.map((m, idx) => {
-        const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
-        const p  = m.priorite || 3;
-        const preview = m.corps.replace(/\n/g,' ').substring(0,120) + (m.corps.length>120?'…':'');
-        const nb = m.notes ? m.notes.split('\n').filter(l=>l.trim().startsWith('[')).length : 0;
-        return `
-        <div class="card-grid border-2 ${st.card} bg-white rounded-3xl p-5 cursor-pointer card-anim"
-             style="animation-delay:${idx*30}ms;border-left:4px solid ${PRIO_COLORS[p]}"
-             onclick="openModal('${m.id}')">
-            <div class="flex justify-between items-start mb-3 gap-2">
-                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">${m.date} ${m.heure?'· '+m.heure:''}</span>
-                <span class="text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${st.badge} flex-shrink-0">${STATUT_ICON[m.statut]||''} ${m.statut}</span>
-            </div>
-            <h3 class="font-black text-gray-800 text-sm leading-snug mb-2 line-clamp-2">${escHtml(m.objet)}</h3>
-            <div class="flex items-center gap-2 mb-3">
-                <span class="inline-flex w-7 h-7 rounded-full bg-[#1A4E8A] text-white text-[10px] font-black items-center justify-center flex-shrink-0">${initials(m.collab)}</span>
-                <span class="text-xs font-bold text-gray-600 truncate flex-1">${escHtml(m.collab)}</span>
-                <span style="width:8px;height:8px;border-radius:50%;background:${PRIO_COLORS[p]};display:inline-block" title="${PRIO_LABELS[p]}"></span>
-            </div>
-            <p class="text-xs text-gray-400 leading-relaxed line-clamp-2">${escHtml(preview)}</p>
-            ${nb ? `<p class="mt-3 text-[9px] text-gray-400 font-black">💬 ${nb}</p>` : ''}
-        </div>`;
-    }).join('');
-}
-
-// ── MODALE DÉTAIL ─────────────────────────────────────────────────────────────
-let _modalPrio = 3;
-
-function openModal(id) {
-    const m = allMissions.find(x => x.id === id);
-    if (!m) return;
-    currentMissionId = id;
-    _modalPrio = m.priorite || 3;
-    const st = STATUT_STYLE[m.statut] || STATUT_STYLE['Attribué'];
-    document.getElementById('modalHeader').className = `p-6 rounded-t-3xl flex justify-between items-start gap-4 ${st.header}`;
-    document.getElementById('modalCollab').textContent = m.collab || '—';
-    document.getElementById('modalObjet').textContent  = m.objet  || '(Sans objet)';
-    document.getElementById('modalMeta').textContent   = `📅 ${m.date} ${m.heure?'· '+m.heure:''} ${m.dateMaj?'· Maj '+m.dateMaj:''}`;
-    if (m.cc&&m.cc.trim()) { document.getElementById('modalCC').textContent=m.cc; document.getElementById('sectionCC').classList.remove('hidden'); }
-    else document.getElementById('sectionCC').classList.add('hidden');
-    if (m.emailCreateur&&m.emailCreateur.trim()) { document.getElementById('modalCreateur').textContent=m.emailCreateur; document.getElementById('sectionCreateur').classList.remove('hidden'); }
-    else document.getElementById('sectionCreateur').classList.add('hidden');
-    document.getElementById('modalCorps').textContent = m.corps || '(Aucun contenu)';
-    buildPrioritySelector('modalPrioritySelector', _modalPrio, 'selectModalPrio');
-    const canEdit = isAdmin || String(m.email||'').toLowerCase() === String(user.email||'').toLowerCase();
-    const ta = document.getElementById('modalResume');
-    ta.value    = m.resume || '';
-    ta.readOnly = !canEdit;
-    ta.className = `w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-medium bg-gray-50 outline-none resize-none ${canEdit?'focus:border-[#1A4E8A]':'text-gray-400'}`;
-    document.getElementById('btnSaveResume').classList.toggle('hidden', !canEdit);
-    const isCreatorOfMission = m.emailCreateur && m.emailCreateur.toLowerCase() === (user.email||'').toLowerCase();
-    document.getElementById('sectionStatut').classList.toggle('hidden', !isAdmin && !isCreatorOfMission);
-    renderNotes(m.notes);
-    document.getElementById('inputNote').value = '';
-    document.getElementById('modalDetail').classList.remove('hidden');
-}
-
-function selectModalPrio(p) {
-    _modalPrio = p;
-    buildPrioritySelector('modalPrioritySelector', p, 'selectModalPrio');
-    if (!currentMissionId) return;
-    apiPost({action:'updateMissionField', id:currentMissionId, field:'priorite', val:p}).then(r => {
-        if (r.success) {
-            const m = allMissions.find(x => x.id === currentMissionId);
-            if (m) m.priorite = p;
-            if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
-        }
-    });
-}
-
-async function saveResume() {
-    const val = document.getElementById('modalResume').value;
-    if (!currentMissionId) return;
-    const r = await apiPost({action:'updateMissionField', id:currentMissionId, field:'resume', val});
-    if (r.success) {
-        const m = allMissions.find(x => x.id === currentMissionId);
-        if (m) m.resume = val;
-        showToast('Résumé enregistré ✓', 'success');
-        if (currentView === 'board') renderBoard(); else renderGrid(filteredMissions);
-    } else showToast('Erreur : ' + r.message, 'error');
-}
-
-function renderNotes(raw) {
-    const c = document.getElementById('modalNotes');
-    if (!raw||!raw.trim()) { c.innerHTML='<p class="text-xs text-gray-300 italic">Aucune note pour l\'instant.</p>'; return; }
-    const lines = raw.split('\n').filter(l=>l.trim());
-    c.innerHTML = lines.map(l => {
-        const stamped = l.trim().startsWith('[');
-        return `<div class="text-xs ${stamped?'bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-gray-700':'text-gray-500 italic px-1'}">${escHtml(l)}</div>`;
-    }).join('');
-    c.scrollTop = c.scrollHeight;
-}
-
-function closeModal() { document.getElementById('modalDetail').classList.add('hidden'); currentMissionId = null; }
-document.getElementById('modalDetail').addEventListener('click', e => { if (e.target===document.getElementById('modalDetail')) closeModal(); });
-
-// ── STATUT (mise à jour optimiste : affichage instantané, écriture en tâche de fond) ──
-async function changeStatut(s) {
-    if (!currentMissionId) return;
-    const id = currentMissionId;
-    const m = allMissions.find(x => x.id === id);
-    const backupStatut = m ? m.statut : null;
-    const backupDateMaj = m ? m.dateMaj : null;
-
-    if (m) { m.statut = s; m.dateMaj = new Date().toLocaleDateString('fr-FR'); }
-    closeModal(); updateKPIs(); applyFilters(); _persistMissionsCache();
-
-    const res = await apiPost({action:'updateMissionStatus', id, statut:s});
-    if (!res.success) {
-        if (m) { m.statut = backupStatut; m.dateMaj = backupDateMaj; }
-        updateKPIs(); applyFilters(); _persistMissionsCache();
-        showToast('Erreur : ' + res.message, 'error');
-    }
-}
-
-// ── NOTE ──────────────────────────────────────────────────────────────────────
-async function saveNote() {
-    const note = document.getElementById('inputNote').value.trim();
-    if (!note||!currentMissionId) return;
-    const btn = document.getElementById('btnSaveNote');
-    btn.disabled = true; btn.textContent = '…';
-    const res = await apiPost({action:'addMissionNote', id:currentMissionId, note});
-    btn.disabled = false; btn.textContent = 'Envoyer';
-    if (res.success) {
-        const m = allMissions.find(x => x.id === currentMissionId);
-        if (m) {
-            const now = new Date().toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-            const ligne = `[${now} — ${user.nom||'?'}] ${note}`;
-            m.notes = m.notes ? m.notes+'\n'+ligne : ligne;
-            m.dateMaj = new Date().toLocaleDateString('fr-FR');
-            renderNotes(m.notes);
-        }
-        document.getElementById('inputNote').value = '';
-    } else showToast('Erreur : ' + res.message, 'error');
-}
-
-// ── NOUVELLE MISSION ──────────────────────────────────────────────────────────
-let _nwPrio = 3;
-
-function openNouveauMission() {
-    _nwPrio = 3;
-    ['nwObjet','nwCorps','nwResume','nwCC'].forEach(id => document.getElementById(id).value='');
-    buildPrioritySelector('nwPrioritySelector', _nwPrio, 'selectNwPrio');
-    if (isAdmin) {
-        document.getElementById('nwCollabWrap').classList.remove('hidden');
-        const list = personnelList.length ? personnelList : [];
-        document.getElementById('nwCollab').innerHTML =
-            '<option value="">— Moi-même —</option>' +
-            list.map(p => `<option value="${p.ref}" data-email="${p.email}" data-nom="${p.nom}">${p.nom}${p.email?' ('+p.email+')':''}</option>`).join('');
-    } else { document.getElementById('nwCollabWrap').classList.add('hidden'); }
-    document.getElementById('modalNouveauMission').classList.remove('hidden');
-    document.getElementById('nwObjet').focus();
-}
-function selectNwPrio(p) { _nwPrio = p; buildPrioritySelector('nwPrioritySelector', p, 'selectNwPrio'); }
-function closeNouveauMission() { document.getElementById('modalNouveauMission').classList.add('hidden'); }
-document.getElementById('modalNouveauMission').addEventListener('click', e => { if(e.target===document.getElementById('modalNouveauMission')) closeNouveauMission(); });
-
-async function saveNouveauMission() {
-    const objet = document.getElementById('nwObjet').value.trim();
-    if (!objet) { showToast('Saisissez un objet.', 'error'); return; }
-    const payload = {
-        action: 'addMission',
-        objet,
-        corps:    document.getElementById('nwCorps').value.trim(),
-        resume:   document.getElementById('nwResume').value.trim(),
-        cc:       document.getElementById('nwCC').value.trim(),
-        priorite: _nwPrio,
-    };
-    if (isAdmin) {
-        const sel = document.getElementById('nwCollab');
-        if (sel.value) {
-            const opt = sel.options[sel.selectedIndex];
-            payload.emailDest = opt.dataset.email || '';
-            payload.nomCollab = opt.dataset.nom   || sel.options[sel.selectedIndex].text.split(' (')[0];
-        }
-    }
-    const btn = document.getElementById('btnCreateMission');
-    btn.disabled = true; btn.textContent = '…';
-    const res = await apiPost(payload);
-    btn.disabled = false; btn.textContent = 'Créer la mission';
-    if (res.success) { showToast('Mission créée ✓', 'success'); closeNouveauMission(); await loadMissions(true); }
-    else showToast('Erreur : ' + res.message, 'error');
-}
-
-// ── EXPORT CSV ────────────────────────────────────────────────────────────────
-function exportCSV(global) {
-    const liste = global ? allMissions : filteredMissions;
-    if (!liste.length) { showToast('Aucune mission à exporter.', 'error'); return; }
-    const headers = ['ID','Date','Heure','Email','Collaborateur','CC','Objet','Corps','Statut','Notes','Date Maj','Priorité','Résumé','Créateur'];
-    const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
-    let csv = headers.map(esc).join(';') + '\n';
-    liste.forEach(m => { csv += [m.id,m.date,m.heure,m.email,m.collab,m.cc,m.objet,m.corps,m.statut,m.notes,m.dateMaj,m.priorite,m.resume,m.emailCreateur].map(esc).join(';') + '\n'; });
-    const fileName = `Missions_HECG_${new Date().toISOString().split('T')[0]}${global?'_GLOBAL':'_vue'}.csv`;
-    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = fileName;
-    a.click();
-
-    apiPost({ action: 'logExport', exportType: 'Missions', fileName, mimeType: 'text/csv', content: csv, rowCount: liste.length })
-        .catch(e => console.error("Erreur envoi mail export :", e));
-}
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-function initials(name) { if(!name) return '?'; return name.trim().split(/\s+/).map(w=>w[0]).join('').substring(0,2).toUpperCase(); }
-function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+renderHead();
+load();
 </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
 </body>
