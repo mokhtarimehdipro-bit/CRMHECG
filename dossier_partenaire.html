@@ -506,6 +506,8 @@
             loadDetails(true);
         }
 
+        function escCode(v) { return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
         function copyCode(code) {
             if (!code) return;
             (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(
@@ -535,7 +537,7 @@
                 return '<div class="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">'
                     + '<div class="text-sm space-y-0.5">'
                     + '<div class="flex items-center gap-2 flex-wrap"><p class="font-bold text-gray-800">👤 ' + prenom + ' ' + nom + '</p>' + posteBadge + maBadge
-                    + (c.id_contact ? '<span class="code-chip sm" title="Code contact — cliquer pour copier" onclick="copyCode('' + String(c.id_contact).replace(/'/g, '') + '')"><span class="code-lbl">Code</span>' + c.id_contact + '</span>' : '')
+                    + (c.id_contact ? '<span class="code-chip sm" data-code="' + escCode(c.id_contact) + '" title="Code contact — cliquer pour copier" onclick="copyCode(this.dataset.code)"><span class="code-lbl">Code</span>' + escCode(c.id_contact) + '</span>' : '')
                     + '</div>'
                     + (mailsHtml ? '<p class="text-xs text-gray-500">✉️ ' + mailsHtml + '</p>' : '')
                     + (telsHtml  ? '<p class="text-xs text-gray-500">📞 ' + telsHtml  + '</p>' : '')
