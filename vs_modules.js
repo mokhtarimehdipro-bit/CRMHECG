@@ -24,6 +24,7 @@ const IC = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', pin: '<path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
 };
 const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
@@ -231,6 +232,7 @@ function injectCss() {
   .vx-upl .fn{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink)}
   .vx-upl .fn span{color:var(--mu);font-size:12px}
   .vx-acl{border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd);max-height:300px}
+  .vx-kw-new{background:linear-gradient(135deg,#fff4ed,#ffe9dc);color:#c2410c;border-color:#fcd2b6;font-weight:800}
   .vx-link{display:inline-flex;align-items:center;gap:6px;margin-top:8px;border:none;background:none;padding:2px 0;font:600 12.5px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--o);cursor:pointer}
   .vx-link:hover{text-decoration:underline}
   .vx-autre{grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding:12px;border-radius:14px;background:linear-gradient(135deg,#fff4ed,#fffaf6);border:1px solid #fcd9c2}
@@ -276,12 +278,12 @@ function injectCss() {
 // ═══════════════════════════ MÉMOIRES ═══════════════════════════
 const MEM_KW = ['Fiscalité', 'CDG', 'IA', 'Dématérialisation', 'Comptabilité', 'Audit', 'Finance', 'Paie', 'Droit social', 'RH', 'Marketing', 'RSE', 'Gestion de trésorerie', 'Consolidation', 'Digitalisation'];
 const MEM_ST = { 'En cours': ['#e8eff8', '#1A4E8A'], 'Sujet validé': ['#fff4ed', '#c2410c'], 'Rendu': ['#ede9fe', '#6d28d9'], 'Soutenu': ['#e8f6ee', '#15803d'] };
-const M = { data: [], etudiants: [], personnel: [], formateurs: [], view: 'cards', sort: 'classe', kw: '', sortCol: 'classe', sortDir: 1 };
+const M = { data: [], etudiants: [], personnel: [], formateurs: [], motsClesRef: [], view: 'cards', sort: 'classe', kw: '', sortCol: 'classe', sortDir: 1 };
 
 async function memLoad(force) {
   const r = await api('getMemoires', {}, force ? { forceRefresh: true } : {});
   if (!r.success) { $('memBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
-  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || [];
+  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || []; M.motsClesRef = r.motsClesRef || MEM_KW.slice();
   M.data.forEach(m => { m.docs = m.docs || []; });
   memRender();
 }
@@ -293,7 +295,7 @@ function memInit() {
     sec.classList.add('vx');
     sec.innerHTML = `
       <div class="vx-hd"><div><h1>Suivi des mémoires</h1><p>Sujets, mots-clés et formateurs référents de chaque étudiant</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" onclick="VX.memExport()">${svg('down', 15)} Exporter</button><button class="vx-btn ora" onclick="VX.memEdit()">${svg('plus', 15, 2.4)} Ajouter un mémoire</button></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" onclick="VX.memKwManage()">${svg('tag', 15)} Mots-clés</button><button class="vx-btn" onclick="VX.memExport()">${svg('down', 15)} Exporter</button><button class="vx-btn ora" onclick="VX.memEdit()">${svg('plus', 15, 2.4)} Ajouter un mémoire</button></div></div>
       <div class="vx-kpis" id="memKpis"></div>
       <div class="vx-bar">
         <div class="vx-search">${svg('search', 15)}<input id="memQ" placeholder="Étudiant, sujet, mot-clé, formateur…" oninput="VX.memRender()"></div>
@@ -428,24 +430,44 @@ function memEdit(id) {
   L.addEventListener('mousedown', ev => { const it = ev.target.closest('[data-i]'); if (it) { ev.preventDefault(); pick(items[+it.dataset.i]); } });
   inp.addEventListener('blur', () => setTimeout(() => L.style.display = 'none', 150));
   // mots-clés
-  const allKw = [...new Set(MEM_KW.concat(...M.data.map(x => x.motsCles)))];
+  const kwPool = () => { const seen = new Set(); return M.motsClesRef.concat(...M.data.map(x => x.motsCles)).filter(k => { const n = norm(k); if (!n || seen.has(n)) return false; seen.add(n); return true; }); };
   const drawTags = () => {
-    $('meTags').innerHTML = E.motsCles.map((k, i) => `<span class="vx-kw" style="${kwColor(k)}">${esc(k)}<button data-rm="${i}">${svg('x', 11, 2.6)}</button></span>`).join('') + `<input id="meKwIn" placeholder="${E.motsCles.length ? '' : 'Tapez puis Entrée (fisca, CDG, IA…)'}">`;
-    $('meSugg').innerHTML = allKw.filter(k => !E.motsCles.some(x => norm(x) === norm(k))).slice(0, 16).map(k => `<span class="vx-kw" style="${kwColor(k)}" data-add="${esc(k)}">+ ${esc(k)}</span>`).join('');
+    $('meTags').innerHTML = E.motsCles.map((k, i) => `<span class="vx-kw" style="${kwColor(k)}">${esc(k)}<button data-rm="${i}">${svg('x', 11, 2.6)}</button></span>`).join('') + `<input id="meKwIn" placeholder="${E.motsCles.length ? 'Ajouter…' : 'Tapez un mot-clé (existant ou nouveau) puis Entrée'}">`;
+    drawSugg('');
     const ki = $('meKwIn');
+    ki.addEventListener('input', () => drawSugg(ki.value));
     ki.addEventListener('keydown', ev => {
       if ((ev.key === 'Enter' || ev.key === ',') && ki.value.trim()) { ev.preventDefault(); addKw(ki.value.trim()); }
       if (ev.key === 'Backspace' && !ki.value && E.motsCles.length) { E.motsCles.pop(); drawTags(); $('meKwIn').focus(); }
     });
   };
+  // suggestions : mots-clés existants qui correspondent à la saisie + « Créer » si nouveau
+  const drawSugg = q => {
+    const nq = norm(q).trim();
+    const dispo = kwPool().filter(k => !E.motsCles.some(x => norm(x) === norm(k)) && (!nq || norm(k).includes(nq)));
+    const exact = nq && kwPool().some(k => norm(k) === nq);
+    $('meSugg').innerHTML = (nq && !exact ? `<span class="vx-kw vx-kw-new" data-create="${esc(q.trim())}">${svg('plus', 11, 2.6)} Créer le mot-clé « ${esc(q.trim())} »</span>` : '')
+      + dispo.slice(0, nq ? 12 : 18).map(k => `<span class="vx-kw" style="${kwColor(k)}" data-add="${esc(k)}">+ ${esc(k)}</span>`).join('');
+  };
   const addKw = k => {
-    const hit = allKw.find(x => norm(x) === norm(k)) || allKw.find(x => norm(x).startsWith(norm(k)) && norm(k).length >= 3) || k;
+    const hit = kwPool().find(x => norm(x) === norm(k));
+    if (!hit) return createKw(k);
     if (!E.motsCles.some(x => norm(x) === norm(hit))) E.motsCles.push(hit);
     drawTags(); $('meKwIn').focus();
+  };
+  // nouveau mot-clé : ajouté au mémoire ET enregistré dans la liste partagée
+  const createKw = k => {
+    k = k.trim().replace(/\s+/g, ' ').slice(0, 40); if (!k) return;
+    k = k.charAt(0).toUpperCase() + k.slice(1);
+    M.motsClesRef.push(k);
+    if (!E.motsCles.some(x => norm(x) === norm(k))) E.motsCles.push(k);
+    drawTags(); $('meKwIn').focus();
+    api('saveMotsClesMemoire', { ajouter: [k] }).then(r => { if (r.success) { M.motsClesRef = r.motsCles; toast('Mot-clé « ' + k + ' » ajouté à la liste ✓'); } else toast('Erreur : ' + errTxt(r.message), false); });
   };
   dlg.addEventListener('click', ev => {
     const rm = ev.target.closest('[data-rm]'); if (rm) { E.motsCles.splice(+rm.dataset.rm, 1); drawTags(); return; }
     const ad = ev.target.closest('[data-add]'); if (ad) addKw(ad.dataset.add);
+    const cr = ev.target.closest('[data-create]'); if (cr) createKw(cr.dataset.create);
   });
   drawTags();
   // formateur : combobox (formateurs actifs + équipe) avec saisie libre
@@ -552,6 +574,43 @@ function memEdit(id) {
   };
   if (!m) inp.focus();
 }
+function memKwManage() {
+  const usage = k => M.data.filter(m => m.motsCles.some(x => norm(x) === norm(k))).length;
+  const dlg = modal(`<h2>Mots-clés des mémoires</h2><p class="sub">Créez vos propres mots-clés : ils sont proposés à toute l'équipe lors de la saisie d'un mémoire.</p>
+    <label class="fl">Nouveau mot-clé</label>
+    <div style="display:flex;gap:10px"><input class="in" id="kwNew" placeholder="Ex : Contrôle interne, ESG, Blockchain…" maxlength="40"><button class="vx-btn pri" id="kwAdd">${svg('plus', 15, 2.4)} Ajouter</button></div>
+    <label class="fl">Liste actuelle <span id="kwN" style="text-transform:none;letter-spacing:0;color:#a3aebd"></span></label>
+    <div id="kwList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    <p class="sub" style="margin-top:14px">Retirer un mot-clé le masque des suggestions ; les mémoires qui l'utilisent le conservent.</p>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 720);
+  const draw = () => {
+    const list = M.motsClesRef.slice().sort((a, b) => a.localeCompare(b, 'fr'));
+    $('kwN').textContent = '(' + list.length + ')';
+    $('kwList').innerHTML = list.map(k => `<span class="vx-kw" style="${kwColor(k)};padding:6px 8px 6px 12px;font-size:12.5px">${esc(k)} <small style="opacity:.6">${usage(k)}</small><button data-kwdel="${esc(k)}" title="Retirer de la liste" style="border:none;background:none;color:inherit;cursor:pointer;opacity:.6;padding:0 0 0 4px">${svg('x', 12, 2.6)}</button></span>`).join('') || '<p class="sub">Aucun mot-clé.</p>';
+  };
+  const add = async () => {
+    const k0 = $('kwNew').value.trim().replace(/\s+/g, ' '); if (!k0) return;
+    const k = k0.charAt(0).toUpperCase() + k0.slice(1);
+    if (M.motsClesRef.some(x => norm(x) === norm(k))) { toast('« ' + k + ' » existe déjà', false); return; }
+    M.motsClesRef.push(k); $('kwNew').value = ''; draw(); $('kwNew').focus();
+    const r = await api('saveMotsClesMemoire', { ajouter: [k] });
+    if (!r.success) { M.motsClesRef = M.motsClesRef.filter(x => x !== k); draw(); toast('Erreur : ' + errTxt(r.message), false); return; }
+    M.motsClesRef = r.motsCles; draw(); toast('Mot-clé « ' + k + ' » ajouté ✓');
+  };
+  $('kwAdd').onclick = add;
+  $('kwNew').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+  dlg.addEventListener('click', async e => {
+    const b = e.target.closest('[data-kwdel]'); if (!b) return;
+    const k = b.dataset.kwdel;
+    if (!confirm('Retirer « ' + k + ' » des suggestions ?')) return;
+    const avant = M.motsClesRef.slice(); M.motsClesRef = M.motsClesRef.filter(x => x !== k); draw();
+    const r = await api('saveMotsClesMemoire', { retirer: [k] });
+    if (!r.success) { M.motsClesRef = avant; draw(); toast('Erreur : ' + errTxt(r.message), false); return; }
+    M.motsClesRef = r.motsCles; draw();
+  });
+  draw(); $('kwNew').focus();
+}
+
 function memExport() {
   const list = memFiltered();
   csvDownload('Memoires_HECG_' + todayISO() + '.csv', [['Étudiant', 'Classe', 'Campus', 'Sujet', 'Mots-clés', 'Formateur référent', 'Statut', 'Notes', 'Mis à jour le']]
@@ -753,7 +812,7 @@ function frEdit(id) {
 }
 
 window.VX = {
-  memInit, memRender, memEdit, memExport,
+  memInit, memRender, memEdit, memExport, memKwManage,
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf

@@ -70,8 +70,9 @@ function handleGetMemoires(p, ss) {
           majLe: d[i][13] instanceof Date ? Utilities.formatDate(d[i][13], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][13] || "") });
       }
       const docs = _memDocsByMemoire_(ss);
+      const motsClesRef = _memMotsCles_(ss);
       list.forEach(function(m) { m.docs = docs[m.id] || []; });
-      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs });
+      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs, motsClesRef: motsClesRef });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
 }
@@ -399,5 +400,47 @@ function handleArchiveMemoireDoc(p, ss) {
     const d = ws.getDataRange().getValues();
     for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(p.id)) { ws.getRange(i + 1, 12).setValue("Oui"); return createJsonResponse({ success: true }); }
     return createJsonResponse({ success: false, message: "Document introuvable." });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+
+// ── Référentiel des mots-clés de mémoire (feuille MEMOIRES_MOTSCLES) ──
+var MEM_KW_DEFAUT = ["Fiscalité", "CDG", "IA", "Dématérialisation", "Comptabilité", "Audit", "Finance", "Paie", "Droit social", "RH", "Marketing", "RSE", "Gestion de trésorerie", "Consolidation", "Digitalisation"];
+
+function _memMotsClesSheet_(ss) {
+  let ws = ss.getSheetByName("MEMOIRES_MOTSCLES");
+  if (!ws) {
+    ws = _vsxSheet_(ss, "MEMOIRES_MOTSCLES", ["Mot-clé", "Créé par", "Créé le", "Retiré"]);
+    const now = new Date();
+    ws.getRange(2, 1, MEM_KW_DEFAUT.length, 4).setValues(MEM_KW_DEFAUT.map(function(k) { return [k, "Liste initiale", now, ""]; }));
+  }
+  return ws;
+}
+function _memMotsCles_(ss) {
+  const d = _memMotsClesSheet_(ss).getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < d.length; i++) if (d[i][0] && String(d[i][3]) !== "Oui") out.push(String(d[i][0]).trim());
+  return out;
+}
+
+/** Ajoute / retire des mots-clés du référentiel (retirer = masquer, jamais supprimer). */
+function handleSaveMotsClesMemoire(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  try {
+    const ws = _memMotsClesSheet_(ss);
+    const d = ws.getDataRange().getValues();
+    const norm = function(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); };
+    const idx = {}; for (let i = 1; i < d.length; i++) idx[norm(d[i][0])] = i + 1;
+    const ajoutes = [];
+    (Array.isArray(p.ajouter) ? p.ajouter : []).forEach(function(k) {
+      k = String(k || "").trim().replace(/\s+/g, " ").slice(0, 40); if (!k) return;
+      const row = idx[norm(k)];
+      if (row) { ws.getRange(row, 4).setValue(""); return; }   // réactive un mot-clé retiré
+      ws.appendRow([k, String(p.nomAuteur || p.emailAuteur || ""), new Date(), ""]);
+      idx[norm(k)] = ws.getLastRow(); ajoutes.push(k);
+    });
+    (Array.isArray(p.retirer) ? p.retirer : []).forEach(function(k) { const row = idx[norm(k)]; if (row) ws.getRange(row, 4).setValue("Oui"); });
+    if (ajoutes.length) logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", "Création", "Vie scolaire", "MOTSCLES", "Mot(s)-clé(s) mémoire : " + ajoutes.join(", "));
+    return createJsonResponse({ success: true, motsCles: _memMotsCles_(ss) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }

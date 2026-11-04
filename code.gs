@@ -421,6 +421,7 @@ function doPostInner_(e) {
       case 'saveMemoire':        return handleSaveMemoire(params, ss);
       case 'uploadMemoireDoc':   return handleUploadMemoireDoc(params, ss);
       case 'archiveMemoireDoc':  return handleArchiveMemoireDoc(params, ss);
+      case 'saveMotsClesMemoire': return handleSaveMotsClesMemoire(params, ss);
       case 'getFrises':          return handleGetFrises(params, ss);
       case 'saveFrise':          return handleSaveFrise(params, ss);
       case 'toggleEtapeFrise':   return handleToggleEtapeFrise(params, ss);
