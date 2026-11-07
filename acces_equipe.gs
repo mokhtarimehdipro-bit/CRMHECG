@@ -1,5 +1,5 @@
 // ==========================================
-// PARAMÈTRES — ACCÈS DE L'ÉQUIPE (page parametres.html, compte maître uniquement)
+// PARAMÈTRES — ACCÈS DE L'ÉQUIPE (page parametres.html, compte maître uniquement) — fichier acces_equipe.gs
 // ==========================================
 // Onglet « Personnel » : A Ref_Perso · B NOM · C PRÉNOM · D FONCTION · E MDP · F ROLE (CRM)
 //   · G Mail · H Role_Vie_Scolaire · I-K préférences trophées (non touchées ici)
