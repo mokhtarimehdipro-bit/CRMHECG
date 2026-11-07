@@ -25,7 +25,9 @@ function _vsxRef_(ss) {
     const typo = String(dE[i][20] || "").toLowerCase();
     if (typo === "prospect") continue;
     etudiants.push({ id: id, nom: String(dE[i][2] || ""), prenom: String(dE[i][3] || ""), classe: String(dE[i][14] || ""),
-                     campus: _vsxCampusLib_(dE[i][22]), sortie: typo === "sortie" });
+                     campus: _vsxCampusLib_(dE[i][22]), sortie: typo === "sortie", typo: typo,
+                     mail: String(dE[i][26] || "").trim() || String(dE[i][4] || "").trim(),
+                     mailHecg: String(dE[i][26] || "").trim(), mailPerso: String(dE[i][4] || "").trim() });
   }
   const dP = getPersonnelDataCached_(ss);
   const personnel = [];
@@ -41,7 +43,8 @@ function _vsxRef_(ss) {
       if (String(dA[r][12] || "NON").trim().toUpperCase() !== "OUI") continue;
       const ds = dA[r][10];
       if (ds instanceof Date && ds < now) continue;
-      formateurs.push({ ref: "A:" + String(dA[r][0]), nom: (String(dA[r][2] || "") + " " + String(dA[r][1] || "").toUpperCase()).trim(), matieres: String(dA[r][8] || "") });
+      formateurs.push({ ref: "A:" + String(dA[r][0]), nom: (String(dA[r][2] || "") + " " + String(dA[r][1] || "").toUpperCase()).trim(), matieres: String(dA[r][8] || ""),
+                        email: String(dA[r][4] || "").trim() || String(dA[r][3] || "").trim() });
     }
   } catch (eF) { Logger.log("Formateurs : " + eF); }
   formateurs.sort(function(a, b) { return a.nom.localeCompare(b.nom); });
@@ -71,6 +74,13 @@ function handleGetMemoires(p, ss) {
       }
       const docs = _memDocsByMemoire_(ss);
       const motsClesRef = _memMotsCles_(ss);
+      const mailEtu = {}; ref.etudiants.forEach(function(e) { mailEtu[e.id] = e.mail; });
+      const mailForm = {}, mailFormNom = {};
+      ref.formateurs.concat(ref.personnel).forEach(function(x) { if (x.email) { mailForm[x.ref] = x.email; mailFormNom[String(x.nom).toLowerCase().replace(/\s+/g, " ")] = x.email; } });
+      list.forEach(function(m) {
+        m.etuMail = mailEtu[m.etuId] || "";
+        m.formateurMail = mailForm[m.formateurRef] || mailFormNom[String(m.formateur).toLowerCase().replace(/\s+/g, " ")] || "";
+      });
       list.forEach(function(m) { m.docs = docs[m.id] || []; });
       return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs, motsClesRef: motsClesRef });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
@@ -443,4 +453,168 @@ function handleSaveMotsClesMemoire(p, ss) {
     if (ajoutes.length) logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", "Création", "Vie scolaire", "MOTSCLES", "Mot(s)-clé(s) mémoire : " + ajoutes.join(", "));
     return createJsonResponse({ success: true, motsCles: _memMotsCles_(ss) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+
+// ═══════════════════════════ CHECKLIST MÉMOIRES PAR DIPLÔME ═══════════════════════════
+// Par année scolaire (sept. → août) et par diplôme (BTS CG, BTS GPME, DCG, DSCG) :
+// on coche les étudiants concernés ; 4 contrôles par étudiant :
+//   sujet (mémoire), mémoire inséré (au moins un document), prof référent, dépôt Cyclade (coché à la main).
+// Année en cours : liste calculée en direct depuis ETUDIANTS (inscrits / préinscrits).
+// Année terminée : figée (instantané JSON) puis consultable en lecture seule.
+var CK_HEADERS = ["Année scolaire", "Diplôme", "ID étudiant", "Concerné", "Dépôt Cyclade", "Date dépôt Cyclade", "Instantané (archive)", "Mis à jour le", "Par"];
+var CK_DIPLOMES = ["BTS CG", "BTS GPME", "DCG", "DSCG"];
+
+function _ckDiplome_(classe) {
+  // Classes compactes du CRM : BTSCG1A, AIX_BTS1GPME, DCG2A, DSCG1A… → on compare les lettres seules
+  const c = String(classe || "").toUpperCase().normalize("NFD").replace(/[^A-Z]/g, "");
+  if (c.indexOf("DSCG") !== -1) return "DSCG";
+  if (c.indexOf("DCG") !== -1) return "DCG";
+  if (c.indexOf("GPME") !== -1) return "BTS GPME";
+  if (c.indexOf("BTSCG") !== -1 || (c.indexOf("BTS") !== -1 && c.indexOf("CG") !== -1)) return "BTS CG";
+  return "";
+}
+function _ckAnneeCourante_() {
+  const d = new Date(), y = d.getFullYear();
+  return d.getMonth() >= 8 ? y + "-" + (y + 1) : (y - 1) + "-" + y;
+}
+function _ckEstTerminee_(annee) {
+  const fin = parseInt(String(annee).split("-")[1], 10);
+  return !isNaN(fin) && new Date() > new Date(fin, 7, 31, 23, 59);
+}
+
+function _ckRows_(ss, annee) {
+  const ws = _vsxSheet_(ss, "MEMOIRES_CHECKLIST", CK_HEADERS);
+  const d = ws.getDataRange().getValues();
+  const rows = {}, annees = {};
+  for (let i = 1; i < d.length; i++) {
+    if (!d[i][0]) continue;
+    annees[String(d[i][0])] = true;
+    if (String(d[i][0]) === annee) rows[String(d[i][2])] = { row: i + 1, v: d[i] };
+  }
+  return { ws: ws, rows: rows, annees: Object.keys(annees) };
+}
+
+function _ckBuild_(ss, annee, ck) {
+  const tz = Session.getScriptTimeZone();
+  const ref = _vsxRef_(ss);
+  // Rapprochement avec les mémoires déjà saisis : par ID étudiant, sinon par nom
+  // (mémoire saisi sous un ancien ID, ou fiche étudiant recréée) — le plus récent l'emporte.
+  const nomKey = function(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ").sort().join(" "); };
+  const md = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS).getDataRange().getValues();
+  const mem = {}, memNom = {};
+  const garder = function(map, k, o) { if (k && (!map[k] || o.maj >= map[k].maj)) map[k] = o; };
+  for (let i = 1; i < md.length; i++) {
+    if (!md[i][0] || String(md[i][14]) === "Oui") continue;
+    const maj = md[i][13] instanceof Date ? md[i][13].getTime() : 0;
+    const o = { id: String(md[i][0]), sujet: String(md[i][5] || ""), formateurRef: String(md[i][7] || ""), formateur: String(md[i][8] || ""), statut: String(md[i][9] || ""), maj: maj };
+    garder(mem, String(md[i][1]), o);
+    garder(memNom, nomKey(md[i][2]), o);
+  }
+  const docs = _memDocsByMemoire_(ss);
+  const byId = {}; ref.etudiants.forEach(function(e) { byId[e.id] = e; });
+  // Mails des formateurs / personnel (par réf., sinon par nom)
+  const mailRef = {}, mailNom = {};
+  ref.formateurs.concat(ref.personnel).forEach(function(x) { if (x.email) { mailRef[x.ref] = x.email; mailNom[nomKey(x.nom)] = mailNom[nomKey(x.nom)] || x.email; } });
+  const ids = {};
+  ref.etudiants.forEach(function(e) {
+    if (e.sortie || (e.typo !== "inscrit" && e.typo !== "préinscrit" && e.typo !== "preinscrit")) return;
+    if (_ckDiplome_(e.classe)) ids[e.id] = true;
+  });
+  Object.keys(ck.rows).forEach(function(id) { if (String(ck.rows[id].v[3]) === "Oui") ids[id] = true; }); // concernés devenus sortis
+  const out = {}; CK_DIPLOMES.forEach(function(d) { out[d] = []; });
+  Object.keys(ids).forEach(function(id) {
+    const e = byId[id] || {};
+    const r = ck.rows[id] ? ck.rows[id].v : null;
+    const dip = _ckDiplome_(e.classe) || (r ? String(r[1]) : "");
+    if (!out[dip]) return;
+    let m = mem[id], rapprochement = m ? "id" : "";
+    if (!m && (e.prenom || e.nom)) { m = memNom[nomKey((e.prenom || "") + " " + (e.nom || ""))]; if (m) rapprochement = "nom"; }
+    const ds = m ? (docs[m.id] || []) : [];
+    const last = ds.length ? ds[ds.length - 1] : null;
+    const dc = r && r[5] ? (r[5] instanceof Date ? Utilities.formatDate(r[5], tz, "yyyy-MM-dd") : String(r[5])) : "";
+    out[dip].push({ etuId: id, etudiant: ((e.prenom || "") + " " + (e.nom || "")).trim() || id, classe: e.classe || "", campus: e.campus || "",
+      sorti: !!e.sortie || !byId[id], concerne: !!r && String(r[3]) === "Oui", memoireId: m ? m.id : "", rapprochement: rapprochement,
+      mailHecg: e.mailHecg || "", mailPerso: e.mailPerso || "",
+      sujet: m ? m.sujet : "", referent: m ? m.formateur : "", statut: m ? m.statut : "",
+      referentMail: m ? (mailRef[m.formateurRef] || mailNom[nomKey(m.formateur)] || "") : "", nbDocs: ds.length,
+      dernierDoc: last ? { version: last.version, date: last.date, url: last.url } : null,
+      cyclade: !!r && String(r[4]) === "Oui", cycladeDate: dc });
+  });
+  CK_DIPLOMES.forEach(function(d) { out[d].sort(function(a, b) { return (a.classe + a.etudiant).localeCompare(b.classe + b.etudiant); }); });
+  return out;
+}
+
+function handleGetMemoiresChecklist(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  try {
+    const courante = _ckAnneeCourante_();
+    const annee = String(p.annee || courante);
+    const ck = _ckRows_(ss, annee);
+    const terminee = _ckEstTerminee_(annee);
+    let diplomes;
+    const ids = Object.keys(ck.rows);
+    const snap = ids.length && ids.every(function(id) { return ck.rows[id].v[6] || String(ck.rows[id].v[3]) !== "Oui"; }) && ids.some(function(id) { return ck.rows[id].v[6]; });
+    if (terminee && snap) {
+      // Archive : lecture des instantanés figés
+      diplomes = {}; CK_DIPLOMES.forEach(function(d) { diplomes[d] = []; });
+      ids.forEach(function(id) { const v = ck.rows[id].v; if (!v[6]) return; try { const o = JSON.parse(String(v[6])); (diplomes[o.diplome] = diplomes[o.diplome] || []).push(o); } catch (e) {} });
+    } else {
+      diplomes = _ckBuild_(ss, annee, ck);
+      if (terminee) {
+        // Fin d'année : on fige les étudiants concernés (archive consultable)
+        const now = new Date();
+        Object.keys(diplomes).forEach(function(dip) {
+          diplomes[dip].forEach(function(o) {
+            if (!o.concerne || !ck.rows[o.etuId]) return;
+            o.diplome = dip;
+            ck.ws.getRange(ck.rows[o.etuId].row, 7, 1, 2).setValues([[JSON.stringify(o), now]]);
+          });
+          diplomes[dip] = diplomes[dip].filter(function(o) { return o.concerne; });
+        });
+      }
+    }
+    const annees = ck.annees.concat([courante]).filter(function(a, i, arr) { return arr.indexOf(a) === i; }).sort().reverse();
+    return createJsonResponse({ success: true, annee: annee, anneeCourante: courante, archivee: terminee, annees: annees, diplomes: diplomes });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+/** Coche / décoche « concerné » (plusieurs étudiants) ou « dépôt Cyclade » (un étudiant). */
+function handleSaveMemoiresChecklist(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const annee = String(p.annee || _ckAnneeCourante_());
+    if (_ckEstTerminee_(annee)) return createJsonResponse({ success: false, message: "Année " + annee + " archivée : consultation seule." });
+    const ck = _ckRows_(ss, annee);
+    const now = new Date(), par = String(p.nomAuteur || p.emailAuteur || "");
+    const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const classe = {}; for (let i = 1; i < dE.length; i++) classe[String(dE[i][0])] = String(dE[i][14] || "");
+    const ensure = function(id) {
+      if (ck.rows[id]) return ck.rows[id];
+      ck.ws.appendRow([annee, _ckDiplome_(classe[id]), id, "", "", "", "", now, par]);
+      const r = { row: ck.ws.getLastRow(), v: [annee, _ckDiplome_(classe[id]), id, "", "", "", "", now, par] };
+      ck.rows[id] = r; return r;
+    };
+    (Array.isArray(p.etuIds) ? p.etuIds : []).forEach(function(id) {
+      const r = ensure(String(id));
+      ck.ws.getRange(r.row, 4).setValue(p.concerne ? "Oui" : "");
+      ck.ws.getRange(r.row, 8, 1, 2).setValues([[now, par]]);
+    });
+    if (p.cycladeEtuId) {
+      const r = ensure(String(p.cycladeEtuId));
+      ck.ws.getRange(r.row, 5, 1, 2).setValues([[p.cyclade ? "Oui" : "", p.cyclade ? String(p.cycladeDate || Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd")) : ""]]);
+      ck.ws.getRange(r.row, 8, 1, 2).setValues([[now, par]]);
+    }
+    // Traçabilité (Historique)
+    const nomEtu = function(id) { for (let i = 1; i < dE.length; i++) if (String(dE[i][0]) === String(id)) return (String(dE[i][3] || "") + " " + String(dE[i][2] || "")).trim(); return String(id); };
+    const ids = Array.isArray(p.etuIds) ? p.etuIds : [];
+    if (ids.length) logAction(par, p.vieScRole || "", p.concerne ? "Création" : "Suppression", "Vie scolaire — Mémoires", ids.length === 1 ? String(ids[0]) : "Checklist " + annee,
+      (p.concerne ? "Checklist mémoires " + annee + " : ajout de " : "Checklist mémoires " + annee + " : retrait de ") + (ids.length > 5 ? ids.length + " étudiants" : ids.map(nomEtu).join(", ")));
+    if (p.cycladeEtuId) logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Mémoires", String(p.cycladeEtuId),
+      "Dépôt Cyclade " + (p.cyclade ? "enregistré" : "annulé") + " pour " + nomEtu(p.cycladeEtuId) + " (" + annee + ")");
+    return createJsonResponse({ success: true });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
 }

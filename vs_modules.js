@@ -232,6 +232,69 @@ function injectCss() {
   .vx-upl .fn{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink)}
   .vx-upl .fn span{color:var(--mu);font-size:12px}
   .vx-acl{border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafd);max-height:300px}
+  .vx-tabs{display:inline-flex;gap:6px;padding:5px;margin:-6px 0 22px;border-radius:16px;background:linear-gradient(180deg,#e9eef5,#eef2f8);box-shadow:inset 0 1px 2px rgba(14,26,43,.06)}
+  .vx-tabs button{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border:none;border-radius:12px;background:none;font:700 13.5px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--mu);cursor:pointer;transition:all .18s}
+  .vx-tabs button.on{background:linear-gradient(180deg,#fff,#f6f9fd);color:var(--b);box-shadow:0 6px 16px -10px rgba(26,78,138,.6)}
+  .vx-lastdoc{display:inline-flex;align-items:center;gap:7px;padding:4px 10px 4px 4px;border-radius:999px;background:linear-gradient(90deg,#eef3fa,#f7f9fc);border:1px solid #dce7f5;color:var(--b);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;transition:all .15s}
+  .vx-lastdoc:hover{background:linear-gradient(90deg,#1A4E8A,#2d64a8);color:#fff}
+  .vx-lastdoc .ver{padding:2px 7px;border-radius:999px;background:linear-gradient(135deg,#f7844a,#F26522);color:#fff;font-size:11px}
+  .ck-top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:18px}
+  .ck-year{display:flex;align-items:center;gap:10px}
+  .ck-year label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+  .ck-arch,.ck-live{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px}
+  .ck-arch{background:linear-gradient(90deg,#f1f5fa,#e9eef5);color:#475569}
+  .ck-live{background:linear-gradient(90deg,#e8f6ee,#f2fbf5);color:#15803d}
+  .ck-dips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}
+  .ck-dip{text-align:left;display:flex;flex-direction:column;gap:6px;padding:18px 20px;border-radius:20px;border:1px solid #e3eaf3;background:linear-gradient(160deg,#fff,#f4f7fb);box-shadow:0 1px 0 #fff inset,0 18px 34px -28px rgba(14,26,43,.5);cursor:pointer;font-family:inherit;transition:all .2s}
+  .ck-dip:hover{transform:translateY(-2px)}
+  .ck-dip.on{background:linear-gradient(150deg,#24589a,#1A4E8A 60%,#163f73);border-color:#1A4E8A;box-shadow:0 22px 38px -20px rgba(26,78,138,.85)}
+  .ck-dip .t{font-size:17px;font-weight:800;color:var(--ink)}
+  .ck-dip .v{font-size:13px;color:var(--mu)}.ck-dip .v b{font-size:20px;color:var(--ink)}
+  .ck-dip .bar{height:7px;border-radius:99px;background:#e6ebf2;overflow:hidden}
+  .ck-dip .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#F26522,#16a34a)}
+  .ck-dip .p{font-size:11.5px;color:var(--mu)}
+  .ck-dip.on .t,.ck-dip.on .v b{color:#fff}.ck-dip.on .v,.ck-dip.on .p{color:rgba(255,255,255,.75)}.ck-dip.on .bar{background:rgba(255,255,255,.2)}
+  .ck-card{padding:22px 24px;border-radius:22px;background:linear-gradient(175deg,#fff,#f6f9fd);border:1px solid #e3eaf3;box-shadow:0 1px 0 #fff inset,0 24px 46px -36px rgba(14,26,43,.55);margin-bottom:18px}
+  .ck-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .ck-h h3{margin:0;font-size:16px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:10px}
+  .ck-h h3 span{font-size:12px;padding:2px 9px;border-radius:99px;background:#e9eef6;color:#516178}
+  .ck-legend{display:flex;gap:6px}.ck-legend span{font-size:11px;font-weight:700;color:var(--mu);padding:4px 10px;border-radius:99px;background:#eef2f7}
+  .ck-t{width:100%;border-collapse:separate;border-spacing:0 6px}
+  .ck-t th{text-align:left;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a96a8;padding:4px 12px}
+  .ck-t td{padding:12px;background:linear-gradient(180deg,#fff,#fafcfe);border-top:1px solid #e9eef5;border-bottom:1px solid #e9eef5;vertical-align:middle}
+  .ck-t td:first-child{border-left:1px solid #e9eef5;border-radius:14px 0 0 14px}.ck-t td:last-child{border-right:1px solid #e9eef5;border-radius:0 14px 14px 0}
+  .ck-t tr.full td{background:linear-gradient(180deg,#f3fbf6,#ecf8f1);border-color:#d3eedc}
+  .ck-etu{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .ck-etu b{display:block;font-size:13.5px;color:var(--ink)}.ck-etu small{font-size:11.5px;color:var(--mu)}
+  .ck-etu:hover b{color:var(--b)}
+  .ck-ok{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:99px;font-size:11.5px;font-weight:800;vertical-align:middle}
+  .ck-ok.y{background:linear-gradient(180deg,#22c55e,#16a34a);color:#fff;box-shadow:0 6px 12px -8px rgba(22,163,74,.9)}
+  .ck-ok.n{background:#fde8e8;color:#c62828}
+  .ck-sub{display:block;margin-top:5px;font-size:12px;color:var(--tx);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ck-t .vx-lastdoc{margin-left:6px}
+  .ck-box input,.ck-pick input,.ck-cyc input{display:none}
+  .ck-box span,.ck-pick .b{width:22px;height:22px;border-radius:7px;border:1.8px solid #c3ccd8;display:inline-flex;align-items:center;justify-content:center;color:transparent;cursor:pointer;background:#fff;flex-shrink:0}
+  .ck-box input:checked+span{background:linear-gradient(180deg,#2d64a8,#1A4E8A);border-color:#1A4E8A;color:#fff}
+  .ck-cyc{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;font-weight:700;color:var(--mu);cursor:pointer;user-select:none;text-transform:none;letter-spacing:0;margin:0}
+  .ck-cyc .sw{width:36px;height:21px;border-radius:99px;background:#cfd8e4;position:relative;transition:background .2s;flex-shrink:0}
+  .ck-cyc .sw::after{content:'';position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+  .ck-cyc.on{color:#15803d}.ck-cyc.on .sw{background:#16a34a}.ck-cyc.on .sw::after{transform:translateX(15px)}
+  .ck-prog{display:inline-block;width:70px;height:7px;border-radius:99px;background:#e6ebf2;overflow:hidden;vertical-align:middle;margin-right:8px}
+  .ck-prog i{display:block;height:100%;background:linear-gradient(90deg,#F26522,#f59e0b)}
+  .ck-prog.p4 i{background:linear-gradient(90deg,#22c55e,#16a34a)}
+  .ck-n{font-size:12.5px;color:var(--ink)}.ck-n.ok{color:#15803d}
+  .ck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .ck-pick{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;border:1px solid #e3eaf3;background:linear-gradient(180deg,#fff,#f8fafd);cursor:pointer;transition:all .15s;text-transform:none;letter-spacing:0;margin:0}
+  .ck-pick:hover{border-color:#bcd0e8;box-shadow:0 10px 20px -16px rgba(26,78,138,.6)}
+  .ck-pick .n b{display:block;font-size:13px;color:var(--ink)}.ck-pick .n small{font-size:11.5px;color:var(--mu)}
+  .ck-pick input:checked+.b{background:linear-gradient(180deg,#2d64a8,#1A4E8A);border-color:#1A4E8A;color:#fff}
+  .ck-pick:has(input:checked){border-color:#1A4E8A;background:linear-gradient(180deg,#eef4fc,#e5eefa)}
+  .ck-pick .m{font-size:11px;font-weight:700;margin-top:2px}.ck-pick .m.y{color:#15803d}.ck-pick .m.n{color:#a3aebd}
+  .ck-filt{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+  .ck-mail{display:block;font-size:11px;color:#1d4ed8;text-decoration:none;margin-top:2px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ck-mail:hover{text-decoration:underline}.ck-mail.perso{color:#94a3b8;font-style:italic}
+  .ck-rap{display:inline-block;margin-left:6px;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;background:#fff4ed;color:#c2410c;vertical-align:middle}
+  @media(max-width:1100px){.ck-dips{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .vx-kw-new{background:linear-gradient(135deg,#fff4ed,#ffe9dc);color:#c2410c;border-color:#fcd2b6;font-weight:800}
   .vx-link{display:inline-flex;align-items:center;gap:6px;margin-top:8px;border:none;background:none;padding:2px 0;font:600 12.5px 'Plus Jakarta Sans',Inter,sans-serif;color:var(--o);cursor:pointer}
   .vx-link:hover{text-decoration:underline}
@@ -295,7 +358,10 @@ function memInit() {
     sec.classList.add('vx');
     sec.innerHTML = `
       <div class="vx-hd"><div><h1>Suivi des mémoires</h1><p>Sujets, mots-clés et formateurs référents de chaque étudiant</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" onclick="VX.memKwManage()">${svg('tag', 15)} Mots-clés</button><button class="vx-btn" onclick="VX.memExport()">${svg('down', 15)} Exporter</button><button class="vx-btn ora" onclick="VX.memEdit()">${svg('plus', 15, 2.4)} Ajouter un mémoire</button></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" onclick="VX.memKwManage()">${svg('tag', 15)} Mots-clés</button><button class="vx-btn" onclick="VX.memExport()">${svg('down', 15)} Exporter Excel</button><button class="vx-btn ora" onclick="VX.memEdit()">${svg('plus', 15, 2.4)} Ajouter un mémoire</button></div></div>
+      <div class="vx-tabs"><button id="memTabM" class="on" onclick="VX.memTab('m')">${svg('book', 15)} Mémoires</button><button id="memTabC" onclick="VX.memTab('c')">${svg('check', 15, 2.4)} Checklist par diplôme</button></div>
+      <div id="memCk" style="display:none"></div>
+      <div id="memMain">
       <div class="vx-kpis" id="memKpis"></div>
       <div class="vx-bar">
         <div class="vx-search">${svg('search', 15)}<input id="memQ" placeholder="Étudiant, sujet, mot-clé, formateur…" oninput="VX.memRender()"></div>
@@ -307,7 +373,8 @@ function memInit() {
         <span class="vx-seg"><button id="memVC" class="on" onclick="VX.memView('cards')">${svg('grid', 14)}Cartes</button><button id="memVT" onclick="VX.memView('table')">${svg('list', 14)}Tableau</button></span>
       </div>
       <div id="memKwBar" style="display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 16px"></div>
-      <div id="memBody"><div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement…</h3></div></div>`;
+      <div id="memBody"><div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement…</h3></div></div>
+      </div>`;
   }
   memLoad();
 }
@@ -360,25 +427,28 @@ function memCard(m) {
   </div>`;
 }
 function memTable(list) {
-  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['formateur', 'Formateur référent'], ['statut', 'Statut']];
+  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['formateur', 'Formateur référent'], ['statut', 'Statut'], ['dernierDoc', 'Dernier document']];
+  list.forEach(m => { const d = m.docs[m.docs.length - 1]; m.dernierDoc = d ? d.date + ' ' + d.version : ''; });
   const sorted = list.slice().sort((a, b) => M.sortDir * String(Array.isArray(a[M.sortCol]) ? a[M.sortCol].join(',') : a[M.sortCol] || '').localeCompare(String(Array.isArray(b[M.sortCol]) ? b[M.sortCol].join(',') : b[M.sortCol] || ''), 'fr', { numeric: true }));
   return `<table class="vx-table"><thead><tr>${cols.map(([k, l]) => `<th onclick="VX.memSortCol('${k}')">${l}${M.sortCol === k ? (M.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
     ${sorted.map(m => { const st = MEM_ST[m.statut] || MEM_ST['En cours']; return `<tr onclick="VX.memEdit('${jsq(m.id)}')">
-      <td><div style="display:flex;align-items:center;gap:10px">${avatar(m.etudiant, 30)}<b style="color:var(--ink);font-weight:600">${esc(m.etudiant)}</b></div></td>
+      <td><div style="display:flex;align-items:center;gap:10px">${avatar(m.etudiant, 30)}<div><b style="color:var(--ink);font-weight:600">${esc(m.etudiant)}</b>${m.etuMail ? `<div style="font-size:11.5px;color:var(--mu)">${esc(m.etuMail)}</div>` : ''}</div></div></td>
       <td><span class="vx-chip b">${esc(m.classe)}</span></td><td>${esc(m.campus)}</td>
       <td style="max-width:340px">${esc(m.sujet)}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}">${esc(k)}</span>`).join('')}</div></td>
-      <td>${esc(m.formateur)}</td><td><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></td></tr>`; }).join('')}
+      <td>${esc(m.formateur)}${m.formateurMail ? `<div style="font-size:11.5px;color:var(--mu)">${esc(m.formateurMail)}</div>` : ''}</td><td><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></td>
+      <td>${(d => d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(d.nom)}"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : '<span style="color:#c3ccd8">—</span>')(m.docs[m.docs.length - 1])}</td></tr>`; }).join('')}
   </tbody></table>`;
 }
-function memEdit(id) {
+function memEdit(id, etuPre) {
   const m = id ? M.data.find(x => x.id === id) : null;
-  const E = { id: m ? m.id : '', etuId: m ? m.etuId : '', motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '' };
+  const pre = !m && etuPre ? M.etudiants.find(x => x.id === etuPre) : null;
+  const E = { id: m ? m.id : '', etuId: m ? m.etuId : (pre ? pre.id : ''), motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '' };
   const etuLabel = e => e ? `${e.prenom} ${e.nom}` : '';
   const dlg = modal(`
     <h2>${m ? 'Modifier le mémoire' : 'Nouveau mémoire'}</h2><p class="sub">La classe et le campus sont repris automatiquement de la fiche étudiant.</p>
     <label class="fl">Étudiant</label>
-    <div class="vx-ac"><input class="in" id="meEtu" placeholder="Tapez un nom ou un prénom…" autocomplete="off" value="${esc(m ? m.etudiant : '')}"><div class="vx-acl" id="meEtuL" style="display:none"></div></div>
+    <div class="vx-ac"><input class="in" id="meEtu" placeholder="Tapez un nom ou un prénom…" autocomplete="off" value="${esc(m ? m.etudiant : (pre ? pre.prenom + ' ' + pre.nom : ''))}"><div class="vx-acl" id="meEtuL" style="display:none"></div></div>
     <div class="vx-fixed" id="meFix"></div>
     <label class="fl">Sujet du mémoire</label><textarea class="in" id="meSujet" placeholder="Ex : L'impact de l'IA sur la révision comptable dans les cabinets">${esc(m ? m.sujet : '')}</textarea>
     <label class="fl">Mots-clés</label>
@@ -561,7 +631,7 @@ function memEdit(id) {
     const r = await api('saveMemoire', { memoire: payload });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     toast(m ? 'Mémoire mis à jour ✓' : 'Mémoire ajouté ✓');
-    dlg.remove(); await memLoad(true);
+    dlg.remove(); await memLoad(true); if (C.open) ckLoad();
     if (next) memEdit(); else if (!m && r.id) { memEdit(r.id); toast('Vous pouvez maintenant déposer les documents du mémoire'); }
   };
   $('meSave').onclick = () => save(false);
@@ -574,6 +644,202 @@ function memEdit(id) {
   };
   if (!m) inp.focus();
 }
+// ═══════════════════════════ CHECKLIST PAR DIPLÔME ═══════════════════════════
+const CK_DIP = ['BTS CG', 'BTS GPME', 'DCG', 'DSCG'];
+const C = { open: false, annee: '', data: null, dip: 'BTS CG', loading: false, sel: new Set(), q: '', cls: '' };
+// Mail affiché : mail HECG en priorité, sinon mail perso (grisé, signalé)
+const ckMailEtu = e => e.mailHecg ? `<a class="ck-mail" href="mailto:${esc(e.mailHecg)}" onclick="event.stopPropagation()">${esc(e.mailHecg)}</a>`
+  : (e.mailPerso ? `<a class="ck-mail perso" href="mailto:${esc(e.mailPerso)}" title="Pas de mail HECG — mail personnel" onclick="event.stopPropagation()">${esc(e.mailPerso)} (perso)</a>` : '');
+function memTab(t) {
+  C.open = t === 'c';
+  $('memTabM').classList.toggle('on', !C.open); $('memTabC').classList.toggle('on', C.open);
+  $('memMain').style.display = C.open ? 'none' : ''; $('memCk').style.display = C.open ? '' : 'none';
+  if (C.open && !C.data) ckLoad();
+}
+async function ckLoad(annee) {
+  C.loading = true; if (annee) C.annee = annee;
+  if (!C.data) $('memCk').innerHTML = `<div class="vx-empty"><div class="ill">${svg('check', 26, 2.4)}</div><h3>Chargement de la checklist…</h3></div>`;
+  const r = await api('getMemoiresChecklist', C.annee ? { annee: C.annee } : {}, { forceRefresh: true });
+  C.loading = false;
+  if (!r.success) { $('memCk').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  C.data = r; C.annee = r.annee;
+  ckRender();
+}
+const ckScore = e => [!!e.sujet.trim(), e.nbDocs > 0, !!e.referent.trim(), e.cyclade];
+function ckRender() {
+  const r = C.data, ro = r.archivee;
+  const stats = d => { const l = (r.diplomes[d] || []).filter(e => e.concerne); return { n: l.length, ok: l.filter(e => ckScore(e).every(Boolean)).length, pts: l.reduce((s, e) => s + ckScore(e).filter(Boolean).length, 0) }; };
+  const list = (r.diplomes[C.dip] || []);
+  const concernes = list.filter(e => e.concerne), autres = list.filter(e => !e.concerne && !e.sorti);
+  const yes = (ok, txt, title) => `<span class="ck-ok ${ok ? 'y' : 'n'}" title="${esc(title || '')}">${ok ? svg('check', 13, 3) : svg('x', 12, 3)}${txt ? `<span>${txt}</span>` : ''}</span>`;
+  const row = e => {
+    const sc = ckScore(e), n = sc.filter(Boolean).length;
+    const d = e.dernierDoc;
+    return `<tr class="${n === 4 ? 'full' : ''}">
+      <td style="width:44px">${ro ? '' : `<label class="ck-box"><input type="checkbox" checked onchange="VX.ckConcerne(['${jsq(e.etuId)}'],false)"><span>${svg('check', 12, 3)}</span></label>`}</td>
+      <td><div class="ck-etu" ${e.memoireId || !ro ? `onclick="VX.memEdit(${e.memoireId ? `'${jsq(e.memoireId)}'` : `null,'${jsq(e.etuId)}'`})"` : ''}>${avatar(e.etudiant, 32)}<div><b>${esc(e.etudiant)}${e.rapprochement === 'nom' ? '<span class="ck-rap" title="Mémoire retrouvé par le nom de l\'étudiant (ID différent) — vérifiez la fiche">rapproché par le nom</span>' : ''}</b><small>${esc(e.classe)} · ${esc(e.campus)}${e.sorti ? ' · <span style="color:#c62828">sorti</span>' : ''}</small>${ckMailEtu(e)}</div></div></td>
+      <td>${yes(sc[0], '', e.sujet || 'Sujet non renseigné')}${e.sujet ? `<span class="ck-sub" title="${esc(e.sujet)}">${esc(e.sujet.slice(0, 60))}${e.sujet.length > 60 ? '…' : ''}</span>` : `<span class="ck-sub" style="color:#c62828">${e.memoireId ? 'Sujet à saisir' : 'Aucun mémoire saisi'}</span>`}</td>
+      <td>${yes(sc[1], '')}${d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : ''}</td>
+      <td>${yes(sc[2], '')}${e.referent ? `<span class="ck-sub">${esc(e.referent)}</span>${e.referentMail ? `<a class="ck-mail" href="mailto:${esc(e.referentMail)}">${esc(e.referentMail)}</a>` : ''}` : ''}</td>
+      <td>${ro ? yes(sc[3], e.cycladeDate ? fmtD(e.cycladeDate) : '') : `<label class="ck-cyc ${e.cyclade ? 'on' : ''}"><input type="checkbox" ${e.cyclade ? 'checked' : ''} onchange="VX.ckCyclade('${jsq(e.etuId)}',this.checked)"><span class="sw"></span>${e.cyclade ? 'Déposé' + (e.cycladeDate ? ' le ' + fmtD(e.cycladeDate) : '') : 'À déposer'}</label>`}</td>
+      <td><span class="ck-prog p${n}"><i style="width:${n * 25}%"></i></span><b class="ck-n ${n === 4 ? 'ok' : ''}">${n === 4 ? 'Complet' : n + '/4'}</b></td></tr>`;
+  };
+  $('memCk').innerHTML = `
+    <div class="ck-top">
+      <div class="ck-year"><label>Année scolaire</label><select class="vx-sel" onchange="VX.ckYear(this.value)">${r.annees.map(a => `<option ${a === r.annee ? 'selected' : ''}>${a}</option>`).join('')}<option value="__new">Autre année…</option></select></div>
+      ${ro ? `<span class="ck-arch">${svg('book', 14)} Année archivée — consultation seule</span>` : `<span class="ck-live">${svg('clock', 14)} Mise à jour automatique avec les étudiants inscrits</span>`}
+      <span style="flex:1"></span>
+      <button class="vx-btn" onclick="VX.ckExport()">${svg('down', 15)} Exporter Excel</button>
+    </div>
+    <div class="ck-dips">${CK_DIP.map(d => { const s2 = stats(d); const pct = s2.n ? Math.round(s2.pts / (s2.n * 4) * 100) : 0; return `<button class="ck-dip ${C.dip === d ? 'on' : ''}" onclick="VX.ckDip('${d}')">
+      <span class="t">${d}</span><span class="v"><b>${s2.ok}</b>/${s2.n} complet${s2.ok > 1 ? 's' : ''}</span>
+      <span class="bar"><i style="width:${pct}%"></i></span><span class="p">${pct} % des contrôles validés · ${(r.diplomes[d] || []).filter(e => !e.concerne && !e.sorti).length} autre(s) inscrit(s)</span></button>`; }).join('')}</div>
+    <div class="ck-card">
+      <div class="ck-h"><h3>${C.dip} · étudiants qui passent le mémoire en ${esc(r.annee)} <span>${concernes.length}</span></h3>
+        <div class="ck-legend"><span>Sujet</span><span>Mémoire inséré</span><span>Prof référent</span><span>Dépôt Cyclade</span></div></div>
+      ${concernes.length ? `<table class="ck-t"><thead><tr><th></th><th>Étudiant</th><th>Sujet</th><th>Mémoire inséré</th><th>Prof référent</th><th>Dépôt Cyclade</th><th>Avancement</th></tr></thead><tbody>${concernes.map(row).join('')}</tbody></table>`
+        : `<div class="vx-note" style="margin:6px 0">${svg('check', 14, 2.4)} ${ro ? 'Aucun étudiant archivé pour ce diplôme.' : 'Cochez ci-dessous les étudiants qui passent le mémoire cette année.'}</div>`}
+    </div>
+    ${ro ? '' : ckOthersHtml(autres)}`;
+}
+// Sélection des étudiants qui passent le mémoire : on coche (recherche + filtre classe), puis
+// « Ajouter la sélection » — le rapprochement avec les mémoires déjà saisis est fait par le serveur.
+function ckOthersHtml(autres) {
+  const classes = [...new Set(autres.map(e => e.classe).filter(Boolean))].sort();
+  const q = norm(C.q);
+  const vis = autres.filter(e => (!C.cls || e.classe === C.cls) && (!q || norm(e.etudiant + ' ' + e.classe).includes(q)));
+  const nSel = autres.filter(e => C.sel.has(e.etuId)).length;
+  return `<div class="ck-card ck-others">
+      <div class="ck-h"><h3>Autres inscrits en ${C.dip} <span>${autres.length}</span></h3>
+        ${autres.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="vx-btn sm" onclick="VX.ckSelAll(true)">${svg('check', 13, 2.4)} Tout sélectionner${vis.length !== autres.length ? ' (filtrés)' : ''}</button>
+          ${nSel ? `<button class="vx-btn sm" onclick="VX.ckSelAll(false)">Désélectionner</button>` : ''}
+          <button class="vx-btn sm ora" ${nSel ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'} onclick="VX.ckAddSel()">${svg('plus', 13, 2.4)} Ajouter la sélection${nSel ? ' (' + nSel + ')' : ''}</button></div>` : ''}</div>
+      ${autres.length ? `<div class="ck-filt">
+          <div class="vx-search">${svg('search', 15)}<input id="ckQ" placeholder="Rechercher un étudiant…" value="${esc(C.q)}" oninput="VX.ckFilter(this.value,null)"></div>
+          <select class="vx-sel" onchange="VX.ckFilter(null,this.value)"><option value="">Toutes les classes</option>${classes.map(c => `<option ${c === C.cls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+        </div>
+        <div class="ck-grid">${vis.map(e => `<label class="ck-pick"><input type="checkbox" ${C.sel.has(e.etuId) ? 'checked' : ''} onchange="VX.ckSel('${jsq(e.etuId)}',this.checked)"><span class="b">${svg('check', 12, 3)}</span>${avatar(e.etudiant, 28)}<span class="n"><b>${esc(e.etudiant)}</b><small>${esc(e.classe)} · ${esc(e.campus)}</small>
+          <span class="m ${e.memoireId ? 'y' : 'n'}">${e.memoireId ? '✓ Mémoire déjà saisi' + (e.sujet ? '' : ' (sans sujet)') : 'Pas encore de mémoire'}</span></span></label>`).join('') || '<p class="sub">Aucun étudiant ne correspond à la recherche.</p>'}</div>`
+        : `<p class="sub" style="margin:4px 0 0">Tous les inscrits de ce diplôme sont dans la checklist.</p>`}
+    </div>`;
+}
+function ckSel(id, on) { if (on) C.sel.add(id); else C.sel.delete(id); ckRender(); }
+function ckSelAll(on) {
+  const autres = (C.data.diplomes[C.dip] || []).filter(e => !e.concerne && !e.sorti);
+  const q = norm(C.q);
+  autres.filter(e => (!C.cls || e.classe === C.cls) && (!q || norm(e.etudiant + ' ' + e.classe).includes(q)))
+    .forEach(e => on ? C.sel.add(e.etuId) : C.sel.delete(e.etuId));
+  if (!on) C.sel.clear();
+  ckRender();
+}
+function ckFilter(q, cls) {
+  if (q !== null) C.q = q; if (cls !== null) C.cls = cls;
+  ckRender();
+  if (q !== null) { const i = $('ckQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+}
+async function ckAddSel() {
+  const autres = (C.data.diplomes[C.dip] || []).filter(e => !e.concerne && !e.sorti && C.sel.has(e.etuId));
+  if (!autres.length) return;
+  const ids = autres.map(e => e.etuId);
+  C.sel.clear();
+  await ckConcerne(ids, true);
+  // Bilan du rapprochement avec les mémoires déjà en place
+  const avec = autres.filter(e => e.memoireId).length, sujet = autres.filter(e => e.sujet.trim()).length,
+        ref = autres.filter(e => e.referent.trim()).length, doc = autres.filter(e => e.nbDocs > 0).length;
+  modal(`<h2>${ids.length} étudiant${ids.length > 1 ? 's' : ''} ajouté${ids.length > 1 ? 's' : ''} — ${esc(C.dip)}</h2>
+    <p class="sub">Rapprochement avec les mémoires déjà saisis dans le CRM :</p>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0">
+      ${[['Mémoire déjà saisi', avec], ['Sujet fourni', sujet], ['Formateur référent', ref], ['Mémoire joint', doc]].map(([l, n]) => `<div class="ck-card" style="margin:0;padding:14px 16px"><b style="font-size:22px;color:${n === ids.length ? '#15803d' : (n ? '#c2410c' : '#c62828')}">${n}</b><span style="color:#7d8a9c"> / ${ids.length}</span><div style="font-size:12.5px;font-weight:700;margin-top:2px">${l}</div></div>`).join('')}
+    </div>
+    ${avec < ids.length ? `<p class="sub"><b>Sans mémoire saisi :</b> ${autres.filter(e => !e.memoireId).map(e => esc(e.etudiant)).join(', ')}</p>` : ''}
+    <div class="mft"><button class="vx-btn pri" onclick="this.closest('.vx-modal').remove()">OK</button></div>`, 560);
+}
+function ckDip(d) { C.dip = d; C.sel.clear(); C.q = ''; C.cls = ''; ckRender(); }
+function ckYear(v) {
+  if (v === '__new') { const a = prompt('Année scolaire (ex : 2027-2028) :', ''); if (!a || !/^\d{4}-\d{4}$/.test(a.trim())) { ckRender(); return; } v = a.trim(); }
+  C.data = null; ckLoad(v);
+}
+async function ckConcerne(ids, on) {
+  const all = Object.values(C.data.diplomes).flat();
+  all.forEach(e => { if (ids.includes(e.etuId)) e.concerne = on; });
+  ckRender();
+  const r = await api('saveMemoiresChecklist', { annee: C.annee, etuIds: ids, concerne: on });
+  if (!r.success) { all.forEach(e => { if (ids.includes(e.etuId)) e.concerne = !on; }); ckRender(); toast('Erreur : ' + errTxt(r.message), false); return; }
+  toast(on ? (ids.length > 1 ? ids.length + ' étudiants ajoutés' : 'Étudiant ajouté') + ' à la checklist ✓' : 'Retiré de la checklist');
+}
+async function ckCyclade(id, on) {
+  const e = Object.values(C.data.diplomes).flat().find(x => x.etuId === id); if (!e) return;
+  e.cyclade = on; e.cycladeDate = on ? todayISO() : ''; ckRender();
+  const r = await api('saveMemoiresChecklist', { annee: C.annee, cycladeEtuId: id, cyclade: on, cycladeDate: todayISO() });
+  if (!r.success) { e.cyclade = !on; ckRender(); toast('Erreur : ' + errTxt(r.message), false); return; }
+  toast(on ? 'Dépôt Cyclade enregistré ✓' : 'Dépôt Cyclade annulé');
+}
+async function ckExport() {
+  const r = C.data; if (!r) return;
+  toast('Préparation du fichier Excel…');
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const wb = new X.Workbook(); wb.creator = 'CRM HECG'; wb.created = new Date();
+  const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + argb } });
+  const OK = { bg: 'E8F6EE', fg: '15803D' }, KO = { bg: 'FDE8E8', fg: 'C62828' }, MID = { bg: 'FFF4ED', fg: 'C2410C' };
+  // Une ligne par étudiant : identité + mails HECG (étudiant et formateur référent) + 4 contrôles colorés
+  const H = ['Étudiant', 'Classe', 'Campus', 'Mail HECG étudiant', 'Sujet du mémoire', 'Mémoire joint', 'Formateur référent', 'Mail formateur référent', 'Dépôt Cyclade', 'Avancement'];
+  const W = [26, 13, 15, 32, 46, 20, 24, 32, 17, 13];
+  const mailCell = (c, mail, perso) => {
+    if (!mail) { c.value = '✗ Non renseigné'; c.font = { italic: true, color: { argb: 'FF' + KO.fg } }; return; }
+    c.value = { text: mail + (perso ? ' (perso)' : ''), hyperlink: 'mailto:' + mail };
+    c.font = { underline: true, color: { argb: perso ? 'FF94A3B8' : 'FF1D4ED8' }, italic: !!perso };
+  };
+  const synth = [];
+  CK_DIP.forEach(d => {
+    const list = (r.diplomes[d] || []).filter(e => e.concerne);
+    const ws = wb.addWorksheet(d, { views: [{ state: 'frozen', ySplit: 5, xSplit: 1 }], properties: { tabColor: { argb: 'FF' + XB.blue } }, pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    ws.columns = W.map(w => ({ width: w }));
+    const ok = list.filter(e => ckScore(e).every(Boolean)).length;
+    const cnt = j => list.filter(e => ckScore(e)[j]).length;
+    synth.push({ d, n: list.length, ok, sujet: cnt(0), doc: cnt(1), ref: cnt(2), cyc: cnt(3) });
+    xlTitle(ws, `Suivi des mémoires ${d} — ${r.annee}`, `${list.length} étudiant(s) · ${ok} dossier(s) complet(s) · sujet ${cnt(0)}/${list.length} · mémoire joint ${cnt(1)}/${list.length} · référent ${cnt(2)}/${list.length} · Cyclade ${cnt(3)}/${list.length} · édition du ${fmtLong(todayISO())}${r.archivee ? ' · année archivée' : ''}`, H.length);
+    // Légende des couleurs
+    const lg = ws.getRow(4); lg.height = 18;
+    [[1, '■ Fait', OK], [2, '■ À faire', KO], [3, '■ Partiel', MID]].forEach(([c, t, k]) => { const cell = lg.getCell(c); cell.value = t; cell.font = { bold: true, size: 9, color: { argb: 'FF' + k.fg } }; cell.fill = fill(k.bg); cell.alignment = { horizontal: 'center' }; });
+    xlHeader(ws, 5, H);
+    list.forEach((e, i) => {
+      const sc = ckScore(e), n = sc.filter(Boolean).length, rw = ws.getRow(6 + i);
+      rw.values = [e.etudiant, e.classe, e.campus, '', e.sujet || '✗ À définir', e.dernierDoc ? '' : '✗ Aucun', e.referent || '✗ À désigner', '', e.cyclade ? '✓ ' + (e.cycladeDate ? fmtD(e.cycladeDate) : 'Déposé') : '✗ À déposer', n === 4 ? '✓ Complet' : n + ' / 4'];
+      rw.height = Math.max(26, Math.min(70, 15 * Math.ceil((e.sujet || '').length / 50)));
+      rw.getCell(1).font = { bold: true, color: { argb: 'FF' + XB.ink } };
+      mailCell(rw.getCell(4), e.mailHecg || e.mailPerso, !e.mailHecg && !!e.mailPerso);
+      if (e.referent) mailCell(rw.getCell(8), e.referentMail, false); else { rw.getCell(8).value = '—'; rw.getCell(8).font = { color: { argb: 'FF' + XB.mu } }; }
+      sc.forEach((v, j) => { const c = rw.getCell([5, 6, 7, 9][j]); const k = v ? OK : KO; c.fill = fill(k.bg); if (!(j === 1 && v)) c.font = { color: { argb: 'FF' + k.fg }, bold: !v }; });
+      if (e.dernierDoc) { const c = rw.getCell(6); c.value = { text: '✓ ' + e.dernierDoc.version + ' du ' + fmtD(e.dernierDoc.date) + (e.nbDocs > 1 ? ' (' + e.nbDocs + ' versions)' : ''), hyperlink: e.dernierDoc.url }; c.font = { color: { argb: 'FF' + OK.fg }, underline: true, bold: true }; }
+      const pc = rw.getCell(10); pc.alignment = { horizontal: 'center', vertical: 'middle' };
+      pc.font = { bold: true, color: { argb: n === 4 ? 'FFFFFFFF' : 'FF' + (n >= 2 ? MID.fg : KO.fg) } };
+      pc.fill = fill(n === 4 ? '16A34A' : (n >= 2 ? MID.bg : KO.bg));
+      [2, 3, 9].forEach(c => rw.getCell(c).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true });
+    });
+    xlBand(ws, 6, 5 + list.length, H.length);
+    if (list.length) ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5 + list.length, column: H.length } };
+    else { ws.mergeCells(6, 1, 6, H.length); const c = ws.getCell(6, 1); c.value = 'Aucun étudiant coché pour ce diplôme.'; c.font = { italic: true, color: { argb: 'FF' + XB.mu } }; }
+  });
+  // Synthèse par diplôme (première feuille)
+  const sy = wb.addWorksheet('Synthèse', { properties: { tabColor: { argb: 'FF' + XB.orange } } });
+  sy.orderNo = -1; // ExcelJS ordonne les feuilles par orderNo : la synthèse passe en premier
+  const SH = ['Diplôme', 'Étudiants', 'Sujet fourni', 'Mémoire joint', 'Formateur référent', 'Dépôt Cyclade', 'Dossiers complets'];
+  sy.columns = [16, 12, 15, 15, 19, 15, 18].map(w => ({ width: w }));
+  xlTitle(sy, `Suivi des mémoires — synthèse ${r.annee}`, `Édition du ${fmtLong(todayISO())}`, SH.length);
+  xlHeader(sy, 4, SH);
+  synth.forEach((s, i) => {
+    const rw = sy.getRow(5 + i); rw.values = [s.d, s.n, s.sujet, s.doc, s.ref, s.cyc, s.ok]; rw.height = 26;
+    rw.getCell(1).font = { bold: true };
+    [3, 4, 5, 6, 7].forEach(c => { const v = rw.getCell(c).value, k = !s.n ? null : (v === s.n ? OK : (v ? MID : KO)); const cell = rw.getCell(c);
+      cell.value = s.n ? `${v} / ${s.n}  (${Math.round(v / s.n * 100)} %)` : '—'; if (k) { cell.fill = fill(k.bg); cell.font = { bold: true, color: { argb: 'FF' + k.fg } }; } });
+    for (let c = 1; c <= SH.length; c++) rw.getCell(c).alignment = { horizontal: c === 1 ? 'left' : 'center', vertical: 'middle', indent: c === 1 ? 1 : 0 };
+  });
+  xlBand(sy, 5, 4 + synth.length, SH.length);
+  await xlDownload(wb, `Checklist_memoires_${r.annee}.xlsx`);
+  toast('Export Excel prêt ✓');
+}
+
 function memKwManage() {
   const usage = k => M.data.filter(m => m.motsCles.some(x => norm(x) === norm(k))).length;
   const dlg = modal(`<h2>Mots-clés des mémoires</h2><p class="sub">Créez vos propres mots-clés : ils sont proposés à toute l'équipe lors de la saisie d'un mémoire.</p>
@@ -611,11 +877,89 @@ function memKwManage() {
   draw(); $('kwNew').focus();
 }
 
-function memExport() {
-  const list = memFiltered();
-  csvDownload('Memoires_HECG_' + todayISO() + '.csv', [['Étudiant', 'Classe', 'Campus', 'Sujet', 'Mots-clés', 'Formateur référent', 'Statut', 'Notes', 'Mis à jour le']]
-    .concat(list.map(m => [m.etudiant, m.classe, m.campus, m.sujet, m.motsCles.join(', '), m.formateur, m.statut, m.notes, fmtD(m.majLe)])));
+let _exceljs = null;
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if (_exceljs) return _exceljs;
+  _exceljs = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'; sc.onload = () => res(window.ExcelJS); sc.onerror = () => { _exceljs = null; rej(new Error('Bibliothèque Excel indisponible (réseau)')); }; document.head.appendChild(sc); });
+  return _exceljs;
 }
+function hslHex(h, s, l) { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('').toUpperCase(); }
+const kwHex = k => { const h = hue(norm(k)); return { fg: hslHex(h, 55, 32), bg: hslHex(h, 70, 94) }; };
+const XB = { blue: '1A4E8A', orange: 'F26522', ink: '0E1A2B', mu: '7D8A9C', line: 'E3EAF3', band: 'F5F8FC' };
+function xlTitle(ws, titre, sousTitre, nbCols) {
+  ws.mergeCells(1, 1, 1, nbCols); ws.mergeCells(2, 1, 2, nbCols); ws.mergeCells(3, 1, 3, nbCols);
+  const t = ws.getCell(1, 1); t.value = titre; t.font = { name: 'Calibri', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+  t.fill = { type: 'gradient', gradient: 'angle', degree: 0, stops: [{ position: 0, color: { argb: 'FF1A4E8A' } }, { position: 1, color: { argb: 'FF2D64A8' } }] };
+  t.alignment = { vertical: 'middle', indent: 1 }; ws.getRow(1).height = 36;
+  const st = ws.getCell(2, 1); st.value = sousTitre; st.font = { size: 10.5, italic: true, color: { argb: 'FF' + XB.mu } }; st.alignment = { indent: 1, vertical: 'middle' }; ws.getRow(2).height = 20;
+  ws.getCell(3, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + XB.orange } }; ws.getRow(3).height = 4;
+}
+function xlHeader(ws, rowIdx, headers) {
+  const r = ws.getRow(rowIdx); r.values = headers; r.height = 28;
+  r.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + XB.blue } };
+    c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = { bottom: { style: 'medium', color: { argb: 'FF' + XB.orange } } }; });
+}
+function xlBand(ws, from, to, nbCols) {
+  for (let r = from; r <= to; r++) for (let c = 1; c <= nbCols; c++) {
+    const cell = ws.getCell(r, c);
+    if (!cell.fill || cell.fill.type !== 'pattern' || !cell.fill.fgColor || cell.fill.fgColor.argb === undefined) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: (r - from) % 2 ? 'FF' + XB.band : 'FFFFFFFF' } };
+    cell.border = { top: { style: 'thin', color: { argb: 'FF' + XB.line } }, bottom: { style: 'thin', color: { argb: 'FF' + XB.line } }, left: { style: 'thin', color: { argb: 'FF' + XB.line } }, right: { style: 'thin', color: { argb: 'FF' + XB.line } } };
+    cell.alignment = Object.assign({ vertical: 'middle', wrapText: true }, cell.alignment || {});
+  }
+}
+async function xlDownload(wb, name) {
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+const STX = { 'En cours': ['E8EFF8', '1A4E8A'], 'Sujet validé': ['FFF4ED', 'C2410C'], 'Rendu': ['EDE9FE', '6D28D9'], 'Soutenu': ['E8F6EE', '15803D'] };
+
+async function memExport() {
+  const list = memFiltered().slice().sort((a, b) => (a.classe + a.etudiant).localeCompare(b.classe + b.etudiant, 'fr'));
+  toast('Préparation du fichier Excel…');
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const wb = new X.Workbook(); wb.creator = 'CRM HECG'; wb.created = new Date();
+  const ws = wb.addWorksheet('Mémoires', { views: [{ state: 'frozen', ySplit: 4 }], properties: { tabColor: { argb: 'FF' + XB.blue } } });
+  const H = ['Étudiant', 'Mail étudiant', 'Classe', 'Campus', 'Sujet du mémoire', 'Mots-clés', 'Formateur référent', 'Mail formateur', 'Statut', 'Dernier document', 'Date dernier doc.', 'Nb doc.', 'Notes'];
+  ws.columns = [26, 30, 13, 16, 46, 34, 24, 30, 14, 22, 15, 9, 34].map(w => ({ width: w }));
+  xlTitle(ws, 'Suivi des mémoires — HECG', `Export du ${fmtLong(todayISO())} · ${list.length} mémoire(s)` + (list.length !== M.data.length ? ' (filtrés)' : ''), H.length);
+  xlHeader(ws, 4, H);
+  list.forEach((m, i) => {
+    const d = m.docs[m.docs.length - 1];
+    const r = ws.getRow(5 + i);
+    r.values = [m.etudiant, m.etuMail || '', m.classe, m.campus, m.sujet, '', m.formateur, m.formateurMail || '', m.statut, d ? d.version + ' — ' + d.nom : '', d ? new Date(d.date + 'T12:00:00') : '', m.docs.length || '', m.notes || ''];
+    r.height = Math.max(24, Math.min(80, 15 * Math.ceil((m.sujet || '').length / 55)));
+    r.getCell(1).font = { bold: true, color: { argb: 'FF' + XB.ink } };
+    if (m.etuMail) { r.getCell(2).value = { text: m.etuMail, hyperlink: 'mailto:' + m.etuMail }; r.getCell(2).font = { color: { argb: 'FF1D4ED8' }, underline: true }; }
+    if (m.formateurMail) { r.getCell(8).value = { text: m.formateurMail, hyperlink: 'mailto:' + m.formateurMail }; r.getCell(8).font = { color: { argb: 'FF1D4ED8' }, underline: true }; }
+    if (m.motsCles.length) r.getCell(6).value = { richText: m.motsCles.flatMap((k, j) => { const c = kwHex(k); return (j ? [{ text: '   ', font: { size: 10 } }] : []).concat([{ text: '● ' + k, font: { bold: true, size: 10.5, color: { argb: 'FF' + c.fg } } }]); }) };
+    const sx = STX[m.statut] || STX['En cours'];
+    r.getCell(9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sx[0] } }; r.getCell(9).font = { bold: true, color: { argb: 'FF' + sx[1] } }; r.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
+    if (d) { r.getCell(10).value = { text: d.version + ' — ' + d.nom, hyperlink: d.url }; r.getCell(10).font = { color: { argb: 'FF1D4ED8' }, underline: true }; r.getCell(11).numFmt = 'dd/mm/yyyy'; }
+    [3, 4, 11, 12].forEach(c => r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' });
+    if (!m.formateur) { r.getCell(7).value = 'À désigner'; r.getCell(7).font = { italic: true, color: { argb: 'FFC2410C' } }; }
+  });
+  xlBand(ws, 5, 4 + list.length, H.length);
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + list.length, column: H.length } };
+  // Synthèse : mots-clés colorés + statuts
+  const sy = wb.addWorksheet('Synthèse', { properties: { tabColor: { argb: 'FF' + XB.orange } } });
+  sy.columns = [{ width: 32 }, { width: 14 }, { width: 6 }, { width: 22 }, { width: 14 }];
+  xlTitle(sy, 'Synthèse des mémoires', `${list.length} mémoire(s) · ${new Set(list.map(m => m.classe)).size} classe(s)`, 5);
+  sy.getRow(4).values = ['Mot-clé', 'Mémoires', '', 'Statut', 'Mémoires'];
+  [1, 2, 4, 5].forEach(c => { const cell = sy.getCell(4, c); cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + XB.blue } }; cell.alignment = { horizontal: 'center', vertical: 'middle' }; });
+  sy.getRow(4).height = 26;
+  const kwc = {}; list.forEach(m => m.motsCles.forEach(k => kwc[k] = (kwc[k] || 0) + 1));
+  Object.entries(kwc).sort((a, b) => b[1] - a[1]).forEach(([k, n], i) => { const c = kwHex(k); const a1 = sy.getCell(5 + i, 1), b1 = sy.getCell(5 + i, 2);
+    a1.value = k; a1.font = { bold: true, color: { argb: 'FF' + c.fg } }; a1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + c.bg } };
+    b1.value = n; b1.alignment = { horizontal: 'center' }; b1.font = { bold: true }; b1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + c.bg } }; sy.getRow(5 + i).height = 22; });
+  Object.keys(STX).forEach((st, i) => { const sx = STX[st]; const a1 = sy.getCell(5 + i, 4), b1 = sy.getCell(5 + i, 5);
+    a1.value = st; b1.value = list.filter(m => m.statut === st).length;
+    [a1, b1].forEach(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sx[0] } }; c.font = { bold: true, color: { argb: 'FF' + sx[1] } }; }); b1.alignment = { horizontal: 'center' }; });
+  await xlDownload(wb, 'Memoires_HECG_' + todayISO() + '.xlsx');
+  toast('Export Excel prêt ✓');
+}
+
 
 // ═══════════════════════════ FRISES ═══════════════════════════
 const F = { data: [], cur: null };
@@ -812,7 +1156,8 @@ function frEdit(id) {
 }
 
 window.VX = {
-  memInit, memRender, memEdit, memExport, memKwManage,
+  memInit, memRender, memEdit, memExport, memKwManage, memTab, ckDip, ckYear, ckConcerne, ckCyclade, ckExport,
+  ckSel, ckSelAll, ckFilter, ckAddSel,
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf
