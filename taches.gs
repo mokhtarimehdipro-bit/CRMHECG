@@ -200,6 +200,7 @@ function handleSaveTache(p, ss) {
       ws.getRange(nextRow, 1, 1, 23).setValues([row]);
       logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Création", "Missions", id, "Tâche : " + titre.substring(0, 80) + " | Pour : " + (c.collab || email));
       _tacheInvalidate_(email);
+      _ensureRelanceTachesTrigger_();
       let mail = false;
       if (_tacheParams_(ss).values.notifMail !== "Non" && email && email.indexOf("@") > 0 && email !== me) mail = _tacheNotifier_(email, row, ss);
       return createJsonResponse({ success: true, id: id, tache: _tacheRowToObj_(row), mailEnvoye: mail });
@@ -287,9 +288,92 @@ function _tacheNotifier_(email, r, ss) {
       + '<table style="border-collapse:collapse;width:100%">' + line("Échéance", esc(ech)) + line("Catégorie", esc(catNom)) + line("Mandat lié", esc(r[TACHE_COL.MANDAT_LABEL])) + line("Commentaire", esc(r[TACHE_COL.COMMENTAIRE])) + '</table>'
       + '<a href="' + url + '" style="display:inline-block;margin-top:22px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">Voir mes tâches</a>'
       + '</div></div></div>';
-    MailApp.sendEmail({ to: email, subject: "[HECG] " + (r[TACHE_COL.URGENT] === "Oui" ? "🚩 " : "") + "Nouvelle tâche : " + String(r[TACHE_COL.OBJET]).substring(0, 90), htmlBody: html, name: "CRM HECG" });
+    const mailOpts = { to: email, subject: "[HECG] " + (r[TACHE_COL.URGENT] === "Oui" ? "🚩 " : "") + "Nouvelle tâche : " + String(r[TACHE_COL.OBJET]).substring(0, 90), htmlBody: html, name: "CRM HECG" };
+    if (email.toLowerCase() !== TACHE_SUPERVISEUR) mailOpts.cc = TACHE_SUPERVISEUR; // direction toujours en copie
+    MailApp.sendEmail(mailOpts);
+    _ensureRelanceTachesTrigger_();
     return true;
   } catch (e) { Logger.log("Notif tâche : " + e); return false; }
+}
+
+// ── Relance automatique : toutes les 2 h, de 7 h à 18 h, du lundi au vendredi ──
+// Chaque membre ayant des tâches du jour ou en retard (ou urgentes sans échéance) reçoit
+// un récapitulatif, direction en copie. Désactivable : TACHES_PARAMS « relanceAuto » = Non.
+var TACHE_SUPERVISEUR = "m.mokhtari@hecg.fr";
+
+function _ensureRelanceTachesTrigger_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty("RELANCE_TACHES_TRIGGER") === "1") return;
+    const exists = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === "relancerTachesEquipe"; });
+    if (!exists) ScriptApp.newTrigger("relancerTachesEquipe").timeBased().everyHours(2).create();
+    props.setProperty("RELANCE_TACHES_TRIGGER", "1");
+  } catch (e) { Logger.log("Trigger relance tâches : " + e); }
+}
+/** À exécuter une fois depuis l'éditeur si besoin (le trigger est aussi créé automatiquement). */
+function creerTriggerRelanceTaches() {
+  ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === "relancerTachesEquipe") ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("relancerTachesEquipe").timeBased().everyHours(2).create();
+  PropertiesService.getScriptProperties().setProperty("RELANCE_TACHES_TRIGGER", "1");
+}
+
+function relancerTachesEquipe(force) {
+  const tz = Session.getScriptTimeZone();
+  const now = new Date();
+  const heure = parseInt(Utilities.formatDate(now, tz, "H"), 10);
+  const jourSem = parseInt(Utilities.formatDate(now, tz, "u"), 10); // 1 = lundi … 7 = dimanche
+  if (force !== true && (heure < 7 || heure > 18 || jourSem > 5)) return;
+  const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  if (_tacheParams_(ss).values.relanceAuto === "Non") return;
+  const today = Utilities.formatDate(now, tz, "yyyy-MM-dd");
+  const d = _tacheSheet_(ss).getDataRange().getValues();
+  const parPersonne = {};
+  for (let i = 1; i < d.length; i++) {
+    if (!d[i][0] || d[i][TACHE_COL.ARCHIVE]) continue;
+    const st = String(d[i][TACHE_COL.STATUT] || "");
+    if (st === "Clôturé" || st === "Annulé") continue;
+    const t = _tacheRowToObj_(d[i]);
+    if (!t.email || t.email.indexOf("@") === -1) continue;
+    const etat = t.echeance ? (t.echeance < today ? "retard" : (t.echeance === today ? "jour" : "")) : (t.urgent ? "urgent" : "");
+    if (!etat) continue;
+    t.etat = etat;
+    t.joursRetard = etat === "retard" ? Math.round((new Date(today + "T12:00:00") - new Date(t.echeance + "T12:00:00")) / 86400000) : 0;
+    (parPersonne[t.email] = parPersonne[t.email] || []).push(t);
+  }
+  const esc = function(s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  const url = "https://mokhtarimehdipro-bit.github.io/CRMHECG/missions.html";
+  let nbMails = 0;
+  Object.keys(parPersonne).forEach(function(email) {
+    const list = parPersonne[email].sort(function(a, b) { return (b.joursRetard - a.joursRetard) || ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)); });
+    const retard = list.filter(function(t) { return t.etat === "retard"; });
+    const nom = list[0].collab || email;
+    const ligne = function(t) {
+      const badge = t.etat === "retard" ? '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">⚠️ EN RETARD de ' + t.joursRetard + ' j</span>'
+        : (t.etat === "jour" ? '<span style="background:#F26522;color:#fff;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">Aujourd\'hui</span>'
+        : '<span style="background:#b91c1c;color:#fff;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">🚩 Urgent</span>');
+      return '<tr><td style="padding:10px 12px;border-bottom:1px solid #eef2f7;background:' + (t.etat === "retard" ? "#fef2f2" : "#fff") + '">'
+        + '<div style="font-weight:700;color:#0f1b2d;font-size:14px">' + (t.urgent ? "🚩 " : "") + esc(t.titre) + '</div>'
+        + (t.mandatLabel ? '<div style="color:#64748b;font-size:12px;margin-top:2px">Concerne : ' + esc(t.mandatLabel) + '</div>' : '')
+        + '</td><td style="padding:10px 12px;border-bottom:1px solid #eef2f7;text-align:right;white-space:nowrap;background:' + (t.etat === "retard" ? "#fef2f2" : "#fff") + '">' + badge
+        + (t.echeance ? '<div style="color:#64748b;font-size:11px;margin-top:4px">Échéance : ' + Utilities.formatDate(new Date(t.echeance + "T12:00:00"), tz, "dd/MM/yyyy") + '</div>' : '') + '</td></tr>';
+    };
+    const html = '<div style="font-family:Segoe UI,Arial,sans-serif;background:#f5f7fb;padding:24px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e6ebf2">'
+      + '<div style="background:' + (retard.length ? "#b91c1c" : "#1A4E8A") + ';padding:18px 24px;color:#fff;font-size:18px;font-weight:700">'
+      + (retard.length ? "⚠️ " + retard.length + " tâche" + (retard.length > 1 ? "s" : "") + " en retard" : "⏰ Rappel de vos tâches du jour") + '</div>'
+      + '<div style="padding:20px 24px"><p style="margin:0 0 14px;color:#334155;font-size:14px">Bonjour ' + esc(nom) + ', voici vos tâches à traiter (' + list.length + ') :</p>'
+      + '<table style="width:100%;border-collapse:collapse;border:1px solid #eef2f7;border-radius:10px">' + list.map(ligne).join("") + '</table>'
+      + '<a href="' + url + '" style="display:inline-block;margin-top:18px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:10px">Ouvrir mes tâches</a>'
+      + '<p style="margin:18px 0 0;padding:12px 14px;background:#fff7ed;border-left:4px solid #F26522;color:#7c2d12;font-size:13px">En cas d\'impossibilité de réaliser une tâche, envoyez un mail à '
+      + '<a href="mailto:' + TACHE_SUPERVISEUR + '?subject=' + encodeURIComponent("Tâche impossible à réaliser") + '" style="color:#c2410c;font-weight:700">' + TACHE_SUPERVISEUR + '</a> en expliquant pourquoi.</p>'
+      + '<p style="margin:14px 0 0;color:#94a3b8;font-size:11px">Rappel automatique toutes les 2 h (7 h – 18 h, du lundi au vendredi) tant que des tâches du jour ou en retard restent ouvertes.</p></div></div></div>';
+    const sujet = "[HECG] " + (retard.length ? "⚠️ " + retard.length + " tâche(s) EN RETARD — " : "⏰ ") + list.length + " tâche(s) à traiter aujourd'hui";
+    try {
+      const opts = { to: email, subject: sujet, htmlBody: html, name: "CRM HECG" };
+      if (email !== TACHE_SUPERVISEUR) opts.cc = TACHE_SUPERVISEUR;
+      MailApp.sendEmail(opts); nbMails++;
+    } catch (eM) { Logger.log("Relance tâches " + email + " : " + eM); }
+  });
+  if (nbMails) logAction("Système", "Auto", "Action", "Missions — relances", "Relance auto", nbMails + " mail(s) de rappel envoyé(s) (tâches du jour / en retard), copie " + TACHE_SUPERVISEUR);
 }
 
 // Paramétrage (admin) : liste des catégories + notifications
@@ -304,14 +388,18 @@ function handleSaveTachesParams(p, ss) {
       if (ws.getLastRow() > 1) ws.getRange(2, 1, ws.getLastRow() - 1, 4).clearContent();
       if (rows.length) ws.getRange(2, 1, rows.length, 4).setValues(rows);
     }
-    if (p.notifMail !== undefined) {
+    const setParam = function(cle, on) {
       const pr = _tacheParams_(ss);
       const d = pr.ws.getDataRange().getValues();
       let found = false;
-      for (let i = 1; i < d.length; i++) if (String(d[i][0]) === "notifMail") { pr.ws.getRange(i + 1, 2).setValue(p.notifMail ? "Oui" : "Non"); found = true; }
-      if (!found) pr.ws.appendRow(["notifMail", p.notifMail ? "Oui" : "Non"]);
-    }
-    logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Modification", "Missions", "PARAMS", "Paramètres des tâches mis à jour");
+      for (let i = 1; i < d.length; i++) if (String(d[i][0]) === cle) { pr.ws.getRange(i + 1, 2).setValue(on ? "Oui" : "Non"); found = true; }
+      if (!found) pr.ws.appendRow([cle, on ? "Oui" : "Non"]);
+    };
+    if (p.notifMail !== undefined) setParam("notifMail", p.notifMail);
+    if (p.relanceAuto !== undefined) { setParam("relanceAuto", p.relanceAuto); if (p.relanceAuto) _ensureRelanceTachesTrigger_(); }
+    logAction(p.idAuteur || p.nomAuteur, p.roleAuteur, "Modification", "Missions", "PARAMS", "Paramètres des tâches mis à jour"
+      + (p.notifMail !== undefined ? " — notifications mail : " + (p.notifMail ? "activées" : "désactivées") : "")
+      + (p.relanceAuto !== undefined ? " — relances 2 h : " + (p.relanceAuto ? "activées" : "désactivées") : ""));
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }

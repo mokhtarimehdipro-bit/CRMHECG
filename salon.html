@@ -29,6 +29,18 @@
   .salon{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:12px 14px;border-radius:16px;background:#fff;border:1px solid var(--li)}
   .salon label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);white-space:nowrap}
   .salon input{flex:1;border:none;outline:none;font:700 15px 'Plus Jakarta Sans',sans-serif;color:var(--ink);background:none;min-width:0}
+  .salon select{flex:1;min-width:0;height:40px;border:1.5px solid var(--li);border-radius:12px;padding:0 34px 0 12px;font:700 15px 'Plus Jakarta Sans',sans-serif;color:var(--ink);background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237d8a9c' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;-webkit-appearance:none;appearance:none;outline:none}
+  .salon .plus{width:40px;height:40px;flex-shrink:0;border-radius:12px;border:none;background:var(--b);color:#fff;font:800 22px/1 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+  .evf{margin:-6px 0 14px;padding:14px;border-radius:16px;background:#fff;border:1.5px dashed var(--b)}
+  .evf .f{margin-top:10px}.evf .f:first-child{margin-top:0}
+  .evf .act{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .evf .act button{height:42px;padding:0 16px;border-radius:12px;font:700 14px 'Plus Jakarta Sans',sans-serif;cursor:pointer;border:1px solid var(--li);background:#fff;color:var(--tx)}
+  .evf .act button.pri{background:var(--b);border-color:var(--b);color:#fff}
+  .assign{margin-bottom:12px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px;font-weight:600}
+  .assign .r{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .assign select{flex:1;min-width:150px;height:40px;border:1.5px solid #fdba74;border-radius:11px;padding:0 10px;font:700 14px 'Plus Jakarta Sans',sans-serif;background:#fff;color:var(--ink)}
+  .assign button{height:40px;padding:0 13px;border-radius:11px;border:none;font:700 13px 'Plus Jakarta Sans',sans-serif;cursor:pointer;background:#F26522;color:#fff}
+  .assign button.ghost{background:#fff;color:#9a3412;border:1px solid #fdba74}
   h1{margin:0 0 4px;font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
   .sub{margin:0 0 14px;color:var(--mu);font-size:13.5px}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -81,7 +93,15 @@
 
 <main>
   <div id="banner"></div>
-  <div class="salon"><label>Salon</label><input id="salon" placeholder="Nom du salon (ex : Studyrama Marseille)" autocomplete="off"></div>
+  <div class="salon"><label>Événement</label><select id="evt"></select><button class="plus" id="evtNew" type="button" title="Créer un événement">+</button></div>
+  <div class="evf" id="evtForm" hidden>
+    <div class="f"><label>Nom de l'événement</label><input id="evtNom" placeholder="Ex : Studyrama Marseille" autocomplete="off"></div>
+    <div class="row">
+      <div class="f"><label>Date</label><input id="evtDate" type="date"></div>
+      <div class="f"><label>Lieu</label><input id="evtLieu" placeholder="Ex : Parc Chanot" autocomplete="off"></div>
+    </div>
+    <div class="act"><button type="button" id="evtCancel">Annuler</button><button type="button" class="pri" id="evtSave">Créer et sélectionner</button></div>
+  </div>
 
   <form class="card" id="form" autocomplete="off" novalidate>
     <h1>Nouveau prospect</h1>
@@ -100,6 +120,7 @@
 
   <section class="card q">
     <h2>Saisies de cet appareil <span id="qState"></span></h2>
+    <div id="qAssign"></div>
     <div id="qList"></div>
     <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
       <button class="btn2" id="syncBtn" type="button">Envoyer maintenant</button>
@@ -110,7 +131,7 @@
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
-const QK = 'hecg_salon_queue_v1', CK = 'hecg_salon_classes_v1', SK = 'hecg_salon_nom_v1';
+const QK = 'hecg_salon_queue_v1', CK = 'hecg_salon_classes_v1', SK = 'hecg_salon_nom_v1', EK = 'hecg_salon_evts_v1', ESK = 'hecg_salon_evt_sel_v1';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 let user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -155,7 +176,64 @@ function renderBanner() {
   else b.innerHTML = '';
   $('who').textContent = user.email ? (user.nom || user.email) : 'Non connecté';
 }
+// ── événements (cache local + créés hors ligne, envoyés avec les prospects) ──
+const evKey = e => (String(e.nom || '').trim().toLowerCase() + '|' + (e.date || ''));
+const evLib = e => e.nom + (e.date ? ' — ' + e.date.split('-').reverse().join('/') : '');
+let EVTS = (() => { try { return JSON.parse(localStorage.getItem(EK) || '[]'); } catch (e) { return []; } })();
+let EVT_SEL = (() => { try { const o = JSON.parse(localStorage.getItem(ESK) || 'null'); if (o) return o; } catch (e) {}
+  const old = localStorage.getItem(SK); return old ? { nom: old, date: '', lieu: '' } : null; })(); // ancien champ texte libre
+if (EVT_SEL && !EVTS.some(e => evKey(e) === evKey(EVT_SEL))) EVTS.push({ ...EVT_SEL, local: true });
+function saveEvts() { try { localStorage.setItem(EK, JSON.stringify(EVTS)); } catch (e) {} idb.set('evts', EVTS); }
+function evtOptions(selKey) {
+  const list = EVTS.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.nom.localeCompare(b.nom));
+  return '<option value="">— Aucun événement —</option>' + list.map(e => `<option value="${esc(evKey(e))}" ${evKey(e) === selKey ? 'selected' : ''}>${esc(evLib(e))}${e.local ? ' (créé sur cet appareil)' : ''}</option>`).join('');
+}
+function renderEvts() { $('evt').innerHTML = evtOptions(EVT_SEL ? evKey(EVT_SEL) : ''); }
+function mergeServerEvts(list) {
+  const byK = {}; EVTS.forEach(e => byK[evKey(e)] = e);
+  (list || []).forEach(e => { byK[evKey(e)] = { nom: e.nom, date: e.date || '', lieu: e.lieu || '', id: e.id }; });
+  EVTS = Object.values(byK); saveEvts(); renderEvts(); renderQ();
+}
+$('evt').addEventListener('change', e => {
+  EVT_SEL = EVTS.find(x => evKey(x) === e.target.value) || null;
+  try { localStorage.setItem(ESK, JSON.stringify(EVT_SEL)); localStorage.removeItem(SK); } catch (er) {}
+});
+$('evtNew').onclick = () => { $('evtForm').hidden = false; $('evtNom').value = ''; $('evtDate').value = new Date().toISOString().slice(0, 10); $('evtLieu').value = ''; $('evtNom').focus(); };
+$('evtCancel').onclick = () => { $('evtForm').hidden = true; };
+$('evtSave').onclick = async () => {
+  const nom = $('evtNom').value.trim(); if (!nom) { $('evtNom').classList.add('err'); return; }
+  $('evtNom').classList.remove('err');
+  const ev = { nom, date: $('evtDate').value, lieu: $('evtLieu').value.trim(), local: true };
+  if (!EVTS.some(e => evKey(e) === evKey(ev))) EVTS.push(ev);
+  EVT_SEL = { nom: ev.nom, date: ev.date, lieu: ev.lieu };
+  try { localStorage.setItem(ESK, JSON.stringify(EVT_SEL)); } catch (er) {}
+  saveEvts(); renderEvts(); renderQ(); $('evtForm').hidden = true;
+  if (navigator.onLine && user.email) {
+    try { const r = await api({ action: 'saveSalonEvenement', nom: ev.nom, date: ev.date, lieu: ev.lieu }); if (r.success) mergeServerEvts(r.evenements); } catch (e) {}
+  }
+};
+
+// Saisies sans événement : elles attendent qu'on leur en affecte un (ou qu'on choisisse de les envoyer sans)
+function renderAssign() {
+  const sans = loadQ().filter(x => (x.st === 'p' || x.st === 'x') && !x.salon && !x.sansEvt);
+  const el = $('qAssign');
+  if (!sans.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="assign">${sans.length} saisie${sans.length > 1 ? 's' : ''} sans événement — elle${sans.length > 1 ? 's' : ''} ne ser${sans.length > 1 ? 'ont' : 'a'} envoyée${sans.length > 1 ? 's' : ''} qu'après affectation.
+    <div class="r"><select id="assignSel">${evtOptions(EVT_SEL ? evKey(EVT_SEL) : '').replace('— Aucun événement —', '— Choisir l\'événement —')}</select>
+    <button type="button" id="assignGo">Affecter</button><button type="button" class="ghost" id="assignSans">Envoyer sans événement</button></div></div>`;
+  $('assignGo').onclick = () => {
+    const ev = EVTS.find(x => evKey(x) === $('assignSel').value); if (!ev) { alert('Choisissez un événement (ou créez-le avec le bouton +).'); return; }
+    const q = loadQ(); q.forEach(x => { if ((x.st === 'p' || x.st === 'x') && !x.salon && !x.sansEvt) { x.salon = ev.nom; x.salonDate = ev.date || ''; x.salonLieu = ev.lieu || ''; } });
+    saveQ(q); renderQ(); sync();
+  };
+  $('assignSans').onclick = () => {
+    if (!confirm('Envoyer ces saisies sans événement ?')) return;
+    const q = loadQ(); q.forEach(x => { if ((x.st === 'p' || x.st === 'x') && !x.salon) x.sansEvt = true; }); saveQ(q); renderQ(); sync();
+  };
+}
+
 function renderQ() {
+  renderAssign();
   const q = loadQ(), pend = q.filter(x => x.st === 'p' || x.st === 'x').length;
   $('qState').className = pend ? 'pend' : 'sync';
   $('qState').textContent = pend ? `${pend} en attente d'envoi` : (q.length ? 'Tout est envoyé ✓' : '');
@@ -164,7 +242,7 @@ function renderQ() {
     const nom = (x.prenom + ' ' + x.nom).trim() || '—';
     const h = [...nom].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 0);
     return `<div class="it"><div class="av" style="background:hsl(${h},55%,48%)">${esc(nom.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase())}</div>
-      <div class="n"><b>${esc(nom)}</b><small>${esc([x.tel, x.mail].filter(Boolean).join(' · '))}${x.classe ? ' · ' + esc(x.classe) : ''}</small></div>
+      <div class="n"><b>${esc(nom)}</b><small>${esc([x.tel, x.mail].filter(Boolean).join(' · '))}${x.classe ? ' · ' + esc(x.classe) : ''}${x.salon ? ' · 📍 ' + esc(x.salon) : (x.st === 'p' && !x.sansEvt ? ' · <b style="color:#c2410c">sans événement</b>' : '')}</small></div>
       <span class="st ${lab[x.st][0]}" title="${esc(x.msg || '')}">${lab[x.st][1]}</span></div>`;
   }).join('') : '<div class="empty">Aucune saisie pour l\'instant.</div>';
 }
@@ -184,17 +262,18 @@ async function api(payload) {
 async function refreshClasses() {
   try { fillClasses(JSON.parse(localStorage.getItem(CK) || '[]')); } catch (e) {}
   if (!navigator.onLine || !user.email) return;
-  try { const r = await api({ action: 'getSalonRef' }); if (r.success) { localStorage.setItem(CK, JSON.stringify(r.classes || [])); fillClasses(r.classes || []); } } catch (e) {}
+  try { const r = await api({ action: 'getSalonRef' }); if (r.success) { localStorage.setItem(CK, JSON.stringify(r.classes || [])); fillClasses(r.classes || []); mergeServerEvts(r.evenements || []); } } catch (e) {}
 }
 
 // ── synchronisation ──────────────────────────────────────────────────────
 async function sync() {
   if (syncing || !navigator.onLine || !user.email) return;
-  const pending = loadQ().filter(x => x.st === 'p' || x.st === 'x');
+  // Les saisies sans événement attendent une affectation (ou le choix « envoyer sans événement »)
+  const pending = loadQ().filter(x => (x.st === 'p' || x.st === 'x') && (x.salon || x.sansEvt));
   if (!pending.length) return;
   syncing = true;
   try {
-    const r = await api({ action: 'addProspectsSalon', prospects: pending.map(x => ({ cid: x.cid, nom: x.nom, prenom: x.prenom, tel: x.tel, mail: x.mail, classe: x.classe, campus: x.campus, salon: x.salon })) });
+    const r = await api({ action: 'addProspectsSalon', prospects: pending.map(x => ({ cid: x.cid, nom: x.nom, prenom: x.prenom, tel: x.tel, mail: x.mail, classe: x.classe, campus: x.campus, salon: x.salon || '', salonDate: x.salonDate || '', salonLieu: x.salonLieu || '' })) });
     if (r.sessionExpired) { authKo = true; renderBanner(); return; }
     authKo = false; renderBanner();
     if (!r.success) throw new Error(r.message);
@@ -213,8 +292,6 @@ async function sync() {
 // ── formulaire ───────────────────────────────────────────────────────────
 $('campus').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; campus = b.dataset.v; localStorage.setItem('hecg_salon_campus', campus); paintCampus(); });
 function paintCampus() { $('campus').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === campus)); }
-$('salon').value = localStorage.getItem(SK) || '';
-$('salon').addEventListener('input', e => localStorage.setItem(SK, e.target.value));
 ['prenom', 'nom', 'tel', 'mail'].forEach((id, i, a) => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const n = a[i + 1]; if (n) $(n).focus(); else $('classe').focus(); } }));
 
 $('form').addEventListener('submit', e => {
@@ -229,7 +306,8 @@ $('form').addEventListener('submit', e => {
   if (tel && tel.replace(/\D/g, '').length < 9) { $('tel').classList.add('err'); ok = false; }
   if (!ok) { if (navigator.vibrate) navigator.vibrate(80); return; }
   const q = loadQ();
-  q.push({ cid: uid(), prenom: v('prenom'), nom: v('nom').toUpperCase(), tel, mail, classe: $('classe').value, campus, salon: v('salon'), at: Date.now(), st: 'p' });
+  q.push({ cid: uid(), prenom: v('prenom'), nom: v('nom').toUpperCase(), tel, mail, classe: $('classe').value, campus,
+           salon: EVT_SEL ? EVT_SEL.nom : '', salonDate: EVT_SEL ? (EVT_SEL.date || '') : '', salonLieu: EVT_SEL ? (EVT_SEL.lieu || '') : '', at: Date.now(), st: 'p' });
   saveQ(q);
   $('form').reset(); paintCampus();
   const o = document.createElement('div'); o.className = 'ok-overlay';
@@ -246,7 +324,13 @@ window.addEventListener('offline', renderNet);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { user = JSON.parse(localStorage.getItem('user') || '{}'); renderBanner(); sync(); } });
 setInterval(sync, 20000);
 
-paintCampus(); renderNet(); renderBanner(); renderQ(); restoreQ().then(() => { renderQ(); refreshClasses(); sync(); });
+paintCampus(); renderNet(); renderBanner(); renderEvts(); renderQ();
+restoreQ().then(async () => {
+  // Les événements survivent aussi au localStorage.clear() des autres pages (copie IndexedDB)
+  const fromDb = await idb.get('evts');
+  if (Array.isArray(fromDb)) { const byK = {}; fromDb.concat(EVTS).forEach(e => byK[evKey(e)] = e); EVTS = Object.values(byK); saveEvts(); renderEvts(); }
+  renderQ(); refreshClasses(); sync();
+});
 </script>
 </body>
 </html>

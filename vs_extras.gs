@@ -295,7 +295,12 @@ function handleAddProspectsSalon(p, ss) {
       const t = normTel(d[i][5]); if (t.length === 9) byTel[t] = String(d[i][0]);
     }
     const cache = CacheService.getScriptCache();
-    const res = [], rows = [];
+    const res = [], rows = [], notes = [];
+    const auteur = String(p.nomAuteur || p.idAuteur || p.emailAuteur || "Salon");
+    const colEvt = _salonColByHeader_(ws, SALON_EVT_COL_HEADER);
+    const evtSheet = _salonEvtSheet_(ss);
+    const evtLib = function(it) { return it.salon ? String(it.salon).trim() + (it.salonDate ? " (" + _salonFmtDateFr_(it.salonDate) + ")" : "") : ""; };
+    const majEvtExistant = {}; // ID étudiant existant → libellés d'événements à ajouter
     let base = Date.now();
     items.forEach(function(it) {
       const cid = String(it.cid || "");
@@ -303,49 +308,153 @@ function handleAddProspectsSalon(p, ss) {
       if (seen) { res.push({ cid: cid, statut: "deja", id: seen }); return; }
       const nom = String(it.nom || "").trim().toUpperCase(), prenom = String(it.prenom || "").trim();
       if (!nom && !prenom) { res.push({ cid: cid, statut: "erreur", message: "Nom manquant" }); return; }
+      if (it.salon) _salonEvtUpsert_(evtSheet, it.salon, it.salonDate, it.salonLieu, auteur);
+      const lib = evtLib(it);
       const mail = String(it.mail || "").trim().toLowerCase(), tel = String(it.tel || "").trim();
       const dup = (mail && byMail[mail]) || (normTel(tel).length === 9 && byTel[normTel(tel)]);
-      if (dup) { if (cid) cache.put("salon_cid_" + cid, dup, 21600); res.push({ cid: cid, statut: "existant", id: dup }); return; }
+      if (dup) {
+        if (cid) cache.put("salon_cid_" + cid, dup, 21600);
+        if (lib) { (majEvtExistant[dup] = majEvtExistant[dup] || []).push(lib); notes.push([dup, auteur, new Date(), "📍 Rencontré de nouveau lors de l'événement « " + lib + " »", false]); }
+        res.push({ cid: cid, statut: "existant", id: dup }); return;
+      }
       const id = "ETU" + String(base++).slice(-6);
       const row = [id, "P@ss123", nom, prenom, mail, tel, "", "", "", "", "", "", "", "", String(it.classe || ""), "Non", "Non",
                    "", "", "", "PROSPECT", "", String(it.campus || ""), "", "", "", ""];
-      rows.push(_withDateCreation_(ws, row));
+      _withDateCreation_(ws, row);
+      while (row.length < colEvt) row.push("");
+      row[colEvt - 1] = lib;
+      rows.push(row);
+      if (lib) notes.push([id, auteur, new Date(), "📍 Rencontré lors de l'événement « " + lib + " »", false]);
       if (mail) byMail[mail] = id; if (normTel(tel).length === 9) byTel[normTel(tel)] = id;
       if (cid) cache.put("salon_cid_" + cid, id, 21600);
       res.push({ cid: cid, statut: "ajoute", id: id });
-      logAction(p.nomAuteur || p.idAuteur || p.emailAuteur, p.roleAuteur || "", "Création", "Dossier étudiant", id,
-        "Prospect salon" + (it.salon ? " « " + String(it.salon) + " »" : "") + " : " + prenom + " " + nom);
+      logAction(auteur, p.roleAuteur || "", "Création", "Dossier étudiant", id,
+        "Prospect salon" + (lib ? " « " + lib + " »" : " (sans événement)") + " : " + prenom + " " + nom);
     });
     if (rows.length) {
       const width = Math.max.apply(null, rows.map(function(r) { return r.length; }));
       const norm = rows.map(function(r) { while (r.length < width) r.push(""); return r; });
       ws.getRange(ws.getLastRow() + 1, 1, norm.length, width).setValues(norm);
     }
+    // Prospects déjà connus : l'événement est ajouté à leur fiche (sans doublon)
+    Object.keys(majEvtExistant).forEach(function(idEtu) {
+      for (let i = 1; i < d.length; i++) if (String(d[i][0]) === idEtu) {
+        const cell = ws.getRange(i + 1, colEvt);
+        const actuels = String(cell.getValue() || "").split(" | ").map(function(s) { return s.trim(); }).filter(Boolean);
+        majEvtExistant[idEtu].forEach(function(l) { if (actuels.indexOf(l) === -1) actuels.push(l); });
+        cell.setValue(actuels.join(" | "));
+        try { _invalidateStudentDetailsCache_(idEtu); } catch (eC) {}
+        logAction(auteur, p.roleAuteur || "", "Modification", "Dossier étudiant", idEtu, "Événement ajouté (déjà dans le CRM) : " + majEvtExistant[idEtu].join(", "));
+        break;
+      }
+    });
+    if (notes.length) { const wc = getSheetSafe(ss, "Carnet_route"); wc.getRange(wc.getLastRow() + 1, 1, notes.length, 5).setValues(notes); }
     return createJsonResponse({ success: true, resultats: res });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
 }
 
 function handleGetSalonRef(p, ss) {
-  return getCachedJsonResponse_('salon_ref_v1', 600, function() {
+  return getCachedJsonResponse_('salon_ref_v2', 600, function() {
     try {
       const d = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
       const cl = {};
       for (let i = 1; i < d.length; i++) { const c = String(d[i][14] || "").trim(); if (c) cl[c] = true; }
-      return createJsonResponse({ success: true, classes: Object.keys(cl).sort() });
+      return createJsonResponse({ success: true, classes: Object.keys(cl).sort(), evenements: _salonEvtList_(ss) });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
+}
+
+// ── Événements (salons, JPO, forums…) : feuille SALON_EVENEMENTS ──
+// Créés depuis salon.html (y compris hors ligne : l'événement est créé côté serveur au premier
+// envoi d'un prospect qui le porte). Le libellé « Nom (jj/mm/aaaa) » est écrit dans la colonne
+// « Événements » de la fiche étudiant (plusieurs séparés par « | ») + note dans le carnet de route.
+var SALON_EVT_HEADERS = ["ID", "Nom", "Date", "Lieu", "Créé par", "Créé le", "Archivé"];
+var SALON_EVT_COL_HEADER = "Événements";
+
+function _salonFmtDateFr_(iso) { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + "/" + m[2] + "/" + m[1] : String(iso || ""); }
+function _salonNorm_(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim(); }
+function _salonEvtSheet_(ss) { return _vsxSheet_(ss, "SALON_EVENEMENTS", SALON_EVT_HEADERS); }
+
+// Colonne repérée par son en-tête dans ETUDIANTS (créée en fin de feuille si absente)
+function _salonColByHeader_(ws, header) {
+  const lastCol = Math.max(ws.getLastColumn(), 1);
+  const h = ws.getRange(1, 1, 1, lastCol).getValues()[0];
+  for (let c = 0; c < h.length; c++) if (_salonNorm_(h[c]) === _salonNorm_(header)) return c + 1;
+  if (ws.getMaxColumns() < lastCol + 1) ws.insertColumnsAfter(ws.getMaxColumns(), 1);
+  ws.getRange(1, lastCol + 1).setValue(header).setFontWeight("bold");
+  return lastCol + 1;
+}
+
+function _salonEvtList_(ss) {
+  const d = _salonEvtSheet_(ss).getDataRange().getValues();
+  const tz = Session.getScriptTimeZone(), out = [];
+  for (let i = 1; i < d.length; i++) {
+    if (!d[i][0] || String(d[i][6]) === "Oui") continue;
+    out.push({ id: String(d[i][0]), nom: String(d[i][1] || ""), date: d[i][2] instanceof Date ? Utilities.formatDate(d[i][2], tz, "yyyy-MM-dd") : String(d[i][2] || ""), lieu: String(d[i][3] || "") });
+  }
+  return out.sort(function(a, b) { return (b.date || "").localeCompare(a.date || ""); });
+}
+
+// Crée l'événement s'il n'existe pas déjà (même nom + même date) ; renvoie son ID
+function _salonEvtUpsert_(ws, nom, date, lieu, auteur) {
+  nom = String(nom || "").trim(); if (!nom) return "";
+  date = String(date || "").trim();
+  const d = ws.getDataRange().getValues(), tz = Session.getScriptTimeZone();
+  for (let i = 1; i < d.length; i++) {
+    const di = d[i][2] instanceof Date ? Utilities.formatDate(d[i][2], tz, "yyyy-MM-dd") : String(d[i][2] || "");
+    if (_salonNorm_(d[i][1]) === _salonNorm_(nom) && (!date || !di || di === date)) return String(d[i][0]);
+  }
+  const id = "EVT" + Date.now() + Math.floor(Math.random() * 10);
+  ws.appendRow([id, nom, "", String(lieu || ""), auteur, new Date(), ""]);
+  ws.getRange(ws.getLastRow(), 3).setNumberFormat("@").setValue(date);
+  try { logAction(auteur, "", "Création", "Salon — Événements", id, "Événement créé : " + nom + (date ? " (" + _salonFmtDateFr_(date) + ")" : "") + (lieu ? " — " + lieu : "")); } catch (eL) {}
+  return id;
+}
+
+function handleSaveSalonEvenement(p, ss) {
+  try {
+    const nom = String(p.nom || "").trim();
+    if (!nom) return createJsonResponse({ success: false, message: "Le nom de l'événement est obligatoire." });
+    const ws = _salonEvtSheet_(ss);
+    const id = _salonEvtUpsert_(ws, nom, p.date, p.lieu, String(p.nomAuteur || p.emailAuteur || ""));
+    return createJsonResponse({ success: true, id: id, evenements: _salonEvtList_(ss) });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
 
 // ── Documents de mémoire (versions V1, V2… datées, un dossier Drive par étudiant) ──
 var MEMDOC_HEADERS = ["ID", "ID mémoire", "ID étudiant", "Version", "Date", "Nom du fichier", "ID fichier", "URL", "Commentaire", "Déposé par", "Déposé le", "Archivé"];
 
-function _memDocsFolder_(etudiantNom) {
+// Dossier parent imposé par la direction (nov. 2026) : le dossier « CRM HECG — Mémoires étudiants »
+// y est créé, ou y est déplacé s'il existait ailleurs (les liens des fichiers restent valides).
+var MEMOIRES_PARENT_FOLDER_ID = "1kv1iYmmc0XLc8B1pl4saGxfUqzkP49Xp";
+
+function _memDocsRoot_() {
   const props = PropertiesService.getScriptProperties();
   let rootId = props.getProperty("MEMOIRES_FOLDER_ID"), root = null;
-  if (rootId) { try { root = DriveApp.getFolderById(rootId); } catch (e) { root = null; } }
-  if (!root) { root = DriveApp.createFolder("CRM HECG — Mémoires étudiants"); props.setProperty("MEMOIRES_FOLDER_ID", root.getId()); }
+  if (rootId) { try { root = DriveApp.getFolderById(rootId); if (root.isTrashed()) root = null; } catch (e) { root = null; } }
+  const parent = DriveApp.getFolderById(MEMOIRES_PARENT_FOLDER_ID);
+  if (!root) {
+    root = parent.createFolder("CRM HECG — Mémoires étudiants");
+    props.setProperty("MEMOIRES_FOLDER_ID", root.getId());
+  } else if (props.getProperty("MEMOIRES_FOLDER_PARENT") !== MEMOIRES_PARENT_FOLDER_ID) {
+    let dejaDedans = false;
+    const it = root.getParents(); while (it.hasNext()) if (it.next().getId() === MEMOIRES_PARENT_FOLDER_ID) dejaDedans = true;
+    if (!dejaDedans) {
+      root.moveTo(parent);
+      try { logAction("Système", "Auto", "Modification", "Vie scolaire — Mémoires", root.getId(), "Dossier Drive des mémoires déplacé dans le dossier " + MEMOIRES_PARENT_FOLDER_ID); } catch (eL) {}
+    }
+  }
+  props.setProperty("MEMOIRES_FOLDER_PARENT", MEMOIRES_PARENT_FOLDER_ID);
+  return root;
+}
+
+/** À exécuter une fois depuis l'éditeur pour déplacer le dossier tout de suite (sinon : au prochain dépôt). */
+function deplacerDossierMemoires() { const r = _memDocsRoot_(); Logger.log("Dossier mémoires : " + r.getUrl()); return r.getUrl(); }
+
+function _memDocsFolder_(etudiantNom) {
+  const root = _memDocsRoot_();
   const nom = String(etudiantNom || "Sans nom").replace(/[\\/:*?"<>|]/g, " ").trim();
   const it = root.getFoldersByName(nom);
   return it.hasNext() ? it.next() : root.createFolder(nom);

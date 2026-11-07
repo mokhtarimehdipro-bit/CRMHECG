@@ -341,7 +341,8 @@ function renderHead() {
   let html = '';
   if (IS_ADMIN) {
     const on = S.params.notifMail !== 'Non';
-    html += `<label class="tk-switch" title="Envoyer un mail au titulaire à chaque nouvelle tâche"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleNotif(this.checked)"><span class="tg"></span>${svg('mail',15)} Notifications mail</label>`;
+    html += `<label class="tk-switch" title="Envoyer un mail au titulaire à chaque nouvelle tâche (m.mokhtari@hecg.fr en copie)"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleNotif(this.checked)"><span class="tg"></span>${svg('mail',15)} Notifications mail</label>`;
+    html += `<label class="tk-switch" title="Rappel automatique toutes les 2 h (7 h–18 h, lun.–ven.) des tâches du jour et en retard, m.mokhtari@hecg.fr en copie"><input type="checkbox" ${S.params.relanceAuto !== 'Non' ? 'checked' : ''} onchange="toggleRelance(this.checked)"><span class="tg"></span>${svg('mail',15)} Relances 2 h</label>`;
     html += `<button class="tk-btn ico" title="Paramètres : catégories" onclick="openSettings()">${svg('gear',17)}</button>`;
     html += `<button class="tk-btn ico" title="Importer les missions envoyées par mail (#mission)" onclick="aspirer(this)">${svg('inbox',17)}</button>`;
   }
@@ -728,6 +729,13 @@ async function toggleNotif(on) {
   if (!r.success) { toast('Erreur : ' + r.message, true); return; }
   sessionStorage.removeItem(CK);
   toast(on ? 'Notifications mail activées' : 'Notifications mail désactivées');
+}
+async function toggleRelance(on) {
+  S.params.relanceAuto = on ? 'Oui' : 'Non';
+  const r = await api({ action:'saveTachesParams', relanceAuto: on });
+  if (!r.success) { toast('Erreur : ' + r.message, true); return; }
+  sessionStorage.removeItem(CK);
+  toast(on ? 'Relances automatiques activées (toutes les 2 h)' : 'Relances automatiques désactivées');
 }
 
 // ── divers ──────────────────────────────────────────────────────────────

@@ -62,6 +62,10 @@
                             <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Dossier créé le</label>
                             <p class="text-sm font-bold text-gray-600"><span id="etuDateCrea" class="font-normal"></span></p>
                         </div>
+                        <div id="etuEvtsWrap" class="mb-4 hidden">
+                            <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Rencontré lors de</label>
+                            <div id="etuEvts"></div>
+                        </div>
                         
                         <div class="mb-6">
                             <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Mot de passe (Consultation)</label>
@@ -482,6 +486,9 @@
                     document.getElementById('etuMailHecg').innerText = p.mailHecg || 'Non renseigné';
                     document.getElementById('etuDateCrea').innerText = p.dateCreation || '';
                     document.getElementById('etuDateCreaWrap').classList.toggle('hidden', !p.dateCreation);
+                    const evts = p.evenements || [];
+                    document.getElementById('etuEvts').innerHTML = evts.map(ev => `<span class="inline-block bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-lg text-[11px] font-bold mr-1 mb-1">📍 ${String(ev).replace(/</g,'&lt;')}</span>`).join('');
+                    document.getElementById('etuEvtsWrap').classList.toggle('hidden', !evts.length);
                     document.getElementById('etuMdp').value = p.mdp || "";
                     document.getElementById('etuEntreprise').innerText = p.entreprise || 'Aucune entreprise';
                     const btnRet = document.getElementById('btnRetirerEnt');

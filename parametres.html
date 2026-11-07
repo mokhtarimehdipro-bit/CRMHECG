@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres — Accès équipe - HECG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
+    <style>
+      .pill{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+      .modal{position:fixed;inset:0;background:rgba(15,27,45,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+      .modal>div{background:#fff;border-radius:20px;width:100%;max-width:560px;max-height:92vh;overflow:auto;padding:26px;box-shadow:0 30px 70px -20px rgba(15,27,45,.5)}
+      .fl{display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:12px 0 5px}
+      .in{width:100%;border:2px solid #eef2f7;border-radius:12px;padding:10px 12px;font-weight:700;font-size:14px;outline:none;background:#fff}
+      .in:focus{border-color:#1A4E8A}
+      .btn{padding:9px 16px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;border:none;transition:all .15s}
+      .btn.pri{background:#1A4E8A;color:#fff}.btn.pri:hover{background:#163f6e}
+      .btn.ora{background:#F26522;color:#fff}.btn.ora:hover{background:#d4541a}
+      .btn.gh{background:#f1f5f9;color:#475569}.btn.gh:hover{background:#e2e8f0}
+      .btn.red{background:#fef2f2;color:#dc2626}.btn.red:hover{background:#fee2e2}
+      .btn.sm{padding:6px 10px;font-size:12px;border-radius:10px}
+      tr.revoque td{background:#fafafa;color:#9ca3af}
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+            <div class="flex space-x-4 border-l-2 pl-4 border-gray-200 overflow-x-auto text-sm">
+                <a href="dashboard.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Étudiants</a>
+                <a href="partenaires.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Entreprises</a>
+                <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Tâches</a>
+                <a href="vie_scolaire.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
+                <a href="historique.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Historique</a>
+                <a href="parametres.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">⚙️ Paramètres</a>
+            </div>
+        </div>
+        <button onclick="localStorage.clear(); window.location.href='index.html'" class="text-red-500 font-bold border border-red-500 px-3 py-1 rounded-lg hover:bg-red-50">Déconnexion</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div id="denied" class="hidden bg-white rounded-3xl p-10 text-center shadow-sm border border-gray-100">
+            <p class="text-4xl mb-2">🔒</p><p class="font-black text-gray-700">Page réservée au compte maître.</p>
+        </div>
+
+        <div id="app" class="hidden">
+            <div class="flex flex-wrap justify-between items-end gap-4 mb-6">
+                <div>
+                    <h1 class="text-3xl font-black text-[#1A4E8A]">Accès de l'équipe</h1>
+                    <p class="text-sm text-gray-400 font-bold mt-1">Droits d'accès au CRM, rôles, mots de passe — compte maître uniquement. Chaque action est tracée dans l'Historique.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn gh" onclick="load()">↺ Actualiser</button>
+                    <button class="btn ora" onclick="openEdit(null)">+ Ajouter un membre</button>
+                </div>
+            </div>
+
+            <div id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-3 items-center">
+                <input id="q" class="in" style="max-width:280px" placeholder="🔍 Nom, mail, fonction…" oninput="render()">
+                <select id="fRole" class="in" style="max-width:200px" onchange="render()"><option value="">Tous les rôles CRM</option></select>
+                <select id="fEtat" class="in" style="max-width:180px" onchange="render()"><option value="">Tous les accès</option><option value="actif">Actifs</option><option value="revoque">Révoqués</option></select>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                        <tr><th class="p-3 text-left">Membre</th><th class="p-3 text-left">Fonction</th><th class="p-3 text-left">Rôle CRM</th><th class="p-3 text-left">Vie scolaire</th><th class="p-3 text-left">Accès</th><th class="p-3 text-left">Dernière connexion</th><th class="p-3 text-right">Actions</th></tr>
+                    </thead>
+                    <tbody id="tbody"><tr><td colspan="7" class="p-10 text-center text-gray-400 font-bold">Chargement…</td></tr></tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-400 mt-3">Révoquer un accès refuse toute nouvelle connexion et ferme immédiatement les sessions ouvertes. Un changement de rôle ou de mot de passe demande au membre de se reconnecter.</p>
+        </div>
+    </main>
+
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-[200]"><div id="toastMsg" class="px-5 py-3 rounded-2xl shadow-lg text-sm font-bold text-white"></div></div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const MASTERS = ['m.mokhtari@hecg.fr'];
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+let S = { data: [], rolesCrm: [], rolesVs: [] };
+
+function toast(msg, ok = true) {
+  const m = $('toastMsg'); m.textContent = msg; m.className = 'px-5 py-3 rounded-2xl shadow-lg text-sm font-bold text-white ' + (ok ? 'bg-green-600' : 'bg-red-500');
+  $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(() => $('toast').classList.add('hidden'), 4000);
+}
+async function api(action, extra = {}) {
+  const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, idAuteur: user.nom || '', nomAuteur: user.nom || '', roleAuteur: user.role || '', emailAuteur: user.email || '', sessionToken: user.sessionToken || '', ...extra }) });
+  const d = await r.json();
+  if (d.sessionExpired) { toast('Session expirée — reconnexion requise', false); setTimeout(() => { localStorage.removeItem('user'); location.href = 'index.html'; }, 1800); }
+  return d;
+}
+
+async function load() {
+  const r = await api('getAccesEquipe');
+  if (!r.success) { $('tbody').innerHTML = `<tr><td colspan="7" class="p-10 text-center text-red-400 font-bold">${esc(r.message)}</td></tr>`; return; }
+  S = r;
+  $('fRole').innerHTML = '<option value="">Tous les rôles CRM</option>' + r.rolesCrm.map(x => `<option>${esc(x)}</option>`).join('');
+  render();
+}
+
+function render() {
+  const q = $('q').value.toLowerCase().trim(), fr = $('fRole').value, fe = $('fEtat').value;
+  const list = S.data.filter(m => (!q || (m.prenom + ' ' + m.nom + ' ' + m.email + ' ' + m.fonction + ' ' + m.ref).toLowerCase().includes(q))
+    && (!fr || m.role === fr) && (!fe || (fe === 'revoque' ? m.revoque : !m.revoque)))
+    .sort((a, b) => (a.revoque - b.revoque) || (a.nom + a.prenom).localeCompare(b.nom + b.prenom, 'fr'));
+  const actifs = S.data.filter(m => !m.revoque);
+  $('kpis').innerHTML = [['Membres', S.data.length, '#1A4E8A'], ['Accès actifs', actifs.length, '#15803d'], ['Révoqués', S.data.length - actifs.length, '#dc2626'],
+    ['Administrateurs', actifs.filter(m => m.role === 'Administrateur').length, '#F26522']]
+    .map(([l, n, c]) => `<div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"><p class="text-[10px] font-black uppercase tracking-widest text-gray-400">${l}</p><p class="text-3xl font-black" style="color:${c}">${n}</p></div>`).join('');
+  $('tbody').innerHTML = list.map(m => {
+    const master = MASTERS.includes((m.email || '').toLowerCase());
+    return `<tr class="border-t border-gray-100 ${m.revoque ? 'revoque' : ''}">
+      <td class="p-3"><div class="font-black text-gray-800">${esc(m.prenom)} ${esc(m.nom)} ${master ? '<span class="pill" style="background:#fff4ed;color:#c2410c">👑 Maître</span>' : ''}</div>
+        <div class="text-xs text-gray-400">${esc(m.email || 'Pas de mail')} · <span class="font-mono">${esc(m.ref)}</span></div></td>
+      <td class="p-3 text-gray-600">${esc(m.fonction || '—')}</td>
+      <td class="p-3"><span class="pill" style="background:#e8eff8;color:#1A4E8A">${esc(m.role || 'Aucun')}</span></td>
+      <td class="p-3">${m.vieScRole ? `<span class="pill" style="background:#ede9fe;color:#6d28d9">${esc(m.vieScRole)}</span>` : '<span class="text-xs text-gray-300">—</span>'}</td>
+      <td class="p-3">${m.revoque ? '<span class="pill" style="background:#fee2e2;color:#dc2626">⛔ Révoqué</span>' : '<span class="pill" style="background:#dcfce7;color:#15803d">✓ Actif</span>'}${m.aMdp ? '' : ' <span class="pill" style="background:#fef9c3;color:#a16207" title="Aucun mot de passe : connexion impossible">sans mot de passe</span>'}</td>
+      <td class="p-3 text-xs text-gray-500 whitespace-nowrap">${esc(m.derniereConnexion || 'Jamais')}</td>
+      <td class="p-3 text-right whitespace-nowrap">
+        <button class="btn gh sm" onclick="openEdit('${esc(m.ref)}')" title="Modifier rôle, fonction, mail">✏️ Modifier</button>
+        <button class="btn gh sm" onclick="openMdp('${esc(m.ref)}')" title="Changer le mot de passe">🔑 Mot de passe</button>
+        ${master ? '' : (m.revoque ? `<button class="btn pri sm" onclick="setAcces('${esc(m.ref)}',false)">Rétablir</button>` : `<button class="btn red sm" onclick="setAcces('${esc(m.ref)}',true)">Révoquer</button>`)}
+      </td></tr>`;
+  }).join('') || '<tr><td colspan="7" class="p-10 text-center text-gray-400 italic">Aucun membre.</td></tr>';
+}
+
+function modal(html) {
+  const d = document.createElement('div'); d.className = 'modal'; d.innerHTML = `<div>${html}</div>`;
+  d.addEventListener('mousedown', e => { if (e.target === d) d.remove(); });
+  document.body.appendChild(d); return d;
+}
+
+function openEdit(ref) {
+  const m = ref ? S.data.find(x => x.ref === ref) : { nom: '', prenom: '', fonction: '', email: '', role: '', vieScRole: '' };
+  const opt = (list, v) => list.map(x => `<option value="${esc(x)}" ${x === v ? 'selected' : ''}>${esc(x || 'Aucun accès Vie scolaire')}</option>`).join('');
+  const d = modal(`<h2 class="text-xl font-black text-[#1A4E8A] mb-1">${ref ? 'Modifier ' + esc(m.prenom + ' ' + m.nom) : 'Nouveau membre'}</h2>
+    <p class="text-xs text-gray-400 mb-2">${ref ? 'Un changement de rôle ou de mail ferme ses sessions : il devra se reconnecter.' : 'Le membre pourra se connecter avec son mail (ou sa référence) et son mot de passe.'}</p>
+    <div class="grid grid-cols-2 gap-3"><div><label class="fl">Prénom *</label><input class="in" id="ePrenom" value="${esc(m.prenom)}"></div><div><label class="fl">Nom *</label><input class="in" id="eNom" value="${esc(m.nom)}"></div></div>
+    <label class="fl">Mail (identifiant de connexion)</label><input class="in" id="eMail" type="email" value="${esc(m.email)}" placeholder="prenom.nom@hecg.fr">
+    <label class="fl">Fonction</label><input class="in" id="eFonction" value="${esc(m.fonction)}" placeholder="Ex : Chargée des relations entreprises">
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="fl">Rôle CRM</label><select class="in" id="eRole"><option value="">— Aucun —</option>${opt(S.rolesCrm, m.role)}</select></div>
+      <div><label class="fl">Rôle Vie scolaire</label><select class="in" id="eVs">${opt(S.rolesVs, m.vieScRole)}</select></div>
+    </div>
+    ${ref ? '' : `<label class="fl">Mot de passe initial</label><input class="in" id="eMdp" placeholder="Laisser vide pour en générer un">
+      <label class="flex items-center gap-2 mt-3 text-sm font-bold text-gray-600"><input type="checkbox" id="eMailSend" checked> Envoyer les identifiants par mail (copie m.mokhtari@hecg.fr)</label>`}
+    <div class="flex justify-end gap-2 mt-6"><button class="btn gh" onclick="this.closest('.modal').remove()">Annuler</button><button class="btn ora" id="eSave">${ref ? 'Enregistrer' : 'Créer l\'accès'}</button></div>`);
+  d.querySelector('#eSave').onclick = async (ev) => {
+    const b = ev.target; b.disabled = true; b.textContent = 'Enregistrement…';
+    const membre = { ref: ref || '', prenom: $('ePrenom').value, nom: $('eNom').value, email: $('eMail').value, fonction: $('eFonction').value, role: $('eRole').value, vieScRole: $('eVs').value };
+    if (!ref) { membre.mdp = $('eMdp').value; membre.envoyerMail = $('eMailSend').checked; }
+    const r = await api('saveAccesMembre', { membre });
+    b.disabled = false; b.textContent = ref ? 'Enregistrer' : 'Créer l\'accès';
+    if (!r.success) { toast(r.message, false); return; }
+    d.remove();
+    if (r.mdp) showMdp(membre.prenom + ' ' + membre.nom, r.mdp);
+    toast(ref ? (r.inchange ? 'Aucun changement' : 'Membre mis à jour ✓' + (r.reconnexion ? ' — reconnexion demandée' : '')) : 'Accès créé ✓' + (r.mailEnvoye ? ' — identifiants envoyés' : ''));
+    load();
+  };
+}
+
+function showMdp(qui, mdp) {
+  modal(`<h2 class="text-xl font-black text-[#1A4E8A] mb-1">Mot de passe de ${esc(qui)}</h2>
+    <p class="text-xs text-gray-400 mb-4">Communiquez-le au membre : il ne sera plus affiché ensuite.</p>
+    <div class="flex gap-2"><input class="in font-mono" style="font-size:18px" readonly value="${esc(mdp)}" id="mdpShow"><button class="btn pri" onclick="navigator.clipboard.writeText(document.getElementById('mdpShow').value);this.textContent='Copié ✓'">Copier</button></div>
+    <div class="flex justify-end mt-6"><button class="btn gh" onclick="this.closest('.modal').remove()">Fermer</button></div>`);
+}
+
+function openMdp(ref) {
+  const m = S.data.find(x => x.ref === ref); if (!m) return;
+  const d = modal(`<h2 class="text-xl font-black text-[#1A4E8A] mb-1">Mot de passe — ${esc(m.prenom + ' ' + m.nom)}</h2>
+    <p class="text-xs text-gray-400 mb-2">Ses sessions ouvertes seront fermées : il devra se reconnecter avec le nouveau mot de passe.</p>
+    <label class="fl">Nouveau mot de passe</label><input class="in font-mono" id="mNew" placeholder="Laisser vide pour en générer un (10 caractères)">
+    <label class="flex items-center gap-2 mt-3 text-sm font-bold text-gray-600 ${m.email ? '' : 'opacity-40'}"><input type="checkbox" id="mSend" ${m.email ? 'checked' : 'disabled'}> Envoyer par mail à ${esc(m.email || '(pas de mail)')}</label>
+    <div class="flex justify-end gap-2 mt-6"><button class="btn gh" onclick="this.closest('.modal').remove()">Annuler</button><button class="btn ora" id="mGo">Changer le mot de passe</button></div>`);
+  d.querySelector('#mGo').onclick = async (ev) => {
+    const v = $('mNew').value.trim();
+    if (v && v.length < 6) { toast('6 caractères minimum', false); return; }
+    ev.target.disabled = true;
+    const r = await api('resetMdpMembre', { ref, mdp: v, envoyerMail: $('mSend').checked });
+    ev.target.disabled = false;
+    if (!r.success) { toast(r.message, false); return; }
+    d.remove();
+    if (r.mdp) showMdp(m.prenom + ' ' + m.nom, r.mdp);
+    toast('Mot de passe changé ✓' + (r.mailEnvoye ? ' — envoyé par mail' : ''));
+    load();
+  };
+}
+
+async function setAcces(ref, revoquer) {
+  const m = S.data.find(x => x.ref === ref); if (!m) return;
+  let motif = '';
+  if (revoquer) { motif = prompt(`Révoquer l'accès de ${m.prenom} ${m.nom} ?\nIl ne pourra plus se connecter et ses sessions seront fermées.\n\nMotif (facultatif) :`, ''); if (motif === null) return; }
+  else if (!confirm(`Rétablir l'accès de ${m.prenom} ${m.nom} ?`)) return;
+  const r = await api('setAccesMembre', { ref, revoquer, motif });
+  if (!r.success) { toast(r.message, false); return; }
+  toast(revoquer ? `Accès révoqué ✓ (${r.sessionsFermees} session(s) fermée(s))` : 'Accès rétabli ✓');
+  load();
+}
+
+if (!MASTERS.includes(String(user.email || '').toLowerCase())) $('denied').classList.remove('hidden');
+else { $('app').classList.remove('hidden'); load(); }
+</script>
+</body>
+</html>

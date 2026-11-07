@@ -25,6 +25,8 @@
                 <a href="missions.html" class="font-semibold text-gray-500 hover:text-[#1A4E8A]">Tâches</a>
                 <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
                 <a href="historique.html" class="font-bold text-[#1A4E8A] border-b-2 border-[#1A4E8A] pb-1">Historique</a>
+                <a href="parametres.html" id="navParametres" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">⚙️ Paramètres</a>
+                <script>(function(){var u=JSON.parse(localStorage.getItem('user')||'{}');if(String(u.email||'').toLowerCase()==='m.mokhtari@hecg.fr'){var e=document.getElementById('navParametres');if(e)e.classList.remove('hidden');}})();</script>
                 <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
             </div>
         </div>
@@ -145,6 +147,7 @@
                 <div id="rankingEtudiant"><p class="text-xs text-gray-400 italic">Chargement…</p></div>
             </div>
         </div>
+<div id="histWindowInfo" class="hidden mb-3 px-4 py-2.5 rounded-2xl bg-blue-50 border border-blue-100 text-xs font-bold text-[#1A4E8A] flex flex-wrap items-center gap-3"></div>
 <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                 <div class="md:col-span-2">
@@ -376,12 +379,38 @@
 
         // Cache local (90s) + rafraîchissement silencieux en arrière-plan — même pattern
         // que dashboard.html/offres.html/missions.html.
-        const HISTORY_CACHE_KEY = 'hecg_cache_history_v1';
+        const HISTORY_CACHE_KEY = 'hecg_cache_history_v2';
         const HISTORY_CACHE_TTL_MS = 90 * 1000;
+        // Fenêtre chargée : par défaut les 60 derniers jours (lecture partielle côté serveur,
+        // format compact). '' = tout l'historique. Élargie automatiquement si un filtre de date
+        // demande une période plus ancienne.
+        const HIST_JOURS_DEFAUT = 60;
+        let HIST_DEPUIS = (() => { const d = new Date(Date.now() - HIST_JOURS_DEFAUT * 86400000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+        let _histLoading = false;
+
+        function renderHistWindowInfo(result) {
+            const el = document.getElementById('histWindowInfo'); if (!el) return;
+            const fr = iso => iso ? iso.split('-').reverse().join('/') : '';
+            el.classList.remove('hidden');
+            el.innerHTML = HIST_DEPUIS
+                ? `<span>⚡ Historique chargé depuis le ${fr(HIST_DEPUIS)} — ${Number(result.charge || allLogs.length).toLocaleString('fr-FR')} action(s) sur ${Number(result.total || 0).toLocaleString('fr-FR')} au total.</span>
+                   <button onclick="chargerHistoriqueDepuis('')" class="px-3 py-1 rounded-xl bg-[#1A4E8A] text-white text-[11px] font-black hover:bg-blue-900">Tout charger</button>
+                   <span class="font-medium text-blue-400">Choisir une date de début plus ancienne charge automatiquement la période.</span>`
+                : `<span>📚 Historique complet chargé — ${Number(result.total || allLogs.length).toLocaleString('fr-FR')} action(s).</span>
+                   <button onclick="chargerHistoriqueDepuis(null)" class="px-3 py-1 rounded-xl bg-white border border-blue-200 text-[11px] font-black hover:bg-blue-100">Revenir aux ${HIST_JOURS_DEFAUT} derniers jours</button>`;
+        }
+
+        function chargerHistoriqueDepuis(depuis) {
+            if (depuis === null) { const d = new Date(Date.now() - HIST_JOURS_DEFAUT * 86400000); depuis = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+            HIST_DEPUIS = depuis;
+            loadHistory(true);
+        }
 
         function _applyHistoryPayload(result) {
             if (result.success) {
-                allLogs = result.logs;
+                // Format compact (en-têtes + lignes) → objets reconstruits côté navigateur
+                allLogs = result.headers ? result.rows.map(r => { const o = {}; result.headers.forEach((h, i) => o[h] = r[i]); return o; }) : (result.logs || []);
+                renderHistWindowInfo(result);
                 studentsMap = result.studentsMap || {};
                 personnelSet = new Set((result.personnelNames || []).map(n => n.toLowerCase()));
                 populateFilters();
@@ -390,14 +419,20 @@
         }
 
         async function _fetchHistoryFresh() {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { "Content-Type": "text/plain;charset=utf-8" },
-                body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role })
-            });
-            const result = await response.json();
-            if (result.success) {
-                try { sessionStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify({ ts: Date.now(), result })); } catch(eStore) {}
+            _histLoading = true;
+            const depuisDemande = HIST_DEPUIS;
+            let result;
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getHistory', roleAuteur: user.role, emailAuteur: user.email || '', sessionToken: user.sessionToken || '', format: 'compact', depuis: HIST_DEPUIS || 'tout' })
+                });
+                result = await response.json();
+            } finally { _histLoading = false; }
+            if (result.sessionExpired) { alert('Session expirée — reconnectez-vous.'); localStorage.removeItem('user'); window.location.href = 'index.html'; return result; }
+            if (result.success && depuisDemande === HIST_DEPUIS) {
+                try { sessionStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify({ ts: Date.now(), depuis: depuisDemande, result })); } catch(eStore) {}
                 _applyHistoryPayload(result);
             }
             return result;
@@ -409,7 +444,7 @@
                 if (!forceRefresh) {
                     try {
                         const cached = JSON.parse(sessionStorage.getItem(HISTORY_CACHE_KEY) || 'null');
-                        if (cached && (Date.now() - cached.ts) < HISTORY_CACHE_TTL_MS) {
+                        if (cached && cached.depuis === HIST_DEPUIS && (Date.now() - cached.ts) < HISTORY_CACHE_TTL_MS) {
                             _applyHistoryPayload(cached.result);
                             _fetchHistoryFresh().catch(function(e){ console.error(e); }); // rafraîchissement silencieux
                             return;
@@ -474,6 +509,8 @@
             const fAction = document.getElementById('fAction').value.toLowerCase();
             const fDateDebut = document.getElementById('fDateDebut').value;
             const fDateFin = document.getElementById('fDateFin').value;
+            // Période demandée plus ancienne que la fenêtre chargée → on charge depuis cette date
+            if (HIST_DEPUIS && fDateDebut && fDateDebut < HIST_DEPUIS && !_histLoading) { chargerHistoriqueDepuis(fDateDebut); return; }
 
             filteredLogs = allLogs.filter(log => {
                 const auteur = String(getSafeValue(log, ['auteur']) || "").toLowerCase();

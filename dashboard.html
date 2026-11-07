@@ -35,6 +35,7 @@
                 <a href="vie_scolaire.html" id="navVieScolaire" class="hidden font-semibold text-gray-500 hover:text-[#1A4E8A]">🏫 Vie Scolaire</a>
                 <a href="trophees.html" id="navTrophees" class="hidden font-semibold text-amber-500 hover:text-amber-600">🏆 Trophées <span id="navTropheesBadge" style="display:none;width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;vertical-align:top;margin-top:4px;margin-left:2px"></span></a>
                 <a href="historique.html" id="navHistorique" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium">Historique</a>
+                <a href="parametres.html" id="navParametres" class="hidden text-gray-600 hover:text-[#1A4E8A] font-medium" title="Accès de l'équipe (compte maître)">⚙️ Paramètres</a>
 
             </div>
         </div>
@@ -453,6 +454,7 @@ async function apiPost(payload) {
                         navHist.classList.remove('hidden');
                     }
                     if (user.vieScRole) { const el = document.getElementById('navVieScolaire'); if (el) el.classList.remove('hidden'); }
+                    if (String(user.email || '').toLowerCase() === 'm.mokhtari@hecg.fr') { const np = document.getElementById('navParametres'); if (np) np.classList.remove('hidden'); }
                     if (user.email) {
                         const tEl = document.getElementById('navTrophees'); if (tEl) { tEl.classList.remove('hidden'); }
                         if (localStorage.getItem('hecg_trophees_new')) { const b = document.getElementById('navTropheesBadge'); if (b) b.style.display = 'inline-block'; }

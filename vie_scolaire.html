@@ -5020,7 +5020,32 @@ function renderQualiopi(){
   const preuvesByInd={};
   qualiopiPreuves.forEach(p=>{ if (!preuvesByInd[p.indicateur]) preuvesByInd[p.indicateur]=[]; preuvesByInd[p.indicateur].push(p); });
   let totalInds=0, documented=0;
-  let html='';
+  // Zone libre (en tête) : documents hors indicateur — dossier Drive « 0_LIBRE », non compté dans le %.
+  const libres = preuvesByInd['LIBRE'] || [];
+  let html=`<div class="qualiopi-card" style="border:2px dashed #93c5fd;background:linear-gradient(180deg,#f8fbff,#fff);margin-bottom:1.75rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+          <span style="background:#dbeafe;color:#1d4ed8;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:800">🗂 Zone libre</span>
+          <span style="font-size:0.7rem;font-weight:700;color:#9ca3af">${libres.length} document${libres.length>1?'s':''}</span>
+        </div>
+        <p style="font-size:0.95rem;font-weight:800;color:#1f2937;margin-bottom:0.25rem">Documents libres</p>
+        <p style="font-size:0.75rem;color:#6b7280">Déposez ici tout document utile à l'audit qui ne relève pas d'un indicateur précis (organigramme, règlement intérieur, rapports, courriers…).</p>
+      </div>
+      ${canWrite('qualiopi')?`<div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0">
+        <button onclick="openQualiopiModal('LIBRE','0')" style="background:#F26522;color:#fff;padding:0.45rem 0.85rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">+ Ajouter un document</button>
+        <button onclick="ouvrirDossierQualiopi('LIBRE','0')" style="background:#f3f4f6;color:#4b5563;padding:0.4rem 0.75rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">📂 Voir dossier</button>
+      </div>`:''}
+    </div>
+    ${libres.length?`<div style="margin-top:0.75rem;border-top:1px solid #e0ecfb;padding-top:0.75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.5rem">`+libres.map(p=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:0.75rem;padding:0.5rem 0.75rem;border:1px solid #e5edf7">
+        <div style="min-width:0"><p style="font-size:0.85rem;font-weight:600;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escTa(p.nomPreuve)}">${escTa(p.nomPreuve)}</p><p style="font-size:0.7rem;color:#9ca3af">${escTa(p.dateDepot)}</p></div>
+        <div style="display:flex;gap:0.4rem;flex-shrink:0">
+          ${p.urlFichier?`<a href="${p.urlFichier}" target="_blank" style="background:#f3f4f6;color:#4b5563;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;text-decoration:none">🔗</a>`:''}
+          ${canWrite('qualiopi')?`<button onclick="deleteQualiopiPreuve('LIBRE','${p.nomPreuve.replace(/'/g,"\\'")}','${p.urlFichier||''}')" style="background:#fef2f2;color:#dc2626;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;border:none;cursor:pointer">🗑</button>`:''}
+        </div>
+      </div>`).join('')+'</div>':''}
+  </div>`;
   QUALIOPI_DATA.forEach(cr=>{
     const cc=CRITERE_COLORS[cr.critere]||'#374151';
     html+=`<div style="margin-bottom:1.5rem">
@@ -5071,7 +5096,7 @@ function openQualiopiModal(num, critere){
   document.getElementById('qualiopiModal').classList.remove('hidden');
   document.getElementById('qualiopiModalIndNum').value=num;
   document.getElementById('qualiopiModalCritere').value=critere;
-  document.getElementById('qualiopiModalInd').textContent='Indicateur '+num+' (Critère '+critere+')';
+  document.getElementById('qualiopiModalInd').textContent= num==='LIBRE' ? 'Zone libre — document hors indicateur' : 'Indicateur '+num+' (Critère '+critere+')';
   document.getElementById('qNomPreuve').value='';
   document.getElementById('qFichier').value='';
   document.getElementById('qDate').value=new Date().toISOString().slice(0,10);
@@ -6509,6 +6534,7 @@ function renderSallesTable(){
             <td class="text-center">${tauxBadge(tF,cF)}</td>
             <td style="font-size:0.78rem;color:#9ca3af;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.commentaire||''}</td>
             ${canW?`<td style="white-space:nowrap">
+              <button onclick="event.stopPropagation();SPLAN.open('${s.id}')" class="btn-ghost py-1 text-xs" title="Plan de salle">🪑</button>
               <button onclick="event.stopPropagation();openSalleModal('${s.id}')" class="btn-ghost py-1 text-xs">✏</button>
               <button onclick="event.stopPropagation();deleteSalle('${s.id}')" class="btn-danger py-1 text-xs">🗑</button>
             </td>`:''}
@@ -6556,7 +6582,10 @@ function renderSalleCard(s,canW){
       </div>
       ${s.commentaire?`<div style="font-size:0.75rem;color:#9ca3af;font-style:italic">${s.commentaire}</div>`:''}
     </div>
-    <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:#1A4E8A;font-weight:700;opacity:0.7">📊 Voir graphique</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button onclick="event.stopPropagation();SPLAN.open('${s.id}')" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:0.35rem 0.8rem;border-radius:0.6rem;font-weight:800;font-size:0.75rem;cursor:pointer">🪑 Plan de salle</button>
+      <span style="font-size:0.72rem;color:#1A4E8A;font-weight:700;opacity:0.7;align-self:center">📊 Voir graphique</span>
+    </div>
   </div>`;
 }
 
@@ -8309,5 +8338,6 @@ async function importSuiviData(){
 </script>
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=6"></script>
+<script src="salles_plan.js?v=1"></script>
 </body>
 </html>

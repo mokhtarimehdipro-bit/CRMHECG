@@ -229,7 +229,7 @@ function doPostInner_(e) {
     var PUBLIC_ACTIONS = new Set([
       'login','publicRegister','getDashboardData','getStats','getPartners','getPartnerHistory',
       'getPartnerDetails','getAllAlerts','getStudentDetails','getCarnetHistorique','getComEvents','getCampagnes',
-      'getEvents','getParticipants','getProspects','getOffres','getHistory','getBilanJournalier',
+      'getEvents','getParticipants','getProspects','getOffres','getBilanJournalier',
       'getRapportHebdomadaire','getFormateurs','getPersonnel','getPersonnelList','getPersonnelStaff',
       'getReferentielMatieres','getNotes','getStatsNotes','getClassesInfo','getPlanningTaches','getReleveNotes',
       'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
@@ -261,6 +261,7 @@ function doPostInner_(e) {
               var emailPer = String(dPerso[pi][6]||"").trim().toLowerCase();
               if ((nomAuteur   && fullNom  === nomAuteur.toLowerCase())  ||
                   (emailAuteur && emailPer === emailAuteur && emailAuteur !== "")) {
+                if (_persoRevoque_(dPerso, pi)) break; // accès révoqué : pas de repli
                 isKnown = true; break;
               }
             }
@@ -305,6 +306,12 @@ function doPostInner_(e) {
       // --- CUBE (analyse croisée dynamique, voir cube.gs) ---
       case "getCubeData":             return handleGetCubeData(params, ss);
       case "exportCubeToSheet":       return handleExportCubeToSheet(params, ss);
+
+      // --- PARAMÈTRES : ACCÈS DE L'ÉQUIPE (compte maître, voir parametres.gs) ---
+      case "getAccesEquipe":   return handleGetAccesEquipe(params, ss);
+      case "saveAccesMembre":  return handleSaveAccesMembre(params, ss);
+      case "setAccesMembre":   return handleSetAccesMembre(params, ss);
+      case "resetMdpMembre":   return handleResetMdpMembre(params, ss);
 
       case "addStudent": return handleAddStudent(params, ss);
       case "updateStudent": return handleUpdateStudent(params, ss);
@@ -429,6 +436,7 @@ function doPostInner_(e) {
       case 'toggleEtapeFrise':   return handleToggleEtapeFrise(params, ss);
       case 'getSalonRef':        return handleGetSalonRef(params, ss);
       case 'addProspectsSalon':  return handleAddProspectsSalon(params, ss);
+      case 'saveSalonEvenement': return handleSaveSalonEvenement(params, ss);
       case 'updateMissionStatus': return handleUpdateMissionStatus(params, ss);
       case 'addMissionNote': return handleAddMissionNote(params, ss);
       case 'aspirerMissionsNow': return handleAspirerMissionsNow(params, ss);
@@ -506,6 +514,8 @@ function doPostInner_(e) {
       // --- ROUTES SALLES & SIMULATIONS ---
       case 'getSalles':         return handleGetSalles(p, ss);
       case 'saveSalle':         return handleSaveSalle(p, ss);
+      case 'getSallePlan':      return handleGetSallePlan(p, ss);
+      case 'saveSallePlan':     return handleSaveSallePlan(p, ss);
       case 'deleteSalle':       return handleDeleteSalle(p, ss);
       case 'getSimulations':    return handleGetSimulations(p, ss);
       case 'saveSimulation':    return handleSaveSimulation(p, ss);
@@ -575,6 +585,12 @@ function handleLogin(params, ss) {
   const dP = getPersonnelDataCached_(ss);
   for(let i=1; i<dP.length; i++) {
     if((id == String(dP[i][0]) || id == String(dP[i][6])) && mdp == String(dP[i][4])) {
+      // Accès révoqué depuis Paramètres → connexion refusée
+      if (_persoRevoque_(dP, i)) {
+        try { logAction(String(dP[i][2]||"") + " " + String(dP[i][1]||""), String(dP[i][5]||""), "Action", "Paramètres — Accès", String(dP[i][0]), "Tentative de connexion refusée (accès révoqué)"); } catch (eL) {}
+        return createJsonResponse({ success: false, message: "Votre accès au CRM a été désactivé. Contactez m.mokhtari@hecg.fr." });
+      }
+      _paramNoteConnexion_(ss, dP[i][0]);
       const email = String(dP[i][6] || "").trim().toLowerCase();
       const nom = String(dP[i][2]||"") + " " + String(dP[i][1]||"");
       const role = String(dP[i][5]||"");
@@ -831,9 +847,11 @@ function handleStudentDetails(params, ss) {
   const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
   let prof = null;
   const colDateCrea = (dE[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
+  // Colonne « Événements » (salons / JPO où l'étudiant a été rencontré — remplie par salon.html)
+  const colEvts = (dE[0] || []).findIndex(h => _salonNorm_(h) === "evenements");
   for (let i = 1; i < dE.length; i++) {
     if (String(dE[i][0]).trim() === id) { 
-      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || ""), mailHecg: String(dE[i][26] || "").trim(), dateCreation: colDateCrea >= 0 ? _formatDateCreation_(dE[i][colDateCrea]) : "" };
+      prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || ""), mailHecg: String(dE[i][26] || "").trim(), dateCreation: colDateCrea >= 0 ? _formatDateCreation_(dE[i][colDateCrea]) : "", evenements: colEvts >= 0 ? String(dE[i][colEvts] || "").split(" | ").map(x => x.trim()).filter(Boolean) : [] };
       break;
     }
   }
@@ -5616,19 +5634,23 @@ function aspirerFranceTravail() {
   const sheet = getSheetSafe(ss, "OFFRES");
   const token = getFranceTravailToken();
 
-  // Liste des recherches (Marseille 13055 et Aix 13001 + 20km)
-  const recherches = [
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=comptabilite+alternance&commune=13055&distance=20",
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=paie+alternance&commune=13055&distance=20",
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=gestion+administrative+alternance&commune=13055&distance=20",
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=comptabilite+alternance&commune=13001&distance=20",
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=paie+alternance&commune=13001&distance=20",
-    "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=gestion+administrative+alternance&commune=13001&distance=20"
-  ];
+  // Recherches = mots-clés × (alternance, stage) × communes (Marseille 13055, Aix 13001, +20 km).
+  // « secretaire » couvre aussi secrétaire médicale / dentaire / juridique (recherche plein texte).
+  const MOTS_CLES = ["comptabilite", "paie", "gestion administrative",
+                     "association", "mode", "vendeur", "vendeuse", "accueil", "secretaire", "charge de recrutement", "ressources humaines"];
+  const recherches = [];
+  ["13055", "13001"].forEach(commune => MOTS_CLES.forEach(mc => ["alternance", "stage"].forEach(type => {
+    recherches.push("https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=" + encodeURIComponent(mc + " " + type).replace(/%20/g, "+") + "&commune=" + commune + "&distance=20");
+  })));
+  // Uniquement des postes d'alternants ou de stagiaires
+  const estAlternanceOuStage = job => job.alternance === true ||
+    /apprenti|professionnalisation|alternan|stage|stagiaire/i.test([job.natureContrat, job.typeContratLibelle, job.typeContrat, job.intitule].join(" "));
 
-  // On récupère les URLs déjà présentes pour éviter les doublons
+  // On récupère les URLs (et le couple poste+entreprise) déjà présents pour éviter les doublons
   const dataExistante = sheet.getDataRange().getValues();
-  const urlsExistantes = dataExistante.map(r => String(r[1])); 
+  const urlsExistantes = dataExistante.map(r => String(r[1]));
+  const clesExistantes = dataExistante.map(r => (String(r[14]) + String(r[4])).toLowerCase().replace(/\s+/g, ''));
+  let nbHorsAlternance = 0;
 
   let totalAjoutees = 0;
   const now = new Date();
@@ -5636,18 +5658,23 @@ function aspirerFranceTravail() {
   dateExp.setDate(now.getDate() + 15);
 
   recherches.forEach(url => {
+    Utilities.sleep(150); // limite de débit de l'API France Travail
     const res = UrlFetchApp.fetch(url, { headers: { "Authorization": "Bearer " + token }, "muteHttpExceptions": true });
-    
-    if (res.getResponseCode() === 200) {
+
+    if (res.getResponseCode() === 200 || res.getResponseCode() === 206) {
       const json = JSON.parse(res.getContentText());
       const resultats = json.resultats;
 
       if (resultats && resultats.length > 0) {
         Logger.log("Trouvé " + resultats.length + " offres pour : " + url);
-        
+
         resultats.forEach(job => {
-          // Vérification doublon par URL
-          if (!urlsExistantes.includes(job.origineOffre.urlOrigine)) {
+          if (!job.origineOffre || !job.origineOffre.urlOrigine) return;
+          if (!estAlternanceOuStage(job)) { nbHorsAlternance++; return; }
+          const cle = (String(job.intitule || "") + String(job.entreprise ? job.entreprise.nom : "Anonyme")).toLowerCase().replace(/\s+/g, '');
+          // Vérification doublon par URL et par poste + entreprise (une offre remonte sur plusieurs mots-clés)
+          if (!urlsExistantes.includes(job.origineOffre.urlOrigine) && !clesExistantes.includes(cle)) {
+            clesExistantes.push(cle);
             
             sheet.appendRow([
               "FT-" + job.id,           // A : ID
@@ -5660,7 +5687,7 @@ function aspirerFranceTravail() {
               "", "", "", "",           // K à N : Vides
               job.intitule,             // O : Poste
               job.typeContratLibelle,   // P : Type (CDD, Apprentissage...)
-              job.description.slice(0, 500) + "...", // Q : Missions
+              String(job.description || "").slice(0, 500) + "...", // Q : Missions
               dateExp                   // R : Date Expiration J+15
             ]);
             
@@ -5676,7 +5703,8 @@ function aspirerFranceTravail() {
     }
   });
 
-  Logger.log("=== FIN : " + totalAjoutees + " offres ajoutées au total ===");
+  Logger.log("=== FIN : " + totalAjoutees + " offres ajoutées au total (" + nbHorsAlternance + " écartées : ni alternance ni stage) ===");
+  try { logAction("Système", "Auto", "Action", "Offres — aspiration", "France Travail", totalAjoutees + " offre(s) ajoutée(s) sur " + recherches.length + " recherches (" + nbHorsAlternance + " écartées hors alternance/stage)"); } catch (eLog) {}
 }
 
 function aspirerLaBonneAlternance() {
@@ -5684,7 +5712,11 @@ function aspirerLaBonneAlternance() {
   const sheet = getSheetSafe(ss, "OFFRES");
 
   // Endpoint v1 public (pas de clé API requise) — sources=matcha,peJob pour exclure les formations
-  const apiUrl = "https://labonnealternance.apprentissage.beta.gouv.fr/api/v1/jobsEtFormations?romes=M1203,M1206,M1604,M1605&insee=13055&latitude=43.296482&longitude=5.36978&radius=30&sources=matcha,peJob&caller=crm_hecg";
+  // Codes ROME : compta/gestion (M1203, M1206, M1604, M1605) + vente & mode (D1106 vente alimentaire,
+  // D1211 sport, D1212 maison/déco, D1214 habillement-accessoires), accueil (M1601), secrétariat (M1607),
+  // secrétariat médical (M1609), RH/recrutement (M1501, M1502), animation associative (G1202, K1206).
+  const ROMES = "M1203,M1206,M1604,M1605,D1106,D1211,D1212,D1214,M1601,M1607,M1609,M1501,M1502,G1202,K1206";
+  const apiUrl = "https://labonnealternance.apprentissage.beta.gouv.fr/api/v1/jobsEtFormations?romes=" + ROMES + "&insee=13055&latitude=43.296482&longitude=5.36978&radius=30&sources=matcha,peJob&caller=crm_hecg";
 
   const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
 
@@ -6572,23 +6604,44 @@ function logExecutionAuto(ss, nomFonction, nbEnvoyes, nbIgnores, nbErreurs, deta
  * RÉCUPÉRATION DE L'HISTORIQUE — Réservé aux Administrateurs uniquement.
  */
 function handleGetHistory(p, ss) {
-  if (p.roleAuteur !== "Administrateur") {
-    return createJsonResponse({ success: false, message: "Accès refusé" });
+  // Accès réservé à une session Administrateur valide (jeton) : l'action n'est plus publique,
+  // un simple roleAuteur:"Administrateur" dans la requête ne suffit plus.
+  const sess = _validateSession(ss, p.sessionToken);
+  if (!sess || sess.role !== "Administrateur") {
+    return createJsonResponse({ success: false, message: "Accès refusé", sessionExpired: !sess });
   }
 
-  // Mise en cache 20s : HISTORIQUE est écrit par ~90 handlers différents via logAction(),
-  // trop dispersé pour une invalidation ciblée — un TTL court suffit (même logique que stats_v1).
-  return getCachedJsonResponse_('history_v1', 20, function() {
+  // Fenêtre lue : par défaut les 60 derniers jours (p.depuis = "aaaa-mm-jj", "" ou "tout" = tout).
+  // HISTORIQUE est en ordre chronologique (appendRow) : on lit d'abord la seule colonne Date
+  // pour trouver la première ligne utile, puis uniquement les lignes de la fenêtre.
+  // Format « compact » (p.format === "compact") : en-têtes une fois + lignes en tableaux.
+  const tz = Session.getScriptTimeZone();
+  let depuis = p.depuis === undefined ? Utilities.formatDate(new Date(Date.now() - 60 * 86400000), tz, "yyyy-MM-dd") : String(p.depuis || "");
+  if (depuis === "tout") depuis = "";
+  const compact = p.format === "compact";
+  return getCachedJsonResponse_('history_v2_' + (compact ? 'c_' : 'o_') + (depuis || 'all'), 20, function() {
   try {
     const sheetLog = getSheetSafe(ss, "HISTORIQUE");
-    const data = sheetLog.getDataRange().getValues();
+    const lastRow = sheetLog.getLastRow(), lastCol = sheetLog.getLastColumn();
+    if (lastRow <= 1) return createJsonResponse({ success: true, logs: [], headers: [], rows: [], studentsMap: {}, personnelNames: [], depuis: depuis, total: 0 });
+    const headers = sheetLog.getRange(1, 1, 1, lastCol).getValues()[0];
 
-    if (data.length <= 1) return createJsonResponse({ success: true, logs: [], studentsMap: {}, personnelNames: [] });
+    let start = 2;
+    if (depuis) {
+      const seuil = new Date(depuis + "T00:00:00").getTime();
+      const dates = sheetLog.getRange(2, 2, lastRow - 1, 1).getValues();
+      const t = function(i) { const v = dates[i][0]; const x = v instanceof Date ? v.getTime() : new Date(v).getTime(); return isNaN(x) ? 0 : x; };
+      // Recherche dichotomique de la première date >= seuil (ordre chronologique)
+      let lo = 0, hi = dates.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (t(mid) < seuil) lo = mid + 1; else hi = mid; }
+      start = lo + 2;
+    }
+    const nb = lastRow - start + 1;
+    const rows = nb > 0 ? sheetLog.getRange(start, 1, nb, lastCol).getValues().reverse() : [];
+    // Dates en texte ISO court (plus léger que l'objet Date sérialisé)
+    rows.forEach(function(r) { if (r[1] instanceof Date) r[1] = Utilities.formatDate(r[1], tz, "yyyy-MM-dd'T'HH:mm:ss"); });
 
-    const headers = data[0];
-    const rows = data.slice(1).reverse();
-
-    let logs = rows.map(r => {
+    let logs = compact ? [] : rows.map(r => {
       let obj = {};
       headers.forEach((h, i) => obj[h] = r[i]);
       return obj;
@@ -6618,7 +6671,9 @@ function handleGetHistory(p, ss) {
       }
     } catch(eP) {}
 
-    return createJsonResponse({ success: true, logs, studentsMap, personnelNames });
+    const out = { success: true, studentsMap: studentsMap, personnelNames: personnelNames, depuis: depuis, total: lastRow - 1, charge: rows.length };
+    if (compact) { out.headers = headers; out.rows = rows; } else out.logs = logs;
+    return createJsonResponse(out);
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
