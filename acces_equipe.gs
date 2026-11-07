@@ -216,3 +216,48 @@ function handleResetMdpMembre(p, ss) {
     return createJsonResponse({ success: false, message: "Membre introuvable." });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
+
+// ── SÉCURITÉ : périmètre d'un compte étudiant ─────────────────────────────────
+// Un étudiant connecté (jeton de rôle « Etudiant ») ne peut appeler que les actions de son
+// espace (dossier.html), et uniquement sur SON identifiant. Renvoie la raison d'un refus, ou "".
+var ACTIONS_ETUDIANT = ["getStudentDetails", "addNote", "getSuiviCandidatures", "addSuiviCandidature", "updateSuiviCandidature",
+  "deleteSuiviCandidature", "addSuiviCandidatureNote", "postulerOffre", "changeStudentMdp", "uploadCV",
+  "gedGetStudentDocs", "gedGetSubfolder", "gedUploadStudentDoc", "gedScanForStudent"];
+var CHAMPS_ID_ETUDIANT = ["targetId", "id_etu", "idEtu", "etuId", "id_etudiant"];
+
+function _controleAccesEtudiant_(ss, action, params, p, session) {
+  if (ACTIONS_ETUDIANT.indexOf(action) === -1) return "action hors de l'espace étudiant";
+  const moi = String(session.ref || "").trim();
+  if (!moi) return "session sans identifiant";
+  for (let k = 0; k < CHAMPS_ID_ETUDIANT.length; k++) {
+    const c = CHAMPS_ID_ETUDIANT[k];
+    const v = params[c] !== undefined ? params[c] : p[c];
+    if (v !== undefined && v !== null && String(v).trim() !== "" && String(v).trim().toUpperCase() !== moi.toUpperCase()) return "dossier d'un autre étudiant (" + c + " = " + v + ")";
+  }
+  // Identifiant absent → on force le sien
+  ["targetId", "id_etu", "idEtu"].forEach(function(c) { if (!params[c]) params[c] = moi; if (!p[c]) p[c] = moi; });
+  if (action === "getStudentDetails") { params.requesterRole = "Etudiant"; p.requesterRole = "Etudiant"; } // jamais la vue staff
+  if (action === "gedGetSubfolder" && !_dossierDansGedEtudiant_(ss, moi, String(params.folderId || p.folderId || ""))) return "dossier Drive hors de son espace";
+  return "";
+}
+
+// Le dossier demandé est-il le dossier GED de l'étudiant ou l'un de ses sous-dossiers ?
+function _dossierDansGedEtudiant_(ss, idEtu, folderId) {
+  if (!folderId) return false;
+  try {
+    const d = getOrCreateGedEtuSheet(ss).getDataRange().getValues();
+    let racine = "";
+    for (let i = 1; i < d.length; i++) if (String(d[i][0]).trim().toUpperCase() === idEtu.toUpperCase()) { racine = String(d[i][2] || "").trim(); break; }
+    if (!racine) return false;
+    let courant = [DriveApp.getFolderById(folderId)];
+    for (let niveau = 0; niveau < 6 && courant.length; niveau++) {
+      const suivants = [];
+      for (let j = 0; j < courant.length; j++) {
+        if (courant[j].getId() === racine) return true;
+        const it = courant[j].getParents(); while (it.hasNext()) suivants.push(it.next());
+      }
+      courant = suivants;
+    }
+  } catch (e) { Logger.log("Contrôle GED étudiant : " + e); }
+  return false;
+}

@@ -226,53 +226,31 @@ function doPostInner_(e) {
 
     // ── Validation de session ────────────────────────────────────
     // Actions publiques (lecture / login) qui ne nécessitent pas de token
-    var PUBLIC_ACTIONS = new Set([
-      'login','publicRegister','getDashboardData','getStats','getPartners','getPartnerHistory',
-      'getPartnerDetails','getAllAlerts','getStudentDetails','getCarnetHistorique','getComEvents','getCampagnes',
-      'getEvents','getParticipants','getProspects','getOffres','getBilanJournalier',
-      'getRapportHebdomadaire','getFormateurs','getPersonnel','getPersonnelList','getPersonnelStaff',
-      'getReferentielMatieres','getNotes','getStatsNotes','getClassesInfo','getPlanningTaches','getReleveNotes',
-      'getObjectifsSemaine','getObjectifsStats','getObjectifsStatsSemaines','getSyntheseSemaine',
-      'getStatsMatieres','getRefTaches','getQualiopiPreuves','getQualiopiDossierUrl',
-      'gedListFolder','gedGetDroits','gedGetStudentDocs','gedGetSubfolder','gedScanForStudent',
-      'getMissions','getMailsLog','getMailDetail','getSettings','getStudentsMinList','getEnterprisesMinList',
-      'getHistoriqueStatutNotes','getTropheeData','getActivityStats','getHistoriqueStatutNotes',
-      'getSalles','getSimulations','getSuiviEXB','getMMOK','getAllStudentAlerts','getSuiviPostCom',
-      'getOffreNotes','checkPartnerDuplicate','getClassesList','getPartnerAlerts','getStudentAlerts',
-      'aspirerMissionsNow'
-    ]);
+    // Actions accessibles sans connexion : uniquement la connexion et l'inscription publique.
+    // (inscription.html / questionnaire_qualiopi.html passent par google.script.run, pas par doPost.)
+    var PUBLIC_ACTIONS = new Set(['login', 'publicRegister']);
 
     var sessionToken = params.sessionToken || p.sessionToken || "";
     var session = null;
     if (!PUBLIC_ACTIONS.has(action)) {
       session = _validateSession(ss, sessionToken);
       if (!session) {
-        // Fallback : si pas de token, vérifier que idAuteur ou emailAuteur est un membre du Personnel connu
-        // (empêche les appels vraiment anonymes tout en laissant fonctionner les anciens HTML)
-        var nomAuteur   = String(params.idAuteur    || p.idAuteur    || "").trim();
-        var emailAuteur = String(params.emailAuteur || p.emailAuteur || "").trim().toLowerCase();
-        var anonymes = ["inconnu","utilisateur inconnu",""];
-        if ((nomAuteur && anonymes.indexOf(nomAuteur.toLowerCase()) === -1) || emailAuteur) {
-          try {
-            var dPerso = getPersonnelDataCached_(ss);
-            var isKnown = false;
-            for (var pi = 1; pi < dPerso.length; pi++) {
-              var fullNom  = (String(dPerso[pi][2]||"") + " " + String(dPerso[pi][1]||"")).trim().toLowerCase();
-              var emailPer = String(dPerso[pi][6]||"").trim().toLowerCase();
-              if ((nomAuteur   && fullNom  === nomAuteur.toLowerCase())  ||
-                  (emailAuteur && emailPer === emailAuteur && emailAuteur !== "")) {
-                if (_persoRevoque_(dPerso, pi)) break; // accès révoqué : pas de repli
-                isKnown = true; break;
-              }
-            }
-            if (isKnown) {
-              session = { nom: nomAuteur || emailAuteur, email: emailAuteur, role: String(params.roleAuteur || p.roleAuteur || ""), vieScRole: String(params.vieScRole || p.vieScRole || ""), ref: "" };
-            }
-          } catch(ePerso) {}
-        }
-        if (!session) {
-          var msg = sessionToken ? "Session expirée. Veuillez vous reconnecter." : "Authentification requise. Accès refusé.";
-          return createJsonResponse({ success: false, message: msg, sessionExpired: true });
+        // Plus de repli « nom ou mail connu sans jeton » (falsifiable) : jeton de session obligatoire.
+        // Toutes les pages ajoutent le jeton automatiquement (auth-fetch.js).
+        try { if (!sessionToken) console.warn('Appel sans jeton refusé : ' + action + ' (' + String(params.emailAuteur || params.idAuteur || 'anonyme') + ')'); } catch (eW) {}
+        var msg = sessionToken ? "Session expirée. Veuillez vous reconnecter." : "Authentification requise. Accès refusé.";
+        return createJsonResponse({ success: false, message: msg, sessionExpired: true });
+      }
+      // Un rôle ne se déclare pas : ce que la page envoie ne peut pas dépasser la session
+      if (String(params.roleAuteur || "") === "Administrateur" && session.role !== "Administrateur") { params.roleAuteur = session.role; p.roleAuteur = session.role; }
+      if (String(params.role || "") === "Administrateur" && session.role !== "Administrateur") { params.role = session.role; p.role = session.role; }
+      if ((params.vieScRole || p.vieScRole) && String(params.vieScRole || p.vieScRole) !== String(session.vieScRole || "")) { params.vieScRole = session.vieScRole || ""; p.vieScRole = session.vieScRole || ""; }
+      // Étudiant : uniquement les actions de son espace, et uniquement sur SON dossier
+      if (session.role === "Etudiant") {
+        var refuse = _controleAccesEtudiant_(ss, action, params, p, session);
+        if (refuse) {
+          try { logAction(session.nom, "Etudiant", "Action", "Sécurité — Accès refusé", session.ref, "Action « " + action + " » refusée : " + refuse); } catch (eL) {}
+          return createJsonResponse({ success: false, message: "Accès refusé." });
         }
       }
       // Enrichir les paramètres avec l'identité validée

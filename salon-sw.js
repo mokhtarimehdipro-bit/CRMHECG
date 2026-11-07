@@ -1,8 +1,8 @@
 // Service worker de l'application « Prospects salon » : la page s'ouvre même sans réseau.
 // Stratégie : réseau d'abord pour la page (toujours la dernière version si connecté),
 // cache en secours ; les appels au CRM (Apps Script) ne sont jamais mis en cache.
-const CACHE = 'hecg-salon-v1';
-const SHELL = ['salon.html', 'salon.webmanifest', 'salon-icon.svg'];
+const CACHE = 'hecg-salon-v2';
+const SHELL = ['salon.html', 'auth-fetch.js?v=1', 'salon.webmanifest', 'salon-icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
