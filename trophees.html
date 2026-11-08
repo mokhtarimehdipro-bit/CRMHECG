@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <script src="auth-fetch.js?v=1"></script>
+    <script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Salle des Trophées - HECG</title>
@@ -469,6 +469,8 @@ function renderBanner(d) {
     const lvInfo = getNiveauFromXP(xp);
     const niveau = lvInfo.n;
     const nl = getNiveauLabel(niveau);
+    // Thèmes d'apparence débloqués au niveau 14 : relance la vérification si le cache dit « non »
+    try { const el = JSON.parse(localStorage.getItem('hecg_skin_elig') || 'null'); if (niveau >= 14 && (!el || !el.ok) && window.HECG_SKINS && !window.__skRecheck) { window.__skRecheck = true; window.HECG_SKINS.recheck(); } } catch (eSk) {}
 
     document.getElementById('pseudoDisplay').textContent = prefs.pseudo || NOM_USER || 'Joueur';
 

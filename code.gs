@@ -291,6 +291,10 @@ function doPostInner_(e) {
       case "setAccesMembre":   return handleSetAccesMembre(params, ss);
       case "resetMdpMembre":   return handleResetMdpMembre(params, ss);
 
+      // --- APPARENCE : thèmes (niveau 14+ et compte maître, voir apparence.gs) ---
+      case "getApparence":     return handleGetApparence(params, ss);
+      case "saveApparence":    return handleSaveApparence(params, ss);
+
       case "addStudent": return handleAddStudent(params, ss);
       case "updateStudent": return handleUpdateStudent(params, ss);
       case "changeStudentMdp": return handleChangeStudentMdp(params, ss);
@@ -11221,6 +11225,7 @@ function handleGetTropheeData(p, ss) {
     // --- 3. Calculer XP total ---
     var xpTotal = 0;
     for (var cat in XP_MAP) { xpTotal += (count[cat] || 0) * XP_MAP[cat]; }
+    try { PropertiesService.getScriptProperties().setProperty("XP_" + emailUser, String(xpTotal)); } catch (eXp) {} // lu par apparence.gs
 
     // --- 4. Prefs + ref utilisateur (Personnel) — lu tôt pour le matching TROPHESPEC ---
     var prefs = { pseudo: "", personnageChoisi: "", emblemeChoisi: "", tropheesVus: "" };
