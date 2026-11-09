@@ -115,6 +115,14 @@ function _rcLireCv_(fiche, dossier) {
   return { date: d.date, origine: d.origine, drive: copie.getUrl() };
 }
 
+// CVthèque à jour ? (date d'édition < 6 mois) — vide si la date n'est pas encore lue
+function _rcEtatCvtheque_(iso) {
+  var m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return "";
+  var mois = (Date.now() - new Date(+m[1], +m[2] - 1, +m[3]).getTime()) / (30.44 * 86400000);
+  return mois < 6 ? "Oui" : "À actualiser";
+}
+
 // ── Audit ────────────────────────────────────────────────────────────────────
 function _rcAudit_(ss, auteur, budgetMs) {
   var t0 = Date.now(), fin = t0 + (budgetMs || 240000);
@@ -167,13 +175,13 @@ function _rcAudit_(ss, auteur, budgetMs) {
     if (!e.actif) note = "Étudiant sorti / prospect dans le CRM mais toujours présenté aux recruteurs — à retirer du site";
     else if (!e.recherche) note = "Statut CRM « " + (e.statut || "vide") + " » mais toujours présenté aux recruteurs — à retirer du site (ou statut à corriger)";
     if (note) ecarts.push({ type: "À retirer du site", gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: f.diplome, url: f.url });
-    maj[e.ligne] = { lien: f.url, drive: info.drive || "", date: info.date || "", ecart: note };
+    maj[e.ligne] = { lien: f.url, drive: info.drive || "", date: info.date || "", ecart: note, cvtheque: _rcEtatCvtheque_(info.date) };
   });
   etus.forEach(function (e) {
     if (!e.actif || !e.recherche || surSite[e.id]) return;
     var note = "En recherche d'alternance dans le CRM mais absent de l'espace recruteurs du site";
     ecarts.push({ type: "Absent du site", gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: "—", url: "" });
-    maj[e.ligne] = { lien: "", drive: "", date: "", ecart: note };
+    maj[e.ligne] = { lien: "", drive: "", date: "", ecart: note, cvtheque: "Non" };
   });
   // Les étudiants qui ne sont plus concernés : on efface l'ancien écart
   etus.forEach(function (e) { if (!maj[e.ligne] && e.ancienEcart) maj[e.ligne] = { lien: null, drive: null, date: null, ecart: "" }; });
@@ -194,11 +202,15 @@ function _rcAudit_(ss, auteur, budgetMs) {
     try { _invalidateStudentDetailsCache_(e.id); } catch (eI) {}
   });
   if (nL > 0) Object.keys(C).forEach(function (k) { wsE.getRange(2, C[k] + 1, nL, 1).setValues(cols[k]); });
+  // Colonne Y « CVthèque » (ex-CV Tech) : Oui si CV à jour (< 6 mois) sur le site, « À actualiser » sinon, Non si absent
+  var colY = dE.slice(1).map(function (r) { return [r[24] === undefined ? "" : r[24]]; }), cvOk = 0;
+  Object.keys(maj).forEach(function (l) { var v = maj[l].cvtheque; if (v) { colY[Number(l) - 2][0] = v; if (v === "Oui") cvOk++; } });
+  if (nL > 0) wsE.getRange(2, 25, nL, 1).setValues(colY);
   if (nouvellesNotes.length) wsN.getRange(wsN.getLastRow() + 1, 1, nouvellesNotes.length, 5).setValues(nouvellesNotes);
 
   // Rapport
   var R = { date: Utilities.formatDate(maintenant, "Europe/Paris", "dd/MM/yyyy HH:mm"), auteur: auteur, profilsSite: fiches.length,
-    enRecherche: etus.filter(function (e) { return e.actif && e.recherche; }).length, presents: Object.keys(surSite).length, cvLus: lus, cvEnAttente: enAttente, notes: notes, ecarts: ecarts };
+    enRecherche: etus.filter(function (e) { return e.actif && e.recherche; }).length, cvthequeOk: cvOk, presents: Object.keys(surSite).length, cvLus: lus, cvEnAttente: enAttente, notes: notes, ecarts: ecarts };
   var wsR = ss.getSheetByName("AUDIT_RECRUTEURS") || ss.insertSheet("AUDIT_RECRUTEURS");
   wsR.clear();
   var rows = [["Audit espace recruteurs ↔ CRM — " + R.date + " — " + auteur, "", "", "", "", ""],

@@ -640,7 +640,7 @@ function renderRecruteurs() {
   const types = {}; r.ecarts.forEach(e => types[e.type] = (types[e.type] || 0) + 1);
   const kpis = d ? [['Profils sur le site', d.profilsSite, '#1A4E8A'], ['En recherche (CRM)', d.enRecherche, '#0f766e'], ['Rapprochés', d.presents, '#059669'], ['Écarts', d.ecarts, '#dc2626'], ['CV en attente de lecture', d.cvEnAttente, '#d97706']] : [];
   s.innerHTML = `<div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-      <div><h1 class="text-2xl font-black text-[#1A4E8A]">🎯 Espace recruteurs ↔ CRM</h1>
+      <div><h1 class="text-2xl font-black text-[#1A4E8A]">🎯 Espace recruteurs ↔ CRM & relances</h1>
       <p class="text-sm text-gray-500 mt-1">Vérifie que chaque étudiant « En recherche » figure sur <a href="https://hecg.fr/espace-recruteurs" target="_blank" class="underline">hecg.fr/espace-recruteurs</a> et que les étudiants placés ou sortis n'y sont plus. Chaque CV est copié dans le Drive et sa date d'édition est reportée dans le dossier étudiant. Audit automatique chaque nuit.</p></div>
       <div class="flex gap-2"><button onclick="rcMdp()" class="btn-ghost text-sm">🔑 ${r.mdpConfigure ? 'Changer le mot de passe' : 'Enregistrer le mot de passe'}</button>
       <button id="btnRcAudit" onclick="rcLancer()" class="btn-orange text-sm" ${r.mdpConfigure ? '' : 'disabled'}>▶ Lancer l'audit maintenant</button></div></div>
@@ -653,7 +653,9 @@ function renderRecruteurs() {
       <td class="p-3"><span class="text-[11px] font-black px-2 py-1 rounded-lg" style="background:${c[0]};color:${c[1]}">${vxEsc(e.type)}</span></td>
       <td class="p-3">${e.id ? `<a href="dossier.html?id=${encodeURIComponent(e.id)}" target="_blank" class="font-bold text-[#1A4E8A] hover:underline">${vxEsc(e.nom)}</a><div class="text-[10px] text-gray-400">${vxEsc(e.id)}</div>` : `<b>${vxEsc(e.nom)}</b>`}</td>
       <td class="p-3 text-gray-600">${vxEsc(e.detail)}</td><td class="p-3">${e.url ? `<a href="${vxEsc(e.url)}" target="_blank" class="text-blue-600 underline text-xs">PDF</a>` : '—'}</td></tr>`; }).join('')
-      : '<tr><td colspan="4" class="text-center text-gray-400 py-8">Aucun écart ✅</td></tr>'}</tbody></table></div>`;
+      : '<tr><td colspan="4" class="text-center text-gray-400 py-8">Aucun écart ✅</td></tr>'}</tbody></table></div>
+    <div id="rcRelances" class="mt-6"></div>`;
+  loadRelances();
 }
 async function rcMdp() {
   const mdp = prompt("Mot de passe de la page « Espace recruteurs » de hecg.fr :");
@@ -670,4 +672,41 @@ async function rcLancer() {
     toast(`Audit terminé : ${r.rapport.ecarts.length} écart(s), ${r.rapport.cvLus} CV lus`);
     loadRecruteurs();
   } finally { b.disabled = false; b.textContent = "▶ Lancer l'audit maintenant"; }
+}
+
+// ══ RELANCE QUOTIDIENNE DES ÉTUDIANTS EN RECHERCHE ══
+let relData = null;
+async function loadRelances() {
+  const box = document.getElementById('rcRelances'); if (!box) return;
+  box.innerHTML = '<p class="text-gray-400 text-sm">Chargement des relances…</p>';
+  const r = await api('getRelanceCandidatures');
+  if (!r.success) { box.innerHTML = `<p class="text-red-600 text-sm">${vxEsc(r.message)}</p>`; return; }
+  relData = r; renderRelances();
+}
+function renderRelances() {
+  const box = document.getElementById('rcRelances'), r = relData, d = r.dernier;
+  box.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 p-5">
+    <div class="flex flex-wrap justify-between items-start gap-3">
+      <div><h2 class="text-lg font-black text-[#1A4E8A]">📬 Relance quotidienne des étudiants en recherche</h2>
+        <p class="text-xs text-gray-500 mt-1">Du lundi au vendredi à partir de ${r.heure} h : un mail rappelle de mettre à jour l'application aux étudiants « En recherche » sans nouvelle candidature depuis plus de 24 h. Copie systématique : <b>${vxEsc(r.copie)}</b>.</p></div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-bold" style="text-transform:none;margin:0"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="relActiver(this.checked)" style="width:18px;height:18px"> Relance automatique active</label>
+        <button id="btnRelEnvoyer" onclick="relEnvoyer()" class="btn-orange text-sm" ${r.cibles.length ? '' : 'disabled'}>✉️ Envoyer maintenant (${r.cibles.length})</button></div></div>
+    <p class="text-xs text-gray-400 mt-2">${d ? `Dernier envoi : ${vxEsc(d.date)} — ${d.envoyes} mail(s)${d.erreurs ? ', ' + d.erreurs + ' erreur(s)' : ''} (${vxEsc(d.auteur)})` : 'Aucun envoi pour le moment.'}${r.envoyeAujourdhui ? ' · déjà envoyée aujourd\'hui' : ''}</p>
+    <details class="mt-3"><summary class="cursor-pointer text-sm font-bold text-gray-600">👀 ${r.cibles.length} étudiant(s) recevraient la relance aujourd'hui</summary>
+      <div class="overflow-x-auto mt-2"><table class="w-full text-xs"><thead class="bg-gray-50 text-gray-500 uppercase"><tr><th class="text-left p-2">Étudiant</th><th class="text-left p-2">Classe</th><th class="text-left p-2">Candidatures</th><th class="text-left p-2">Dernière</th></tr></thead>
+      <tbody>${r.cibles.map(c => `<tr class="border-t"><td class="p-2"><a href="dossier.html?id=${encodeURIComponent(c.id)}" target="_blank" class="font-bold text-[#1A4E8A] hover:underline">${vxEsc(c.prenom + ' ' + c.nom)}</a></td><td class="p-2">${vxEsc(c.classe)}</td><td class="p-2">${c.nb}</td><td class="p-2 ${c.derniere ? '' : 'text-red-600 font-bold'}">${vxEsc(c.derniere || 'aucune')}</td></tr>`).join('')}</tbody></table></div></details></div>`;
+}
+async function relActiver(on) {
+  const r = await api('saveRelanceCandidatures', { active: on });
+  if (!r.success) { toast(r.message, false); return; }
+  toast(on ? 'Relance quotidienne activée ✓' : 'Relance quotidienne désactivée');
+}
+async function relEnvoyer() {
+  if (!confirm(`Envoyer maintenant la relance à ${relData.cibles.length} étudiant(s) (copie ${relData.copie}) ?\nLa relance automatique de ce jour sera alors considérée comme faite.`)) return;
+  const b = document.getElementById('btnRelEnvoyer'); b.disabled = true; b.textContent = '⏳ Envoi…';
+  const r = await api('saveRelanceCandidatures', { envoyerMaintenant: true });
+  if (!r.success) { toast(r.message, false); b.disabled = false; return; }
+  toast(`${r.envoyes} relance(s) envoyée(s)` + (r.erreurs && r.erreurs.length ? ` — ${r.erreurs.length} erreur(s)` : ' ✓'));
+  loadRelances();
 }

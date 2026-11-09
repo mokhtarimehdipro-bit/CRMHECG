@@ -535,7 +535,7 @@
 
                     const badgeCV  = p.faitCV  === "Oui" ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV</span>'          : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV</span>';
                     const badgeLI  = p.faitLI  === "Oui" ? '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ LinkedIn</span>'    : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ LinkedIn</span>';
-                    const badgeCVT = p.cvTech  === "Oui" ? '<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CV Tech</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CV Tech</span>';
+                    const badgeCVT = p.cvTech === "Oui" ? '<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">✅ CVthèque</span>' : (p.cvTech === "À actualiser" ? '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">⏳ CVthèque à actualiser</span>' : '<span class="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm">❌ CVthèque</span>');
                     document.getElementById('badgeZone').innerHTML = badgeCV + " " + badgeLI + " " + badgeCVT;
 
                     document.getElementById('suiviTimeline').innerHTML = data.notes.map(n => `
@@ -558,9 +558,9 @@
                     // Historique alternance
                     renderAlternanceHistory(data.alternanceHistory || []);
 
-                    // Toutes les offres partagées sont listées ; celles devenues obsolètes (ou retirées)
-                    // restent visibles, grisées avec un badge « Expirée ».
-                    document.getElementById('listOffresPartagees').innerHTML = offres.map(o => {
+                    // Offres en cours affichées ; les offres obsolètes (ou retirées) sont regroupées derrière
+                    // un bouton et ne sont construites qu'à l'ouverture (fluidité du dossier).
+                    const carteOffre = o => {
                         let action;
                         if (o.etat === 'Postulée') action = `<a href="${o.url || '#'}" target="_blank" class="px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black shadow-md hover:bg-green-600 transition">POSTULÉE ✔</a>`;
                         else if (o.expiree) action = o.url
@@ -579,7 +579,12 @@
                             </div>
                             ${action}
                         </div>`;
-                    }).join('') || '<p class="text-slate-300 italic text-center py-4 text-sm">Aucune offre partagée pour le moment.</p>';
+                    };
+                    const enCours = offres.filter(o => !o.expiree), obsoletes = offres.filter(o => o.expiree);
+                    window._offresObsoletes = obsoletes; window._carteOffre = carteOffre;
+                    document.getElementById('listOffresPartagees').innerHTML =
+                        (enCours.map(carteOffre).join('') || `<p class="text-slate-300 italic text-center py-4 text-sm">${offres.length ? 'Aucune offre en cours pour le moment.' : 'Aucune offre partagée pour le moment.'}</p>`)
+                        + (obsoletes.length ? `<button type="button" id="btnOffresObsoletes" onclick="basculerOffresObsoletes()" class="w-full mt-1 py-3 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-black hover:bg-slate-50 transition">🗂 Voir les ${obsoletes.length} offre${obsoletes.length > 1 ? 's' : ''} obsolète${obsoletes.length > 1 ? 's' : ''}</button><div id="listOffresObsoletes" class="hidden space-y-3 mt-3"></div>` : '');
                     // GED - chargement documents
                     loadGedEtu();
 
@@ -1309,6 +1314,16 @@
             document.getElementById('carteEntMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     
+        function basculerOffresObsoletes() {
+            const box = document.getElementById('listOffresObsoletes'), btn = document.getElementById('btnOffresObsoletes');
+            if (!box) return;
+            if (!box.dataset.rendu) { box.innerHTML = (window._offresObsoletes || []).map(window._carteOffre).join(''); box.dataset.rendu = '1'; }
+            const ouvrir = box.classList.contains('hidden');
+            box.classList.toggle('hidden', !ouvrir);
+            const n = (window._offresObsoletes || []).length;
+            btn.innerText = ouvrir ? '▲ Masquer les offres obsolètes' : `🗂 Voir les ${n} offre${n > 1 ? 's' : ''} obsolète${n > 1 ? 's' : ''}`;
+        }
+
         // CV publié sur l'espace recruteurs de hecg.fr (audit automatique — recruteurs.gs)
         function renderCvSite(c) {
             const box = document.getElementById('etuCvSite');

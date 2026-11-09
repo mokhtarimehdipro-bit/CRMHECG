@@ -481,6 +481,8 @@ function doPostInner_(e) {
       case 'getAuditRecruteurs':         return handleGetAuditRecruteurs(p, ss);
       case 'lancerAuditRecruteurs':      return handleLancerAuditRecruteurs(p, ss);
       case 'saveMdpRecruteurs':          return handleSaveMdpRecruteurs(p, ss);
+      case 'getRelanceCandidatures':     return handleGetRelanceCandidatures(p, ss);
+      case 'saveRelanceCandidatures':    return handleSaveRelanceCandidatures(p, ss);
       case 'saveNotesBulk':              return handleSaveNotesBulk(p, ss);
       case 'updateNotesClasse':          return handleUpdateNotesClasse(p, ss);
       case 'getStatsExclusions':         return handleGetStatsExclusions(p, ss);
@@ -6083,7 +6085,7 @@ function handleSendOneRelance(p, ss) {
     const htmlBody = String(p.htmlBody || "");
     if (!mailDest.includes("@")) return createJsonResponse({ success: false, message: "Email invalide." });
     if (!htmlBody)               return createJsonResponse({ success: false, message: "Corps vide." });
-    GmailApp.sendEmail(mailDest, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL });
+    GmailApp.sendEmail(mailDest, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL, cc: POLE_PEDA_EMAIL });   // pôle pédagogique en copie des relances
     try { logMailDetail(ss, { auteur: p.emailAuteur || "Super-admin", categorie: "Relance auto", sousCat: "Relance hebdo Préinscrit (individuelle)", objet: sujet, destinataires: [mailDest], corps: String(p.nomEtu || "") + " — envoi individuel", sourceId: "RELANCE-" + String(p.idEtu || "") + "-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd") }); } catch(eLog) {}
     return createJsonResponse({ success: true });
   } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
@@ -6238,7 +6240,7 @@ function _doRelanceHebdo(ss, auteur, dryRun) {
       continue;
     }
     try {
-      GmailApp.sendEmail(mailEtu, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL });
+      GmailApp.sendEmail(mailEtu, sujet, "", { htmlBody: htmlBody, from: SENDER_EMAIL, cc: POLE_PEDA_EMAIL });   // pôle pédagogique en copie des relances
       nbMailsEnvoyes++;
       try { logMailDetail(ss, { auteur: auteur, categorie: "Relance auto", sousCat: "Relance hebdo Préinscrit", objet: sujet, destinataires: [mailEtu], corps: prenomEtu + " " + nomEtu + " (" + mailEtu + ") — " + nbOffres + " offre(s)", sourceId: "RELANCE-" + idEtu + "-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd") }); } catch(eLog) {}
     } catch(e) {

@@ -145,7 +145,7 @@
     <button onclick="showModule('charlemagne')" id="nav-charlemagne" class="nav-btn hidden">🔎 Contrôle Charlemagne</button>
     <button onclick="showModule('maintenance')" id="nav-maintenance" class="nav-btn hidden">🛠️ Tickets maintenance</button>
     <button onclick="showModule('formulaires')" id="nav-formulaires" class="nav-btn hidden">🧾 Formulaires</button>
-    <button onclick="showModule('recruteurs')" id="nav-recruteurs" class="nav-btn hidden">🎯 Espace recruteurs</button>
+    <button onclick="showModule('recruteurs')" id="nav-recruteurs" class="nav-btn hidden">🎯 Recruteurs & relances</button>
   </aside>
 
   <!-- CONTENT -->
@@ -8252,7 +8252,7 @@ function renderTsFilters(){
     h += _tsBlock('Campus', _tsChecks('campus', [{v:'HECG',l:'📍 Marseille'},{v:'HECG_AIX',l:'📍 Aix-en-Provence'}]));
     h += _tsBlock('Statut', _tsChecks('statuts', [{v:'recherche',l:'🔍 En recherche'},{v:'initial',l:'🎒 En initial'},{v:'alternance',l:'🏢 En alternance'},{v:'contrat',l:'💼 En contrat'},{v:'non su',l:'❓ Non su'}]));
     h += _tsBlock('Ateliers', _tsSelect('tsAtelier', [{v:'',l:'Tous'},{v:'CV',l:'✅ CV fait'},{v:'CV_NON',l:'❌ CV non fait'},{v:'LI',l:'✅ LinkedIn fait'},{v:'LI_NON',l:'❌ LinkedIn non fait'},{v:'BOTH',l:'⭐ Les deux faits'}]));
-    h += _tsBlock('CV Tech', _tsSelect('tsCvTech', [{v:'',l:'Tous'},{v:'OUI',l:'✅ Oui'},{v:'NON',l:'❌ Non'}]));
+    h += _tsBlock('CVthèque', _tsSelect('tsCvTech', [{v:'',l:'Tous'},{v:'OUI',l:'✅ Oui'},{v:'NON',l:'❌ Non'}]));
     h += _tsBlock('Dernier échange', _tsSelect('tsPeriode', [{v:'',l:'Tous'},{v:'7',l:'🟢 < 7 jours'},{v:'7-30',l:'🟡 Entre 7 et 30 jours'},{v:'30',l:'🔴 > 30 jours'},{v:'NEVER',l:'⚪ Jamais'}]));
     h += _tsBlock('Référent HECG', _tsSelect('tsReferent', [{v:'',l:'Tous les référents'}].concat(o.referents.map(r=>({v:r.ref,l:r.nom})))));
     h += `</div>`;
@@ -8323,6 +8323,6 @@ async function importSuiviData(){
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=6"></script>
 <script src="salles_plan.js?v=1"></script>
-<script src="vs_qualite.js?v=2"></script>
+<script src="vs_qualite.js?v=3"></script>
 </body>
 </html>

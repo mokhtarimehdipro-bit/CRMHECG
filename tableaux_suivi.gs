@@ -27,7 +27,7 @@ var TS_TYPES_LABEL = { etudiants: "Étudiants", entreprises: "Entreprises", cont
 
 // Colonnes CRM par type (la 1re colonne est toujours l'ID CRM, ajoutée automatiquement)
 var TS_FIELDS = {
-  etudiants:   ["Nom", "Prénom", "Classe", "Campus", "Typologie", "Statut", "Entreprise", "Mail", "Téléphone", "Mail HECG", "Référent", "Atelier CV", "Atelier LinkedIn", "CV Tech", "Date entrée", "Date sortie", "Motif sortie", "Dernier échange"],
+  etudiants:   ["Nom", "Prénom", "Classe", "Campus", "Typologie", "Statut", "Entreprise", "Mail", "Téléphone", "Mail HECG", "Référent", "Atelier CV", "Atelier LinkedIn", "CVthèque", "Date entrée", "Date sortie", "Motif sortie", "Dernier échange"],
   entreprises: ["Entreprise", "Adresse", "CP", "Ville", "Nb contacts", "Contact principal", "Poste", "Téléphone", "Mail", "Alternants actifs", "Nb alternants", "Dernier échange"],
   contacts:    ["Entreprise", "Nom", "Prénom", "Poste", "Maître d'apprentissage", "Téléphone", "Mail", "Téléphone 2", "Mail 2", "Ville", "Alternants actifs"],
   offres:      ["Poste", "Entreprise", "Ville", "Plateforme", "Date", "Qualité", "État", "Lien", "Nb partages"],
@@ -324,7 +324,7 @@ function _tabSuiviResumeFiltres_(type, f) {
   if (type === "etudiants") {
     if (f.alumni) parts.push("Alumni");
     add("Typo", f.typos); add("Classes", f.classes); add("Statuts", f.statuts); add("Campus", f.campus);
-    add("Atelier", f.atelier); add("CV Tech", f.cvTech); add("Dernier échange", f.periode); add("Référent", f.referentNom || f.referent);
+    add("Atelier", f.atelier); add("CVthèque", f.cvTech); add("Dernier échange", f.periode); add("Référent", f.referentNom || f.referent);
   } else if (type === "entreprises" || type === "contacts") {
     add("Ville", f.ville); add("Alternants", f.alternants); if (f.ma === "OUI") parts.push("MA uniquement");
   } else if (type === "offres") {
