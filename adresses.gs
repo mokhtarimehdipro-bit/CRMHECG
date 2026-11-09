@@ -615,8 +615,9 @@ function _adrCommuneLot_(items) {
   return out;
 }
 
-function _adrRecaler_(groupes, ordre, sireneLot, geocoderLot, communeLot) {
-  var cibles = ordre.filter(function (id) { var d = groupes[id].decision; return d && d.type === "alerte"; });
+function _adrRecaler_(groupes, ordre, sireneLot, geocoderLot, communeLot, inclureCommune) {
+  var cibles = ordre.filter(function (id) { var d = groupes[id].decision;
+    return d && (d.type === "alerte" || (inclureCommune && d.type === "harmonise" && d.a && d.a.statut === "Commune")); });
   if (!cibles.length) return;
 
   // 1. SIRENE par nom d'entreprise
@@ -747,9 +748,16 @@ function _adrHarmoniser_(ss, forcer, silencieux, plage) {
     groupes[id].lignes.push(_adrDeLigne_(data[i], C));
   }
   var total = ordre.length;
-  if (plage) ordre = ordre.slice(plage.debut, plage.debut + plage.taille);   // traitement par lots (limite 6 min)
+  if (plage && plage.ids) {   // recalage ciblé (résultats SIRENE fournis par le navigateur)
+    var voulu = {};
+    plage.ids.forEach(function (x) { voulu[String(x).trim().toUpperCase()] = 1; });
+    ordre = ordre.filter(function (id) { return voulu[id]; });
+  } else if (plage) ordre = ordre.slice(plage.debut, plage.debut + plage.taille);   // traitement par lots (limite 6 min)
   _adrDecider_(groupes, ordre, _adrGeocoderLot_, forcer);
-  _adrRecaler_(groupes, ordre, _adrSireneLot_, _adrGeocoderLot_, _adrCommuneLot_);
+  var sireneLot = plage && plage.sirene
+    ? function (items) { return items.map(function (it) { return plage.sirene[it.g.id] || []; }); }
+    : _adrSireneLot_;
+  _adrRecaler_(groupes, ordre, sireneLot, _adrGeocoderLot_, _adrCommuneLot_, !!(plage && plage.sirene));
   var rapport = { total: total, suite: !!plage && plage.debut + plage.taille < total, entreprises: ordre.length, dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0,
     sansAdresse: 0, lignesModifiees: 0, recalees: 0, recalSirene: 0, recalBan: 0, recalCommune: 0, exemples: [], recalages: [], alertes: [] };
 
@@ -1005,4 +1013,32 @@ function handleGetCarteEntreprises(p, ss) {
     out.sort(function (x, y) { return x.nom.localeCompare(y.nom, "fr"); });
     return createJsonResponse({ success: true, data: out });
   });
+}
+
+// ---------------------------------------------------------------------------
+// RECALAGE SIRENE DEPUIS LE NAVIGATEUR (bouton 🏛️ de partenaires.html) : l'annuaire
+// recherche-entreprises refuse les serveurs Google (HTTP 502), le navigateur l'interroge donc
+// et transmet les résultats bruts ; les contrôles (nom, rue / commune, département) restent ici.
+function handleRecalerAdressesSirene(p, ss) {
+  var isAdmin = String(p.roleAuteur || "") === "Administrateur" || PARAM_MASTER_EMAILS.indexOf(String(p.emailAuteur || "").toLowerCase()) !== -1;
+  if (!isAdmin) return createJsonResponse({ success: false, message: "Réservé aux administrateurs." });
+  var sirene = {}, ids = [];
+  try { sirene = typeof p.resultats === "string" ? JSON.parse(p.resultats) : (p.resultats || {}); } catch (e) { sirene = {}; }
+  Object.keys(sirene).forEach(function (k) { var K = String(k).trim().toUpperCase(); ids.push(K); if (K !== k) sirene[K] = sirene[k]; });
+  if (!ids.length) return createJsonResponse({ success: false, message: "Aucune entreprise à recaler." });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return createJsonResponse({ success: false, message: "Un audit des adresses est en cours, réessayez dans quelques minutes." });
+  try {
+    var R = _adrHarmoniser_(ss, false, false, { ids: ids, sirene: sirene });
+    var resume = ids.length + " entreprises à recaler soumises à SIRENE — " + R.recalSirene + " recalées via SIRENE (adresse officielle INSEE + SIRET), "
+      + (R.recalees - R.recalSirene) + " via la Base Adresse Nationale, " + R.harmonisees + " harmonisées, ALERTES restantes : " + R.aVerifier + " à vérifier + " + R.multiples + " adresses multiples";
+    var rc = R.recalages.slice(0, 30).map(function (e) { return e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.source + "]"; });
+    logAction(p.nomAuteur || p.idAuteur || "Administrateur", p.roleAuteur || "", "Modification", "Entreprises — recalage SIRENE des adresses", "PARTENARIAT",
+      resume + (rc.length ? " | " + rc.join(" ; ") : ""));
+    _invalidatePartnersCache_();
+    return createJsonResponse({ success: true, resume: resume, rapport: { soumises: ids.length, sirene: R.recalSirene, autres: R.recalees - R.recalSirene,
+      harmonisees: R.harmonisees, aVerifier: R.aVerifier, multiples: R.multiples, recalages: R.recalages.slice(0, 200) } });
+  } catch (e) {
+    return createJsonResponse({ success: false, message: e.toString() });
+  } finally { lock.releaseLock(); }
 }

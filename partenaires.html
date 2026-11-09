@@ -86,6 +86,7 @@
                 </select>
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="recalerSireneNavigateur()" id="btnSireneAdr" class="hidden px-5 py-3 bg-white border border-emerald-600/30 rounded-2xl text-xs font-black text-emerald-700 hover:bg-emerald-50 transition shadow-sm" title="Administrateurs : retrouve dans le répertoire SIRENE (INSEE) l'adresse officielle des entreprises encore à vérifier">🏛️ Recaler via SIRENE</button>
                 <button onclick="normaliserAdresses()" id="btnNormAdr" class="hidden px-5 py-3 bg-white border border-[#1A4E8A]/30 rounded-2xl text-xs font-black text-[#1A4E8A] hover:bg-blue-50 transition shadow-sm" title="Administrateurs : une seule adresse par entreprise + mise en conformité avec la Base Adresse Nationale">🧭 Normaliser les adresses</button>
                 <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
                 <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
@@ -1106,7 +1107,54 @@
             });
         }
         if (['Administrateur'].includes(userRole) || String(_userSession.email || '').toLowerCase() === 'm.mokhtari@hecg.fr') {
-            const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden');
+            const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden'); const _b2 = document.getElementById('btnSireneAdr'); if (_b2) _b2.classList.remove('hidden');
+        }
+        // Recalage SIRENE : le navigateur interroge l'annuaire des entreprises (refusé aux serveurs
+        // Google), le serveur contrôle les résultats (nom, rue ou commune, département) et met à jour.
+        async function recalerSireneNavigateur() {
+            const STATUTS = { 'À vérifier': 1, 'Adresses multiples': 1, 'Saisie libre': 1, 'Commune': 1 };
+            const cibles = (allPartners || []).filter(e => STATUTS[e.adrStatut] && e.nom);
+            if (!cibles.length) { alert("Aucune entreprise à recaler : toutes les adresses renseignées sont déjà vérifiées."); return; }
+            if (!confirm("Rechercher dans le répertoire SIRENE (INSEE) l'adresse officielle de " + cibles.length + " entreprise(s) dont l'adresse est à vérifier ou incomplète ?\n\n• l'adresse n'est remplacée que si le nom de l'entreprise ET sa rue (ou sa commune) correspondent ;\n• l'ancienne saisie est conservée dans « Adresse d'origine » ;\n• durée : environ " + Math.ceil(cibles.length / 4 / 60 + 0.5) + " minute(s), gardez la page ouverte.")) return;
+            const btn = document.getElementById('btnSireneAdr');
+            btn.disabled = true;
+            const resultats = {};
+            const garder = r => ({
+                siren: r.siren, nom_complet: r.nom_complet, nom_raison_sociale: r.nom_raison_sociale, sigle: r.sigle,
+                siege: r.siege ? { adresse: r.siege.adresse, code_postal: r.siege.code_postal, libelle_commune: r.siege.libelle_commune, latitude: r.siege.latitude, longitude: r.siege.longitude,
+                    siret: r.siege.siret, etat_administratif: r.siege.etat_administratif, nom_commercial: r.siege.nom_commercial, liste_enseignes: r.siege.liste_enseignes } : null,
+                matching_etablissements: (r.matching_etablissements || []).slice(0, 10).map(e => ({ adresse: e.adresse, code_postal: e.code_postal, libelle_commune: e.libelle_commune,
+                    latitude: e.latitude, longitude: e.longitude, siret: e.siret, etat_administratif: e.etat_administratif, nom_commercial: e.nom_commercial, liste_enseignes: e.liste_enseignes }))
+            });
+            let n = 0, echecs = 0;
+            for (const e of cibles) {
+                n++;
+                btn.innerText = '⏳ SIRENE ' + n + ' / ' + cibles.length;
+                const dep = /^\d{5}$/.test(String(e.cp || '')) && !String(e.cp).startsWith('20') ? String(e.cp).slice(0, 2) : '';
+                const q = String(e.nom).replace(/\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+                const url = 'https://recherche-entreprises.api.gouv.fr/search?per_page=5&q=' + encodeURIComponent(q) + (dep ? '&departement=' + dep : '');
+                for (let essai = 0; essai < 3; essai++) {
+                    try {
+                        const r = await fetch(url);
+                        if (r.status === 429 || r.status >= 500) { await new Promise(ok => setTimeout(ok, 1500)); continue; }
+                        const j = await r.json();
+                        resultats[e.id] = (j.results || []).map(garder);
+                        break;
+                    } catch (err) { await new Promise(ok => setTimeout(ok, 1000)); }
+                }
+                if (!resultats[e.id]) { echecs++; resultats[e.id] = []; }
+                await new Promise(ok => setTimeout(ok, 220));   // ≤ 5 requêtes/s (limite de l'annuaire : 7/s)
+            }
+            btn.innerText = '⏳ Contrôle et mise à jour…';
+            try {
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'recalerAdressesSirene', resultats: resultats, idAuteur: u.nom || '', nomAuteur: u.nom || '', roleAuteur: u.role || '', emailAuteur: u.email || '', sessionToken: u.sessionToken || '' }) }).then(x => x.json());
+                if (!r.success) throw new Error(r.message || 'Erreur');
+                const R = r.rapport;
+                alert("🏛️ Recalage SIRENE terminé\n\n" + R.soumises + " entreprises recherchées dans SIRENE" + (echecs ? " (" + echecs + " sans réponse de l'annuaire)" : "") + "\n• " + R.sirene + " recalées sur l'adresse officielle INSEE (avec SIRET)\n• " + R.autres + " recalées via la Base Adresse Nationale\n• " + R.aVerifier + " encore à vérifier + " + R.multiples + " à adresses contradictoires\n\nDétail dans l'Historique (Entreprises — recalage SIRENE des adresses).");
+                loadPartners(true);
+            } catch (err) { alert("❌ Recalage interrompu : " + err.message); }
+            btn.disabled = false; btn.innerText = '🏛️ Recaler via SIRENE';
         }
         async function normaliserAdresses() {
             if (!confirm("Normaliser les adresses de toute la base entreprises ?\n\n• une seule adresse par entreprise, recopiée sur tous ses contacts ;\n• chaque adresse est comparée à la Base Adresse Nationale : orthographe officielle, code postal, coordonnées GPS ;\n• les adresses à vérifier sont recalées automatiquement (SIRENE/INSEE par le nom de l'entreprise, sinon Base Adresse Nationale) ; seules les introuvables restent « à vérifier » (rien n'est supprimé, l'ancienne saisie est conservée dans la colonne « Adresse d'origine »).\n\nDurée : 1 à 2 minutes.")) return;

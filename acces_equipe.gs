@@ -229,6 +229,7 @@ function _controleAccesEtudiant_(ss, action, params, p, session) {
   if (ACTIONS_ETUDIANT.indexOf(action) === -1) return "action hors de l'espace étudiant";
   const moi = String(session.ref || "").trim();
   if (!moi) return "session sans identifiant";
+  if (_etuAccesFerme_(ss, moi)) return "espace étudiant fermé (étudiant sorti ou prospect)";
   for (let k = 0; k < CHAMPS_ID_ETUDIANT.length; k++) {
     const c = CHAMPS_ID_ETUDIANT[k];
     const v = params[c] !== undefined ? params[c] : p[c];

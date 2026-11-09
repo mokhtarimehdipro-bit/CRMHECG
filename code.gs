@@ -251,6 +251,8 @@ function doPostInner_(e) {
         var refuse = _controleAccesEtudiant_(ss, action, params, p, session);
         if (refuse) {
           try { logAction(session.nom, "Etudiant", "Action", "Sécurité — Accès refusé", session.ref, "Action « " + action + " » refusée : " + refuse); } catch (eL) {}
+          if (refuse.indexOf("espace étudiant fermé") === 0)   // sorti / prospect : session coupée, retour à la connexion
+            return createJsonResponse({ success: false, message: "Votre espace étudiant est fermé. Pour toute question : m.mokhtari@hecg.fr.", sessionExpired: true });
           return createJsonResponse({ success: false, message: "Accès refusé." });
         }
       }
@@ -297,6 +299,7 @@ function doPostInner_(e) {
       case "saveApparence":    return handleSaveApparence(params, ss);
       case "getPostesContacts":  return handleGetPostesContacts(params, ss);
       case "getCarteEntreprises": return handleGetCarteEntreprises(params, ss);
+      case "recalerAdressesSirene": return handleRecalerAdressesSirene(params, ss);
       case "harmoniserAdresses": return handleHarmoniserAdresses(params, ss);
 
       case "addStudent": return handleAddStudent(params, ss);
@@ -587,10 +590,46 @@ function handleLogin(params, ss) {
   }
   const sE = getSheetSafe(ss, "ETUDIANTS"); const dE = sE.getDataRange().getValues();
   for(let j=1; j<dE.length; j++) if(id == String(dE[j][0]) && mdp == String(dE[j][1])) {
+    // Espace étudiant fermé aux étudiants SORTIS et aux PROSPECTS, même avec les bons identifiants
+    const refus = _etuMotifRefus_(dE[j]);
+    if (refus) {
+      try { logAction(dE[j][3] + " " + dE[j][2], "Etudiant", "Action", "Espace étudiant — connexion refusée", String(dE[j][0]), "Connexion refusée : " + refus); } catch (eL) {}
+      return createJsonResponse({ success: false, message: refus === "sorti"
+        ? "Votre espace étudiant est fermé car vous ne faites plus partie des effectifs HECG. Pour toute question : m.mokhtari@hecg.fr."
+        : "Votre espace étudiant n'est pas encore ouvert (inscription non finalisée). Pour toute question : m.mokhtari@hecg.fr." });
+    }
     const studentToken = _createSession(ss, dE[j][0], String(dE[j][4]||""), dE[j][3]+" "+dE[j][2], "Etudiant", "");
     return createJsonResponse({ success: true, role: "Etudiant", nom: dE[j][3]+" "+dE[j][2], ref: dE[j][0], sessionToken: studentToken });
   }
   return createJsonResponse({ success: false, message: "Identifiants incorrects." });
+}
+
+// Motif de fermeture de l'espace étudiant ("" = accès autorisé) — ligne ETUDIANTS complète.
+// Même règle que la typologie (calculerTypoEtu) : date de sortie renseignée = SORTI (si c'est une
+// date future, l'accès reste ouvert jusqu'à ce jour-là) ; pas de classe = PROSPECT.
+function _etuMotifRefus_(row) {
+  const sortie = row[18], classe = String(row[14] || "").trim();
+  if (sortie !== "" && sortie !== null && String(sortie).trim() !== "") {
+    const d = sortie instanceof Date ? sortie : null;
+    if (!d || isNaN(d.getTime())) return "sorti";
+    const fin = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+    if (fin < new Date()) return "sorti";
+  }
+  if (!classe) return "prospect";
+  return "";
+}
+// Identifiants des étudiants dont l'espace est fermé (cache 5 min) — contrôle des sessions ouvertes
+function _etuAccesFerme_(ss, idEtu) {
+  const cache = CacheService.getScriptCache();
+  let liste = cache.get("etu_acces_fermes_v1");
+  if (liste === null) {
+    const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const ids = [];
+    for (let j = 1; j < dE.length; j++) if (dE[j][0] && _etuMotifRefus_(dE[j])) ids.push(String(dE[j][0]).trim().toUpperCase());
+    liste = "|" + ids.join("|") + "|";
+    try { cache.put("etu_acces_fermes_v1", liste, 300); } catch (eC) {}
+  }
+  return liste.indexOf("|" + String(idEtu || "").trim().toUpperCase() + "|") !== -1;
 }
 
 function calculerTypoEtu(entree, sortie, classe) {
