@@ -860,7 +860,8 @@ function handleStudentDetails(params, ss) {
   const offersMap = {};
   for(let j=1; j<dO.length; j++) {
     // Colonne J (index 9) = Qualité (Vérifiée/À qualifier/Obsolète) ; colonne B = lien à jour.
-    offersMap[String(dO[j][0]).trim()] = { poste: dO[j][14], ent: dO[j][4], url: dO[j][1], qualite: dO[j][9] };
+    offersMap[String(dO[j][0]).trim()] = { poste: dO[j][14], ent: dO[j][4], url: dO[j][1], qualite: dO[j][9],
+      alt: _classerContratOffre_(dO[j][0], dO[j][3], dO[j][14], dO[j][15], dO[j][6]) };
   }
   // Toutes les offres partagées sont affichées (y compris obsolètes, signalées « expirées ») :
   // les masquer faisait disparaître du dossier des offres annoncées dans la relance hebdo.
@@ -877,7 +878,7 @@ function handleStudentDetails(params, ss) {
     const info = offersMap[idOffre];
     studentOffers.push({
       id: idOffre, poste: info ? (info.poste || "Offre sans intitulé") : "Offre retirée", entreprise: info ? (info.ent || "-") : "-",
-      url: info ? info.url : "", etat: dP[s][3], qualite: info ? info.qualite : "",
+      url: info ? info.url : "", etat: dP[s][3], qualite: info ? info.qualite : "", alt: info ? info.alt : null,
       expiree: !info || String(info.qualite || "").trim() === "Obsolète",
       datePartage: dP[s][2] instanceof Date ? Utilities.formatDate(dP[s][2], Session.getScriptTimeZone(), "dd/MM/yyyy") : ""
     });
@@ -1754,7 +1755,7 @@ function handleRemoveFormerAlternant(p, ss) {
 function handleGetOffres(p, ss) {
   // Réponse identique pour tout le monde : mise en cache 20s (endpoint sans cache
   // jusqu'ici, contrairement au dashboard/stats, alors qu'il est aussi très sollicité).
-  return getCachedJsonResponse_('offres_v1', 20, function() {
+  return getCachedJsonResponse_('offres_v2', 20, function() {
   try {
     const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
     const dP = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
@@ -1810,6 +1811,8 @@ function handleGetOffres(p, ss) {
           qualite: dO[i][9],
           etat: dO[i][13],
           poste: dO[i][14],
+          contrat: String(dO[i][15] || ""),
+          alt: _classerContratOffre_(idOffre, dO[i][3], dO[i][14], dO[i][15], dO[i][6]),
           destinataires: sharedWith,
           dernierNote: lastNote
         });
@@ -1821,7 +1824,7 @@ function handleGetOffres(p, ss) {
 }
 // Invalide le cache de handleGetOffres après toute écriture sur OFFRES/PARTAGES/SUIVI_OFFRES
 function _invalidateOffresCache_() {
-  try { CacheService.getScriptCache().remove('offres_v1'); } catch(e) {}
+  try { CacheService.getScriptCache().remove('offres_v2'); } catch(e) {}
 }
 
 function handleAddOffre(p, ss) {
@@ -5502,8 +5505,10 @@ function aspirerLinkedIn() {
       let identifiantUnique = (poste + entreprise).toLowerCase().trim();
 
       // VÉRIFICATION CROISÉE
+      const clsLk = _classerContratOffre_("LK-", "LinkedIn", poste, "", "");
+      if (clsLk.code === "non") { _offresEcartees_.push("LinkedIn : " + poste + " (" + clsLk.raison + ")"); continue; } // pas une alternance → non importée
       if (!urlsExistantes.includes(urlOffre) && !postesEntreprises.includes(identifiantUnique)) {
-        sheet.appendRow(["LK-"+Date.now(), urlOffre, new Date(), "LinkedIn", entreprise, "", "", "", "", "À qualifier", "", "", "", "", poste, "Alternance", "Détail sur lien", calculerDateExpiration(15)]);
+        sheet.appendRow(["LK-"+Date.now(), urlOffre, new Date(), "LinkedIn", entreprise, "", "", "", "", "À qualifier", "", "", "", "", poste, _typeContratAspire_(clsLk), "Détail sur lien", calculerDateExpiration(15)]);
         urlsExistantes.push(urlOffre);
         postesEntreprises.push(identifiantUnique);
       }
@@ -5549,6 +5554,9 @@ function aspirerGoogleAlerts() {
           // Création de la clé anti-doublon (Ex: "alternant(e)gestionnairepaiehexanet")
           const cleDoublon = (poste + entreprise).toLowerCase().replace(/\s+/g, '');
 
+          const clsGo = _classerContratOffre_("GO-", plateforme, poste, "", "");
+          if (clsGo.code === "non") { _offresEcartees_.push(plateforme + " : " + poste + " (" + clsGo.raison + ")"); continue; } // pas une alternance → non importée
+
           if (!offresExistantes.includes(cleDoublon)) {
             
             // LA MAGIE : On fabrique un lien Google Jobs intelligent qui pointe sur cette offre
@@ -5566,7 +5574,7 @@ function aspirerGoogleAlerts() {
               entreprise, 
               lieu, "", "", "", "À qualifier", "", "", "", "Non partagée", 
               poste, // Colonne O
-              "Alternance", 
+              _typeContratAspire_(clsGo),
               "Alerte Google"
             ]);
             
@@ -5616,12 +5624,12 @@ function aspirerFranceTravail() {
   const sheet = getSheetSafe(ss, "OFFRES");
   const token = getFranceTravailToken();
 
-  // Recherches = mots-clés × (alternance, stage) × communes (Marseille 13055, Aix 13001, +20 km).
+  // Recherches = mots-clés × (alternance, apprentissage) × communes (Marseille 13055, Aix 13001, +20 km).
   // « secretaire » couvre aussi secrétaire médicale / dentaire / juridique (recherche plein texte).
   const MOTS_CLES = ["comptabilite", "paie", "gestion administrative",
                      "association", "mode", "vendeur", "vendeuse", "accueil", "secretaire", "charge de recrutement", "ressources humaines"];
   const recherches = [];
-  ["13055", "13001"].forEach(commune => MOTS_CLES.forEach(mc => ["alternance", "stage"].forEach(type => {
+  ["13055", "13001"].forEach(commune => MOTS_CLES.forEach(mc => ["alternance", "apprentissage"].forEach(type => {
     recherches.push("https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=" + encodeURIComponent(mc + " " + type).replace(/%20/g, "+") + "&commune=" + commune + "&distance=20");
   })));
   // Uniquement des postes d'alternants ou de stagiaires
@@ -5653,6 +5661,11 @@ function aspirerFranceTravail() {
         resultats.forEach(job => {
           if (!job.origineOffre || !job.origineOffre.urlOrigine) return;
           if (!estAlternanceOuStage(job)) { nbHorsAlternance++; return; }
+          // France Travail signale l'alternance (job.alternance / nature du contrat) : sinon on vérifie l'intitulé
+          const natFt = [job.natureContrat, job.typeContratLibelle].join(" ");
+          const clsFt = job.alternance === true || /apprenti|professionnalisation/i.test(natFt)
+            ? { code: "alternance" } : _classerContratOffre_("X-", "France Travail", job.intitule, natFt, "");
+          if (clsFt.code === "non" || clsFt.code === "inconnu") { nbHorsAlternance++; return; }
           const cle = (String(job.intitule || "") + String(job.entreprise ? job.entreprise.nom : "Anonyme")).toLowerCase().replace(/\s+/g, '');
           // Vérification doublon par URL et par poste + entreprise (une offre remonte sur plusieurs mots-clés)
           if (!urlsExistantes.includes(job.origineOffre.urlOrigine) && !clesExistantes.includes(cle)) {
@@ -5668,7 +5681,7 @@ function aspirerFranceTravail() {
               "À qualifier",            // J : Statut
               "", "", "", "",           // K à N : Vides
               job.intitule,             // O : Poste
-              job.typeContratLibelle,   // P : Type (CDD, Apprentissage...)
+              (clsFt.code === "stage" ? "Stage" : "Alternance") + " — " + (job.natureContrat || job.typeContratLibelle || ""), // P : Type
               String(job.description || "").slice(0, 500) + "...", // Q : Missions
               dateExp                   // R : Date Expiration J+15
             ]);
@@ -5764,8 +5777,10 @@ function aspirerLaBonneAlternance() {
   Logger.log("=== LBA : " + totalAjoutees + " offres ajoutées au total ===");
 }
 
+var _offresEcartees_ = []; // offres repérées mais non importées car ce ne sont pas des alternances
 function toutAspirer() {
   console.log("🚀 Lancement de l'aspiration globale...");
+  _offresEcartees_ = [];
 
   try {
     aspirerFranceTravail();
@@ -5795,7 +5810,10 @@ function toutAspirer() {
     aspirerMissionsGmail();
   } catch(e) { console.error("Erreur Missions Gmail : " + e.message); }
 
-  console.log("🏁 Fin de l'aspiration globale.");
+  if (_offresEcartees_.length) {
+    try { logAction("Système", "Auto", "Action", "Offres — aspiration (hors alternance écartées)", "Aspiration", _offresEcartees_.length + " offre(s) non importée(s) car ce ne sont pas des alternances : " + _offresEcartees_.slice(0, 40).join(" · ")); } catch (eL) {}
+  }
+  console.log("🏁 Fin de l'aspiration globale (" + _offresEcartees_.length + " offres hors alternance écartées).");
 }
 
 // --- OUTIL : NETTOYEUR D'URL ---
@@ -8042,6 +8060,8 @@ function aspirerHelloWork() {
         // 4. VÉRIFICATION DOUBLON
         const cleDoublon = (poste + entreprise).toLowerCase().replace(/\s+/g, '');
         if (offresExistantes.includes(cleDoublon) || urlsExistantes.includes(url)) continue;
+        const clsHw = _classerContratOffre_("HW-", "HelloWork", poste, "", "");
+        if (clsHw.code === "non") { _offresEcartees_.push("HelloWork : " + poste + " (" + clsHw.raison + ")"); nbMatchsDansCeMessage++; continue; } // pas une alternance
 
         // 5. INSERTION
         const idOffre = "HW-" + Date.now() + "-" + Math.floor(Math.random() * 100);
@@ -8057,7 +8077,7 @@ function aspirerHelloWork() {
           "", "", "",        // K, L, M
           "Non partagée",    // N (index 13)
           poste,             // O (index 14)
-          "Alternance",      // P
+          _typeContratAspire_(clsHw), // P : Alternance / Stage / À vérifier
           "Alerte HelloWork" // Q
         ]);
 

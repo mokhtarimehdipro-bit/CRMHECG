@@ -545,7 +545,10 @@
                         <div class="p-5 border border-slate-100 rounded-2xl ${o.expiree ? 'bg-slate-100 opacity-70' : 'bg-slate-50'} flex justify-between items-center group">
                             <div>
                                 <p class="text-sm font-black ${o.expiree ? 'text-slate-500' : 'text-[#1A4E8A]'}">${o.poste}
-                                    ${o.expiree ? '<span class="ml-2 px-2 py-0.5 bg-slate-300 text-slate-600 text-[9px] font-black rounded-full uppercase align-middle">Expirée</span>' : ''}</p>
+                                    ${o.expiree ? '<span class="ml-2 px-2 py-0.5 bg-slate-300 text-slate-600 text-[9px] font-black rounded-full uppercase align-middle">Expirée</span>' : ''}
+                                    ${o.alt && o.alt.code === 'non' ? '<span class="ml-2 px-2 py-0.5 bg-red-100 text-red-700 border border-red-200 text-[9px] font-black rounded-full uppercase align-middle">⛔ Pas une alternance' + (o.alt.raison ? ' (' + o.alt.raison + ')' : '') + '</span>' : ''}
+                                    ${o.alt && o.alt.code === 'stage' ? '<span class="ml-2 px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-black rounded-full uppercase align-middle">⚠️ Stage — pas une alternance</span>' : ''}
+                                    ${o.alt && o.alt.code === 'inconnu' ? '<span class="ml-2 px-2 py-0.5 bg-slate-200 text-slate-600 text-[9px] font-black rounded-full uppercase align-middle">❔ Alternance non confirmée</span>' : ''}</p>
                                 <p class="text-[10px] font-bold text-slate-400 uppercase">${o.entreprise}${o.datePartage ? ' · partagée le ' + o.datePartage : ''}</p>
                             </div>
                             ${action}
