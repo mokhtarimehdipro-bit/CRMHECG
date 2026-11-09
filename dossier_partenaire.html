@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script>
+    <script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script><script src="adresse-fr.js?v=1"></script>
     <meta charset="UTF-8">
     <title>Fiche Partenaire - HECG</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -22,7 +22,8 @@
                         </div>
                         <div class="flex items-center gap-2 mt-1">
                             <p id="entAdresse" class="text-sm text-gray-400 font-medium"></p>
-                            <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse">✏️</button>
+                            <span id="entAdresseBadge"></span>
+                            <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse (Base Adresse Nationale / SIRENE)">✏️</button>
                         </div>
                         <p id="entDateCrea" class="text-xs text-gray-400 font-medium mt-1 hidden"></p>
                     </div>
@@ -43,13 +44,7 @@
                         <input type="text"  id="newTel"    placeholder="Téléphone 1"    class="border p-2 rounded-lg text-sm bg-white">
                         <input type="text"  id="newTel2"   placeholder="Téléphone 2"    class="border p-2 rounded-lg text-sm bg-white">
                     </div>
-                    <select id="newPoste" class="w-full border p-2 rounded-lg text-sm bg-white">
-                        <option value="">-- Poste du contact --</option>
-                        <option value="RH">RH</option>
-                        <option value="Gérant">Gérant</option>
-                        <option value="Expert comptable">Expert comptable</option>
-                        <option value="Collaborateur comptable">Collaborateur comptable</option>
-                    </select>
+                    <input type="text" id="newPoste" placeholder="Poste du contact — choisir dans la liste ou saisir un nouveau poste" class="w-full border p-2 rounded-lg text-sm bg-white">
                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
                         <div class="flex items-center gap-2">
                             <input type="checkbox" id="newIsMA" onchange="toggleDPMASelector()" class="w-4 h-4 accent-amber-500 cursor-pointer">
@@ -149,13 +144,7 @@
             </div>
             <div class="mb-3">
                 <label class="block text-[10px] uppercase font-black text-gray-400 mb-1">Poste</label>
-                <select id="editDPPoste" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white">
-                    <option value="">-- Poste du contact --</option>
-                    <option value="RH">RH</option>
-                    <option value="Gérant">Gérant</option>
-                    <option value="Expert comptable">Expert comptable</option>
-                    <option value="Collaborateur comptable">Collaborateur comptable</option>
-                </select>
+                <input type="text" id="editDPPoste" placeholder="Choisir dans la liste ou saisir un nouveau poste" class="w-full border border-gray-200 p-2 rounded-lg text-sm bg-white">
             </div>
             <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6 space-y-2">
                 <div class="flex items-center gap-2">
@@ -289,7 +278,7 @@
         let currentUser = null;
         let nomEntrepriseActuelle = "";
         let contactsData = [];
-        let adresseData = { adresse: "", cp: "", ville: "" };
+        let adresseData = { adresse: "", complement: "", cp: "", ville: "", lat: "", lon: "", statut: "", siret: "" };
         let allStudentsCacheDP = [];
 
         const _dpUserSession = JSON.parse(localStorage.getItem('user') || '{}');
@@ -350,9 +339,10 @@
                     document.getElementById('entNom').innerText = d.info.entreprise;
                     const codeEl = document.getElementById('entCode');
                     if (codeEl && partId) { codeEl.dataset.code = partId.toUpperCase(); codeEl.innerHTML = '<span class="code-lbl">Code</span>' + partId.toUpperCase(); }
-                    adresseData = { adresse: d.info.adresse || "", cp: d.info.cp || "", ville: d.info.ville || "" };
-                    const adresseDisplay = [d.info.adresse, d.info.cp, d.info.ville].filter(Boolean).join(' · ');
-                    document.getElementById('entAdresse').innerText = adresseDisplay || 'Adresse non renseignée';
+                    adresseData = { adresse: d.info.adresse || "", complement: d.info.complement || "", cp: d.info.cp || "", ville: d.info.ville || "",
+                        lat: d.info.lat || "", lon: d.info.lon || "", statut: d.info.adrStatut || "", siret: d.info.siret || "" };
+                    document.getElementById('entAdresse').innerText = (HecgAdresse.texte(adresseData) || 'Adresse non renseignée') + (adresseData.siret ? '  ·  SIRET ' + adresseData.siret : '');
+                    document.getElementById('entAdresseBadge').innerHTML = HecgAdresse.badge(adresseData);
                     const elDateCrea = document.getElementById('entDateCrea');
                     elDateCrea.innerText = d.info.dateCreation ? '🗓️ Entreprise créée le ' + d.info.dateCreation : '';
                     elDateCrea.classList.toggle('hidden', !d.info.dateCreation);
@@ -573,6 +563,7 @@
         function toggleAddContactForm() {
             const f = document.getElementById('addContactForm');
             f.classList.toggle('hidden');
+            HecgPostes.attacher(document.getElementById('newPoste'));
         }
 
         async function toggleDPMASelector() {
@@ -651,7 +642,7 @@
                 nom, prenom,
                 mail1: mail, mail2: document.getElementById('newMail2').value.trim(),
                 tel1: tel,   tel2:  document.getElementById('newTel2').value.trim(),
-                poste: document.getElementById('newPoste').value,
+                poste: document.getElementById('newPoste').value.trim(),
                 is_ma: isMA ? 'Oui' : 'Non'
             });
             if (res.success) {
@@ -685,12 +676,19 @@
             else alert("Erreur : " + res.message);
         }
 
-        async function editAdresse() {
-            const newAdresse = prompt("Adresse (rue, n°...) :", adresseData.adresse); if (newAdresse === null) return;
-            const newCp = prompt("Code postal :", adresseData.cp); if (newCp === null) return;
-            const newVille = prompt("Ville :", adresseData.ville); if (newVille === null) return;
-            const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: newAdresse, cp: newCp, ville: newVille });
-            if (res.success) loadDetails(true); else alert("Erreur : " + res.message);
+        // Adresse normalisée (Base Adresse Nationale / SIRENE — adresse-fr.js), commune à tous les contacts
+        function editAdresse() {
+            HecgAdresse.ouvrir({
+                nomEntreprise: nomEntrepriseActuelle,
+                initial: adresseData,
+                onValider: async a => {
+                    const res = await apiPost({ action: 'updateEnterprise', id_entreprise: partId, adresse: a.adresse, complement: a.complement, cp: a.cp, ville: a.ville, lat: a.lat, lon: a.lon, adrStatut: a.statut, siret: a.siret });
+                    if (res.success) {
+                        if (res.adresse && res.adresse.statut === 'Saisie libre') alert("⚠️ Adresse enregistrée, mais introuvable dans la Base Adresse Nationale : elle reste marquée « à vérifier ».");
+                        loadDetails(true);
+                    } else alert("Erreur : " + res.message);
+                }
+            });
         }
 
         async function signalFormerAlternant(idEtudiant, prenom, nomFamille) {
@@ -730,6 +728,7 @@
             document.getElementById('editDPMail2').value = c.mail2 || '';
             document.getElementById('editDPTel1').value = c.tel || '';
             document.getElementById('editDPTel2').value = c.tel2 || '';
+            HecgPostes.attacher(document.getElementById('editDPPoste'));
             document.getElementById('editDPPoste').value = c.poste || '';
             const isMA = c.is_ma === 'Oui';
             document.getElementById('editDPIsMA').checked = isMA;
@@ -771,7 +770,7 @@
                 mail2: document.getElementById('editDPMail2').value.trim(),
                 tel: document.getElementById('editDPTel1').value.trim(),
                 tel2: document.getElementById('editDPTel2').value.trim(),
-                poste: document.getElementById('editDPPoste').value,
+                poste: document.getElementById('editDPPoste').value.trim(),
                 is_ma: isMA ? 'Oui' : 'Non'
             });
             if (!res.success) { alert('Erreur : ' + res.message); return; }

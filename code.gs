@@ -294,6 +294,8 @@ function doPostInner_(e) {
       // --- APPARENCE : thèmes (niveau 14+ et compte maître, voir apparence.gs) ---
       case "getApparence":     return handleGetApparence(params, ss);
       case "saveApparence":    return handleSaveApparence(params, ss);
+      case "getPostesContacts":  return handleGetPostesContacts(params, ss);
+      case "harmoniserAdresses": return handleHarmoniserAdresses(params, ss);
 
       case "addStudent": return handleAddStudent(params, ss);
       case "updateStudent": return handleUpdateStudent(params, ss);
@@ -1476,9 +1478,11 @@ function handleGetPartners(params, ss) {
   // ses contacts en ont une (même règle que handleGetPartnerDetails)
   const colDateCrea = (dP[0] || []).findIndex(h => String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase());
   const creaMin = {}, creaIncomplete = {};
+  const adrC = _adrColsLecture_(dP[0]), adrLignes = {};   // une seule adresse par entreprise (adresses.gs)
   for (let i = 1; i < dP.length; i++) {
     const idEnt = String(dP[i][1] || "").trim(); if (!idEnt) continue;
-    if (!entreprises[idEnt]) entreprises[idEnt] = { id: idEnt, nom: String(dP[i][2] || "").trim(), adresse: String(dP[i][10] || "").trim(), cp: String(dP[i][11] || "").trim(), ville: String(dP[i][12] || "").trim(), contacts: [], alternants: [], anciensAlternants: [] };
+    if (!entreprises[idEnt]) entreprises[idEnt] = { id: idEnt, nom: String(dP[i][2] || "").trim(), adresse: "", cp: "", ville: "", contacts: [], alternants: [], anciensAlternants: [] };
+    (adrLignes[idEnt] = adrLignes[idEnt] || []).push(_adrDeLigne_(dP[i], adrC));
     const vCrea = colDateCrea >= 0 ? dP[i][colDateCrea] : "";
     const dCrea = _dateCreationToDate_(vCrea);
     if (!dCrea) creaIncomplete[idEnt] = true;
@@ -1486,6 +1490,8 @@ function handleGetPartners(params, ss) {
     entreprises[idEnt].contacts.push({ id_contact: dP[i][0], nom: String(dP[i][3] || "").trim(), prenom: String(dP[i][4] || "").trim(), tel: dP[i][5], email: dP[i][6], tel2: dP[i][9], mail2: dP[i][8], poste: String(dP[i][13] || "").trim(), is_ma: String(dP[i][14] || "Non").trim(), dateCreation: _formatDateCreation_(vCrea) });
   }
   Object.keys(entreprises).forEach(function(idEnt) {
+    const a = _adrReference_(adrLignes[idEnt] || []);
+    Object.assign(entreprises[idEnt], { adresse: a.adresse, cp: a.cp, ville: a.ville, complement: a.complement, lat: a.lat, lon: a.lon, adrStatut: a.statut, siret: a.siret });
     const d = creaIncomplete[idEnt] ? null : creaMin[idEnt];
     entreprises[idEnt].dateCreation = d ? _formatDateCreation_(d) : "";
     entreprises[idEnt].dateCreationKey = d ? _dateCreationKey_(d) : "";
@@ -4860,7 +4866,8 @@ function handleGetPartnerDetails(params, ss) {
 
     for (let i = 1; i < dP.length; i++) {
       if (String(dP[i][1]).trim().toUpperCase() === id) {
-        if (!info) info = { entreprise: String(dP[i][2] || "").trim(), adresse: String(dP[i][10] || "").trim(), cp: String(dP[i][11] || "").trim(), ville: String(dP[i][12] || "").trim() };
+        if (!info) info = { entreprise: String(dP[i][2] || "").trim(), _lignesAdr: [] };
+        info._lignesAdr.push(_adrDeLigne_(dP[i], _adrColsLecture_(dP[0])));
         contacts.push({
           id_contact: String(dP[i][0] || "").trim(),
           nom: String(dP[i][3] || "").trim(),
@@ -4881,7 +4888,10 @@ function handleGetPartnerDetails(params, ss) {
 
     if (!info) return createJsonResponse({ success: false, message: "Entreprise introuvable" });
     info.dateCreation = (dateCreaEnt && dateCreaEntComplete) ? _formatDateCreation_(dateCreaEnt) : "";
-    
+    const adrRef = _adrReference_(info._lignesAdr);
+    delete info._lignesAdr;
+    Object.assign(info, { adresse: adrRef.adresse, cp: adrRef.cp, ville: adrRef.ville, complement: adrRef.complement, lat: adrRef.lat, lon: adrRef.lon, adrStatut: adrRef.statut, siret: adrRef.siret });
+
     const dataEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
     const nomEntLower = info.entreprise.toLowerCase();
     const alternants = dataEtu
@@ -4979,20 +4989,23 @@ function handleUpdateEnterprise(p, ss) {
     // c'était la cause probable des sauvegardes très lentes sur les entreprises ayant
     // plusieurs contacts.
     const rowsToWrite = []; // { rowIndex1Based, values }
+    // Adresse : normalisée (adresses.gs) et recopiée sur TOUS les contacts de l'entreprise
+    const majAdresse = p.adresse !== undefined || p.cp !== undefined || p.ville !== undefined;
+    const adrC = majAdresse ? _adrCols_(sheet) : null;
+    const adrNew = majAdresse ? _adrDepuisSaisie_(p) : null;
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]).trim().toUpperCase() === idCible) {
         if (!found) {
           // Capture des anciennes valeurs sur la première ligne trouvée
           if (p.nouveauNom !== undefined && p.nouveauNom && data[i][2] !== p.nouveauNom) changes.push("Nom: " + data[i][2] + " → " + p.nouveauNom);
-          if (p.adresse !== undefined && data[i][10] !== p.adresse) changes.push("Adresse: " + (data[i][10] || "-") + " → " + (p.adresse || "-"));
-          if (p.cp !== undefined && String(data[i][11]) !== String(p.cp)) changes.push("CP: " + (data[i][11] || "-") + " → " + (p.cp || "-"));
-          if (p.ville !== undefined && data[i][12] !== p.ville) changes.push("Ville: " + (data[i][12] || "-") + " → " + (p.ville || "-"));
+          if (majAdresse) {
+            const avant = _adrTexte_(_adrDeLigne_(data[i], adrC)), apres = _adrTexte_(adrNew);
+            if (avant !== apres) changes.push("Adresse : « " + (avant || "-") + " » → « " + (apres || "-") + " » [" + (adrNew.statut || "vide") + "]");
+          }
         }
         const rowCopy = data[i].slice();
         if (p.nouveauNom !== undefined && p.nouveauNom) rowCopy[2] = p.nouveauNom;
-        if (p.adresse !== undefined) rowCopy[10] = p.adresse;
-        if (p.cp !== undefined) rowCopy[11] = p.cp;
-        if (p.ville !== undefined) rowCopy[12] = p.ville;
+        if (majAdresse) _adrDansLigne_(rowCopy, adrC, adrNew);
         rowsToWrite.push({ rowIndex1Based: i + 1, values: rowCopy });
         found = true;
       }
@@ -5002,10 +5015,10 @@ function handleUpdateEnterprise(p, ss) {
     });
     if (found) {
       const logDetail = changes.length > 0 ? changes.join(" | ") : "Mise à jour fiche entreprise";
-      logAction(p.idAuteur, p.roleAuteur, "Modification", "Entreprise", idCible, logDetail);
+      logAction(p.idAuteur, p.roleAuteur, "Modification", majAdresse ? "Entreprise — adresse" : "Entreprise", idCible, logDetail);
       _invalidatePartnersCache_();
       _invalidatePartnerDetailsCache_(idCible);
-      return createJsonResponse({ success: true });
+      return createJsonResponse({ success: true, adresse: adrNew });
     }
     return createJsonResponse({ success: false, message: "ID non trouvé" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
@@ -5307,6 +5320,13 @@ function handleAddPartner(p, ss) {
       idEnt = "ENT" + Utilities.formatDate(new Date(), "GMT", "yyMMddHHmmss");
     }
 
+    // 2 bis. Adresse : une entreprise n'a qu'UNE adresse. Nouveau contact d'une entreprise
+    // existante → il hérite de l'adresse de l'entreprise (celle saisie est ignorée).
+    // Nouvelle entreprise → adresse normalisée (BAN / SIRENE, voir adresses.gs).
+    const adrC = _adrCols_(sheetPart);
+    const adrExistante = (p.id_entreprise && String(p.id_entreprise).trim()) ? _adrEntreprise_(ss, idEnt) : null;
+    const adr = adrExistante || _adrDepuisSaisie_(p);
+
     // 3. On crée le nouveau contact lié à cette entreprise
     const idCont = "CONT" + Utilities.formatDate(new Date(), "GMT", "yyMMddHHmmss") + Math.floor(Math.random() * 10);
     
@@ -5323,21 +5343,21 @@ function handleAddPartner(p, ss) {
       "",               // Colonne H
       p.mail2 || "",    // Colonne I
       p.tel2 || "",     // Colonne J
-      p.adresse || "",  // Colonne K
-      p.cp || "",       // Colonne L
-      p.ville || "",    // Colonne M
+      adr.adresse || "",  // Colonne K
+      adr.cp || "",       // Colonne L
+      adr.ville || "",    // Colonne M
       p.poste || "",    // Colonne N — Poste du contact
       p.is_ma || "Non"  // Colonne O — Maître d'apprentissage
     ];
     
-    sheetPart.appendRow(_withDateCreation_(sheetPart, nouvelleLigne));
+    sheetPart.appendRow(_adrDansLigne_(_withDateCreation_(sheetPart, nouvelleLigne), adrC, adr));
 
     // 5. On laisse une trace dans l'historique
     // 5. On laisse une trace dans l'historique (avec sécurité sur le nom)
     const auteurReconnu = p.idAuteur || p.auteur || "Inconnu";
     const roleReconnu = p.roleAuteur || p.role || "N/A";
     const isNewEnt = !p.id_entreprise || String(p.id_entreprise).trim() === "";
-    const logDetail = (isNewEnt ? "Nouvelle entreprise : " : "Nouveau contact ajouté à : ") + (p.nom_entreprise || "?") + " | Contact : " + (p.prenom || "") + " " + (p.nom || "") + (p.mail1 ? " <" + p.mail1 + ">" : "") + (p.ville ? " — " + p.ville : "");
+    const logDetail = (isNewEnt ? "Nouvelle entreprise : " : "Nouveau contact ajouté à : ") + (p.nom_entreprise || "?") + " | Contact : " + (p.prenom || "") + " " + (p.nom || "") + (p.mail1 ? " <" + p.mail1 + ">" : "") + (adr.ville ? " — " + _adrTexte_(adr) + " [" + (adr.statut || "sans adresse") + "]" : "") + (p.poste ? " | Poste : " + p.poste : "");
     logAction(auteurReconnu, roleReconnu, "Création", isNewEnt ? "Entreprise" : "Contact", idEnt, logDetail);
     _invalidatePartnersCache_();
     _invalidatePartnerDetailsCache_(idEnt);

@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
-    <script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script>
+    <script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script><script src="adresse-fr.js?v=1"></script>
     <meta charset="UTF-8">
     <title>HECG - CRM Partenaires</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -78,8 +78,15 @@
                     <input type="date" id="filterCreaAu" onchange="filterPartners()" class="text-xs font-black text-slate-600 outline-none bg-transparent">
                 </div>
 
+                <select id="filterAdr" onchange="filterPartners()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 outline-none focus:ring-2 focus:ring-[#1A4E8A] transition shadow-sm cursor-pointer" title="Qualité de l'adresse (Base Adresse Nationale / SIRENE)">
+                    <option value="all">📍 Toutes les adresses</option>
+                    <option value="ok">✅ Adresse référencée</option>
+                    <option value="verif">⚠️ À vérifier / rue manquante</option>
+                    <option value="vide">∅ Adresse manquante</option>
+                </select>
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
+                <button onclick="normaliserAdresses()" id="btnNormAdr" class="hidden px-5 py-3 bg-white border border-[#1A4E8A]/30 rounded-2xl text-xs font-black text-[#1A4E8A] hover:bg-blue-50 transition shadow-sm" title="Administrateurs : une seule adresse par entreprise + mise en conformité avec la Base Adresse Nationale">🧭 Normaliser les adresses</button>
                 <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
                 <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
             </div>
@@ -107,6 +114,7 @@
                     <div class="flex-grow pr-10">
                         <input type="text" id="editEntNom" class="text-3xl font-black text-slate-800 bg-transparent border-b-2 border-transparent focus:border-[#F26522] outline-none w-full transition-colors" title="Cliquer pour modifier le nom de l'entreprise">
                         <p class="text-slate-400 font-bold text-xs mt-1" id="editEntRef"></p>
+                        <div class="flex items-center gap-2 mt-1 flex-wrap"><p id="dossierAdresse" class="text-xs text-slate-500 font-medium"></p><span id="dossierAdresseBadge"></span><button type="button" onclick="editAdresseDossier()" class="text-[10px] font-black text-[#1A4E8A] hover:underline">✏️ Modifier l'adresse</button></div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -186,7 +194,8 @@
             <form id="addContactForm" class="space-y-4">
                 <div class="space-y-1">
                     <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Entreprise de rattachement</label>
-                    <input type="text" id="addContEntNom" placeholder="Nom de l'entreprise" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <input type="text" id="addContEntNom" oninput="detecterEntrepriseExistante()" placeholder="Nom de l'entreprise" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <div id="addContEntMatch" class="hidden space-y-1"></div>
                     <input type="hidden" id="addContEntId">
                 </div>
 
@@ -208,24 +217,22 @@
                     </div>
                 </div>
 
-                <div class="space-y-2">
+                <div class="space-y-1">
                     <label class="text-[9px] font-bold text-slate-400 ml-2 italic">Adresse de l'entreprise</label>
-                    <input type="text" id="addContAdresse" placeholder="Adresse (rue, n°...)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
-                    <div class="grid grid-cols-2 gap-4">
-                        <input type="text" id="addContCP" placeholder="Code postal" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
-                        <input type="text" id="addContVille" placeholder="Ville" class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#1A4E8A]">
+                    <div class="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <div class="min-w-0">
+                            <p id="addContAdrTexte" class="text-sm font-bold text-slate-600 truncate">Aucune adresse</p>
+                            <div id="addContAdrBadge" class="mt-1"></div>
+                            <p id="addContAdrNote" class="hidden text-[10px] text-slate-400 italic mt-1">Adresse commune à tous les contacts de l'entreprise — modifiable depuis la fiche entreprise.</p>
+                        </div>
+                        <button type="button" id="addContAdrBtn" onclick="choisirAdresseNouveauContact()" class="shrink-0 px-4 py-2 bg-white border border-[#1A4E8A]/30 text-[#1A4E8A] rounded-xl text-xs font-black hover:bg-blue-50">📍 Renseigner</button>
                     </div>
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Poste du contact</label>
-                    <select id="addContPoste" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
-                        <option value="">-- Sélectionner un poste --</option>
-                        <option value="RH">RH</option>
-                        <option value="Gérant">Gérant</option>
-                        <option value="Expert comptable">Expert comptable</option>
-                        <option value="Collaborateur comptable">Collaborateur comptable</option>
-                    </select>
+                    <input type="text" id="addContPoste" placeholder="Choisir dans la liste ou saisir un nouveau poste…" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
+                    <p class="text-[10px] text-slate-400 ml-2">Cliquez ou commencez à taper pour voir les postes existants ; un poste absent de la liste est créé automatiquement.</p>
                 </div>
 
                 <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
@@ -274,13 +281,7 @@
                 </div>
                 <div class="space-y-1">
                     <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Poste</label>
-                    <select id="editContactPoste" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
-                        <option value="">-- Sélectionner un poste --</option>
-                        <option value="RH">RH</option>
-                        <option value="Gérant">Gérant</option>
-                        <option value="Expert comptable">Expert comptable</option>
-                        <option value="Collaborateur comptable">Collaborateur comptable</option>
-                    </select>
+                    <input type="text" id="editContactPoste" placeholder="Choisir dans la liste ou saisir un nouveau poste…" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
                 </div>
                 <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
                     <div class="flex items-center gap-3">
@@ -492,7 +493,8 @@
                             ${nbAlt > 0 ? `<span class="text-[10px] bg-green-50 text-green-700 px-3 py-1.5 rounded-xl font-black">${nbAlt} Alternant${nbAlt > 1 ? 's' : ''}</span>` : ''}
                             <span class="text-[10px] ${scoreColor} px-3 py-1.5 rounded-xl font-black ml-auto">⭐ ${score} pts</span>
                         </div>
-                        ${(ent.ville || ent.cp) ? `<p class="text-[10px] text-slate-400 mt-2 font-medium">📍 ${[ent.adresse, ent.cp, ent.ville].filter(Boolean).join(' · ')}</p>` : ''}
+                        ${(ent.ville || ent.cp || ent.adresse) ? `<p class="text-[10px] text-slate-400 mt-2 font-medium">📍 ${escAdr(HecgAdresse.texte(ent))}</p>` : ''}
+                        <div class="mt-1">${HecgAdresse.badge({ adresse: ent.adresse, cp: ent.cp, ville: ent.ville, statut: ent.adrStatut })}</div>
                     </div>
                   <button onclick="window.location.href='dossier_partenaire.html?id=${ent.id}'" class="mt-6 w-full py-3 bg-[#1A4E8A] text-white rounded-2xl font-black text-xs hover:bg-[#F26522] transition shadow-lg text-center">📂 DOSSIER COMPLET</button>
                 </div>
@@ -508,6 +510,8 @@
             
             document.getElementById('editEntNom').value = ent.nom || "";
             document.getElementById('editEntRef').innerText = "ID SYSTÈME : " + ent.id;
+            document.getElementById('dossierAdresse').innerText = "📍 " + (HecgAdresse.texte(ent) || "Adresse non renseignée");
+            document.getElementById('dossierAdresseBadge').innerHTML = HecgAdresse.badge({ adresse: ent.adresse, cp: ent.cp, ville: ent.ville, statut: ent.adrStatut });
             
             document.getElementById('dossierContacts').innerHTML = (ent.contacts || []).map(c => `
                 <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group/item transition-all hover:bg-white hover:shadow-md">
@@ -662,6 +666,7 @@
             document.getElementById('editContactMail').value = c.email || "";
             document.getElementById('editContactTel2').value = c.tel2 || "";
             document.getElementById('editContactMail2').value = c.mail2 || "";
+            HecgPostes.attacher(document.getElementById('editContactPoste'));
             document.getElementById('editContactPoste').value = c.poste || "";
             const isMA = c.is_ma === "Oui";
             document.getElementById('editContIsMA').checked = isMA;
@@ -707,7 +712,7 @@
                 mail: document.getElementById('editContactMail').value,
                 tel2: document.getElementById('editContactTel2').value,
                 mail2: document.getElementById('editContactMail2').value,
-                poste: document.getElementById('editContactPoste').value
+                poste: document.getElementById('editContactPoste').value.trim()
             };
             await apiPost(payload);
             // Liaison MA si cochée
@@ -752,14 +757,19 @@
             document.getElementById('addContactForm').reset();
             document.getElementById('addContIsMA').checked = false;
             document.getElementById('maStudentBlock').classList.add('hidden');
+            HecgPostes.attacher(document.getElementById('addContPoste'));
+            _newEntAdr = null;
+            document.getElementById('addContEntMatch').classList.add('hidden');
             if (idEnt) {
                 const ent = allPartners.find(p => String(p.id) === String(idEnt));
                 document.getElementById('addContEntNom').value = ent.nom;
                 document.getElementById('addContEntNom').readOnly = true;
                 document.getElementById('addContEntId').value = ent.id;
+                _afficherAdresseNouveauContact({ adresse: ent.adresse, complement: ent.complement, cp: ent.cp, ville: ent.ville, statut: ent.adrStatut }, true);
             } else {
                 document.getElementById('addContEntNom').readOnly = false;
                 document.getElementById('addContEntId').value = "";
+                _afficherAdresseNouveauContact(null, false);
             }
             document.getElementById('addContactModal').classList.add('modal-active');
         }
@@ -812,16 +822,19 @@
                 mail2: document.getElementById('addContMail2').value,
                 tel1: document.getElementById('addContTel1').value,
                 tel2: document.getElementById('addContTel2').value,
-                adresse: document.getElementById('addContAdresse').value,
-                cp: document.getElementById('addContCP').value,
-                ville: document.getElementById('addContVille').value,
-                poste: document.getElementById('addContPoste').value,
+                // Adresse : seulement pour une NOUVELLE entreprise (un contact hérite de l'adresse de son entreprise)
+                ...(!document.getElementById('addContEntId').value && _newEntAdr ? {
+                    adresse: _newEntAdr.adresse, complement: _newEntAdr.complement, cp: _newEntAdr.cp, ville: _newEntAdr.ville,
+                    lat: _newEntAdr.lat, lon: _newEntAdr.lon, adrStatut: _newEntAdr.statut, siret: _newEntAdr.siret
+                } : {}),
+                poste: document.getElementById('addContPoste').value.trim(),
                 is_ma: isMA ? 'Oui' : 'Non'
             };
 
             if (!payload.nom_entreprise || !payload.nom || !payload.mail1) {
                 return alert("Champs obligatoires : Nom Entreprise, Nom Contact, Mail Principal.");
             }
+            if (!payload.id_entreprise && !_newEntAdr && !confirm("Aucune adresse n'est renseignée pour cette nouvelle entreprise (elle ne pourra pas être placée sur la carte).\n\nCréer quand même ?")) return;
 
             const result = await apiPost(payload);
 
@@ -940,6 +953,14 @@
             // Filtre par période de création (entreprise sans date = antérieure à la fonctionnalité → exclue)
             if (creaDu || creaAu) data = data.filter(p => !!p.dateCreationKey && (!creaDu || p.dateCreationKey >= creaDu) && (!creaAu || p.dateCreationKey <= creaAu));
 
+            // Filtre qualité d'adresse
+            const adrFilter = document.getElementById('filterAdr').value;
+            if (adrFilter !== 'all') data = data.filter(p => {
+                const vide = !p.adresse && !p.cp && !p.ville;
+                const ok = ['BAN', 'BAN voie', 'SIRENE'].includes(p.adrStatut);
+                return adrFilter === 'vide' ? vide : adrFilter === 'ok' ? ok : (!vide && !ok);
+            });
+
             lastFilteredPartners = data;
             updatePartnersCounter(data.length, allPartners.length);
             renderPartners(data);
@@ -1012,6 +1033,82 @@
                 openDossier(currentId);
                 loadPartners(true);
             });
+        }
+
+        // --- ADRESSES (référentiel BAN / SIRENE — adresse-fr.js, adresses.gs) ---
+        let _newEntAdr = null;
+        function escAdr(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+        function _afficherAdresseNouveauContact(a, entrepriseExistante) {
+            document.getElementById('addContAdrTexte').innerText = HecgAdresse.texte(a) || (entrepriseExistante ? "Aucune adresse enregistrée pour cette entreprise" : "Aucune adresse");
+            document.getElementById('addContAdrBadge').innerHTML = (a || entrepriseExistante) ? HecgAdresse.badge(a) : '';
+            document.getElementById('addContAdrNote').classList.toggle('hidden', !entrepriseExistante);
+            document.getElementById('addContAdrBtn').classList.toggle('hidden', !!entrepriseExistante);
+        }
+        // Une entreprise = une adresse : si le nom saisi existe déjà, on propose d'y rattacher le contact
+        function _normNomEnt(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+        function detecterEntrepriseExistante() {
+            const box = document.getElementById('addContEntMatch');
+            if (document.getElementById('addContEntId').value) { box.classList.add('hidden'); return; }
+            const v = _normNomEnt(document.getElementById('addContEntNom').value);
+            if (v.length < 3) { box.classList.add('hidden'); return; }
+            const hits = allPartners.filter(p => { const n = _normNomEnt(p.nom); return n === v || (v.length >= 4 && (n.startsWith(v) || n.includes(' ' + v))); }).slice(0, 4);
+            if (!hits.length) { box.classList.add('hidden'); return; }
+            box.innerHTML = '<p class="text-[10px] font-black text-amber-600 ml-2 mt-1">⚠️ Entreprise déjà enregistrée ? Rattachez-y le contact (elle garde son adresse) :</p>'
+                + hits.map(p => `<button type="button" onclick="rattacherEntrepriseExistante('${p.id}')" class="block w-full text-left px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100"><span class="text-xs font-black text-slate-700">${escAdr(p.nom)}</span> <span class="text-[10px] text-slate-500">— ${escAdr(HecgAdresse.texte(p) || 'sans adresse')}</span></button>`).join('');
+            box.classList.remove('hidden');
+        }
+        function rattacherEntrepriseExistante(id) {
+            const ent = allPartners.find(p => String(p.id) === String(id)); if (!ent) return;
+            document.getElementById('addContEntNom').value = ent.nom;
+            document.getElementById('addContEntNom').readOnly = true;
+            document.getElementById('addContEntId').value = ent.id;
+            document.getElementById('addContEntMatch').classList.add('hidden');
+            _newEntAdr = null;
+            _afficherAdresseNouveauContact({ adresse: ent.adresse, complement: ent.complement, cp: ent.cp, ville: ent.ville, statut: ent.adrStatut }, true);
+        }
+        function choisirAdresseNouveauContact() {
+            HecgAdresse.ouvrir({
+                titre: "Adresse de la nouvelle entreprise",
+                nomEntreprise: document.getElementById('addContEntNom').value.trim(),
+                initial: _newEntAdr || {},
+                onValider: a => {
+                    _newEntAdr = (a.adresse || a.cp || a.ville) ? a : null;
+                    _afficherAdresseNouveauContact(_newEntAdr, false);
+                }
+            });
+        }
+        function editAdresseDossier() {
+            const ent = allPartners.find(p => String(p.id) === String(currentId));
+            if (!ent) return;
+            HecgAdresse.ouvrir({
+                nomEntreprise: ent.nom,
+                initial: { adresse: ent.adresse, complement: ent.complement, cp: ent.cp, ville: ent.ville, lat: ent.lat, lon: ent.lon, statut: ent.adrStatut, siret: ent.siret },
+                onValider: async a => {
+                    const res = await apiPost({ action: 'updateEnterprise', id_entreprise: ent.id, adresse: a.adresse, complement: a.complement, cp: a.cp, ville: a.ville, lat: a.lat, lon: a.lon, adrStatut: a.statut, siret: a.siret });
+                    if (!res || !res.success) return alert("❌ " + ((res && res.message) || "Adresse non enregistrée."));
+                    const n = res.adresse || a;
+                    Object.assign(ent, { adresse: n.adresse, complement: n.complement, cp: n.cp, ville: n.ville, lat: n.lat, lon: n.lon, adrStatut: n.statut, siret: n.siret });
+                    openDossier(ent.id);
+                    loadPartners(true);
+                }
+            });
+        }
+        if (['Administrateur'].includes(userRole) || String(_userSession.email || '').toLowerCase() === 'm.mokhtari@hecg.fr') {
+            const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden');
+        }
+        async function normaliserAdresses() {
+            if (!confirm("Normaliser les adresses de toute la base entreprises ?\n\n• une seule adresse par entreprise, recopiée sur tous ses contacts ;\n• chaque adresse est comparée à la Base Adresse Nationale : orthographe officielle, code postal, coordonnées GPS ;\n• les adresses introuvables sont marquées « à vérifier » (rien n'est supprimé, l'ancienne saisie est conservée dans la colonne « Adresse d'origine »).\n\nDurée : 1 à 2 minutes.")) return;
+            const btn = document.getElementById('btnNormAdr');
+            btn.disabled = true; btn.innerText = '⏳ Normalisation en cours…';
+            try {
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'harmoniserAdresses', idAuteur: u.nom || '', nomAuteur: u.nom || '', roleAuteur: u.role || '', emailAuteur: u.email || '', sessionToken: u.sessionToken || '' }) }).then(x => x.json());
+                if (!r.success) throw new Error(r.message || 'Erreur');
+                const R = r.rapport;
+                alert("✅ Normalisation terminée\n\n" + R.entreprises + " entreprises\n• " + R.ban + " adresses référencées au numéro\n• " + R.voie + " référencées à la voie\n• " + R.commune + " avec la commune seulement (rue manquante)\n• " + R.aVerifier + " à vérifier\n• " + R.sansAdresse + " sans adresse\n• " + R.unifiees + " entreprises avaient plusieurs adresses → unifiées\n\nUtilisez le filtre « ⚠️ À vérifier » pour corriger les dernières. Le détail est dans l'Historique.");
+                loadPartners(true);
+            } catch (e) { alert("❌ Normalisation interrompue : " + e.message); }
+            btn.disabled = false; btn.innerText = '🧭 Normaliser les adresses';
         }
 
         // --- CARTE INTERACTIVE ---
@@ -1171,6 +1268,11 @@
         }
 
         async function _nominatim(query) {
+            try {   // Base Adresse Nationale d'abord (référentiel officiel), Nominatim en secours
+                const b = await fetch('https://data.geopf.fr/geocodage/search?limit=1&q=' + encodeURIComponent(query.replace(/, France$/, ''))).then(r => r.json());
+                const f = b && b.features && b.features[0];
+                if (f && f.properties.score >= 0.5) return [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+            } catch(e) {}
             try {
                 const r = await fetch(
                     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=fr`,
@@ -1200,8 +1302,8 @@
             marker.bindPopup(`
                 <div style="font-family:sans-serif;min-width:200px;padding:4px">
                     <div style="font-weight:900;font-size:14px;color:#1A4E8A;margin-bottom:4px">${p.nom}</div>
-                    <div style="font-size:11px;color:#666;margin-bottom:4px">📍 ${p.ville || '—'}${p.cp ? ' (' + p.cp + ')' : ''}${p.adresse ? '<br>📌 ' + p.adresse : ''}</div>
-                    ${precise ? '<div style="font-size:9px;color:#F26522;font-weight:700;margin-bottom:4px">📡 Position précise (géocodée)</div>' : ''}
+                    <div style="font-size:11px;color:#666;margin-bottom:4px">📍 ${escAdr(HecgAdresse.texte(p)) || '—'}</div>
+                    ${precise ? '<div style="font-size:9px;color:#059669;font-weight:700;margin-bottom:4px">✅ Position exacte (adresse référencée)</div>' : '<div style="font-size:9px;color:#d97706;font-weight:700;margin-bottom:4px">⚠️ Position approximative (adresse à vérifier)</div>'}
                     <div style="font-size:11px;color:#333">👤 ${cName}</div>
                     ${c.email ? `<div style="font-size:11px;color:#1A4E8A">✉️ ${c.email}</div>` : ''}
                     ${c.tel ? `<div style="font-size:11px;color:#555">📞 ${c.tel}</div>` : ''}
@@ -1226,17 +1328,20 @@
             const toGeocode = [];
 
             lastFilteredPartners.forEach(p => {
+                // 1. Coordonnées officielles enregistrées (BAN / SIRENE, voir adresses.gs)
+                const stored = (p.lat && p.lon) ? [Number(p.lat), Number(p.lon)] : null;
+                const storedPrecise = stored && ['BAN', 'BAN voie', 'SIRENE'].includes(p.adrStatut);
                 const cacheKey = _geocacheKey(p);
-                const cachedCoords = _geocache[cacheKey];
+                const cachedCoords = stored ? null : _geocache[cacheKey];
                 const fallback = getCoordsForLocation(p.ville, p.cp);
-                const coords = cachedCoords || fallback;
+                const coords = stored || cachedCoords || fallback;
                 if (!coords) return;
 
-                const { marker, ll } = _buildMarker(p, coords, !!cachedCoords);
+                const { marker, ll } = _buildMarker(p, coords, storedPrecise || (!stored && !!cachedCoords));
                 bounds.push(ll);
                 _markerGroup.addLayer(marker);
 
-                if (!cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
+                if (!stored && !cachedCoords && (p.adresse || p.cp || p.ville)) toGeocode.push(p);
             });
 
             if (bounds.length > 0 && fitView) {
@@ -1263,7 +1368,7 @@
                     _setMapStatus(`⟳ Géocodage ${done + 1}/${partners.length}…`);
                     const coords = await _nominatim(q);
                     if (coords) { _geocache[cacheKey] = coords; _saveGeoCache(); }
-                    await new Promise(r => setTimeout(r, 1100));
+                    await new Promise(r => setTimeout(r, 120));
                 }
                 done++;
             }
