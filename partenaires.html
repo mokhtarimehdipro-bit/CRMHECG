@@ -92,6 +92,7 @@
             </div>
         </div>
 
+        <button type="button" id="adrAlertBanner" onclick="document.getElementById('filterAdr').value='verif'; filterPartners();" class="hidden w-full mb-6 px-5 py-3 bg-amber-50 border border-amber-300 rounded-2xl text-left text-xs font-black text-amber-800 hover:bg-amber-100 transition"></button>
         <div id="loader" class="text-center py-24">
             <div class="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#1A4E8A] rounded-full animate-spin mb-4"></div>
             <p class="font-black text-slate-400 text-sm animate-pulse">SYNCHRONISATION GOOGLE SHEETS...</p>
@@ -967,7 +968,18 @@
             refreshMapMarkers(true);
         }
 
+        // Alerte visible : adresses non conformes au référentiel (audit adresses.gs)
+        function updateAdrAlertBanner() {
+            const el = document.getElementById('adrAlertBanner'); if (!el) return;
+            const multi = allPartners.filter(p => p.adrStatut === 'Adresses multiples').length;
+            const verif = allPartners.filter(p => ['À vérifier', 'Saisie libre'].includes(p.adrStatut)).length;
+            if (!multi && !verif) { el.classList.add('hidden'); return; }
+            el.innerHTML = '⚠️ Adresses à contrôler : ' + (verif ? verif + ' non conforme' + (verif > 1 ? 's' : '') + ' au référentiel officiel' : '') + (verif && multi ? ' · ' : '') + (multi ? multi + ' entreprise' + (multi > 1 ? 's' : '') + ' avec des adresses différentes selon les contacts' : '') + ' <span class="underline ml-2">Afficher la liste →</span>';
+            el.classList.remove('hidden');
+        }
+
         function updatePartnersCounter(nbAffiche, nbTotal) {
+            updateAdrAlertBanner();
             const el = document.getElementById('partnersCounter');
             if (!el) return;
             const pluriel = n => n > 1 ? 's' : '';

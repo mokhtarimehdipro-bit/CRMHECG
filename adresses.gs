@@ -167,7 +167,10 @@ function _adrEvaluer_(f, saisie) {
   var cpOk = saisie.cp && f.postcode === saisie.cp;
   var villeOk = saisie.ville && _adrVilleCompatible_(saisie.ville, f.city);
   var depOk = !saisie.cp || String(f.postcode).slice(0, 2) === String(saisie.cp).slice(0, 2);
-  if (!(cpOk || (villeOk && depOk))) return null;
+  // Décalage « léger » seulement : même ville (le CP peut être corrigé dans la même ville / le
+  // même département). Une ville différente (ex. « Marseille » saisi, adresse trouvée à Aix) = trop
+  // complexe → pas de correction automatique.
+  if (saisie.ville ? !(villeOk && depOk) : !cpOk) return null;
   var orig = saisie.adresse || "";
   if ((f.type === "housenumber" || f.type === "street" || f.type === "locality") && orig) {
     if (f.score < 0.4 || !_adrRueCompatible_(f.street || f.name, orig)) return null;
@@ -354,9 +357,9 @@ function handleHarmoniserAdresses(p, ss) {
   if (!lock.tryLock(20000)) return createJsonResponse({ success: false, message: "Une normalisation est déjà en cours." });
   try {
     var rapport = _adrHarmoniser_(ss, !!p.forcer);
-    var resume = rapport.entreprises + " entreprises — " + rapport.ban + " adresse(s) au numéro, " + rapport.voie + " à la voie, "
-      + rapport.commune + " à la commune, " + rapport.aVerifier + " à vérifier, " + rapport.sansAdresse + " sans adresse, "
-      + rapport.unifiees + " entreprise(s) à adresses multiples unifiées, " + rapport.lignesModifiees + " ligne(s) modifiée(s)";
+    var resume = rapport.entreprises + " entreprises — " + rapport.harmonisees + " harmonisées (" + rapport.ban + " au numéro, " + rapport.voie + " à la voie, "
+      + rapport.commune + " à la commune), " + rapport.dejaOk + " déjà conformes, ALERTES : " + rapport.aVerifier + " à vérifier + " + rapport.multiples
+      + " à adresses multiples (non modifiées), " + rapport.sansAdresse + " sans adresse, " + rapport.lignesModifiees + " ligne(s) modifiée(s). Détail : onglet « Audit adresses »";
     var ex = rapport.exemples.slice(0, 25).map(function (e) { return e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.statut + "]"; });
     logAction(p.nomAuteur || p.idAuteur || "Système", p.roleAuteur || "", "Modification", "Entreprises — normalisation des adresses",
       "PARTENARIAT", resume + (ex.length ? " | Exemples : " + ex.join(" ; ") : ""));
@@ -373,11 +376,94 @@ function harmoniserAdressesEntreprises() {   // depuis l'éditeur Apps Script
   Logger.log(out.getContent());
 }
 
+function _adrDistanceM_(a, b) {
+  var R = 6371000, t = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * t, dLon = (b.lon - a.lon) * t;
+  var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+// AUDIT + HARMONISATION. Règle (demande direction, 2026-11-09) :
+//  • décalage LÉGER (orthographe, abréviation, CP dans la même ville, adresse absente sur
+//    certains contacts) → adresse officielle BAN appliquée à tous les contacts ;
+//  • cas COMPLEXE (voie introuvable, ville différente, adresses contradictoires entre contacts)
+//    → l'adresse saisie n'est PAS modifiée, seul le statut d'alerte est posé
+//    (« À vérifier » ou « Adresses multiples »), affiché sur l'application.
+// Planification pure (testable hors Apps Script) : groupes → décisions
+function _adrDecider_(groupes, ordre, geocoderLot, forcer) {
+  var items1 = [], items2 = [];
+  ordre.forEach(function (id) {
+    var g = groupes[id], vus = {};
+    g.cands = [];
+    g.lignes.forEach(function (a) {
+      if (!a.adresse && !a.cp && !a.ville) return;
+      var cp = /^\d{5}$/.test(a.cp) ? a.cp : (/^\d{4}$/.test(a.cp) ? "0" + a.cp : "");
+      var sa = { adresse: _adrNettoyer_(a.adresse, cp), cp: cp, ville: a.ville, brut: a };
+      var k = _adrNorm_(sa.adresse + "|" + sa.cp + "|" + sa.ville);
+      if (vus[k]) { vus[k].nb++; return; }
+      sa.nb = 1; vus[k] = sa; g.cands.push(sa);
+    });
+    var verif = g.lignes.filter(function (a) { return ADR_STATUTS_OK[a.statut] && a.lat; })[0];
+    if (verif && !forcer) { g.decision = { type: "ok", a: verif }; return; }   // déjà validée (fenêtre d'adresse)
+    if (!g.cands.length) { g.decision = { type: "vide" }; return; }
+    g.cands.forEach(function (c) {
+      if (c.adresse) items1.push({ c: c, q: [c.adresse, c.cp, c.ville].filter(Boolean).join(" ") });
+      items2.push({ c: c, q: [c.ville, c.cp ? c.cp.slice(0, 2) : ""].filter(Boolean).join(" ") || c.cp });
+    });
+  });
+  var r1 = geocoderLot(items1, false);
+  items1.forEach(function (it, k) { it.c.res = _adrEvaluer_(r1[k], it.c); it.c.ban = r1[k]; });
+  var r2 = geocoderLot(items2, true);
+  items2.forEach(function (it, k) { it.c.commune = _adrEvaluerCommune_(r2[k], it.c); });
+
+  ordre.forEach(function (id) {
+    var g = groupes[id];
+    if (g.decision) return;
+    var avecRue = g.cands.filter(function (c) { return c.adresse; });
+    var sansRue = g.cands.filter(function (c) { return !c.adresse; });
+    var compl = (g.lignes.filter(function (a) { return a.complement; })[0] || {}).complement || "";
+    var siret = (g.lignes.filter(function (a) { return a.siret; })[0] || {}).siret || "";
+    if (avecRue.length) {
+      var ok = avecRue.filter(function (c) { return c.res; });
+      var memeLieu = ok.length === avecRue.length && ok.every(function (c) { return _adrDistanceM_(c.res, ok[0].res) <= 150; });
+      var villeRef = ok.length ? ok[0].res.ville : avecRue[0].ville;
+      var villesOk = sansRue.every(function (c) { return !c.ville || _adrVilleCompatible_(c.ville, villeRef); });
+      if (ok.length && memeLieu && villesOk) {
+        ok.sort(function (a, b) { return (b.res.statut === "BAN") - (a.res.statut === "BAN") || b.nb - a.nb; });
+        var r = ok[0].res;
+        g.decision = { type: "harmonise", a: { adresse: r.adresse, cp: r.cp, ville: r.ville, complement: compl || r.complement, lat: r.lat, lon: r.lon, statut: r.statut, siret: siret } };
+      } else if (avecRue.length === 1 && villesOk) {
+        var cm = avecRue[0].commune, b = avecRue[0].ban;
+        g.decision = { type: "alerte", statut: "À vérifier", lat: cm ? cm.lat : "", lon: cm ? cm.lon : "",
+          raison: b && b.type !== "municipality" ? "écart trop important avec la Base Adresse Nationale (proposition : " + _adrCasse_(String((b.housenumber ? b.housenumber + " " : "") + (b.street || b.name)).replace(/\s+/g, " ")) + ", " + b.postcode + " " + b.city + ")" : "voie introuvable dans la Base Adresse Nationale" };
+      } else {
+        g.decision = { type: "alerte", statut: "Adresses multiples", lat: "", lon: "",
+          raison: g.cands.length + " adresses différentes selon les contacts" };
+      }
+    } else {
+      var cms = sansRue.filter(function (c) { return c.commune; });
+      var memeVille = cms.length === sansRue.length && cms.every(function (c) { return _adrNorm_(c.commune.ville) === _adrNorm_(cms[0].commune.ville); });
+      if (memeVille) {
+        var c0 = cms[0].commune;
+        g.decision = { type: "harmonise", a: { adresse: "", cp: c0.cp, ville: c0.ville, complement: compl, lat: c0.lat, lon: c0.lon, statut: "Commune", siret: siret } };
+      } else if (sansRue.length === 1) {
+        g.decision = { type: "alerte", statut: "À vérifier", lat: "", lon: "", raison: "commune introuvable" };
+      } else {
+        g.decision = { type: "alerte", statut: "Adresses multiples", lat: "", lon: "", raison: sansRue.length + " communes différentes selon les contacts" };
+      }
+    }
+  });
+}
+
 function _adrHarmoniser_(ss, forcer) {
   var ws = getSheetSafe(ss, "PARTENARIAT");
   var C = _adrCols_(ws);
   var data = ws.getDataRange().getValues();
   var nCols = data[0].length;
+  var colsMin = Math.min(C.complement, C.lat, C.lon, C.statut, C.siret, C.origine);
+  var colsMax = Math.max(C.complement, C.lat, C.lon, C.statut, C.siret, C.origine);
+  for (var r0 = 1; r0 < data.length; r0++) while (data[r0].length < Math.max(nCols, colsMax + 1)) data[r0].push("");
+
   var groupes = {}, ordre = [];
   for (var i = 1; i < data.length; i++) {
     var id = String(data[i][1] || "").trim().toUpperCase();
@@ -386,84 +472,87 @@ function _adrHarmoniser_(ss, forcer) {
     groupes[id].rows.push(i);
     groupes[id].lignes.push(_adrDeLigne_(data[i], C));
   }
-  var rapport = { entreprises: ordre.length, ban: 0, voie: 0, commune: 0, aVerifier: 0, sansAdresse: 0, dejaOk: 0, unifiees: 0, lignesModifiees: 0, exemples: [], aVerifierListe: [] };
+  _adrDecider_(groupes, ordre, _adrGeocoderLot_, forcer);
+  var rapport = { entreprises: ordre.length, dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0,
+    sansAdresse: 0, lignesModifiees: 0, exemples: [], alertes: [] };
 
-  // 1. Adresse de référence + besoin de géocodage
-  var aGeocoder = [];
   ordre.forEach(function (id) {
-    var g = groupes[id];
-    var cles = {};
-    g.lignes.forEach(function (a) { if (a.adresse || a.cp || a.ville) cles[_adrNorm_(a.adresse + "|" + a.cp + "|" + a.ville)] = 1; });
-    g.multiples = Object.keys(cles).length > 1;
-    g.ref = _adrReference_(g.lignes);
-    g.avant = _adrTexte_(g.ref);
-    g.final = null;
-    if (!g.ref.adresse && !g.ref.cp && !g.ref.ville) { g.final = g.ref; return; }
-    var dejaTraitee = g.ref.statut && (ADR_STATUTS_OK[g.ref.statut] || (!forcer && (g.ref.statut === "Saisie libre")));
-    if (dejaTraitee) { g.final = g.ref; return; }
-    g.saisie = { adresse: _adrNettoyer_(g.ref.adresse, g.ref.cp), cp: /^\d{5}$/.test(g.ref.cp) ? g.ref.cp : (/^\d{4}$/.test(g.ref.cp) ? "0" + g.ref.cp : ""), ville: g.ref.ville };
-    aGeocoder.push(g);
-  });
-
-  // 2. Passe 1 : adresses complètes
-  var avecRue = aGeocoder.filter(function (g) { return g.saisie.adresse; });
-  var res1 = _adrGeocoderLot_(avecRue.map(function (g) { return { q: [g.saisie.adresse, g.saisie.cp, g.saisie.ville].filter(Boolean).join(" ") }; }), false);
-  avecRue.forEach(function (g, k) {
-    var r = _adrEvaluer_(res1[k], g.saisie);
-    if (r) g.final = { adresse: r.adresse, cp: r.cp, ville: r.ville, complement: g.ref.complement || r.complement, lat: r.lat, lon: r.lon, statut: r.statut, siret: g.ref.siret };
-  });
-  // 3. Passe 2 : commune (adresse introuvable ou absente)
-  var sansRes = aGeocoder.filter(function (g) { return !g.final && (g.saisie.ville || g.saisie.cp); });
-  var res2 = _adrGeocoderLot_(sansRes.map(function (g) { return { q: [g.saisie.ville, g.saisie.cp ? g.saisie.cp.slice(0, 2) : ""].filter(Boolean).join(" ") || g.saisie.cp }; }), true);
-  sansRes.forEach(function (g, k) {
-    var r = _adrEvaluerCommune_(res2[k], g.saisie);
-    g.final = {
-      adresse: g.saisie.adresse, cp: r ? r.cp : g.saisie.cp || g.ref.cp, ville: r ? r.ville : g.ref.ville, complement: g.ref.complement,
-      lat: r ? r.lat : "", lon: r ? r.lon : "", statut: g.saisie.adresse ? "À vérifier" : (r ? "Commune" : "À vérifier"), siret: g.ref.siret
-    };
-  });
-  aGeocoder.forEach(function (g) {
-    if (!g.final) g.final = { adresse: g.saisie.adresse, cp: g.ref.cp, ville: g.ref.ville, complement: g.ref.complement, lat: "", lon: "", statut: "À vérifier", siret: g.ref.siret };
-  });
-
-  // 4. Application en mémoire sur toutes les lignes de chaque entreprise
-  var colsMin = Math.min(C.complement, C.lat, C.lon, C.statut, C.siret, C.origine);
-  var colsMax = Math.max(C.complement, C.lat, C.lon, C.statut, C.siret, C.origine);
-  var bloc1 = [], bloc2 = [];   // K:M et colonnes étendues
-  for (var r0 = 1; r0 < data.length; r0++) {
-    while (data[r0].length < Math.max(nCols, colsMax + 1)) data[r0].push("");
-  }
-  ordre.forEach(function (id) {
-    var g = groupes[id], a = g.final;
-    var st = a.statut;
-    if (!a.adresse && !a.cp && !a.ville) rapport.sansAdresse++;
-    else if (st === "BAN" || st === "SIRENE") rapport.ban++;
-    else if (st === "BAN voie") rapport.voie++;
-    else if (st === "Commune") rapport.commune++;
-    else { rapport.aVerifier++; if (rapport.aVerifierListe.length < 400) rapport.aVerifierListe.push({ id: id, nom: g.nom, adresse: _adrTexte_(a), statut: st }); }
+    var g = groupes[id], d = g.decision;
+    var avantTxt = (g.cands || []).map(function (c) { return _adrTexte_(c.brut); }).join(" / ");
     var modifie = false;
     g.rows.forEach(function (ri) {
       var row = data[ri];
-      var avantLigne = [row[10], row[11], row[12], row[C.complement], row[C.lat], row[C.lon], row[C.statut], String(row[C.siret]).replace(/^'/, "")].map(String).join("|");
-      var origine = row[C.origine];
-      if (!origine && g.avant && g.avant !== _adrTexte_(a)) origine = [row[10], row[11], row[12]].map(function (x) { return String(x || "").trim(); }).filter(Boolean).join(", ");
-      _adrDansLigne_(row, C, a);
-      row[C.origine] = origine || "";
-      var apresLigne = [row[10], row[11], row[12], row[C.complement], row[C.lat], row[C.lon], row[C.statut], a.siret || ""].map(String).join("|");
-      if (avantLigne !== apresLigne) { rapport.lignesModifiees++; modifie = true; }
+      var avant = row.slice(10, 13).concat([row[C.complement], row[C.lat], row[C.lon], row[C.statut], row[C.origine]]).map(String).join("|");
+      if (d.type === "harmonise" || d.type === "ok") {
+        var a = d.a;
+        var origine = row[C.origine];
+        var txtLigne = [row[10], row[11], row[12]].map(function (x) { return String(x || "").trim(); }).filter(Boolean).join(", ");
+        if (!origine && txtLigne && _adrNorm_(txtLigne) !== _adrNorm_(_adrTexte_(a))) origine = txtLigne;
+        _adrDansLigne_(row, C, a);
+        row[C.origine] = origine || "";
+      } else if (d.type === "alerte") {   // adresse saisie conservée telle quelle
+        row[C.statut] = d.statut; row[C.lat] = d.lat || ""; row[C.lon] = d.lon || "";
+      }
+      var apres = row.slice(10, 13).concat([row[C.complement], row[C.lat], row[C.lon], row[C.statut], row[C.origine]]).map(String).join("|");
+      if (avant !== apres) { rapport.lignesModifiees++; modifie = true; }
     });
-    if (g.multiples) rapport.unifiees++;
-    if (modifie && g.avant !== _adrTexte_(a) && rapport.exemples.length < 300) rapport.exemples.push({ id: id, nom: g.nom, avant: g.avant || "—", apres: _adrTexte_(a) || "—", statut: st || "—" });
+    if (d.type === "vide") rapport.sansAdresse++;
+    else if (d.type === "ok") rapport.dejaOk++;
+    else if (d.type === "harmonise") {
+      rapport.harmonisees++;
+      if (d.a.statut === "BAN") rapport.ban++; else if (d.a.statut === "BAN voie") rapport.voie++; else rapport.commune++;
+      if (modifie && _adrNorm_(avantTxt) !== _adrNorm_(_adrTexte_(d.a)) && rapport.exemples.length < 300)
+        rapport.exemples.push({ id: id, nom: g.nom, avant: avantTxt || "—", apres: _adrTexte_(d.a), statut: d.a.statut });
+    } else {
+      if (d.statut === "Adresses multiples") rapport.multiples++; else rapport.aVerifier++;
+      if (rapport.alertes.length < 500) rapport.alertes.push({ id: id, nom: g.nom, adresse: avantTxt, statut: d.statut, raison: d.raison });
+    }
   });
 
-  // 5. Écriture groupée (2 plages)
-  for (var r1 = 1; r1 < data.length; r1++) {
-    bloc1.push([data[r1][10], data[r1][11], data[r1][12]]);
-    bloc2.push(data[r1].slice(colsMin, colsMax + 1));
+  var bloc1 = [], bloc2 = [];
+  for (var r = 1; r < data.length; r++) {
+    bloc1.push([data[r][10], data[r][11], data[r][12]]);
+    bloc2.push(data[r].slice(colsMin, colsMax + 1));
   }
   if (bloc1.length) {
     ws.getRange(2, 11, bloc1.length, 3).setValues(bloc1);
     ws.getRange(2, colsMin + 1, bloc2.length, colsMax - colsMin + 1).setValues(bloc2);
   }
+  _adrRapportFeuille_(ss, rapport);
   return rapport;
+}
+
+// Rapport lisible dans l'onglet « Audit adresses » (recréé à chaque audit)
+function _adrRapportFeuille_(ss, R) {
+  try {
+    var ws = ss.getSheetByName("Audit adresses") || ss.insertSheet("Audit adresses");
+    ws.clear();
+    var rows = [["Audit des adresses entreprises — " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"), "", "", "", ""],
+      [R.entreprises + " entreprises · " + R.harmonisees + " harmonisées · " + R.dejaOk + " déjà conformes · " + R.aVerifier + " à vérifier · " + R.multiples + " à adresses multiples · " + R.sansAdresse + " sans adresse", "", "", "", ""],
+      ["", "", "", "", ""], ["Type", "ID entreprise", "Entreprise", "Adresse avant", "Adresse après / motif de l'alerte"]];
+    R.alertes.forEach(function (a) { rows.push(["⚠️ " + a.statut, a.id, a.nom, a.adresse, a.raison]); });
+    R.exemples.forEach(function (e) { rows.push(["✅ Harmonisée (" + e.statut + ")", e.id, e.nom, e.avant, e.apres]); });
+    ws.getRange(1, 1, rows.length, 5).setValues(rows);
+    ws.getRange(1, 1).setFontWeight("bold").setFontSize(13);
+    ws.getRange(4, 1, 1, 5).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+    ws.setFrozenRows(4);
+    ws.setColumnWidths(1, 1, 190); ws.setColumnWidths(2, 1, 120); ws.setColumnWidths(3, 1, 240); ws.setColumnWidths(4, 2, 380);
+  } catch (e) { console.error("rapport audit : " + e); }
+}
+
+// Audit automatique UNE fois après mise en ligne : le premier appel au serveur programme
+// l'exécution par un déclencheur ponctuel (hors requête utilisateur) — voir doPost.
+function _adrAuditAutoProgrammer_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty("ADR_AUDIT_V1")) return;
+    props.setProperty("ADR_AUDIT_V1", "programmé " + new Date().toISOString());
+    ScriptApp.newTrigger("auditAdressesAuto").timeBased().after(60 * 1000).create();
+  } catch (e) { console.error("audit adresses : " + e); }
+}
+function auditAdressesAuto() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesAuto") ScriptApp.deleteTrigger(t); });
+  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var out = handleHarmoniserAdresses({ roleAuteur: "Administrateur", nomAuteur: "Audit automatique des adresses" }, ss);
+  PropertiesService.getScriptProperties().setProperty("ADR_AUDIT_V1", "fait " + new Date().toISOString() + " — " + String(out.getContent()).slice(0, 300));
 }

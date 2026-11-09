@@ -209,6 +209,7 @@ function doPost(e) {
   var action = "";
   try { action = String(JSON.parse(e.postData.contents).action || ""); } catch (eA) {}
   var out = doPostInner_(e);
+  if (action === "getPartners") _adrAuditAutoProgrammer_();   // audit des adresses : une seule fois (adresses.gs)
   if (action && !READ_ACTION_RE.test(action)) {
     try { if (String(out.getContent()).indexOf('"success":false') === -1) bumpDataVersion_(); } catch (eB) { bumpDataVersion_(); }
   }

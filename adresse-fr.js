@@ -36,6 +36,7 @@
     if (a.statut === "SIRENE") return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" title="Adresse officielle de l\'établissement (répertoire SIRENE de l\'INSEE)">✅ SIRENE</span>';
     if (a.statut === "BAN") return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" title="Adresse référencée dans la Base Adresse Nationale">✅ Adresse référencée</span>';
     if (a.statut === "BAN voie") return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600" title="Voie référencée (numéro absent de la Base Adresse Nationale)">✅ Voie référencée</span>';
+    if (a.statut === "Adresses multiples") return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-700" title="Les contacts de cette entreprise ont des adresses différentes : choisissez la bonne (✏️)">⛔ Adresses différentes selon les contacts</span>';
     if (a.statut === "Commune") return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700" title="Seule la commune est connue : position approximative sur la carte">⚠️ Rue manquante</span>';
     return '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700" title="Adresse non trouvée dans la Base Adresse Nationale">⚠️ Adresse à vérifier</span>';
   }

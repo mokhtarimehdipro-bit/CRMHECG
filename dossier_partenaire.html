@@ -25,6 +25,7 @@
                             <span id="entAdresseBadge"></span>
                             <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse (Base Adresse Nationale / SIRENE)">✏️</button>
                         </div>
+                        <div id="entAdresseAlerte" class="hidden mt-2 p-3 rounded-xl border text-xs font-bold"></div>
                         <p id="entDateCrea" class="text-xs text-gray-400 font-medium mt-1 hidden"></p>
                     </div>
                     <div class="flex items-center gap-2">
@@ -343,6 +344,14 @@
                         lat: d.info.lat || "", lon: d.info.lon || "", statut: d.info.adrStatut || "", siret: d.info.siret || "" };
                     document.getElementById('entAdresse').innerText = (HecgAdresse.texte(adresseData) || 'Adresse non renseignée') + (adresseData.siret ? '  ·  SIRET ' + adresseData.siret : '');
                     document.getElementById('entAdresseBadge').innerHTML = HecgAdresse.badge(adresseData);
+                    const alEl = document.getElementById('entAdresseAlerte');
+                    const msgAl = adresseData.statut === 'Adresses multiples'
+                        ? "⛔ Les contacts de cette entreprise portent des adresses différentes. Elles n'ont pas été modifiées automatiquement : cliquez sur ✏️ pour choisir l'adresse officielle (elle sera appliquée à tous les contacts)."
+                        : ['À vérifier', 'Saisie libre'].includes(adresseData.statut)
+                        ? "⚠️ Cette adresse ne correspond pas au référentiel officiel (Base Adresse Nationale) et n'a pas été corrigée automatiquement : vérifiez-la avec ✏️."
+                        : '';
+                    alEl.innerText = msgAl;
+                    alEl.className = msgAl ? 'mt-2 p-3 rounded-xl border text-xs font-bold ' + (adresseData.statut === 'Adresses multiples' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800') : 'hidden';
                     const elDateCrea = document.getElementById('entDateCrea');
                     elDateCrea.innerText = d.info.dateCreation ? '🗓️ Entreprise créée le ' + d.info.dateCreation : '';
                     elDateCrea.classList.toggle('hidden', !d.info.dateCreation);
