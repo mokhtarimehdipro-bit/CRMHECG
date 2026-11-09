@@ -1,6 +1,6 @@
 // =============================================================================
 //  RELANCE QUOTIDIENNE DES ÉTUDIANTS EN RECHERCHE (demande direction 2026-11-09)
-//  Chaque jour ouvré (lundi-vendredi, 9 h), un mail est envoyé aux étudiants actifs « En recherche »
+//  Chaque jour ouvré (lundi-vendredi, 9 h), un mail est envoyé aux étudiants INSCRITS ou PRÉINSCRITS « En recherche »
 //  qui n'ont ajouté AUCUNE candidature dans leur suivi (feuille TSUIVI) depuis plus de 24 h,
 //  pour leur rappeler de tenir l'application à jour. polepedagogique@hecg.fr est en copie de
 //  toutes les relances étudiants (celle-ci et les relances hebdomadaires de code.gs).
@@ -8,6 +8,8 @@
 // =============================================================================
 var POLE_PEDA_EMAIL = "polepedagogique@hecg.fr";
 var RELANCE_CAND_HEURE = 9;
+
+function _relNorm_(v) { return String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, ""); }
 
 function _relCandCibles_(ss) {
   var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
@@ -24,6 +26,8 @@ function _relCandCibles_(ss) {
     var r = dE[j], id2 = String(r[0] || "").trim();
     if (!id2 || id2.toUpperCase() === "ETU000X") continue;
     if (!/recherche/i.test(String(r[13] || ""))) continue;
+    var typo = _relNorm_(r[20]) || _relNorm_(calculerTypoEtu(r[17], r[18], r[14]));   // colonne U « Typo » (sinon recalculée)
+    if (typo !== "INSCRIT" && typo !== "PREINSCRIT") continue;            // uniquement inscrits et préinscrits
     if (_etuMotifRefus_(r)) continue;                                   // sortis et prospects exclus
     var mail = String(r[4] || "").trim();
     if (mail.indexOf("@") < 1) continue;

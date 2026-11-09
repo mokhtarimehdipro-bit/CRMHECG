@@ -88,10 +88,13 @@ function _rcCacheFeuille_(ss) {
 function _rcDateDepuisTexte_(t, url) {
   var m = String(t || "").match(/date\s*d['’]?\s*[ée]dition\s*:?\s*(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/i);
   if (m) return { date: _rcIso_(new Date(+(m[3].length === 2 ? "20" + m[3] : m[3]), +m[2] - 1, +m[1])), origine: "Date d'édition du CV" };
-  var tous = String(t || "").match(/\b(\d{1,2})\/(\d{1,2})\/(20\d\d)\b/g);
-  if (tous && tous.length) { var x = tous[tous.length - 1].split("/"); return { date: _rcIso_(new Date(+x[2], +x[1] - 1, +x[0])), origine: "Dernière date lue sur le CV" }; }
   var f = decodeURIComponent(url).match(/(20\d\d)-(\d{2})-(\d{2})/);
   if (f) return { date: f[1] + "-" + f[2] + "-" + f[3], origine: "Date du nom de fichier" };
+  var tous = String(t || "").match(/(\d{1,2})\/(\d{1,2})\/(20\d\d)/g), limite = Date.now() - 3 * 365 * 86400000;
+  if (tous) for (var q = tous.length - 1; q >= 0; q--) {   // une date ancienne (naissance, diplôme…) n'est pas une date d'édition
+    var x = tous[q].split("/"), dq = new Date(+x[2], +x[1] - 1, +x[0]);
+    if (dq.getTime() > limite && dq.getTime() <= Date.now() + 86400000) return { date: _rcIso_(dq), origine: "Dernière date récente lue sur le CV" };
+  }
   var u = url.match(/uploads\/(20\d\d)\/(\d{2})\//);
   if (u) return { date: u[1] + "-" + u[2] + "-01", origine: "Mois de mise en ligne (date non lisible sur le CV)" };
   return { date: "", origine: "Date non lisible" };
