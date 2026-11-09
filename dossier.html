@@ -98,6 +98,7 @@
                             📄 Consulter le CV
                         </a>
                         <p id="etuNoCV" class="text-center text-xs text-gray-400 italic mb-4">Aucun CV déposé</p>
+                        <div id="etuCvSite" class="hidden mb-4"></div>
                     </div>
                 </div>
 
@@ -525,6 +526,7 @@
                         document.getElementById('etuRef').innerHTML = p.refPerso || 'Non assigné';
                     }
 
+                    renderCvSite(p.cvSite);
                     if(p.cv && p.cv.startsWith('http')) {
                         document.getElementById('etuCV').href = p.cv;
                         document.getElementById('etuCV').classList.remove('hidden');
@@ -1305,6 +1307,41 @@
             _carteMap.setView(m.getLatLng(), 16);
             m.openPopup();
             document.getElementById('carteEntMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    
+        // CV publié sur l'espace recruteurs de hecg.fr (audit automatique — recruteurs.gs)
+        function renderCvSite(c) {
+            const box = document.getElementById('etuCvSite');
+            if (!box) return;
+            if (!c) { box.classList.add('hidden'); return; }
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
+            let html = '';
+            if (c.lien) {
+                let couleur = 'gray', libAge = 'date non lisible';
+                const m = String(c.dateEdition || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+                let dateTxt = '—';
+                if (m) {
+                    const d = new Date(+m[1], +m[2] - 1, +m[3]), mois = (Date.now() - d) / (30.44 * 86400000);
+                    dateTxt = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+                    if (mois > 12) { couleur = 'red'; libAge = "plus d'un an"; }
+                    else if (mois >= 6) { couleur = 'orange'; libAge = 'entre 6 mois et 1 an'; }
+                    else { couleur = 'green'; libAge = 'moins de 6 mois'; }
+                }
+                const pal = { green: ['bg-green-50 border-green-200', 'text-green-700', 'bg-green-500'], orange: ['bg-orange-50 border-orange-200', 'text-orange-700', 'bg-orange-500'],
+                    red: ['bg-red-50 border-red-200', 'text-red-700', 'bg-red-500'], gray: ['bg-gray-50 border-gray-200', 'text-gray-600', 'bg-gray-400'] }[couleur];
+                html += `<div class="rounded-xl border ${pal[0]} p-3">
+                    <p class="text-[11px] font-black ${pal[1]} uppercase flex items-center gap-2"><span class="inline-block w-2.5 h-2.5 rounded-full ${pal[2]}"></span>CV disponible sur l'espace recruteurs</p>
+                    <p class="text-sm font-black text-gray-800 mt-1">Date d'édition : ${esc(dateTxt)}</p>
+                    <p class="text-[11px] ${pal[1]} font-bold">CV de ${libAge}</p>
+                    <div class="flex gap-2 mt-2 flex-wrap">
+                        <a href="${esc(c.lien)}" target="_blank" class="text-[11px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50">🌐 CV sur hecg.fr</a>
+                        ${c.drive ? `<a href="${esc(c.drive)}" target="_blank" class="text-[11px] font-bold bg-white border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50">📁 Copie Drive</a>` : ''}
+                    </div>
+                    ${c.verifieLe ? `<p class="text-[10px] text-gray-400 mt-1">Vérifié le ${esc(c.verifieLe)}</p>` : ''}</div>`;
+            }
+            if (c.ecart) html += `<div class="rounded-xl border border-red-200 bg-red-50 p-3 ${c.lien ? 'mt-2' : ''}"><p class="text-[11px] font-black text-red-700">⚠️ Espace recruteurs : ${esc(c.ecart)}</p>${c.verifieLe ? `<p class="text-[10px] text-gray-400 mt-1">Audit du ${esc(c.verifieLe)}</p>` : ''}</div>`;
+            box.innerHTML = html;
+            box.classList.toggle('hidden', !html);
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>

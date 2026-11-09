@@ -145,6 +145,7 @@
     <button onclick="showModule('charlemagne')" id="nav-charlemagne" class="nav-btn hidden">🔎 Contrôle Charlemagne</button>
     <button onclick="showModule('maintenance')" id="nav-maintenance" class="nav-btn hidden">🛠️ Tickets maintenance</button>
     <button onclick="showModule('formulaires')" id="nav-formulaires" class="nav-btn hidden">🧾 Formulaires</button>
+    <button onclick="showModule('recruteurs')" id="nav-recruteurs" class="nav-btn hidden">🎯 Espace recruteurs</button>
   </aside>
 
   <!-- CONTENT -->
@@ -789,6 +790,7 @@
     <div id="section-frises" class="section"></div>
     <div id="section-maintenance" class="section"></div>
     <div id="section-formulaires" class="section"></div>
+    <div id="section-recruteurs" class="section"></div>
     <div id="section-charlemagne" class="section">
       <div class="flex flex-wrap justify-between items-start gap-3 mb-5">
         <div>
@@ -1973,6 +1975,7 @@ const ACCESS = {
   charlemagne: ['Super-admin','Administratif'],
   maintenance: ['Super-admin','Pédagogie','Administratif'],
   formulaires: ['Super-admin','Pédagogie','Administratif'],
+  recruteurs: ['Super-admin','Pédagogie','Administratif'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -1992,6 +1995,7 @@ const WRITE = {
   charlemagne: ['Super-admin','Administratif'],
   maintenance: ['Super-admin','Pédagogie','Administratif'],
   formulaires: ['Super-admin','Pédagogie','Administratif'],
+  recruteurs: ['Super-admin','Pédagogie','Administratif'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -2182,7 +2186,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','maintenance','formulaires'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','maintenance','formulaires','recruteurs'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
@@ -2232,6 +2236,7 @@ function showModule(m){
   if (m==='charlemagne') charlInit();
   if (m==='maintenance') loadMaintenance();
   if (m==='formulaires') loadFormulaires();
+  if (m==='recruteurs') loadRecruteurs();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -8318,6 +8323,6 @@ async function importSuiviData(){
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=6"></script>
 <script src="salles_plan.js?v=1"></script>
-<script src="vs_qualite.js?v=1"></script>
+<script src="vs_qualite.js?v=2"></script>
 </body>
 </html>

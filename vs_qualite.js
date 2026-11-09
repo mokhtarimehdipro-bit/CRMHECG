@@ -234,7 +234,7 @@ function qModal() {
       <div id="qxBlocLien" class="hidden"><label>Adresse (URL)</label><input type="url" id="qxUrl" placeholder="https://hecg.fr/…"></div>
       <div><label>Commentaire (ce que la preuve démontre)</label><textarea id="qxCom" rows="2" placeholder="ex. : prérequis, durée et tarifs publiés sur la fiche BTS CG"></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-        <div><label>Date du document</label><input type="date" id="qxDate"></div>
+        <div><label>Date du document *</label><input type="date" id="qxDate" required></div>
         <div><label>Valable pendant</label><select id="qxVal"><option value="6">6 mois</option><option value="12">1 an</option><option value="24">2 ans</option><option value="36">3 ans</option><option value="0">Permanent</option></select></div>
       </div>
       <p class="text-xs text-gray-400">La preuve passe automatiquement en « À revoir » 60 jours avant son échéance, puis en « Obsolète ». Un libellé contenant une année scolaire terminée (ex. 2024-2025) est aussi signalé obsolète.</p>
@@ -282,6 +282,7 @@ async function saveQualiopiPreuve() {
   const nom = document.getElementById('qxNom').value.trim(), com = document.getElementById('qxCom').value.trim();
   const dateDocument = document.getElementById('qxDate').value, validite = document.getElementById('qxVal').value;
   if (!nom) { toast('Saisissez un libellé.', false); return; }
+  if (!dateDocument) { toast('Indiquez la date du document : tous les éléments Qualiopi doivent être datés.', false); return; }
   const btn = document.getElementById('qxSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
   const fin = (r, msg) => { btn.disabled = false; btn.textContent = 'Enregistrer'; if (!r.success) { toast('Erreur : ' + r.message, false); return; } toast(msg); closeQualiopiModal(); loadQualiopi(); };
   if (qEdition.id) { fin(await api('updateQualiopiPreuve', { id: qEdition.id, nomPreuve: nom, commentaire: com, dateDocument, validite }), 'Preuve mise à jour ✓'); return; }
@@ -622,4 +623,51 @@ function fmCsv() {
   const csv = '﻿' + [e.cols].concat(e.lignes).map(l => l.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(';')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   a.download = (e.titre || 'reponses').replace(/[^\w-]+/g, '_') + '.csv'; a.click();
+}
+
+// ══ AUDIT ESPACE RECRUTEURS (hecg.fr) ↔ CRM ══
+let rcData = null;
+async function loadRecruteurs() {
+  const s = document.getElementById('section-recruteurs');
+  s.innerHTML = '<div class="text-center text-gray-400 py-16">Chargement du dernier audit…</div>';
+  const r = await api('getAuditRecruteurs');
+  if (!r.success) { s.innerHTML = `<p class="text-red-600 font-bold">${vxEsc(r.message)}</p>`; return; }
+  rcData = r; renderRecruteurs();
+}
+function renderRecruteurs() {
+  const s = document.getElementById('section-recruteurs'), r = rcData, d = r.dernier;
+  const coul = { 'Absent du site': ['#fee2e2', '#b91c1c'], 'À retirer du site': ['#ffedd5', '#c2410c'], 'Inconnu du CRM': ['#e0e7ff', '#3730a3'], 'Homonymes': ['#f3f4f6', '#374151'] };
+  const types = {}; r.ecarts.forEach(e => types[e.type] = (types[e.type] || 0) + 1);
+  const kpis = d ? [['Profils sur le site', d.profilsSite, '#1A4E8A'], ['En recherche (CRM)', d.enRecherche, '#0f766e'], ['Rapprochés', d.presents, '#059669'], ['Écarts', d.ecarts, '#dc2626'], ['CV en attente de lecture', d.cvEnAttente, '#d97706']] : [];
+  s.innerHTML = `<div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+      <div><h1 class="text-2xl font-black text-[#1A4E8A]">🎯 Espace recruteurs ↔ CRM</h1>
+      <p class="text-sm text-gray-500 mt-1">Vérifie que chaque étudiant « En recherche » figure sur <a href="https://hecg.fr/espace-recruteurs" target="_blank" class="underline">hecg.fr/espace-recruteurs</a> et que les étudiants placés ou sortis n'y sont plus. Chaque CV est copié dans le Drive et sa date d'édition est reportée dans le dossier étudiant. Audit automatique chaque nuit.</p></div>
+      <div class="flex gap-2"><button onclick="rcMdp()" class="btn-ghost text-sm">🔑 ${r.mdpConfigure ? 'Changer le mot de passe' : 'Enregistrer le mot de passe'}</button>
+      <button id="btnRcAudit" onclick="rcLancer()" class="btn-orange text-sm" ${r.mdpConfigure ? '' : 'disabled'}>▶ Lancer l'audit maintenant</button></div></div>
+    ${!r.mdpConfigure ? '<div class="qualiopi-card" style="border-left:4px solid #f59e0b"><p class="font-bold text-amber-700">Enregistrez une fois le mot de passe de la page « Espace recruteurs » : il est conservé côté serveur, jamais dans le code.</p></div>' : ''}
+    ${d ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">${kpis.map(k => `<div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-2xl font-black" style="color:${k[2]}">${k[1]}</p><p class="text-[11px] font-bold text-gray-400 uppercase">${k[0]}</p></div>`).join('')}</div>
+      <p class="text-xs text-gray-400 mb-3">Dernier audit : ${vxEsc(d.date)} — ${vxEsc(d.auteur)}${d.notes ? ' · ' + d.notes + ' note(s) ajoutée(s) aux dossiers' : ''}${d.cvEnAttente ? ' · les CV restants sont lus automatiquement toutes les 5 minutes' : ''}</p>` : '<p class="text-gray-400 text-sm mb-3">Aucun audit encore réalisé.</p>'}
+    ${Object.keys(types).length ? `<div class="flex flex-wrap gap-2 mb-3">${Object.entries(types).map(([t, n]) => { const c = coul[t] || coul.Homonymes; return `<span class="text-xs font-bold px-3 py-1 rounded-full" style="background:${c[0]};color:${c[1]}">${vxEsc(t)} · ${n}</span>`; }).join('')}</div>` : ''}
+    <div class="bg-white rounded-2xl border border-gray-100 overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50 text-[11px] uppercase text-gray-500"><tr><th class="text-left p-3">Écart</th><th class="text-left p-3">Étudiant</th><th class="text-left p-3">Note</th><th class="text-left p-3">CV site</th></tr></thead>
+    <tbody>${r.ecarts.length ? r.ecarts.map(e => { const c = coul[e.type] || coul.Homonymes; return `<tr class="border-t align-top">
+      <td class="p-3"><span class="text-[11px] font-black px-2 py-1 rounded-lg" style="background:${c[0]};color:${c[1]}">${vxEsc(e.type)}</span></td>
+      <td class="p-3">${e.id ? `<a href="dossier.html?id=${encodeURIComponent(e.id)}" target="_blank" class="font-bold text-[#1A4E8A] hover:underline">${vxEsc(e.nom)}</a><div class="text-[10px] text-gray-400">${vxEsc(e.id)}</div>` : `<b>${vxEsc(e.nom)}</b>`}</td>
+      <td class="p-3 text-gray-600">${vxEsc(e.detail)}</td><td class="p-3">${e.url ? `<a href="${vxEsc(e.url)}" target="_blank" class="text-blue-600 underline text-xs">PDF</a>` : '—'}</td></tr>`; }).join('')
+      : '<tr><td colspan="4" class="text-center text-gray-400 py-8">Aucun écart ✅</td></tr>'}</tbody></table></div>`;
+}
+async function rcMdp() {
+  const mdp = prompt("Mot de passe de la page « Espace recruteurs » de hecg.fr :");
+  if (!mdp) return;
+  const r = await api('saveMdpRecruteurs', { mdp });
+  if (!r.success) { toast(r.message, false); return; }
+  toast('Mot de passe enregistré ✓'); loadRecruteurs();
+}
+async function rcLancer() {
+  const b = document.getElementById('btnRcAudit'); b.disabled = true; b.textContent = "⏳ Audit en cours (jusqu'à 3 min)…";
+  try {
+    const r = await api('lancerAuditRecruteurs');
+    if (!r.success) { toast(r.message, false); if (r.mdp) rcMdp(); return; }
+    toast(`Audit terminé : ${r.rapport.ecarts.length} écart(s), ${r.rapport.cvLus} CV lus`);
+    loadRecruteurs();
+  } finally { b.disabled = false; b.textContent = "▶ Lancer l'audit maintenant"; }
 }
