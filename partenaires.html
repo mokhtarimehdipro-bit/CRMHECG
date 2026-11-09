@@ -1109,7 +1109,7 @@
             const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden');
         }
         async function normaliserAdresses() {
-            if (!confirm("Normaliser les adresses de toute la base entreprises ?\n\n• une seule adresse par entreprise, recopiée sur tous ses contacts ;\n• chaque adresse est comparée à la Base Adresse Nationale : orthographe officielle, code postal, coordonnées GPS ;\n• les adresses introuvables sont marquées « à vérifier » (rien n'est supprimé, l'ancienne saisie est conservée dans la colonne « Adresse d'origine »).\n\nDurée : 1 à 2 minutes.")) return;
+            if (!confirm("Normaliser les adresses de toute la base entreprises ?\n\n• une seule adresse par entreprise, recopiée sur tous ses contacts ;\n• chaque adresse est comparée à la Base Adresse Nationale : orthographe officielle, code postal, coordonnées GPS ;\n• les adresses à vérifier sont recalées automatiquement (SIRENE/INSEE par le nom de l'entreprise, sinon Base Adresse Nationale) ; seules les introuvables restent « à vérifier » (rien n'est supprimé, l'ancienne saisie est conservée dans la colonne « Adresse d'origine »).\n\nDurée : 1 à 2 minutes.")) return;
             const btn = document.getElementById('btnNormAdr');
             btn.disabled = true; btn.innerText = '⏳ Normalisation en cours…';
             try {
@@ -1117,7 +1117,16 @@
                 const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'harmoniserAdresses', idAuteur: u.nom || '', nomAuteur: u.nom || '', roleAuteur: u.role || '', emailAuteur: u.email || '', sessionToken: u.sessionToken || '' }) }).then(x => x.json());
                 if (!r.success) throw new Error(r.message || 'Erreur');
                 const R = r.rapport;
-                alert("✅ Normalisation terminée\n\n" + R.entreprises + " entreprises\n• " + R.ban + " adresses référencées au numéro\n• " + R.voie + " référencées à la voie\n• " + R.commune + " avec la commune seulement (rue manquante)\n• " + R.aVerifier + " à vérifier\n• " + R.sansAdresse + " sans adresse\n• " + R.unifiees + " entreprises avaient plusieurs adresses → unifiées\n\nUtilisez le filtre « ⚠️ À vérifier » pour corriger les dernières. Le détail est dans l'Historique.");
+                alert("✅ Audit et recalage terminés
+
+" + R.entreprises + " entreprises
+• " + R.dejaOk + " déjà conformes
+• " + R.harmonisees + " harmonisées (écart léger)
+• " + (R.recalees || 0) + " recalées automatiquement (" + (R.recalSirene || 0) + " via SIRENE/INSEE, " + (R.recalBan || 0) + " via la Base Adresse Nationale, " + (R.recalCommune || 0) + " à la commune)
+• " + R.aVerifier + " encore à vérifier + " + R.multiples + " à adresses contradictoires (positionnées sur la carte)
+• " + R.sansAdresse + " sans adresse
+
+Détail : onglet « Audit adresses » du Google Sheet.");
                 loadPartners(true);
             } catch (e) { alert("❌ Normalisation interrompue : " + e.message); }
             btn.disabled = false; btn.innerText = '🧭 Normaliser les adresses';
