@@ -1116,6 +1116,7 @@
                 const u = JSON.parse(localStorage.getItem('user') || '{}');
                 const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'harmoniserAdresses', idAuteur: u.nom || '', nomAuteur: u.nom || '', roleAuteur: u.role || '', emailAuteur: u.email || '', sessionToken: u.sessionToken || '' }) }).then(x => x.json());
                 if (!r.success) throw new Error(r.message || 'Erreur');
+                if (r.enCours) { alert('🧭 ' + r.message); btn.disabled = false; btn.innerText = '🧭 Normaliser les adresses'; return; }
                 const R = r.rapport;
                 alert("✅ Audit et recalage terminés
 

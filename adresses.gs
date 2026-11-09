@@ -226,6 +226,7 @@ function _adrGeocoderUne_(saisie) {
 function _adrGeocoderLot_(items, typeCommune) {
   var out = [];
   for (var start = 0; start < items.length; start += 400) {
+    if (!_adrTempsOk_()) { _adrDiag_("temps limite atteint : " + (items.length - start) + " requête(s) non faite(s)"); while (out.length < items.length) out.push(null); break; }
     var part = items.slice(start, start + 400);
     var csv = "id,q,t\n" + part.map(function (it, i) {
       return i + ',"' + String(it.q || "").replace(/"/g, '""').replace(/[\r\n]+/g, " ") + '",' + (typeCommune ? "municipality" : "");
@@ -236,23 +237,81 @@ function _adrGeocoderLot_(items, typeCommune) {
     for (var essai = 0; essai < 3 && !res; essai++) {
       try {
         var r = UrlFetchApp.fetch(ADR_BAN_URL + "/csv", { method: "post", payload: payload, muteHttpExceptions: true });
-        if (r.getResponseCode() === 200) res = r.getContentText("UTF-8"); else Utilities.sleep(1500);
-      } catch (e) { Utilities.sleep(1500); }
+        if (r.getResponseCode() === 200) res = r.getContentText("UTF-8");
+        else { _adrDiag_("BAN csv HTTP " + r.getResponseCode() + " : " + r.getContentText().slice(0, 150)); Utilities.sleep(1500); }
+      } catch (e) { _adrDiag_("BAN csv : " + e); Utilities.sleep(1500); }
     }
-    var rows = res ? Utilities.parseCsv(res) : [];
-    var h = rows.length ? rows[0] : [];
-    function ix(n) { return h.indexOf(n); }
-    var parsed = {};
-    for (var k = 1; k < rows.length; k++) {
-      var row = rows[k];
-      parsed[row[0]] = row[ix("result_type")] ? {
-        type: row[ix("result_type")], score: Number(row[ix("result_score")]) || 0,
-        housenumber: row[ix("result_housenumber")], street: row[ix("result_street")], name: row[ix("result_name")],
-        postcode: row[ix("result_postcode")], city: row[ix("result_city")],
-        lat: Number(row[ix("latitude")]), lon: Number(row[ix("longitude")])
-      } : null;
-    }
-    part.forEach(function (it, i) { out.push(parsed[String(i)] || null); });
+    var parsed = {}, nb = 0;
+    try {
+      var rows = res ? Utilities.parseCsv(res.replace(/^﻿/, "")) : [];
+      var h = rows.length ? rows[0].map(function (x) { return String(x).trim(); }) : [];
+      var ix = function (n) { return h.indexOf(n); };
+      for (var k = 1; k < rows.length; k++) {
+        var row = rows[k];
+        if (!row[ix("result_type")]) continue;
+        nb++;
+        parsed[String(row[0]).trim()] = {
+          type: row[ix("result_type")], score: Number(row[ix("result_score")]) || 0,
+          housenumber: row[ix("result_housenumber")], street: row[ix("result_street")], name: row[ix("result_name")],
+          postcode: row[ix("result_postcode")], city: row[ix("result_city")],
+          lat: Number(row[ix("latitude")]), lon: Number(row[ix("longitude")])
+        };
+      }
+      if (res && !nb) _adrDiag_("BAN csv sans résultat : " + res.slice(0, 150));
+    } catch (e3) { _adrDiag_("BAN csv illisible : " + e3); nb = 0; }
+    if (!nb && part.length) {   // repli : une requête par adresse (en parallèle)
+      var unit = _adrGeocoderUnitaires_(part, typeCommune);
+      part.forEach(function (it, i) { out.push(unit[i]); });
+    } else part.forEach(function (it, i) { out.push(parsed[String(i)] || null); });
+  }
+  return out;
+}
+
+var _ADR_DIAG_ = [], _ADR_T0_ = 0;
+function _adrTempsOk_() { return !_ADR_T0_ || Date.now() - _ADR_T0_ < 250000; }   // marge sous la limite de 6 min
+// Sonde au début de l'audit : ce que répondent réellement les services depuis les serveurs Google
+function _adrSonde_() {
+  try {
+    var t = Date.now();
+    var r1 = UrlFetchApp.fetch(ADR_BAN_URL + "/csv", { method: "post", muteHttpExceptions: true,
+      payload: { data: Utilities.newBlob('id,q\n0,"146 rue Paradis 13006 Marseille"', "text/csv", "a.csv"), columns: "q" } });
+    _adrDiag_("sonde BAN lot HTTP " + r1.getResponseCode() + " (" + (Date.now() - t) + " ms) : " + r1.getContentText().replace(/\s+/g, " ").slice(0, 160));
+    t = Date.now();
+    var r2 = UrlFetchApp.fetch(ADR_BAN_URL + "?limit=1&q=" + encodeURIComponent("146 rue Paradis 13006 Marseille"), { muteHttpExceptions: true });
+    _adrDiag_("sonde BAN unitaire HTTP " + r2.getResponseCode() + " (" + (Date.now() - t) + " ms)");
+    t = Date.now();
+    var r3 = UrlFetchApp.fetch(ADR_SIRENE_URL + "?per_page=1&q=secafi", { muteHttpExceptions: true });
+    _adrDiag_("sonde SIRENE HTTP " + r3.getResponseCode() + " (" + (Date.now() - t) + " ms)");
+  } catch (e) { _adrDiag_("sonde : " + e); }
+}
+function _adrDiag_(m) { if (_ADR_DIAG_.length < 12) _ADR_DIAG_.push(m); console.warn("adresses : " + m); }
+
+function _adrGeocoderUnitaires_(items, typeCommune) {
+  var out = [];
+  for (var s = 0; s < items.length; s += 25) {
+    if (!_adrTempsOk_()) { _adrDiag_("temps limite atteint : " + (items.length - s) + " requête(s) non faite(s)"); while (out.length < items.length) out.push(null); break; }
+    var part = items.slice(s, s + 25);
+    var reqs = part.map(function (it) {
+      return { url: ADR_BAN_URL + "?limit=1&q=" + encodeURIComponent(String(it.q || "x").slice(0, 200)) + (typeCommune ? "&type=municipality" : ""), muteHttpExceptions: true };
+    });
+    var rep = [];
+    try { rep = UrlFetchApp.fetchAll(reqs); } catch (e) { _adrDiag_("BAN unitaire : " + e); }
+    part.forEach(function (it, k) {
+      var f = null;
+      try {
+        var r = rep[k];
+        if (r && r.getResponseCode() === 200) {
+          var ft = (JSON.parse(r.getContentText()).features || [])[0];
+          if (ft) {
+            var pr = ft.properties || {};
+            f = { type: pr.type, score: pr.score, housenumber: pr.housenumber, street: pr.street, name: pr.name,
+              postcode: pr.postcode, city: pr.city, lon: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1] };
+          }
+        } else if (r) _adrDiag_("BAN unitaire HTTP " + r.getResponseCode());
+      } catch (e2) {}
+      out.push(f);
+    });
+    Utilities.sleep(600);
   }
   return out;
 }
@@ -352,32 +411,9 @@ function handleGetPostesContacts(p, ss) {
 //  2. géocodage BAN en lot : adresse officielle au numéro (statut BAN), à la voie,
 //     sinon position de la commune (statut Commune) ou « À vérifier » ;
 //  3. le texte saisi avant normalisation est conservé dans « Adresse d'origine ».
-function handleHarmoniserAdresses(p, ss) {
-  var isAdmin = String(p.roleAuteur || "") === "Administrateur" || PARAM_MASTER_EMAILS.indexOf(String(p.emailAuteur || "").toLowerCase()) !== -1;
-  if (!isAdmin) return createJsonResponse({ success: false, message: "Réservé aux administrateurs." });
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(20000)) return createJsonResponse({ success: false, message: "Une normalisation est déjà en cours." });
-  try {
-    var rapport = _adrHarmoniser_(ss, !!p.forcer, !!p.silencieuxSiRien);
-    var resume = rapport.entreprises + " entreprises — " + rapport.harmonisees + " harmonisées (" + rapport.ban + " au numéro, " + rapport.voie + " à la voie, "
-      + rapport.commune + " à la commune), " + rapport.recalees + " recalées automatiquement (" + rapport.recalSirene + " via SIRENE, " + rapport.recalBan + " via BAN, " + rapport.recalCommune + " à la commune), " + rapport.dejaOk + " déjà conformes, ALERTES : " + rapport.aVerifier + " à vérifier + " + rapport.multiples
-      + " à adresses multiples (non modifiées), " + rapport.sansAdresse + " sans adresse, " + rapport.lignesModifiees + " ligne(s) modifiée(s). Détail : onglet « Audit adresses »";
-    var ex = rapport.exemples.slice(0, 25).map(function (e) { return e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.statut + "]"; });
-    var rc = rapport.recalages.slice(0, 25).map(function (e) { return e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.source + "]"; });
-    if (!p.silencieuxSiRien || rapport.lignesModifiees)
-      logAction(p.nomAuteur || p.idAuteur || "Système", p.roleAuteur || "", "Modification", "Entreprises — normalisation des adresses",
-        "PARTENARIAT", resume + (rc.length ? " | Recalages : " + rc.join(" ; ") : "") + (ex.length ? " | Exemples : " + ex.join(" ; ") : ""));
-    _invalidatePartnersCache_();
-    return createJsonResponse({ success: true, rapport: rapport, resume: resume });
-  } catch (e) {
-    return createJsonResponse({ success: false, message: e.toString() });
-  } finally { lock.releaseLock(); }
-}
-
 function harmoniserAdressesEntreprises() {   // depuis l'éditeur Apps Script
   var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  var out = handleHarmoniserAdresses({ roleAuteur: "Administrateur", nomAuteur: "Éditeur Apps Script" }, ss);
-  Logger.log(out.getContent());
+  _adrAuditDemarrer_("Éditeur Apps Script", "Administrateur", false);
 }
 
 function _adrDistanceM_(a, b) {
@@ -417,6 +453,7 @@ function _adrDecider_(groupes, ordre, geocoderLot, forcer) {
   });
   var r1 = geocoderLot(items1, false);
   items1.forEach(function (it, k) { it.c.res = _adrEvaluer_(r1[k], it.c); it.c.ban = r1[k]; });
+  items2 = items2.filter(function (it) { return !it.c.res; });   // commune utile seulement si la rue n'est pas validée
   var r2 = geocoderLot(items2, true);
   items2.forEach(function (it, k) { it.c.commune = _adrEvaluerCommune_(r2[k], it.c); });
 
@@ -513,6 +550,7 @@ function _adrEtablissements_(r) {
 function _adrSireneLot_(items) {
   var out = [];
   for (var s = 0; s < items.length; s += 6) {
+    if (!_adrTempsOk_()) { _adrDiag_("temps limite atteint : " + (items.length - s) + " requête(s) non faite(s)"); while (out.length < items.length) out.push([]); break; }
     var part = items.slice(s, s + 6);
     var reqs = part.map(function (it) {
       return { url: ADR_SIRENE_URL + "?per_page=5&q=" + encodeURIComponent(String(it.q).slice(0, 80)) + (it.dep ? "&departement=" + it.dep : ""), muteHttpExceptions: true };
@@ -525,6 +563,7 @@ function _adrSireneLot_(items) {
         var r = rep[k];
         if (r && r.getResponseCode() === 429) { Utilities.sleep(1500); r = UrlFetchApp.fetch(reqs[k].url, { muteHttpExceptions: true }); }
         if (r && r.getResponseCode() === 200) res = JSON.parse(r.getContentText()).results || [];
+        else if (r) _adrDiag_("SIRENE HTTP " + r.getResponseCode());
       } catch (e2) {}
       out.push(res);
     });
@@ -549,6 +588,7 @@ function _adrChoisirCommune_(features, it) {
 function _adrCommuneLot_(items) {
   var out = [];
   for (var s = 0; s < items.length; s += 20) {
+    if (!_adrTempsOk_()) { _adrDiag_("temps limite atteint : " + (items.length - s) + " requête(s) non faite(s)"); while (out.length < items.length) out.push(null); break; }
     var part = items.slice(s, s + 20);
     var reqs = part.map(function (it) {
       var q = (it.ville || it.cp || "").slice(0, 80);
@@ -677,9 +717,11 @@ function _adrRecaler_(groupes, ordre, sireneLot, geocoderLot, communeLot) {
   });
 }
 
-function _adrHarmoniser_(ss, forcer, silencieux) {
+function _adrHarmoniser_(ss, forcer, silencieux, plage) {
   var ws = getSheetSafe(ss, "PARTENARIAT");
   var C = _adrCols_(ws);
+  _ADR_T0_ = Date.now(); _ADR_DIAG_ = [];
+  if (!plage || !plage.debut) _adrSonde_();
   var data = ws.getDataRange().getValues();
   var nCols = data[0].length;
   var colsMin = Math.min(C.complement, C.lat, C.lon, C.statut, C.siret, C.origine);
@@ -694,9 +736,11 @@ function _adrHarmoniser_(ss, forcer, silencieux) {
     groupes[id].rows.push(i);
     groupes[id].lignes.push(_adrDeLigne_(data[i], C));
   }
+  var total = ordre.length;
+  if (plage) ordre = ordre.slice(plage.debut, plage.debut + plage.taille);   // traitement par lots (limite 6 min)
   _adrDecider_(groupes, ordre, _adrGeocoderLot_, forcer);
   _adrRecaler_(groupes, ordre, _adrSireneLot_, _adrGeocoderLot_, _adrCommuneLot_);
-  var rapport = { entreprises: ordre.length, dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0,
+  var rapport = { total: total, suite: !!plage && plage.debut + plage.taille < total, entreprises: ordre.length, dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0,
     sansAdresse: 0, lignesModifiees: 0, recalees: 0, recalSirene: 0, recalBan: 0, recalCommune: 0, exemples: [], recalages: [], alertes: [] };
 
   ordre.forEach(function (id) {
@@ -737,16 +781,19 @@ function _adrHarmoniser_(ss, forcer, silencieux) {
     }
   });
 
+  var rMin = data.length, rMax = 0;   // écriture limitée aux lignes des entreprises du lot
+  ordre.forEach(function (id) { groupes[id].rows.forEach(function (ri) { if (ri < rMin) rMin = ri; if (ri > rMax) rMax = ri; }); });
   var bloc1 = [], bloc2 = [];
-  for (var r = 1; r < data.length; r++) {
+  for (var r = rMin; r <= rMax; r++) {
     bloc1.push([data[r][10], data[r][11], data[r][12]]);
     bloc2.push(data[r].slice(colsMin, colsMax + 1));
   }
   if (bloc1.length) {
-    ws.getRange(2, 11, bloc1.length, 3).setValues(bloc1);
-    ws.getRange(2, colsMin + 1, bloc2.length, colsMax - colsMin + 1).setValues(bloc2);
+    ws.getRange(rMin + 1, 11, bloc1.length, 3).setValues(bloc1);
+    ws.getRange(rMin + 1, colsMin + 1, bloc2.length, colsMax - colsMin + 1).setValues(bloc2);
   }
-  if (!silencieux || rapport.lignesModifiees) _adrRapportFeuille_(ss, rapport);
+  rapport.diag = _ADR_DIAG_.slice();
+  if (!plage && (!silencieux || rapport.lignesModifiees)) _adrRapportFeuille_(ss, rapport);
   return rapport;
 }
 
@@ -757,41 +804,141 @@ function _adrRapportFeuille_(ss, R) {
     ws.clear();
     var rows = [["Audit des adresses entreprises — " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"), "", "", "", ""],
       [R.entreprises + " entreprises · " + R.harmonisees + " harmonisées · " + (R.recalees || 0) + " recalées automatiquement · " + R.dejaOk + " déjà conformes · " + R.aVerifier + " à vérifier · " + R.multiples + " à adresses multiples · " + R.sansAdresse + " sans adresse", "", "", "", ""],
-      ["", "", "", "", ""], ["Type", "ID entreprise", "Entreprise", "Adresse avant", "Adresse après / motif de l'alerte"]];
+      [_ADR_DIAG_.length ? "Incidents techniques : " + _ADR_DIAG_.join(" | ") : "", "", "", "", ""], ["Type", "ID entreprise", "Entreprise", "Adresse avant", "Adresse après / motif de l'alerte"]];
     R.alertes.forEach(function (a) { rows.push(["⚠️ " + a.statut, a.id, a.nom, a.adresse, a.raison]); });
     (R.recalages || []).forEach(function (e) { rows.push(["🔁 Recalée (" + e.source + ")", e.id, e.nom, e.avant, e.apres + (e.raison ? " — était : " + e.raison : "")]); });
     R.exemples.forEach(function (e) { rows.push(["✅ Harmonisée (" + e.statut + ")", e.id, e.nom, e.avant, e.apres]); });
     ws.getRange(1, 1, rows.length, 5).setValues(rows);
     ws.getRange(1, 1).setFontWeight("bold").setFontSize(13);
-    ws.getRange(4, 1, 1, 5).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
-    ws.setFrozenRows(4);
+    ws.getRange(5, 1, 1, 5).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+    ws.setFrozenRows(5);
     ws.setColumnWidths(1, 1, 190); ws.setColumnWidths(2, 1, 120); ws.setColumnWidths(3, 1, 240); ws.setColumnWidths(4, 2, 380);
   } catch (e) { console.error("rapport audit : " + e); }
 }
 
+function handleHarmoniserAdresses(p, ss) {
+  var isAdmin = String(p.roleAuteur || "") === "Administrateur" || PARAM_MASTER_EMAILS.indexOf(String(p.emailAuteur || "").toLowerCase()) !== -1;
+  if (!isAdmin) return createJsonResponse({ success: false, message: "Réservé aux administrateurs." });
+  var etat = _adrEtat_();
+  if (etat && etat.enCours && Date.now() - etat.maj < 15 * 60 * 1000)
+    return createJsonResponse({ success: true, enCours: true, message: "Un audit est déjà en cours (" + etat.debut + " / " + etat.total + " entreprises traitées)." });
+  _adrAuditDemarrer_(p.nomAuteur || p.idAuteur || "Administrateur", p.roleAuteur || "Administrateur", false);
+  return createJsonResponse({ success: true, enCours: true, message: "Audit lancé en arrière-plan : traitement par lots de " + ADR_LOT + " entreprises (environ 1 minute par lot). Résultat dans l'onglet « Audit adresses » et dans l'Historique." });
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT PAR LOTS : chaque lot (ADR_LOT entreprises) tourne dans sa propre exécution
+// (déclencheur ponctuel), pour ne jamais dépasser la limite de 6 min d'Apps Script.
+// L'état cumulé est conservé dans la propriété ADR_AUDIT_ETAT.
+var ADR_LOT = 150;
+function _adrEtat_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("ADR_AUDIT_ETAT") || "null"); } catch (e) { return null; }
+}
+function _adrEtatSauver_(e) {
+  e.maj = Date.now();
+  PropertiesService.getScriptProperties().setProperty("ADR_AUDIT_ETAT", JSON.stringify(e));
+}
+function _adrAuditDemarrer_(auteur, role, silencieux) {
+  _adrEtatSauver_({ enCours: true, debut: 0, total: 0, auteur: auteur, role: role, silencieux: !!silencieux, lance: Date.now(),
+    c: { dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0, sansAdresse: 0,
+      lignesModifiees: 0, recalees: 0, recalSirene: 0, recalBan: 0, recalCommune: 0 }, ex: [], rc: [], diag: [] });
+  _adrDeclencheurLot_(5);
+}
+function _adrDeclencheurLot_(secondes) {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesLot") ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("auditAdressesLot").timeBased().after(Math.max(1, secondes) * 1000).create();
+}
+function auditAdressesLot() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesLot") ScriptApp.deleteTrigger(t); });
+  var etat = _adrEtat_();
+  if (!etat || !etat.enCours) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { _adrDeclencheurLot_(60); return; }
+  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var R;
+  try {
+    R = _adrHarmoniser_(ss, false, etat.silencieux, { debut: etat.debut, taille: ADR_LOT });
+  } catch (e) {
+    etat.diag.push("lot " + etat.debut + " : " + e);
+    etat.erreurs = (etat.erreurs || 0) + 1;
+    _adrEtatSauver_(etat);
+    lock.releaseLock();
+    if (etat.erreurs <= 3) _adrDeclencheurLot_(60);   // nouvel essai du même lot
+    return;
+  }
+  try {
+    etat.total = R.total;
+    Object.keys(etat.c).forEach(function (k) { etat.c[k] += R[k] || 0; });
+    R.exemples.forEach(function (e) { if (etat.ex.length < 25) etat.ex.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.statut + "]"); });
+    R.recalages.forEach(function (e) { if (etat.rc.length < 25) etat.rc.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.source + "]"); });
+    (R.diag || []).forEach(function (d) { if (etat.diag.length < 10) etat.diag.push(d); });
+    _adrRapportLot_(ss, etat, R, etat.debut === 0);
+    etat.debut += ADR_LOT;
+    etat.erreurs = 0;
+    if (R.suite) { _adrEtatSauver_(etat); _adrDeclencheurLot_(10); }
+    else _adrAuditTerminer_(ss, etat);
+    _invalidatePartnersCache_();
+  } finally { lock.releaseLock(); }
+}
+function _adrResume_(c, total) {
+  return total + " entreprises — " + c.harmonisees + " harmonisées (écart léger), " + c.recalees + " recalées automatiquement ("
+    + c.recalSirene + " via SIRENE, " + c.recalBan + " via BAN, " + c.recalCommune + " à la commune), " + c.dejaOk + " déjà conformes, ALERTES : "
+    + c.aVerifier + " à vérifier + " + c.multiples + " à adresses multiples, " + c.sansAdresse + " sans adresse, " + c.lignesModifiees + " ligne(s) modifiée(s)";
+}
+function _adrAuditTerminer_(ss, etat) {
+  etat.enCours = false; etat.fini = Date.now();
+  _adrEtatSauver_(etat);
+  var resume = _adrResume_(etat.c, etat.total) + ". Détail : onglet « Audit adresses »";
+  try {
+    var ws = ss.getSheetByName("Audit adresses");
+    ws.getRange(1, 1).setValue("Audit des adresses entreprises — terminé le " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"));
+    ws.getRange(2, 1).setValue(resume);
+  } catch (e) {}
+  if (!etat.silencieux || etat.c.lignesModifiees)
+    logAction(etat.auteur || "Système", etat.role || "", "Modification", "Entreprises — normalisation des adresses", "PARTENARIAT",
+      resume + (etat.rc.length ? " | Recalages : " + etat.rc.join(" ; ") : "") + (etat.ex.length ? " | Exemples : " + etat.ex.join(" ; ") : ""));
+  _adrNocturneInstaller_();
+}
+// Onglet « Audit adresses » : (re)créé au 1er lot, puis lignes ajoutées à chaque lot
+function _adrRapportLot_(ss, etat, R, premier) {
+  var ws = ss.getSheetByName("Audit adresses") || ss.insertSheet("Audit adresses");
+  if (premier) {
+    ws.clear();
+    ws.getRange(1, 1, 5, 5).setValues([["Audit des adresses entreprises — en cours (lancé le " + Utilities.formatDate(new Date(etat.lance), "Europe/Paris", "dd/MM/yyyy HH:mm") + ")", "", "", "", ""],
+      ["", "", "", "", ""], ["", "", "", "", ""], ["", "", "", "", ""],
+      ["Type", "ID entreprise", "Entreprise", "Adresse avant", "Adresse après / motif de l'alerte"]]);
+    ws.getRange(1, 1).setFontWeight("bold").setFontSize(13);
+    ws.getRange(5, 1, 1, 5).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+    ws.setFrozenRows(5);
+    ws.setColumnWidths(1, 1, 190); ws.setColumnWidths(2, 1, 120); ws.setColumnWidths(3, 1, 240); ws.setColumnWidths(4, 2, 380);
+  }
+  ws.getRange(2, 1).setValue("Progression : " + Math.min(etat.debut + ADR_LOT, R.total) + " / " + R.total + " entreprises — " + _adrResume_(etat.c, R.total));
+  ws.getRange(3, 1).setValue(etat.diag.length ? "Incidents techniques : " + etat.diag.join(" | ") : "");
+  var rows = [];
+  R.alertes.forEach(function (a) { rows.push(["⚠️ " + a.statut, a.id, a.nom, a.adresse, a.raison]); });
+  R.recalages.forEach(function (e) { rows.push(["🔁 Recalée (" + e.source + ")", e.id, e.nom, e.avant, e.apres + (e.raison ? " — était : " + e.raison : "")]); });
+  R.exemples.forEach(function (e) { rows.push(["✅ Harmonisée (" + e.statut + ")", e.id, e.nom, e.avant, e.apres]); });
+  if (rows.length) ws.getRange(Math.max(ws.getLastRow(), 5) + 1, 1, rows.length, 5).setValues(rows);
+}
+
 // Audit automatique UNE fois après mise en ligne : le premier appel au serveur programme
-// l'exécution par un déclencheur ponctuel (hors requête utilisateur) — voir doPost.
+// le lancement (voir doPost), puis chaque nuit à 3 h.
 function _adrAuditAutoProgrammer_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty("ADR_AUDIT_V1")) return;
-    props.setProperty("ADR_AUDIT_V1", "programmé " + new Date().toISOString());
-    ScriptApp.newTrigger("auditAdressesAuto").timeBased().after(60 * 1000).create();
+    if (props.getProperty("ADR_AUDIT_V4")) return;
+    props.setProperty("ADR_AUDIT_V4", "lancé " + new Date().toISOString());
+    _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false);
   } catch (e) { console.error("audit adresses : " + e); }
 }
-function auditAdressesAuto() {
+function auditAdressesAuto() {   // ancien déclencheur ponctuel
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesAuto") ScriptApp.deleteTrigger(t); });
-  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  var out = handleHarmoniserAdresses({ roleAuteur: "Administrateur", nomAuteur: "Audit automatique des adresses" }, ss);
-  PropertiesService.getScriptProperties().setProperty("ADR_AUDIT_V1", "fait " + new Date().toISOString() + " — " + String(out.getContent()).slice(0, 300));
-  _adrNocturneInstaller_();
+  _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false);
 }
-// Recalage chaque nuit (3 h) des adresses saisies librement / restées à vérifier depuis la veille.
 function _adrNocturneInstaller_() {
   var deja = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "auditAdressesNocturne"; });
   if (!deja) ScriptApp.newTrigger("auditAdressesNocturne").timeBased().everyDays(1).atHour(3).inTimezone("Europe/Paris").create();
 }
-function auditAdressesNocturne() {
-  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  handleHarmoniserAdresses({ roleAuteur: "Administrateur", nomAuteur: "Recalage nocturne des adresses", silencieuxSiRien: true }, ss);
+function auditAdressesNocturne() {   // recalage des saisies libres / adresses restées à vérifier
+  _adrAuditDemarrer_("Recalage nocturne des adresses", "Administrateur", true);
 }
