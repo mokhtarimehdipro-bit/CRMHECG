@@ -1,0 +1,300 @@
+[
+ {
+  "id": "01-bts-prerequis",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : prérequis et objectifs",
+  "comment": "Prérequis (diplôme niveau 4), profil attendu et objectifs de la formation publiés sur la fiche formation.",
+  "date": "2026-11-09",
+  "png": "01-bts-prerequis.png"
+ },
+ {
+  "id": "02-bts-duree",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : durée, rythme, rentrée, délai d'accès, RNCP",
+  "comment": "Durée (1362 h), durée de contrat 24 mois, rythme 2 j/3 j, dates de rentrée 2026, délai d'accès (jusqu'à 3 semaines après la rentrée), RNCP.",
+  "date": "2026-11-09",
+  "png": "02-bts-duree.png"
+ },
+ {
+  "id": "03-bts-tarifs",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : tarifs et financement",
+  "comment": "Aucun coût pour le bénéficiaire ; prise en charge OPCO selon les niveaux France compétences.",
+  "date": "2026-11-09",
+  "png": "03-bts-tarifs.png"
+ },
+ {
+  "id": "04-bts-methodes",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : méthodes mobilisées et modalités",
+  "comment": "Méthodes pédagogiques (cours, études de cas, TP, séminaires pros, MOOCs) – présentiel.",
+  "date": "2026-11-09",
+  "png": "04-bts-methodes.png"
+ },
+ {
+  "id": "05-bts-evaluation",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : modalités d'évaluation (épreuves, coefficients)",
+  "comment": "Tableau des épreuves (coefficients, type, durée) et règle d'obtention (moyenne 10/20).",
+  "date": "2026-11-09",
+  "png": "05-bts-evaluation.png"
+ },
+ {
+  "id": "06-handicap-accueil",
+  "ind": "1",
+  "url": "https://hecg.fr/",
+  "label": "Site HECG – Accueil : accessibilité handicap et référente",
+  "comment": "Accessibilité aux personnes en situation de handicap + coordonnées de la référente handicap (Mme BENABBES).",
+  "date": "2026-11-09",
+  "png": "06-handicap-accueil.png"
+ },
+ {
+  "id": "07-contact",
+  "ind": "1",
+  "url": "https://hecg.fr/contact",
+  "label": "Site HECG – Contacts et adresses des deux campus",
+  "comment": "Contacts (mail, téléphones, horaires) et adresses des campus de Marseille et d'Aix-en-Provence.",
+  "date": "2026-11-09",
+  "png": "07-contact.png"
+ },
+ {
+  "id": "08-dcg-duree",
+  "ind": "1",
+  "url": "https://hecg.fr/diplome-de-comptabilite-et-gestion",
+  "label": "Site HECG – DCG : durée, rentrée, délai d'accès, RNCP35526",
+  "comment": "Durées (700/1400/2100 h), contrats, rentrées 2026, délai d'accès, parcours « à la carte » selon les UE acquises.",
+  "date": "2026-11-09",
+  "png": "08-dcg-duree.png"
+ },
+ {
+  "id": "09-dscg-duree",
+  "ind": "1",
+  "url": "https://hecg.fr/diplome-superieur-de-comptabilite-et-gestion",
+  "label": "Site HECG – DSCG : durée, rentrée, délai d'accès, RNCP40998",
+  "comment": "Durée 700/1400 h, contrats, rentrées 2026, délai d'accès.",
+  "date": "2026-11-09",
+  "png": "09-dscg-duree.png"
+ },
+ {
+  "id": "10-gpme-duree",
+  "ind": "1",
+  "url": "https://hecg.fr/bts-gestion-de-la-pme",
+  "label": "Site HECG – BTS GPME : durée, rentrée, délai d'accès, RNCP38363",
+  "comment": "Durée 1351 h, contrat 24 mois, rentrée 2026, délai d'accès.",
+  "date": "2026-11-09",
+  "png": "10-gpme-duree.png"
+ },
+ {
+  "id": "11-cdsp-duree",
+  "ind": "1",
+  "url": "https://hecg.fr/charge-developpement-social-paie",
+  "label": "Site HECG – Bachelor CDSP : durée, rythme, rentrée, délai d'accès",
+  "comment": "420 h sur 1 an, rythme 1 j/4 j, rentrée 28/09/2026. ⚠️ Tarifs et RNCP absents de la page.",
+  "date": "2026-11-09",
+  "png": "11-cdsp-duree.png"
+ },
+ {
+  "id": "12-inscription",
+  "ind": "8",
+  "url": "https://hecg.fr/sinscrire",
+  "label": "Site HECG – Procédure d'inscription et d'admission (positionnement)",
+  "comment": "Étude du dossier par le responsable d'admission, entretien individuel, réponse sous 3 jours, pièces demandées (bulletins, diplômes, notes d'UE) servant au positionnement.",
+  "date": "2026-11-09",
+  "png": "12-inscription.png"
+ },
+ {
+  "id": "13-taux",
+  "ind": "2",
+  "url": "https://hecg.fr/nos-diplomes",
+  "label": "Site HECG – Indicateurs de résultats publiés",
+  "comment": "Taux de réussite BTS CG 83 %, DCG 70 %, DSCG 65 %, satisfaction 88 %, abandon 3 %, rupture 10 %. ⚠️ Mise à jour du 30/06/2025 à actualiser + modalités de calcul à préciser (nouvel indicateur 2).",
+  "date": "2026-11-09",
+  "png": "13-taux.png"
+ },
+ {
+  "id": "14-dcg-poursuite",
+  "ind": "3",
+  "url": "https://hecg.fr/diplome-de-comptabilite-et-gestion",
+  "label": "Site HECG – DCG : débouchés, poursuite d'études, équivalences",
+  "comment": "Débouchés, poursuite vers DSCG/expertise comptable, dispenses d'UE (équivalences) selon le diplôme d'origine.",
+  "date": "2026-11-09",
+  "png": "14-dcg-poursuite.png"
+ },
+ {
+  "id": "15-gpme-blocs",
+  "ind": "3",
+  "url": "https://hecg.fr/bts-gestion-de-la-pme",
+  "label": "Site HECG – BTS GPME : blocs de compétences",
+  "comment": "Programme présenté par blocs de compétences (validation possible par bloc).",
+  "date": "2026-11-09",
+  "png": "15-gpme-blocs.png"
+ },
+ {
+  "id": "16-bts-programme",
+  "ind": "7",
+  "url": "https://hecg.fr/bts-comptabilite-gestion",
+  "label": "Site HECG – BTS CG : programme aligné sur le référentiel (P1 à P7)",
+  "comment": "Contenus structurés selon les processus P1–P7 du référentiel du BTS CG (RNCP) : adéquation contenus / certification.",
+  "date": "2026-11-09",
+  "png": "16-bts-programme.png"
+ },
+ {
+  "id": "17-rythme",
+  "ind": "9",
+  "url": "https://hecg.fr/",
+  "label": "Site HECG – Conditions de déroulement : rythme d'alternance",
+  "comment": "Information sur le rythme (2 jours école / 3 jours entreprise) et la gratuité pour l'apprenant.",
+  "date": "2026-11-09",
+  "png": "17-rythme.png"
+ },
+ {
+  "id": "18-suivi",
+  "ind": "10",
+  "url": "https://hecg.fr/",
+  "label": "Site HECG – Suivi personnalisé et tutorat",
+  "comment": "Effectifs limités (15–20), tutorat dès le début de la formation, suivi personnalisé.",
+  "date": "2026-11-09",
+  "png": "18-suivi.png"
+ },
+ {
+  "id": "19-evaluations",
+  "ind": "11",
+  "url": "https://hecg.fr/notre-equipe",
+  "label": "Site HECG – Évaluations régulières des acquis",
+  "comment": "Contrôles continus trimestriels et examens blancs ; DST hebdomadaires (fiches formations).",
+  "date": "2026-11-09",
+  "png": "19-evaluations.png"
+ },
+ {
+  "id": "20-vss",
+  "ind": "12",
+  "url": "https://hecg.fr/droits-et-devoirs-des-apprentis",
+  "label": "Site HECG – Engagements contre le harcèlement, les discriminations ; reprise de parcours",
+  "comment": "Engagement contre harcèlement moral/sexuel et discriminations ; accompagnement après interruption de formation. ⚠️ Nouvel indicateur 12 : décrire la procédure de prévention ET de traitement des violences (VSS).",
+  "date": "2026-11-09",
+  "png": "20-vss.png"
+ },
+ {
+  "id": "21-entreprise-suivi",
+  "ind": "13",
+  "url": "https://hecg.fr/les-avantages-pour-lentreprise",
+  "label": "Site HECG – Coordination CFA / entreprise",
+  "comment": "Outil numérique de liaison, réunions maîtres d'apprentissage/tuteurs, conseils d'évaluation, 2 visites minimum par an en entreprise.",
+  "date": "2026-11-09",
+  "png": "21-entreprise-suivi.png"
+ },
+ {
+  "id": "22-missions-cfa",
+  "ind": "14",
+  "url": "https://hecg.fr/droits-et-devoirs-des-apprentis",
+  "label": "Site HECG – Missions du CFA (L6231-2) : accompagnement social, handicap, mobilité",
+  "comment": "Accompagnement des publics en difficulté sociale/économique et en situation de handicap, cohérence centre/entreprise, mobilité, suivi après interruption.",
+  "date": "2026-11-09",
+  "png": "22-missions-cfa.png"
+ },
+ {
+  "id": "23-droits",
+  "ind": "15",
+  "url": "https://hecg.fr/droits-et-devoirs-des-apprentis",
+  "label": "Site HECG – Droits et devoirs des apprentis",
+  "comment": "Information des apprentis sur leurs droits (congés, protection sociale, transport…) et devoirs (assiduité, règlement intérieur…).",
+  "date": "2026-11-09",
+  "png": "23-droits.png"
+ },
+ {
+  "id": "24-sante",
+  "ind": "15",
+  "url": "https://hecg.fr/sante-et-securite-au-travail",
+  "label": "Site HECG – Santé et sécurité au travail",
+  "comment": "Règles de santé et sécurité en milieu professionnel, interlocuteurs (CSE, médecine du travail, inspection du travail), AT/MP.",
+  "date": "2026-11-09",
+  "png": "24-sante.png"
+ },
+ {
+  "id": "25-locaux",
+  "ind": "17",
+  "url": "https://hecg.fr/notre-equipe",
+  "label": "Site HECG – Moyens techniques et locaux",
+  "comment": "Salles équipées (tableaux interactifs, PC portables, Wi-Fi), logiciels professionnels, deux campus.",
+  "date": "2026-11-09",
+  "png": "25-locaux.png"
+ },
+ {
+  "id": "26-equipe",
+  "ind": "18",
+  "url": "https://hecg.fr/notre-equipe",
+  "label": "Site HECG – Organisation de l'équipe (direction, pédagogie, administratif, social, handicap)",
+  "comment": "Rôles identifiés : directeurs, responsables pédagogiques, secrétariat, communication, pôle social, référente handicap.",
+  "date": "2026-11-09",
+  "png": "26-equipe.png"
+ },
+ {
+  "id": "27-ressources",
+  "ind": "19",
+  "url": "https://hecg.fr/notre-equipe",
+  "label": "Site HECG – Ressources pédagogiques (supports, e-learning, logiciels)",
+  "comment": "Supports mis à jour, plateformes e-learning, accès aux logiciels professionnels.",
+  "date": "2026-11-09",
+  "png": "27-ressources.png"
+ },
+ {
+  "id": "28-referente",
+  "ind": "20",
+  "url": "https://hecg.fr/notre-equipe",
+  "label": "Site HECG – Référente handicap identifiée",
+  "comment": "Référente du pôle handicap nommée. ⚠️ Référent mobilité et conseil de perfectionnement non présentés sur le site.",
+  "date": "2026-11-09",
+  "png": "28-referente.png"
+ },
+ {
+  "id": "29-formateurs",
+  "ind": "21",
+  "url": "https://hecg.fr/",
+  "label": "Site HECG – Qualification des intervenants",
+  "comment": "Enseignants certifiés/agrégés, experts-comptables et avocats ; formateurs membres de jurys d'examen.",
+  "date": "2026-11-09",
+  "png": "29-formateurs.png"
+ },
+ {
+  "id": "30-partenaires",
+  "ind": "28",
+  "url": "https://hecg.fr/les-avantages-pour-lentreprise",
+  "label": "Site HECG – Offre aux entreprises partenaires",
+  "comment": "Étude des besoins de l'entreprise, pré-recrutement, rédaction des contrats, classes dédiées, intervention de professionnels de l'entreprise.",
+  "date": "2026-11-09",
+  "png": "30-partenaires.png"
+ },
+ {
+  "id": "31-insertion",
+  "ind": "29",
+  "url": "https://hecg.fr/les-avantages-pour-lentreprise",
+  "label": "Site HECG – Actions d'insertion professionnelle",
+  "comment": "Événements de recrutement avec les jeunes diplômés, diffusion d'offres CDD/CDI, recherche d'alternance accompagnée.",
+  "date": "2026-11-09",
+  "png": "31-insertion.png"
+ },
+ {
+  "id": "32-avis",
+  "ind": "30",
+  "url": "https://hecg.fr/",
+  "label": "Site HECG – Avis des apprenants publiés",
+  "comment": "Avis Google des apprenants affichés ; taux de satisfaction 88 % publié (page Nos diplômes).",
+  "date": "2026-11-09",
+  "png": "32-avis.png"
+ },
+ {
+  "id": "33-qualiopi",
+  "ind": "1",
+  "url": "https://hecg.fr/wp-content/uploads/2026/07/Certificat-QUALIOPI-HECG-2025-2028.pdf",
+  "label": "Certificat Qualiopi HECG 2025-2028 (ALTICERT) publié sur le site",
+  "comment": "Certificat OF + CFA (NDA 93131995613), sans exclusion, en ligne sur hecg.fr.",
+  "date": "2026-11-09",
+  "png": "",
+  "fichier": "https://hecg.fr/wp-content/uploads/2026/07/Certificat-QUALIOPI-HECG-2025-2028.pdf"
+ }
+]

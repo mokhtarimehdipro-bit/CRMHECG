@@ -886,6 +886,7 @@ function _adrTickInstaller_() {
 }
 function auditAdressesTick() {
   var t0 = Date.now();
+  try { _qualiopiPackAuto_(); } catch (eQ) { console.error('pack Qualiopi : ' + eQ); }   // import unique (qualiopi.gs)
   _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();
   var h = Number(Utilities.formatDate(new Date(), "Europe/Paris", "H"));

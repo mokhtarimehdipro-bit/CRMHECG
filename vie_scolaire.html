@@ -143,6 +143,8 @@
     <button onclick="showModule('memoires')"   id="nav-memoires"    class="nav-btn hidden">🎓 Suivi des mémoires</button>
     <button onclick="showModule('frises')"     id="nav-frises"      class="nav-btn hidden">🗓️ Frises chronologiques</button>
     <button onclick="showModule('charlemagne')" id="nav-charlemagne" class="nav-btn hidden">🔎 Contrôle Charlemagne</button>
+    <button onclick="showModule('maintenance')" id="nav-maintenance" class="nav-btn hidden">🛠️ Tickets maintenance</button>
+    <button onclick="showModule('formulaires')" id="nav-formulaires" class="nav-btn hidden">🧾 Formulaires</button>
   </aside>
 
   <!-- CONTENT -->
@@ -420,7 +422,7 @@
       <div class="flex justify-between items-center mb-6">
         <div>
           <h1 class="text-2xl font-black text-[#1A4E8A]">Qualiopi — Suivi des indicateurs</h1>
-          <p class="text-sm text-gray-400 mt-1">Référentiel National Qualité — Actions de formation</p>
+          <p class="text-sm text-gray-400 mt-1">Référentiel national qualité — décret n° 2026-728 (33 indicateurs, en vigueur au 01/11/2026) · preuves datées et contrôle d'obsolescence</p>
         </div>
         <div id="qualiopiProgress" class="text-right">
           <p id="qualiopiPct" class="text-3xl font-black text-[#1A4E8A]">--%</p>
@@ -785,6 +787,8 @@
     <!-- ===================== SUIVI DES MÉMOIRES / FRISES (vs_modules.js) ===================== -->
     <div id="section-memoires" class="section"></div>
     <div id="section-frises" class="section"></div>
+    <div id="section-maintenance" class="section"></div>
+    <div id="section-formulaires" class="section"></div>
     <div id="section-charlemagne" class="section">
       <div class="flex flex-wrap justify-between items-start gap-3 mb-5">
         <div>
@@ -1967,6 +1971,8 @@ const ACCESS = {
   memoires:    ['Super-admin','Pédagogie','Administratif'],
   frises:      ['Super-admin','Pédagogie','Administratif'],
   charlemagne: ['Super-admin','Administratif'],
+  maintenance: ['Super-admin','Pédagogie','Administratif'],
+  formulaires: ['Super-admin','Pédagogie','Administratif'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -1984,6 +1990,8 @@ const WRITE = {
   memoires:    ['Super-admin','Pédagogie','Administratif'],
   frises:      ['Super-admin','Pédagogie','Administratif'],
   charlemagne: ['Super-admin','Administratif'],
+  maintenance: ['Super-admin','Pédagogie','Administratif'],
+  formulaires: ['Super-admin','Pédagogie','Administratif'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -2174,7 +2182,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','maintenance','formulaires'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
@@ -2222,6 +2230,8 @@ function showModule(m){
   if (m==='memoires')    VX.memInit();
   if (m==='frises')      VX.frInit();
   if (m==='charlemagne') charlInit();
+  if (m==='maintenance') loadMaintenance();
+  if (m==='formulaires') loadFormulaires();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -4996,60 +5006,8 @@ async function saveGedDroits(){
 // ══════════════════════════════════════════════════════════════════
 // QUALIOPI
 // ══════════════════════════════════════════════════════════════════
-const QUALIOPI_DATA = [
-  { critere:1, titre:"Information du public", color:"bg-blue-600", indicateurs:[
-    {num:"1",texte:"Le prestataire diffuse des indicateurs de résultats adaptés à la nature des prestations et aux publics bénéficiaires.",attentes:"Indicateurs de résultats (taux de réussite, taux de satisfaction, taux d'insertion...)"},
-    {num:"2",texte:"Le prestataire met à disposition du public des informations sur les modalités de déroulement et d'organisation des prestations.",attentes:"Programme détaillé, modalités pédagogiques, durée, modalités d'évaluation"},
-    {num:"3",texte:"Le prestataire communique les éléments relatifs aux certifications visées.",attentes:"Référentiels de certification accessibles, partenaires certificateurs, modalités de validation"},
-    {num:"4",texte:"Le prestataire informe le public sur les conditions d'accès et les prérequis exigés.",attentes:"Conditions d'admission, prérequis, niveau minimum requis, entretien préalable"},
-    {num:"5",texte:"Le prestataire informe le public sur les délais d'accès aux prestations.",attentes:"Calendrier des sessions, délais d'inscription, délais de réponse aux candidatures"},
-    {num:"6",texte:"Le prestataire met à disposition une information sur les tarifs et les financements mobilisables.",attentes:"Tarifs détaillés, dispositifs de financement acceptés (CPF, OPCO...), conditions de prise en charge"},
-    {num:"7",texte:"Le prestataire rend accessibles les indicateurs de résultats des certifications préparées.",attentes:"Statistiques de réussite aux examens, taux d'obtention par promotion"},
-    {num:"8",texte:"Le prestataire communique sur l'accessibilité aux personnes en situation de handicap.",attentes:"Référent handicap identifié, informations sur les aménagements possibles, partenariats spécialisés"},
-  ]},
-  { critere:2, titre:"Identification des objectifs", color:"bg-indigo-600", indicateurs:[
-    {num:"9",texte:"Les compétences mobilisées pour la réalisation des prestations sont définies.",attentes:"Description des compétences clés, ressources humaines et matérielles mobilisées"},
-    {num:"10",texte:"La conception des prestations est réalisée en prenant en compte les objectifs, besoins et attentes des bénéficiaires.",attentes:"Analyse des besoins préalable (questionnaire, entretien), programme personnalisé"},
-    {num:"11",texte:"La prestation prend en compte les situations spécifiques des bénéficiaires.",attentes:"Adaptations pour les situations de handicap, aménagements pédagogiques"},
-    {num:"12",texte:"En cas de sous-traitance, le prestataire s'assure de la capacité du sous-traitant.",attentes:"Conventions de sous-traitance, vérification des qualifications"},
-    {num:"13",texte:"Les résultats obtenus sont analysés et pris en compte dans l'amélioration des prestations.",attentes:"Enquêtes de satisfaction, analyse des taux de réussite, plan d'amélioration continue"},
-    {num:"14",texte:"Les compétences des personnels sont définies, mises en oeuvre et évaluées.",attentes:"Fiches de poste, évaluations régulières des formateurs, bilans de compétences"},
-  ]},
-  { critere:3, titre:"Adaptation aux bénéficiaires", color:"bg-violet-600", indicateurs:[
-    {num:"15",texte:"La réalisation de la prestation est évaluée par le bénéficiaire.",attentes:"Formulaires d'évaluation à chaud et à froid, exploitation des résultats"},
-    {num:"16",texte:"La progression pédagogique est adaptée aux objectifs et mise à jour en fonction des compétences.",attentes:"Suivi individualisé, bilans de mi-parcours, adaptation du programme"},
-    {num:"17",texte:"Des modalités de suivi et d'accompagnement des bénéficiaires sont mises en oeuvre.",attentes:"Carnet de suivi, bilan périodique formateur/apprenant"},
-    {num:"18",texte:"Les modalités d'évaluation des acquis en cours et en fin de prestation sont précisées.",attentes:"Grilles d'évaluation, contrôles de connaissances, certification intermédiaire"},
-    {num:"19",texte:"La réalisation des évaluations des acquis est tracée.",attentes:"Émargements, rapports d'évaluation archivés, résultats conservés"},
-    {num:"20",texte:"Les acquis et besoins des bénéficiaires sont identifiés lors du positionnement.",attentes:"Tests de positionnement, analyse des prérequis, entretien d'entrée"},
-    {num:"21",texte:"Les ressources pédagogiques nécessaires sont mises à la disposition des bénéficiaires.",attentes:"Supports de cours, plateformes numériques, bibliothèque, matériels"},
-    {num:"22",texte:"Le réseau des acteurs de l'insertion professionnelle et de la certification est mobilisé.",attentes:"Partenariats entreprises, conventions de stage, réseaux CFA"},
-    {num:"23",texte:"Les réclamations sont traitées.",attentes:"Procédure de traitement des réclamations, registre, délai de réponse"},
-    {num:"24",texte:"Les abandons sont tracés et les raisons analysées.",attentes:"Registre des abandons, entretiens de sortie, analyse des causes"},
-  ]},
-  { critere:4, titre:"Adéquation des moyens", color:"bg-purple-600", indicateurs:[
-    {num:"25",texte:"Les locaux et équipements sont adaptés aux objectifs, aux publics et accessibles aux personnes en situation de handicap.",attentes:"Plan des locaux, liste des équipements, conformité accessibilité PMR"},
-    {num:"26",texte:"Les sous-traitants et intervenants extérieurs sont identifiés et leurs compétences actualisées.",attentes:"Contrats formateurs vacataires, CV à jour, attestations de compétences"},
-    {num:"27",texte:"Les activités de formation à distance sont adaptées aux exigences légales et réglementaires.",attentes:"Plateforme LMS conforme FOAD, cahier des charges, suivi des connexions"},
-    {num:"28",texte:"Les outils et techniques pédagogiques sont décrits et adaptés aux objectifs.",attentes:"Fiches pédagogiques, description des méthodes, variété des approches"},
-  ]},
-  { critere:5, titre:"Qualification des personnels", color:"bg-pink-600", indicateurs:[
-    {num:"29",texte:"Les personnels sont recrutés en tenant compte de leurs qualifications et expériences.",attentes:"Procédures de recrutement, critères définis, CV et diplômes des formateurs"},
-    {num:"30",texte:"Le prestataire met en oeuvre et trace des actions de développement des compétences de ses personnels.",attentes:"Plan de formation interne, formations suivies, attestations"},
-  ]},
-  { critere:6, titre:"Inscription dans l'environnement professionnel", color:"bg-rose-600", indicateurs:[
-    {num:"31",texte:"Le prestataire participe à des instances, réseaux professionnels ou sectoriels.",attentes:"Adhésions, participations à des conférences, partenariats sectoriels"},
-    {num:"32",texte:"Le prestataire réalise une veille sur les évolutions relatives aux compétences et métiers dans ses domaines.",attentes:"Veille réglementaire, abonnements (BO, RNCP), participation à des salons"},
-  ]},
-];
-
-async function loadQualiopi(){
-  const r=await api('getQualiopiPreuves');
-  qualiopiPreuves = r.success ? r.data : [];
-  renderQualiopi();
-  if (canWrite('qualiopi')) loadQuestionnaireSurvey();
-}
-
+// (déplacé dans vs_qualite.js)
+// (déplacé dans vs_qualite.js)
 // ── Enquête de satisfaction formateurs (Indicateurs 14 & 17) ────────
 const QUESTIONNAIRE_LABELS = {
   q14_1:"Soutien au développement des compétences pédagogiques",
@@ -5153,129 +5111,11 @@ async function openQDetailModal(){
 function closeQDetailModal(){ document.getElementById('qDetailModal').classList.add('hidden'); }
 
 // ── Couleurs des critères (CSS inline, pas @apply) ──────────────────
-const CRITERE_COLORS={1:'#2563eb',2:'#4338ca',3:'#7c3aed',4:'#9333ea',5:'#db2777',6:'#e11d48'};
-
-function renderQualiopi(){
-  const preuvesByInd={};
-  qualiopiPreuves.forEach(p=>{ if (!preuvesByInd[p.indicateur]) preuvesByInd[p.indicateur]=[]; preuvesByInd[p.indicateur].push(p); });
-  let totalInds=0, documented=0;
-  // Zone libre (en tête) : documents hors indicateur — dossier Drive « 0_LIBRE », non compté dans le %.
-  const libres = preuvesByInd['LIBRE'] || [];
-  let html=`<div class="qualiopi-card" style="border:2px dashed #93c5fd;background:linear-gradient(180deg,#f8fbff,#fff);margin-bottom:1.75rem">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
-      <div style="flex:1">
-        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
-          <span style="background:#dbeafe;color:#1d4ed8;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:800">🗂 Zone libre</span>
-          <span style="font-size:0.7rem;font-weight:700;color:#9ca3af">${libres.length} document${libres.length>1?'s':''}</span>
-        </div>
-        <p style="font-size:0.95rem;font-weight:800;color:#1f2937;margin-bottom:0.25rem">Documents libres</p>
-        <p style="font-size:0.75rem;color:#6b7280">Déposez ici tout document utile à l'audit qui ne relève pas d'un indicateur précis (organigramme, règlement intérieur, rapports, courriers…).</p>
-      </div>
-      ${canWrite('qualiopi')?`<div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0">
-        <button onclick="openQualiopiModal('LIBRE','0')" style="background:#F26522;color:#fff;padding:0.45rem 0.85rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">+ Ajouter un document</button>
-        <button onclick="ouvrirDossierQualiopi('LIBRE','0')" style="background:#f3f4f6;color:#4b5563;padding:0.4rem 0.75rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">📂 Voir dossier</button>
-      </div>`:''}
-    </div>
-    ${libres.length?`<div style="margin-top:0.75rem;border-top:1px solid #e0ecfb;padding-top:0.75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.5rem">`+libres.map(p=>`
-      <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:0.75rem;padding:0.5rem 0.75rem;border:1px solid #e5edf7">
-        <div style="min-width:0"><p style="font-size:0.85rem;font-weight:600;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escTa(p.nomPreuve)}">${escTa(p.nomPreuve)}</p><p style="font-size:0.7rem;color:#9ca3af">${escTa(p.dateDepot)}</p></div>
-        <div style="display:flex;gap:0.4rem;flex-shrink:0">
-          ${p.urlFichier?`<a href="${p.urlFichier}" target="_blank" style="background:#f3f4f6;color:#4b5563;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;text-decoration:none">🔗</a>`:''}
-          ${canWrite('qualiopi')?`<button onclick="deleteQualiopiPreuve('LIBRE','${p.nomPreuve.replace(/'/g,"\\'")}','${p.urlFichier||''}')" style="background:#fef2f2;color:#dc2626;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;border:none;cursor:pointer">🗑</button>`:''}
-        </div>
-      </div>`).join('')+'</div>':''}
-  </div>`;
-  QUALIOPI_DATA.forEach(cr=>{
-    const cc=CRITERE_COLORS[cr.critere]||'#374151';
-    html+=`<div style="margin-bottom:1.5rem">
-      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
-        <span style="background:${cc};color:white;padding:0.2rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:900">Critère ${cr.critere}</span>
-        <h2 style="font-size:1.1rem;font-weight:900;color:#1f2937">${cr.titre}</h2>
-      </div>`;
-    cr.indicateurs.forEach(ind=>{
-      totalInds++;
-      const preuves=preuvesByInd[ind.num]||[];
-      if (preuves.length) documented++;
-      const docBg=preuves.length?'#f0fdf4':'#fff';
-      const docBorder=preuves.length?'#bbf7d0':'#f3f4f6';
-      html+=`<div class="qualiopi-card" style="background:${docBg};border-color:${docBorder}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
-              <span style="background:${preuves.length?'#dcfce7':'#f3f4f6'};color:${preuves.length?'#15803d':'#9ca3af'};padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:700">
-                ${preuves.length?'✓ Documenté ('+preuves.length+')':'⬜ À documenter'}</span>
-              <span style="font-size:0.7rem;font-weight:900;color:#9ca3af">Indicateur ${ind.num}</span>
-            </div>
-            <p style="font-size:0.85rem;font-weight:600;color:#1f2937;margin-bottom:0.4rem">${ind.texte}</p>
-            <p style="font-size:0.75rem;color:#6b7280;font-style:italic">📋 <strong>Ce que vous devez fournir :</strong> ${ind.attentes}</p>
-          </div>
-          ${canWrite('qualiopi')?`<div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0">
-            <button onclick="openQualiopiModal('${ind.num}','${cr.critere}')" style="background:#1A4E8A;color:#fff;padding:0.4rem 0.75rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">+ Ajouter</button>
-            <button onclick="ouvrirDossierQualiopi('${ind.num}','${cr.critere}')" style="background:#f3f4f6;color:#4b5563;padding:0.4rem 0.75rem;border-radius:0.6rem;font-weight:700;font-size:0.75rem;border:none;cursor:pointer;white-space:nowrap">📂 Voir dossier</button>
-          </div>`:''}
-        </div>
-        ${preuves.length?`<div style="margin-top:0.75rem;border-top:1px solid #f3f4f6;padding-top:0.75rem;display:flex;flex-direction:column;gap:0.4rem">`+preuves.map(p=>`
-          <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:0.75rem;padding:0.5rem 0.75rem;border:1px solid #f3f4f6">
-            <div><p style="font-size:0.85rem;font-weight:600;color:#374151">${p.nomPreuve}</p><p style="font-size:0.7rem;color:#9ca3af">${p.dateDepot}</p></div>
-            <div style="display:flex;gap:0.5rem">
-              ${p.urlFichier?`<a href="${p.urlFichier}" target="_blank" style="background:#f3f4f6;color:#4b5563;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;text-decoration:none">🔗 Ouvrir</a>`:''}
-              ${canWrite('qualiopi')?`<button onclick="deleteQualiopiPreuve('${ind.num}','${p.nomPreuve.replace(/'/g,"\\'")}','${p.urlFichier||''}')" style="background:#fef2f2;color:#dc2626;padding:0.3rem 0.6rem;border-radius:0.5rem;font-weight:700;font-size:0.7rem;border:none;cursor:pointer">🗑</button>`:''}
-            </div>
-          </div>`).join('')+'</div>':''}
-      </div>`;
-    });
-    html+='</div>';
-  });
-  document.getElementById('qualiopiContent').innerHTML=html;
-  const pct=totalInds>0?Math.round(documented/totalInds*100):0;
-  document.getElementById('qualiopiPct').textContent=pct+'%';
-}
-
-function openQualiopiModal(num, critere){
-  document.getElementById('qualiopiModal').classList.remove('hidden');
-  document.getElementById('qualiopiModalIndNum').value=num;
-  document.getElementById('qualiopiModalCritere').value=critere;
-  document.getElementById('qualiopiModalInd').textContent= num==='LIBRE' ? 'Zone libre — document hors indicateur' : 'Indicateur '+num+' (Critère '+critere+')';
-  document.getElementById('qNomPreuve').value='';
-  document.getElementById('qFichier').value='';
-  document.getElementById('qDate').value=new Date().toISOString().slice(0,10);
-}
-function closeQualiopiModal(){ document.getElementById('qualiopiModal').classList.add('hidden'); }
-
-async function saveQualiopiPreuve(){
-  const nom      = document.getElementById('qNomPreuve').value.trim();
-  const file     = document.getElementById('qFichier').files[0];
-  const dateVal  = document.getElementById('qDate').value;
-  const indNum   = document.getElementById('qualiopiModalIndNum').value;
-  const critere  = document.getElementById('qualiopiModalCritere').value;
-  if (!nom){ toast('Saisissez un libellé pour la preuve.',false); return; }
-  if (!file){ toast('Sélectionnez un fichier.',false); return; }
-  const btn=document.getElementById('btnSaveQualiopiPreuve'); btn.textContent='Envoi…'; btn.disabled=true;
-  const reader=new FileReader();
-  reader.onload=async function(e){
-    const b64=e.target.result.split(',')[1];
-    const r=await api('uploadQualiopiFile',{
-      base64Data:b64, mimeType:file.type, fileName:file.name,
-      indicateur:indNum, critere:critere, nomPreuve:nom, dateDepot:dateVal
-    });
-    btn.textContent='⬆ Enregistrer'; btn.disabled=false;
-    if (!r.success){ toast('Erreur : '+r.message,false); return; }
-    toast('Preuve enregistrée ✓'); closeQualiopiModal(); loadQualiopi();
-  };
-  reader.readAsDataURL(file);
-}
-
+// (déplacé dans vs_qualite.js)
 async function ouvrirDossierQualiopi(indicateur, critere){
   const r=await api('getQualiopiDossierUrl',{indicateur,critere});
   if (r.success&&r.url) window.open(r.url,'_blank');
   else toast('Dossier pas encore créé. Ajoutez d\'abord une preuve.',false);
-}
-
-async function deleteQualiopiPreuve(indicateur, nomPreuve, urlFichier){
-  if (!confirm('Supprimer cette preuve ?')) return;
-  const r=await api('deleteQualiopiPreuve',{indicateur,nomPreuve,urlFichier});
-  if (!r.success){ toast('Erreur : '+r.message,false); return; }
-  toast('Preuve supprimée'); loadQualiopi();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -8478,5 +8318,6 @@ async function importSuiviData(){
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=6"></script>
 <script src="salles_plan.js?v=1"></script>
+<script src="vs_qualite.js?v=1"></script>
 </body>
 </html>

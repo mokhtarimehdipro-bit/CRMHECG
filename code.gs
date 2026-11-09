@@ -229,7 +229,7 @@ function doPostInner_(e) {
     // Actions publiques (lecture / login) qui ne nécessitent pas de token
     // Actions accessibles sans connexion : uniquement la connexion et l'inscription publique.
     // (inscription.html / questionnaire_qualiopi.html passent par google.script.run, pas par doPost.)
-    var PUBLIC_ACTIONS = new Set(['login', 'publicRegister']);
+    var PUBLIC_ACTIONS = new Set(['login', 'publicRegister', 'formPublicGet', 'formPublicSubmit']);   // formulaires publiés (formulaires.gs)
 
     var sessionToken = params.sessionToken || p.sessionToken || "";
     var session = null;
@@ -274,6 +274,8 @@ function doPostInner_(e) {
 
     switch (action) {
       case "login": return handleLogin(params, ss);
+      case "formPublicGet": return handleFormPublicGet(params, ss);
+      case "formPublicSubmit": return handleFormPublicSubmit(params, ss);
       case "getDashboardData": return handleDashboardData(params, ss);
       case "getStats": return handleGetStats(params, ss);
       // --- TABLEAUX DE SUIVI (Vie scolaire, voir tableaux_suivi.gs) ---
@@ -467,6 +469,15 @@ function doPostInner_(e) {
       case 'getQualiopiPreuves':         return handleGetQualiopiPreuves(p, ss);
       case 'saveQualiopiPreuve':         return handleSaveQualiopiPreuve(p, ss);
       case 'deleteQualiopiPreuve':       return handleDeleteQualiopiPreuve(p, ss);
+      case 'updateQualiopiPreuve':       return handleUpdateQualiopiPreuve(p, ss);
+      case 'getQualiopiActions':         return handleGetQualiopiActions(p, ss);
+      case 'saveQualiopiAction':         return handleSaveQualiopiAction(p, ss);
+      case 'getTicketsMaintenance':      return handleGetTicketsMaintenance(p, ss);
+      case 'updateTicketMaintenance':    return handleUpdateTicketMaintenance(p, ss);
+      case 'getFormulaires':             return handleGetFormulaires(p, ss);
+      case 'saveFormulaire':             return handleSaveFormulaire(p, ss);
+      case 'deleteFormulaire':           return handleDeleteFormulaire(p, ss);
+      case 'getFormulaireReponses':      return handleGetFormulaireReponses(p, ss);
       case 'saveNotesBulk':              return handleSaveNotesBulk(p, ss);
       case 'updateNotesClasse':          return handleUpdateNotesClasse(p, ss);
       case 'getStatsExclusions':         return handleGetStatsExclusions(p, ss);
@@ -10436,43 +10447,9 @@ function handleGedScanForStudent(p, ss) {
 // VIE SCOLAIRE — QUALIOPI
 // ==========================================
 
-function handleGetQualiopiPreuves(p, ss) {
-  try {
-    const data = getSheetSafe(ss,"QUALIOPI_PREUVES").getDataRange().getValues(); const rows = [];
-    for (let i=1;i<data.length;i++) {
-      if (!data[i][0]) continue;
-      rows.push({ indicateur:String(data[i][0]), nomPreuve:String(data[i][1]),
-        urlFichier:String(data[i][2]||""), dateDepot:String(data[i][3]||"") });
-    }
-    return createJsonResponse({ success:true, data:rows });
-  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
-}
-
-function handleSaveQualiopiPreuve(p, ss) {
-  try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success:false, message:"Accès refusé." });
-    const ws   = getSheetSafe(ss,"QUALIOPI_PREUVES");
-    const date = Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"dd/MM/yyyy");
-    ws.appendRow([p.indicateur||"", p.nomPreuve||"", p.urlFichier||"", p.dateDepot||date]);
-    logAction(p.emailAuteur||"?","Super-admin","Création","Vie scolaire",p.indicateur,"Qualiopi preuve: "+p.nomPreuve);
-    return createJsonResponse({ success:true });
-  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
-}
-
-function handleDeleteQualiopiPreuve(p, ss) {
-  try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success:false, message:"Accès refusé." });
-    const ws = getSheetSafe(ss,"QUALIOPI_PREUVES"); const data = ws.getDataRange().getValues();
-    for (let i=1;i<data.length;i++) {
-      if (String(data[i][0])===String(p.indicateur) && String(data[i][1])===String(p.nomPreuve)
-          && String(data[i][2])===String(p.urlFichier)) {
-        ws.deleteRow(i+1); return createJsonResponse({ success:true });
-      }
-    }
-    return createJsonResponse({ success:false, message:"Preuve introuvable." });
-  } catch(e) { return createJsonResponse({ success:false, message:e.toString() }); }
-}
-
+// handleGetQualiopiPreuves : déplacée dans qualiopi.gs
+// handleSaveQualiopiPreuve : déplacée dans qualiopi.gs
+// handleDeleteQualiopiPreuve : déplacée dans qualiopi.gs
 // ==========================================
 // VIE SCOLAIRE — NOTES EN MASSE & RELEVÉ
 // ==========================================
@@ -10879,39 +10856,8 @@ function handleGetPersonnelList(p, ss) {
 
 const QUALIOPI_ROOT_ID = "1Byn9V9FX1N0enndO1CnI8DnIlnu-YoKl";
 
-function handleUploadQualiopiFile(p, ss) {
-  try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès refusé." });
-    if (!p.base64Data || !p.fileName || !p.mimeType)
-      return createJsonResponse({ success: false, message: "Paramètres manquants." });
-    // Sous-dossier : CRITERE_INDICATEUR (ex: "1_3")
-    const folderName = String(p.critere||"0") + "_" + String(p.indicateur||"0");
-    const root = DriveApp.getFolderById(QUALIOPI_ROOT_ID);
-    const it   = root.getFoldersByName(folderName);
-    const folder = it.hasNext() ? it.next() : root.createFolder(folderName);
-    const blob = Utilities.newBlob(Utilities.base64Decode(p.base64Data), p.mimeType, p.fileName);
-    const file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    // Sauvegarder la preuve en base
-    const ws   = getSheetSafe(ss,"QUALIOPI_PREUVES");
-    const date = Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"dd/MM/yyyy");
-    ws.appendRow([p.indicateur||"", p.nomPreuve||p.fileName, file.getUrl(), p.dateDepot||date]);
-    logAction(p.emailAuteur||"?","Super-admin","Création","Vie scolaire",p.indicateur,"Qualiopi preuve: "+p.fileName);
-    return createJsonResponse({ success: true, id: file.getId(), url: file.getUrl(), folderUrl: folder.getUrl() });
-  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
-}
-
-function handleGetQualiopiDossierUrl(p, ss) {
-  try {
-    if (p.vieScRole !== "Super-admin") return createJsonResponse({ success: false, message: "Accès refusé." });
-    const folderName = String(p.critere||"0") + "_" + String(p.indicateur||"0");
-    const root = DriveApp.getFolderById(QUALIOPI_ROOT_ID);
-    const it   = root.getFoldersByName(folderName);
-    if (it.hasNext()) return createJsonResponse({ success: true, url: it.next().getUrl() });
-    return createJsonResponse({ success: true, url: root.getUrl() + "?usp=sharing" }); // parent si pas encore créé
-  } catch(e) { return createJsonResponse({ success: false, message: e.toString() }); }
-}
-
+// handleUploadQualiopiFile : déplacée dans qualiopi.gs
+// handleGetQualiopiDossierUrl : déplacée dans qualiopi.gs
 // ==========================================
 // VIE SCOLAIRE — QUALIOPI : ENQUÊTE FORMATEURS (Indicateurs 14 & 17)
 // Chaque formateur en poste dispose d'un code anonyme fixe (colonne 14 de
