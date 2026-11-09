@@ -300,6 +300,8 @@ function doPostInner_(e) {
       case "getPostesContacts":  return handleGetPostesContacts(params, ss);
       case "getCarteEntreprises": return handleGetCarteEntreprises(params, ss);
       case "recalerAdressesSirene": return handleRecalerAdressesSirene(params, ss);
+      case "controleCharlemagne": return handleControleCharlemagne(params, ss);
+      case "getControleCharlemagne": return handleGetControleCharlemagne(params, ss);
       case "harmoniserAdresses": return handleHarmoniserAdresses(params, ss);
 
       case "addStudent": return handleAddStudent(params, ss);
@@ -610,8 +612,14 @@ function handleLogin(params, ss) {
 function _etuMotifRefus_(row) {
   const sortie = row[18], classe = String(row[14] || "").trim();
   if (sortie !== "" && sortie !== null && String(sortie).trim() !== "") {
-    const d = sortie instanceof Date ? sortie : null;
-    if (!d || isNaN(d.getTime())) return "sorti";
+    let d = sortie instanceof Date ? sortie : null;
+    if (!d) {   // dates saisies en texte : « 29/12/2025 », « 3/11/2026 », « 2026-06-08 »
+      const t = String(sortie).trim();
+      let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) d = new Date(+m[3], +m[2] - 1, +m[1]);
+      else if ((m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) d = new Date(+m[1], +m[2] - 1, +m[3]);
+    }
+    if (!d || isNaN(d.getTime())) return "sorti";   // texte illisible (motif, « abandon »…) = sorti
     const fin = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
     if (fin < new Date()) return "sorti";
   }

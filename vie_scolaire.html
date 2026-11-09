@@ -142,6 +142,7 @@
     <button onclick="showModule('suivis')"     id="nav-suivis"      class="nav-btn hidden">📊 Tableaux de suivis Excel</button>
     <button onclick="showModule('memoires')"   id="nav-memoires"    class="nav-btn hidden">🎓 Suivi des mémoires</button>
     <button onclick="showModule('frises')"     id="nav-frises"      class="nav-btn hidden">🗓️ Frises chronologiques</button>
+    <button onclick="showModule('charlemagne')" id="nav-charlemagne" class="nav-btn hidden">🔎 Contrôle Charlemagne</button>
   </aside>
 
   <!-- CONTENT -->
@@ -784,6 +785,140 @@
     <!-- ===================== SUIVI DES MÉMOIRES / FRISES (vs_modules.js) ===================== -->
     <div id="section-memoires" class="section"></div>
     <div id="section-frises" class="section"></div>
+    <div id="section-charlemagne" class="section">
+      <div class="flex flex-wrap justify-between items-start gap-3 mb-5">
+        <div>
+          <h1 class="text-2xl font-black text-[#1A4E8A]">🔎 Contrôle Charlemagne</h1>
+          <p class="text-sm text-gray-500 mt-1 max-w-3xl">Importez l'export Excel de l'édition <b>« Tableau de bord COMPLET MMOK »</b> de Charlemagne : chaque étudiant est rapproché de sa fiche CRM (identifiant élève, e-mail, nom) et les incohérences de classe, de dates d'entrée/sortie et d'entreprise sont listées. <b>Rien n'est modifié</b> dans le CRM. Les colonnes sensibles de l'export (n° Sécu, RQTH, handicap, titres de séjour…) ne quittent jamais votre ordinateur.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="file" id="charlFichier" accept=".xls,.xlsx,.csv,.htm,.html" class="text-sm">
+          <button id="btnCharlImport" onclick="charlImporter()" class="bg-[#1A4E8A] text-white px-4 py-2 rounded-xl font-black text-sm hover:opacity-90">Importer et contrôler</button>
+        </div>
+      </div>
+      <div id="charlResume" class="mb-4"></div>
+      <div id="charlFiltres" class="hidden flex flex-wrap gap-2 mb-3">
+        <select id="charlFGravite" onchange="charlRendre()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm"><option value="">Toutes gravités</option><option>Erreur</option><option>À vérifier</option><option>Info</option></select>
+        <select id="charlFType" onchange="charlRendre()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm"><option value="">Tous les types</option></select>
+        <input id="charlFTexte" oninput="charlRendre()" type="search" placeholder="Étudiant, classe, entreprise…" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[200px]">
+        <button onclick="charlExporterCsv()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-xl font-bold text-sm hover:bg-gray-200">⬇️ Export CSV</button>
+      </div>
+      <div class="overflow-x-auto bg-white rounded-2xl border border-gray-100">
+        <table class="w-full text-sm"><thead class="bg-gray-50 text-[11px] uppercase text-gray-500"><tr>
+          <th class="text-left p-3">Gravité</th><th class="text-left p-3">Type</th><th class="text-left p-3">Étudiant</th><th class="text-left p-3">Classe</th>
+          <th class="text-left p-3">Charlemagne</th><th class="text-left p-3">CRM</th><th class="text-left p-3">Détail / action suggérée</th></tr></thead>
+          <tbody id="charlTbody"><tr><td colspan="7" class="text-center text-gray-400 py-10">Aucun contrôle pour l'instant : importez un export Charlemagne.</td></tr></tbody></table>
+      </div>
+      <details id="charlClasses" class="hidden mt-4 bg-white rounded-2xl border border-gray-100 p-4">
+        <summary class="font-black text-sm text-gray-700 cursor-pointer">Correspondance des classes Charlemagne → CRM (apprise sur les étudiants rapprochés)</summary>
+        <div id="charlClassesTable" class="mt-3"></div>
+      </details>
+    </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ══ CONTRÔLE CHARLEMAGNE ══ (seules les colonnes de cette liste blanche sont envoyées au serveur)
+let charlRapport = null;
+const CHARL_COLONNES = {
+  idEleve: ['identifiant eleve'], nom: ['nom'], prenom: ['prenom'], naissance: ['date de naissance'],
+  email: ['email'], mailPerso: ['mail perso'], classe: ['libelle classe'], codeClasse: ['code classe'], niveau: ['libelle niveau'],
+  entree: ['date entree'], sortie: ['date sortie'], motif: ['motif de sortie'], etatPreinscription: ['etat preinscription*'],
+  societe: ['societe resp', 'societe'], nomResp: ['nom resp'], prenomResp: ['prenom resp'], emailResp: ['email bureau resp'], professionResp: ['profession resp']
+};
+function charlNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+// clé d'en-tête tolérante aux accents mal décodés (« Pr�nom » = « Prénom ») : sans espaces ni « e »
+function charlCle(s){ return charlNorm(s).replace(/ /g,'').replace(/e/g,''); }
+function charlEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function charlInit(){
+  if (charlRapport) return;
+  try { const r = await api('getControleCharlemagne'); if (r.success && r.rapport) { charlRapport = r.rapport; charlAfficher(); } } catch(e){}
+}
+async function charlImporter(){
+  const f = document.getElementById('charlFichier').files[0];
+  if (!f) { toast('Choisissez d\'abord le fichier exporté de Charlemagne', false); return; }
+  const btn = document.getElementById('btnCharlImport'); btn.disabled = true; btn.textContent = '⏳ Lecture du fichier…';
+  try {
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array', cellDates:true, dateNF:'dd/mm/yyyy' });
+    let lignes = null;
+    for (const nomFeuille of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header:1, raw:false, dateNF:'dd/mm/yyyy', defval:'' });
+      const iEnt = rows.findIndex(r => { const h = r.map(charlCle); return h.includes(charlCle('nom')) && h.includes(charlCle('prenom')); });
+      if (iEnt < 0) continue;
+      const h = rows[iEnt].map(charlCle), idx = {};
+      Object.keys(CHARL_COLONNES).forEach(k => {
+        for (const cand of CHARL_COLONNES[k]) {
+          const i = cand.endsWith('*') ? h.findIndex(x => x.startsWith(charlCle(cand.slice(0,-1)))) : h.indexOf(charlCle(cand));
+          if (i >= 0) { idx[k] = i; break; }
+        }
+      });
+      if (idx.societe === undefined) throw new Error('colonne « Société Resp » introuvable : utilisez l\'édition « Tableau de bord COMPLET MMOK »');
+      lignes = rows.slice(iEnt+1).filter(r => r.some(x => String(x).trim())).map(r => {
+        const o = {}; Object.keys(idx).forEach(k => { o[k] = String(r[idx[k]] ?? '').trim(); }); return o;   // liste blanche
+      }).filter(o => o.nom || o.idEleve);
+      break;
+    }
+    if (!lignes || !lignes.length) throw new Error('aucun tableau avec les colonnes « Nom » et « Prénom » dans ce fichier');
+    if (!confirm(lignes.length + ' étudiant(s) lus dans « ' + f.name + ' ».\n\nLancer le contrôle avec le CRM ? (aucune donnée du CRM n\'est modifiée)')) return;
+    btn.textContent = '⏳ Contrôle en cours…';
+    const r = await api('controleCharlemagne', { lignes: JSON.stringify(lignes), fichier: f.name });
+    if (!r.success) throw new Error(r.message || 'erreur serveur');
+    charlRapport = r.rapport; charlAfficher();
+    toast('Contrôle terminé : ' + r.rapport.stats.erreurs + ' erreur(s), ' + r.rapport.stats.aVerifier + ' à vérifier');
+  } catch(e) { toast('Import impossible : ' + e.message, false); }
+  finally { btn.disabled = false; btn.textContent = 'Importer et contrôler'; }
+}
+function charlAfficher(){
+  const R = charlRapport, S = R.stats || {};
+  const carte = (lib, val, cls) => `<div class="rounded-2xl p-4 border ${cls}"><div class="text-2xl font-black">${val ?? 0}</div><div class="text-[11px] font-bold uppercase">${lib}</div></div>`;
+  document.getElementById('charlResume').innerHTML =
+    `<p class="text-xs text-gray-500 mb-2">Dernier contrôle : <b>${charlEsc(R.date)}</b> — fichier « ${charlEsc(R.fichier)} » — par ${charlEsc(R.importePar)}</p>
+     <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+       ${carte('Étudiants Charlemagne', S.charlemagne, 'bg-white border-gray-100 text-gray-700')}
+       ${carte('Rapprochés du CRM', S.rapproches, 'bg-white border-gray-100 text-gray-700')}
+       ${carte('Alternants (entreprise OK)', (S.entOk||0) + (S.entApprochant||0) + ' / ' + (S.alternantsCharl||0), 'bg-white border-gray-100 text-gray-700')}
+       ${carte('Erreurs', S.erreurs, 'bg-red-50 border-red-100 text-red-700')}
+       ${carte('À vérifier', S.aVerifier, 'bg-amber-50 border-amber-100 text-amber-700')}
+       ${carte('Infos', S.infos, 'bg-blue-50 border-blue-100 text-blue-700')}
+     </div>`;
+  const types = Object.keys(R.parType || {}).sort();
+  document.getElementById('charlFType').innerHTML = '<option value="">Tous les types</option>' + types.map(t => `<option value="${charlEsc(t)}">${charlEsc(t)} (${R.parType[t]})</option>`).join('');
+  document.getElementById('charlFiltres').classList.remove('hidden');
+  const cl = R.classes || [];
+  document.getElementById('charlClasses').classList.toggle('hidden', !cl.length);
+  document.getElementById('charlClassesTable').innerHTML = '<table class="text-sm w-full"><tr class="text-[11px] uppercase text-gray-400"><th class="text-left p-1">Charlemagne</th><th class="text-left p-1">CRM</th><th class="text-left p-1">Étudiants</th><th class="text-left p-1">Concordance</th></tr>' +
+    cl.map(c => `<tr class="border-t"><td class="p-1 font-bold">${charlEsc(c.charlemagne)}</td><td class="p-1">${charlEsc(c.crm)}</td><td class="p-1">${c.effectif}</td><td class="p-1 ${c.part < 80 ? 'text-amber-600 font-bold' : 'text-gray-500'}">${c.part} %</td></tr>`).join('') + '</table>';
+  charlRendre();
+}
+function charlFiltrees(){
+  const g = document.getElementById('charlFGravite').value, t = document.getElementById('charlFType').value, q = charlNorm(document.getElementById('charlFTexte').value);
+  return (charlRapport?.anomalies || []).filter(a => (!g || a.gravite === g) && (!t || a.type === t) &&
+    (!q || charlNorm([a.nom, a.classe, a.charlemagne, a.crm, a.detail, a.idEtu, a.idEleve].join(' ')).includes(q)));
+}
+function charlRendre(){
+  const L = charlFiltrees();
+  const coul = { 'Erreur':'bg-red-100 text-red-700', 'À vérifier':'bg-amber-100 text-amber-700', 'Info':'bg-blue-100 text-blue-700' };
+  document.getElementById('charlTbody').innerHTML = L.length ? L.slice(0, 800).map(a => `<tr class="border-t align-top">
+      <td class="p-3"><span class="px-2 py-1 rounded-lg text-[11px] font-black ${coul[a.gravite]||''}">${charlEsc(a.gravite)}</span></td>
+      <td class="p-3 font-bold text-gray-700">${charlEsc(a.type)}</td>
+      <td class="p-3">${a.idEtu ? `<a href="dossier.html?id=${encodeURIComponent(a.idEtu)}" target="_blank" class="font-bold text-[#1A4E8A] hover:underline">${charlEsc(a.nom)}</a>` : `<b>${charlEsc(a.nom)}</b>`}
+        <div class="text-[10px] text-gray-400">${charlEsc(a.idEtu || 'hors CRM')}${a.idEleve ? ' · Charlemagne n° ' + charlEsc(a.idEleve) : ''}</div></td>
+      <td class="p-3 text-gray-600">${charlEsc(a.classe)}</td>
+      <td class="p-3">${charlEsc(a.charlemagne)}</td>
+      <td class="p-3">${charlEsc(a.crm)}</td>
+      <td class="p-3 text-gray-600">${charlEsc(a.detail)}${a.suggestion ? `<div class="text-[11px] font-bold text-[#F26522] mt-1">➜ ${charlEsc(a.suggestion)}</div>` : ''}</td></tr>`).join('')
+    + (L.length > 800 ? '<tr><td colspan="7" class="text-center text-gray-400 p-3">… affinez les filtres pour voir les autres</td></tr>' : '')
+    : '<tr><td colspan="7" class="text-center text-gray-400 py-10">Aucune incohérence pour ce filtre ✅</td></tr>';
+}
+function charlExporterCsv(){
+  const L = charlFiltrees();
+  const cols = ['gravite','type','idEtu','idEleve','nom','classe','charlemagne','crm','detail','suggestion'];
+  const csv = '﻿' + ['Gravité;Type;ID CRM;Identifiant Charlemagne;Étudiant;Classe;Charlemagne;CRM;Détail;Action suggérée']
+    .concat(L.map(a => cols.map(c => '"' + String(a[c] ?? '').replace(/"/g,'""') + '"').join(';'))).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+  a.download = 'controle_charlemagne.csv'; a.click();
+}
+</script>
+
 
     <!-- ===================== TABLEAUX DE SUIVIS EXCEL ===================== -->
     <div id="section-suivis" class="section">
@@ -1831,6 +1966,7 @@ const ACCESS = {
   suivis:      ['Super-admin','Pédagogie','Administratif'],
   memoires:    ['Super-admin','Pédagogie','Administratif'],
   frises:      ['Super-admin','Pédagogie','Administratif'],
+  charlemagne: ['Super-admin','Administratif'],
 };
 const WRITE = {
   notes:       ['Super-admin','Pédagogie','Administratif'],
@@ -1847,6 +1983,7 @@ const WRITE = {
   suivis:      ['Super-admin','Pédagogie','Administratif'],
   memoires:    ['Super-admin','Pédagogie','Administratif'],
   frises:      ['Super-admin','Pédagogie','Administratif'],
+  charlemagne: ['Super-admin','Administratif'],
 };
 const canAccess = m => (ACCESS[m]||[]).includes(vieScRole);
 const canWrite  = m => (WRITE[m]||[]).includes(vieScRole);
@@ -2037,7 +2174,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
@@ -2084,6 +2221,7 @@ function showModule(m){
   if (m==='suivis')      loadTableauxSuivi();
   if (m==='memoires')    VX.memInit();
   if (m==='frises')      VX.frInit();
+  if (m==='charlemagne') charlInit();
 }
 
 // ══════════════════════════════════════════════════════════════════
