@@ -237,6 +237,30 @@
                     <a id="gedEtuFolderUrl" href="#" target="_blank" class="text-xs text-blue-500 hover:underline font-semibold">📂 Ouvrir le dossier dans Google Drive</a>
                 </div>
             </div>
+
+            <!-- ═══ CARTE DES ENTREPRISES PARTENAIRES (nom + adresse + nb d'alternants, jamais de contact ni de nom d'alternant) ═══ -->
+            <div id="carteEntSection" class="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-4 border-b pb-3">
+                    <div>
+                        <h3 class="text-xl font-black text-gray-800">🗺️ Carte des entreprises partenaires</h3>
+                        <p class="text-xs text-gray-500 mt-1">Toutes les entreprises partenaires d'HECG, avec le nombre d'alternants HECG qu'elles accueillent actuellement. Filtrez par secteur pour organiser vos déplacements.</p>
+                    </div>
+                    <button id="btnCarteEnt" onclick="carteEntOuvrir()" class="bg-[#1A4E8A] text-white px-4 py-2 rounded-xl font-black text-sm hover:opacity-90">Afficher la carte</button>
+                </div>
+                <div id="carteEntZone" class="hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+                        <input id="carteFiltreTexte" oninput="carteEntFiltrer()" type="search" placeholder="Adresse, rue, ville ou entreprise…" class="md:col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                        <input id="carteFiltreCp" oninput="carteEntFiltrer()" type="search" inputmode="numeric" placeholder="Code postal (ex. 13008 ou 130)" class="border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                        <label class="flex items-center gap-2 text-sm font-semibold text-gray-600 px-2"><input id="carteFiltreAlt" type="checkbox" onchange="carteEntFiltrer()" class="w-4 h-4"> Avec alternants HECG</label>
+                    </div>
+                    <p id="carteEntCompteur" class="text-xs font-bold text-gray-500 mb-2"></p>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div id="carteEntMap" class="lg:col-span-2 rounded-2xl border border-gray-200 z-0" style="height:480px"></div>
+                        <div id="carteEntListe" class="custom-scrollbar overflow-y-auto space-y-2 pr-1" style="max-height:480px"></div>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-2">● plein : adresse vérifiée · ○ pointillé : position approximative (commune) · orange = au moins un alternant HECG en cours</p>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -1192,6 +1216,95 @@
                 gedBreadcrumb = gedBreadcrumb.slice(0, crumbIndex);
                 loadGedEtu(gedBreadcrumb[gedBreadcrumb.length - 1].id);
             }
+        }
+
+        // ═══ CARTE DES ENTREPRISES PARTENAIRES ═══
+        let _carteEnts = [], _carteMap = null, _carteCalque = null, _carteMarq = [];
+        function _carteEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function _carteNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+        function _carteLeaflet() {
+            if (window.L) return Promise.resolve();
+            return new Promise((ok, ko) => {
+                const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+                const js = document.createElement('script'); js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; js.onload = ok; js.onerror = ko; document.head.appendChild(js);
+            });
+        }
+        async function carteEntOuvrir() {
+            const btn = document.getElementById('btnCarteEnt');
+            const zone = document.getElementById('carteEntZone');
+            if (_carteMap) { zone.classList.toggle('hidden'); btn.innerText = zone.classList.contains('hidden') ? 'Afficher la carte' : 'Masquer la carte'; if (!zone.classList.contains('hidden')) _carteMap.invalidateSize(); return; }
+            btn.disabled = true; btn.innerText = '⏳ Chargement…';
+            try {
+                const [res] = await Promise.all([apiPost({ action: 'getCarteEntreprises', targetId: studentId }), _carteLeaflet()]);
+                if (!res || !res.success) throw new Error((res && res.message) || 'Erreur serveur');
+                _carteEnts = res.data || [];
+                zone.classList.remove('hidden');
+                _carteMap = L.map('carteEntMap').setView([43.35, 5.45], 10);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_carteMap);
+                _carteCalque = L.featureGroup().addTo(_carteMap);
+                _carteEnts.forEach((e, i) => {
+                    if (!(e.lat && e.lon)) return;
+                    const alt = e.alternants > 0;
+                    const m = L.circleMarker([e.lat, e.lon], { radius: alt ? 8 : 6, weight: 2, color: alt ? '#C2410C' : '#1A4E8A',
+                        fillColor: alt ? '#F26522' : '#3B82F6', fillOpacity: e.precise ? 0.85 : 0.25, dashArray: e.precise ? null : '3 3' });
+                    m.bindPopup(_cartePopup(e));
+                    _carteMarq[i] = m;
+                });
+                btn.innerText = 'Masquer la carte';
+                carteEntFiltrer(true);
+            } catch (e) {
+                alert('Impossible de charger la carte : ' + e.message);
+                btn.innerText = 'Afficher la carte';
+            }
+            btn.disabled = false;
+        }
+        function _carteAdresse(e) { return [e.adresse, e.complement, [e.cp, e.ville].filter(Boolean).join(' ')].filter(Boolean).join(', '); }
+        function _cartePopup(e) {
+            const n = e.alternants || 0;
+            const txtAlt = n ? `🎓 <b>${n}</b> alternant${n > 1 ? 's' : ''} HECG en cours` : 'Aucun alternant HECG actuellement';
+            const itin = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(e.lat && e.lon ? e.lat + ',' + e.lon : _carteAdresse(e));
+            return `<div style="min-width:200px"><div style="font-weight:900;color:#1A4E8A;font-size:14px">${_carteEsc(e.nom)}</div>
+                <div style="margin:4px 0;color:#374151">📍 ${_carteEsc(_carteAdresse(e))}</div>
+                ${e.precise ? '' : '<div style="color:#B45309;font-size:11px">Position approximative (adresse à préciser)</div>'}
+                <div style="margin:4px 0">${txtAlt}</div>
+                <a href="${itin}" target="_blank" rel="noopener" style="font-weight:700;color:#F26522">🧭 Itinéraire</a></div>`;
+        }
+        function carteEntFiltrer(ajuster) {
+            if (!_carteMap) return;
+            const t = _carteNorm(document.getElementById('carteFiltreTexte').value);
+            const cp = String(document.getElementById('carteFiltreCp').value || '').replace(/\D/g, '');
+            const avecAlt = document.getElementById('carteFiltreAlt').checked;
+            const mots = t ? t.split(' ') : [];
+            _carteCalque.clearLayers();
+            const vis = [];
+            _carteEnts.forEach((e, i) => {
+                if (cp && !String(e.cp || '').startsWith(cp)) return;
+                if (avecAlt && !(e.alternants > 0)) return;
+                if (mots.length) { const h = _carteNorm(e.nom + ' ' + _carteAdresse(e)); if (!mots.every(w => h.includes(w))) return; }
+                vis.push(i);
+                if (_carteMarq[i]) _carteCalque.addLayer(_carteMarq[i]);
+            });
+            const nbAlt = vis.reduce((s, i) => s + (_carteEnts[i].alternants || 0), 0);
+            const horsCarte = vis.filter(i => !_carteMarq[i]).length;
+            document.getElementById('carteEntCompteur').innerText = vis.length + ' entreprise' + (vis.length > 1 ? 's' : '') + ' · ' + nbAlt + ' alternant' + (nbAlt > 1 ? 's' : '') + ' HECG en cours' + (horsCarte ? ' · ' + horsCarte + ' sans position sur la carte' : '');
+            const liste = document.getElementById('carteEntListe');
+            liste.innerHTML = vis.slice(0, 300).map(i => {
+                const e = _carteEnts[i], n = e.alternants || 0;
+                return `<div onclick="carteEntVoir(${i})" class="p-3 rounded-xl border ${n ? 'border-orange-200 bg-orange-50' : 'border-gray-100 bg-gray-50'} ${_carteMarq[i] ? 'cursor-pointer hover:shadow' : 'opacity-80'}">
+                    <div class="font-black text-sm text-[#1A4E8A]">${_carteEsc(e.nom)}</div>
+                    <div class="text-xs text-gray-600">📍 ${_carteEsc(_carteAdresse(e))}</div>
+                    <div class="text-[11px] font-bold ${n ? 'text-orange-700' : 'text-gray-400'}">${n ? '🎓 ' + n + ' alternant' + (n > 1 ? 's' : '') + ' HECG en cours' : 'Aucun alternant HECG actuellement'}${_carteMarq[i] ? '' : ' · pas de position'}</div></div>`;
+            }).join('') + (vis.length > 300 ? '<p class="text-xs text-gray-400 text-center py-2">… affinez le filtre pour voir les autres</p>' : '')
+              || '<p class="text-sm text-gray-400 italic text-center py-6">Aucune entreprise ne correspond à ce filtre.</p>';
+            const b = _carteCalque.getBounds();
+            if ((ajuster !== false) && b.isValid() && (t || cp || avecAlt || ajuster === true)) _carteMap.fitBounds(b.pad(0.1), { maxZoom: 15 });
+        }
+        function carteEntVoir(i) {
+            const m = _carteMarq[i];
+            if (!m) return;
+            _carteMap.setView(m.getLatLng(), 16);
+            m.openPopup();
+            document.getElementById('carteEntMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>

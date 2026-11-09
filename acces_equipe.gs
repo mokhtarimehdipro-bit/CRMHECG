@@ -222,7 +222,7 @@ function handleResetMdpMembre(p, ss) {
 // espace (dossier.html), et uniquement sur SON identifiant. Renvoie la raison d'un refus, ou "".
 var ACTIONS_ETUDIANT = ["getStudentDetails", "addNote", "getSuiviCandidatures", "addSuiviCandidature", "updateSuiviCandidature",
   "deleteSuiviCandidature", "addSuiviCandidatureNote", "postulerOffre", "changeStudentMdp", "uploadCV",
-  "gedGetStudentDocs", "gedGetSubfolder", "gedUploadStudentDoc", "gedScanForStudent"];
+  "gedGetStudentDocs", "gedGetSubfolder", "gedUploadStudentDoc", "gedScanForStudent", "getCarteEntreprises"];
 var CHAMPS_ID_ETUDIANT = ["targetId", "id_etu", "idEtu", "etuId", "id_etudiant"];
 
 function _controleAccesEtudiant_(ss, action, params, p, session) {

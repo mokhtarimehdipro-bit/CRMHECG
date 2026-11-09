@@ -968,3 +968,41 @@ function _adrAuditAutoProgrammer_() {
 function auditAdressesAuto() { _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false); }   // anciens déclencheurs
 function auditAdressesLot() { auditAdressesTick(); }
 function auditAdressesNocturne() { _adrAuditDemarrer_("Recalage nocturne des adresses", "Administrateur", true); }
+
+// ---------------------------------------------------------------------------
+// CARTE DES ENTREPRISES PARTENAIRES (espace étudiant, dossier.html — demande 2026-11-09)
+// Données volontairement réduites : nom de l'ENTREPRISE (jamais les contacts), adresse,
+// position et NOMBRE d'alternants HECG en cours (jamais leurs noms).
+function handleGetCarteEntreprises(p, ss) {
+  try {
+    logAction(p.idAuteur || p.nomAuteur || "Inconnu", p.roleAuteur || "", "Consultation", "Dossier étudiant — carte des entreprises",
+      String(p.targetId || p.id_etu || ""), "Ouverture de la carte des entreprises partenaires");
+  } catch (eL) {}
+  return getCachedJsonResponse_("carte_entreprises_v1", 600, function () {
+    var dP = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
+    var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    var C = _adrColsLecture_(dP[0]);
+    var ents = {}, ordre = [];
+    for (var i = 1; i < dP.length; i++) {
+      var id = String(dP[i][1] || "").trim().toUpperCase();
+      if (!id) continue;
+      if (!ents[id]) { ents[id] = { nom: String(dP[i][2] || "").trim(), lignes: [], alt: 0 }; ordre.push(id); }
+      if (!ents[id].nom) ents[id].nom = String(dP[i][2] || "").trim();
+      ents[id].lignes.push(_adrDeLigne_(dP[i], C));
+    }
+    for (var j = 1; j < dE.length; j++) {   // même règle que la base entreprises : statut alternant / apprenti
+      var idE = String(dE[j][11] || "").trim().toUpperCase();
+      var st = String(dE[j][13] || "").toLowerCase();
+      if (ents[idE] && (st.indexOf("altern") !== -1 || st.indexOf("apprenti") !== -1)) ents[idE].alt++;
+    }
+    var out = [];
+    ordre.forEach(function (id) {
+      var e = ents[id], a = _adrReference_(e.lignes);
+      if (!e.nom || (!a.adresse && !a.cp && !a.ville)) return;
+      out.push({ nom: e.nom, adresse: a.adresse || "", complement: a.complement || "", cp: a.cp || "", ville: a.ville || "",
+        lat: a.lat || "", lon: a.lon || "", precise: !!ADR_STATUTS_OK[a.statut], alternants: e.alt });
+    });
+    out.sort(function (x, y) { return x.nom.localeCompare(y.nom, "fr"); });
+    return createJsonResponse({ success: true, data: out });
+  });
+}

@@ -296,6 +296,7 @@ function doPostInner_(e) {
       case "getApparence":     return handleGetApparence(params, ss);
       case "saveApparence":    return handleSaveApparence(params, ss);
       case "getPostesContacts":  return handleGetPostesContacts(params, ss);
+      case "getCarteEntreprises": return handleGetCarteEntreprises(params, ss);
       case "harmoniserAdresses": return handleHarmoniserAdresses(params, ss);
 
       case "addStudent": return handleAddStudent(params, ss);
