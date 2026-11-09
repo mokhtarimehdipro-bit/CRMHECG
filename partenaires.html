@@ -1118,16 +1118,7 @@
                 if (!r.success) throw new Error(r.message || 'Erreur');
                 if (r.enCours) { alert('🧭 ' + r.message); btn.disabled = false; btn.innerText = '🧭 Normaliser les adresses'; return; }
                 const R = r.rapport;
-                alert("✅ Audit et recalage terminés
-
-" + R.entreprises + " entreprises
-• " + R.dejaOk + " déjà conformes
-• " + R.harmonisees + " harmonisées (écart léger)
-• " + (R.recalees || 0) + " recalées automatiquement (" + (R.recalSirene || 0) + " via SIRENE/INSEE, " + (R.recalBan || 0) + " via la Base Adresse Nationale, " + (R.recalCommune || 0) + " à la commune)
-• " + R.aVerifier + " encore à vérifier + " + R.multiples + " à adresses contradictoires (positionnées sur la carte)
-• " + R.sansAdresse + " sans adresse
-
-Détail : onglet « Audit adresses » du Google Sheet.");
+                alert("✅ Audit et recalage terminés\n\n" + R.entreprises + " entreprises\n• " + R.dejaOk + " déjà conformes\n• " + R.harmonisees + " harmonisées (écart léger)\n• " + (R.recalees || 0) + " recalées automatiquement\n• " + R.aVerifier + " encore à vérifier + " + R.multiples + " à adresses contradictoires\n• " + R.sansAdresse + " sans adresse\n\nDétail : onglet « Audit adresses » du Google Sheet.");
                 loadPartners(true);
             } catch (e) { alert("❌ Normalisation interrompue : " + e.message); }
             btn.disabled = false; btn.innerText = '🧭 Normaliser les adresses';

@@ -234,11 +234,11 @@ function _adrGeocoderLot_(items, typeCommune) {
     var payload = { data: Utilities.newBlob(csv, "text/csv", "adresses.csv"), columns: "q" };
     if (typeCommune) payload.type = "t";
     var res = null;
-    for (var essai = 0; essai < 3 && !res; essai++) {
+    for (var essai = 0; essai < 3 && !res && !_ADR_CSV_KO_; essai++) {
       try {
         var r = UrlFetchApp.fetch(ADR_BAN_URL + "/csv", { method: "post", payload: payload, muteHttpExceptions: true });
         if (r.getResponseCode() === 200) res = r.getContentText("UTF-8");
-        else { _adrDiag_("BAN csv HTTP " + r.getResponseCode() + " : " + r.getContentText().slice(0, 150)); Utilities.sleep(1500); }
+        else { _adrDiag_("BAN csv HTTP " + r.getResponseCode() + " : " + r.getContentText().slice(0, 150)); if (r.getResponseCode() >= 500) _ADR_CSV_KO_ = true; else Utilities.sleep(1500); }
       } catch (e) { _adrDiag_("BAN csv : " + e); Utilities.sleep(1500); }
     }
     var parsed = {}, nb = 0;
@@ -268,13 +268,22 @@ function _adrGeocoderLot_(items, typeCommune) {
 }
 
 var _ADR_DIAG_ = [], _ADR_T0_ = 0;
-function _adrTempsOk_() { return !_ADR_T0_ || Date.now() - _ADR_T0_ < 250000; }   // marge sous la limite de 6 min
+var _ADR_LIMITE_ = 0, _ADR_CSV_KO_ = false;   // _ADR_CSV_KO_ : géocodage en lot refusé → requêtes unitaires directement
+// fetchAll tolérant : une seule URL en échec (« Adresse non disponible ») ne fait plus échouer tout le paquet
+function _adrFetchAll_(reqs) {
+  try { return UrlFetchApp.fetchAll(reqs); } catch (e) {
+    _adrDiag_("paquet en échec, reprise une par une : " + String(e).slice(0, 120));
+    return reqs.map(function (q) { try { return UrlFetchApp.fetch(q.url, { muteHttpExceptions: true }); } catch (e2) { return null; } });
+  }
+}   // échéance absolue de l'exécution en cours (posée par auditAdressesTick)
+function _adrTempsOk_() { return (!_ADR_T0_ || Date.now() - _ADR_T0_ < 250000) && (!_ADR_LIMITE_ || Date.now() < _ADR_LIMITE_); }   // marge sous la limite de 6 min
 // Sonde au début de l'audit : ce que répondent réellement les services depuis les serveurs Google
 function _adrSonde_() {
   try {
     var t = Date.now();
     var r1 = UrlFetchApp.fetch(ADR_BAN_URL + "/csv", { method: "post", muteHttpExceptions: true,
       payload: { data: Utilities.newBlob('id,q\n0,"146 rue Paradis 13006 Marseille"', "text/csv", "a.csv"), columns: "q" } });
+    if (r1.getResponseCode() >= 500) _ADR_CSV_KO_ = true;
     _adrDiag_("sonde BAN lot HTTP " + r1.getResponseCode() + " (" + (Date.now() - t) + " ms) : " + r1.getContentText().replace(/\s+/g, " ").slice(0, 160));
     t = Date.now();
     var r2 = UrlFetchApp.fetch(ADR_BAN_URL + "?limit=1&q=" + encodeURIComponent("146 rue Paradis 13006 Marseille"), { muteHttpExceptions: true });
@@ -295,7 +304,7 @@ function _adrGeocoderUnitaires_(items, typeCommune) {
       return { url: ADR_BAN_URL + "?limit=1&q=" + encodeURIComponent(String(it.q || "x").slice(0, 200)) + (typeCommune ? "&type=municipality" : ""), muteHttpExceptions: true };
     });
     var rep = [];
-    try { rep = UrlFetchApp.fetchAll(reqs); } catch (e) { _adrDiag_("BAN unitaire : " + e); }
+    rep = _adrFetchAll_(reqs);
     part.forEach(function (it, k) {
       var f = null;
       try {
@@ -556,12 +565,12 @@ function _adrSireneLot_(items) {
       return { url: ADR_SIRENE_URL + "?per_page=5&q=" + encodeURIComponent(String(it.q).slice(0, 80)) + (it.dep ? "&departement=" + it.dep : ""), muteHttpExceptions: true };
     });
     var rep = [];
-    try { rep = UrlFetchApp.fetchAll(reqs); } catch (e) { rep = []; }
+    rep = _adrFetchAll_(reqs);
     part.forEach(function (it, k) {
       var res = [];
       try {
         var r = rep[k];
-        if (r && r.getResponseCode() === 429) { Utilities.sleep(1500); r = UrlFetchApp.fetch(reqs[k].url, { muteHttpExceptions: true }); }
+        if (r && (r.getResponseCode() === 429 || r.getResponseCode() >= 500)) { Utilities.sleep(1500); try { r = UrlFetchApp.fetch(reqs[k].url, { muteHttpExceptions: true }); } catch (eR) {} }
         if (r && r.getResponseCode() === 200) res = JSON.parse(r.getContentText()).results || [];
         else if (r) _adrDiag_("SIRENE HTTP " + r.getResponseCode());
       } catch (e2) {}
@@ -595,7 +604,7 @@ function _adrCommuneLot_(items) {
       return { url: ADR_BAN_URL + "?type=municipality&limit=10&q=" + encodeURIComponent(q.length >= 3 ? q : it.cp), muteHttpExceptions: true };
     });
     var rep = [];
-    try { rep = UrlFetchApp.fetchAll(reqs); } catch (e) { rep = []; }
+    rep = _adrFetchAll_(reqs);
     part.forEach(function (it, k) {
       var f = null;
       try { if (rep[k] && rep[k].getResponseCode() === 200) f = _adrChoisirCommune_(JSON.parse(rep[k].getContentText()).features, it); } catch (e2) {}
@@ -721,6 +730,7 @@ function _adrHarmoniser_(ss, forcer, silencieux, plage) {
   var ws = getSheetSafe(ss, "PARTENARIAT");
   var C = _adrCols_(ws);
   _ADR_T0_ = Date.now(); _ADR_DIAG_ = [];
+  if (plage && plage.csvKo) _ADR_CSV_KO_ = true;
   if (!plage || !plage.debut) _adrSonde_();
   var data = ws.getDataRange().getValues();
   var nCols = data[0].length;
@@ -842,42 +852,67 @@ function _adrAuditDemarrer_(auteur, role, silencieux) {
   _adrEtatSauver_({ enCours: true, debut: 0, total: 0, auteur: auteur, role: role, silencieux: !!silencieux, lance: Date.now(),
     c: { dejaOk: 0, harmonisees: 0, ban: 0, voie: 0, commune: 0, aVerifier: 0, multiples: 0, sansAdresse: 0,
       lignesModifiees: 0, recalees: 0, recalSirene: 0, recalBan: 0, recalCommune: 0 }, ex: [], rc: [], diag: [] });
-  _adrDeclencheurLot_(5);
+  _adrTickInstaller_();
 }
-function _adrDeclencheurLot_(secondes) {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesLot") ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger("auditAdressesLot").timeBased().after(Math.max(1, secondes) * 1000).create();
+// UN SEUL déclencheur récurrent (toutes les 5 min) pour tout le module adresses : le projet est
+// à la limite de 20 déclencheurs par script, les déclencheurs ponctuels échouaient sans bruit.
+function _adrTickInstaller_() {
+  try {
+    var tick = false;
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      var h = t.getHandlerFunction();
+      if (h === "auditAdressesLot" || h === "auditAdressesAuto" || h === "auditAdressesNocturne") ScriptApp.deleteTrigger(t);
+      if (h === "auditAdressesTick") tick = true;
+    });
+    if (!tick) ScriptApp.newTrigger("auditAdressesTick").timeBased().everyMinutes(5).create();
+  } catch (e) {
+    var msg = "Impossible de programmer l'audit des adresses : " + e;
+    console.error(msg);
+    PropertiesService.getScriptProperties().setProperty("ADR_AUDIT_ERREUR", new Date().toISOString() + " " + msg);
+    try {
+      var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+      var ws = ss.getSheetByName("Audit adresses") || ss.insertSheet("Audit adresses");
+      ws.getRange(3, 1).setValue("⛔ " + msg + " (" + ScriptApp.getProjectTriggers().length + " déclencheurs dans le projet)");
+    } catch (e2) {}
+  }
 }
-function auditAdressesLot() {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesLot") ScriptApp.deleteTrigger(t); });
+function auditAdressesTick() {
+  var t0 = Date.now();
+  _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();
+  var h = Number(Utilities.formatDate(new Date(), "Europe/Paris", "H"));
+  if ((!etat || !etat.enCours) && h === 3 && (!etat || Date.now() - (etat.lance || 0) > 20 * 3600 * 1000)) {
+    _adrAuditDemarrer_("Recalage nocturne des adresses", "Administrateur", true);   // chaque nuit
+    etat = _adrEtat_();
+  }
   if (!etat || !etat.enCours) return;
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) { _adrDeclencheurLot_(60); return; }
-  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  var R;
+  if (!lock.tryLock(5000)) return;   // un autre lot tourne encore : prochain passage
   try {
-    R = _adrHarmoniser_(ss, false, etat.silencieux, { debut: etat.debut, taille: ADR_LOT });
-  } catch (e) {
-    etat.diag.push("lot " + etat.debut + " : " + e);
-    etat.erreurs = (etat.erreurs || 0) + 1;
-    _adrEtatSauver_(etat);
-    lock.releaseLock();
-    if (etat.erreurs <= 3) _adrDeclencheurLot_(60);   // nouvel essai du même lot
-    return;
-  }
-  try {
-    etat.total = R.total;
-    Object.keys(etat.c).forEach(function (k) { etat.c[k] += R[k] || 0; });
-    R.exemples.forEach(function (e) { if (etat.ex.length < 25) etat.ex.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.statut + "]"); });
-    R.recalages.forEach(function (e) { if (etat.rc.length < 25) etat.rc.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.source + "]"); });
-    (R.diag || []).forEach(function (d) { if (etat.diag.length < 10) etat.diag.push(d); });
-    _adrRapportLot_(ss, etat, R, etat.debut === 0);
-    etat.debut += ADR_LOT;
-    etat.erreurs = 0;
-    if (R.suite) { _adrEtatSauver_(etat); _adrDeclencheurLot_(10); }
-    else _adrAuditTerminer_(ss, etat);
-    _invalidatePartnersCache_();
+    var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+    while (etat.enCours && Date.now() - t0 < 150000) {   // plusieurs lots par passage, sous la limite de 6 min
+      var R;
+      try {
+        R = _adrHarmoniser_(ss, false, etat.silencieux, { debut: etat.debut, taille: ADR_LOT, csvKo: !!etat.csvKo });
+        if (_ADR_CSV_KO_) etat.csvKo = true;
+      } catch (e) {
+        etat.diag.push("lot " + etat.debut + " : " + e);
+        etat.erreurs = (etat.erreurs || 0) + 1;
+        if (etat.erreurs > 3) { etat.debut += ADR_LOT; etat.erreurs = 0; }   // lot ignoré après 3 échecs
+        _adrEtatSauver_(etat);
+        break;
+      }
+      etat.total = R.total;
+      Object.keys(etat.c).forEach(function (k) { etat.c[k] += R[k] || 0; });
+      R.exemples.forEach(function (e) { if (etat.ex.length < 25) etat.ex.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.statut + "]"); });
+      R.recalages.forEach(function (e) { if (etat.rc.length < 25) etat.rc.push(e.nom + " : « " + e.avant + " » → « " + e.apres + " » [" + e.source + "]"); });
+      (R.diag || []).forEach(function (d) { if (etat.diag.length < 10) etat.diag.push(d); });
+      _adrRapportLot_(ss, etat, R, etat.debut === 0);
+      etat.debut += ADR_LOT;
+      etat.erreurs = 0;
+      if (R.suite) _adrEtatSauver_(etat); else _adrAuditTerminer_(ss, etat);
+      _invalidatePartnersCache_();
+    }
   } finally { lock.releaseLock(); }
 }
 function _adrResume_(c, total) {
@@ -897,7 +932,6 @@ function _adrAuditTerminer_(ss, etat) {
   if (!etat.silencieux || etat.c.lignesModifiees)
     logAction(etat.auteur || "Système", etat.role || "", "Modification", "Entreprises — normalisation des adresses", "PARTENARIAT",
       resume + (etat.rc.length ? " | Recalages : " + etat.rc.join(" ; ") : "") + (etat.ex.length ? " | Exemples : " + etat.ex.join(" ; ") : ""));
-  _adrNocturneInstaller_();
 }
 // Onglet « Audit adresses » : (re)créé au 1er lot, puis lignes ajoutées à chaque lot
 function _adrRapportLot_(ss, etat, R, premier) {
@@ -926,19 +960,11 @@ function _adrRapportLot_(ss, etat, R, premier) {
 function _adrAuditAutoProgrammer_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty("ADR_AUDIT_V4")) return;
-    props.setProperty("ADR_AUDIT_V4", "lancé " + new Date().toISOString());
+    if (props.getProperty("ADR_AUDIT_V6")) return;
+    props.setProperty("ADR_AUDIT_V6", "lancé " + new Date().toISOString());
     _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false);
   } catch (e) { console.error("audit adresses : " + e); }
 }
-function auditAdressesAuto() {   // ancien déclencheur ponctuel
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "auditAdressesAuto") ScriptApp.deleteTrigger(t); });
-  _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false);
-}
-function _adrNocturneInstaller_() {
-  var deja = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "auditAdressesNocturne"; });
-  if (!deja) ScriptApp.newTrigger("auditAdressesNocturne").timeBased().everyDays(1).atHour(3).inTimezone("Europe/Paris").create();
-}
-function auditAdressesNocturne() {   // recalage des saisies libres / adresses restées à vérifier
-  _adrAuditDemarrer_("Recalage nocturne des adresses", "Administrateur", true);
-}
+function auditAdressesAuto() { _adrAuditDemarrer_("Audit automatique des adresses", "Administrateur", false); }   // anciens déclencheurs
+function auditAdressesLot() { auditAdressesTick(); }
+function auditAdressesNocturne() { _adrAuditDemarrer_("Recalage nocturne des adresses", "Administrateur", true); }
