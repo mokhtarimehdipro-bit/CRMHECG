@@ -691,21 +691,26 @@ function maintChargerQr() {
   _qrLib = new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = ok; sc.onerror = () => { _qrLib = null; ko(new Error('Bibliothèque QR indisponible (réseau)')); }; document.head.appendChild(sc); });
   return _qrLib;
 }
-async function maintQr() {
-  const url = maintData.formPublic, m = maintModal();
+// QR code générique (tickets, centre des formulaires) : généré dans le navigateur, PNG haute définition
+let _qrCourant = { fichier: 'QR.png', cible: '' };
+async function qrAfficher(url, titre, desc, fichier, avert) {
+  _qrCourant = { fichier: fichier || 'QR-HECG.png', cible: titre };
+  const m = maintModal();
   m.innerHTML = `<div class="modal-box p-6 text-center" style="max-width:520px">
-    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">🔳 QR code — signaler un problème</h3>
-    <p class="text-xs text-gray-500 mb-4">À scanner pour ouvrir directement le formulaire de maintenance. Téléchargez l'image en haute définition pour l'équipe communication.</p>
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">🔳 QR code — ${vxEsc(titre)}</h3>
+    <p class="text-xs text-gray-500 mb-3">${vxEsc(desc || "À scanner pour ouvrir directement le formulaire. Téléchargez l'image en haute définition pour l'équipe communication.")}</p>
+    ${avert ? `<p class="text-xs font-bold text-amber-700 bg-amber-50 rounded-xl px-3 py-2 mb-3">⚠️ ${vxEsc(avert)}</p>` : ''}
     <div id="mtQrBox" style="display:none"></div>
-    <img id="mtQrImg" alt="QR code du formulaire de maintenance" style="width:280px;height:280px;margin:0 auto;image-rendering:pixelated;border:12px solid #fff;box-shadow:0 0 0 1px #e2e8f0;border-radius:8px">
+    <img id="mtQrImg" alt="QR code" style="width:280px;height:280px;margin:0 auto;image-rendering:pixelated;border:12px solid #fff;box-shadow:0 0 0 1px #e2e8f0;border-radius:8px">
     <p class="text-[11px] text-gray-400 mt-3 break-all">${vxEsc(url)}</p>
     <div class="flex flex-wrap justify-center gap-2 mt-4">
       <button onclick="maintQrTelecharger()" class="btn-orange text-sm">⬇ Télécharger (PNG haute définition)</button>
-      <button onclick="navigator.clipboard.writeText(maintData.formPublic);toast('Lien copié ✓')" class="btn-ghost text-sm">📋 Copier le lien</button>
-      <a href="mailto:?subject=${encodeURIComponent('Affiche — QR code signalement maintenance')}&body=${encodeURIComponent("Bonjour,\n\nPour l'affiche de signalement des problèmes de maintenance, voici le lien du formulaire à encoder dans le QR code (l'image PNG est jointe) :\n" + url + "\n\nMerci !")}" class="btn-ghost text-sm">✉️ Préparer le mail à la com</a>
+      <button id="qrCopier" class="btn-ghost text-sm">📋 Copier le lien</button>
+      <a href="mailto:?subject=${encodeURIComponent('Affiche — QR code « ' + titre + ' »')}&body=${encodeURIComponent("Bonjour,\n\nPour l'affiche « " + titre + " », voici le lien à encoder dans le QR code (l'image PNG est jointe) :\n" + url + "\n\nMerci !")}" class="btn-ghost text-sm">✉️ Préparer le mail à la com</a>
       <a href="${vxEsc(url)}" target="_blank" class="btn-ghost text-sm">↗ Tester le lien</a></div>
     <div class="flex justify-end mt-5"><button onclick="document.getElementById('mtModal').classList.add('hidden')" class="btn-ghost">Fermer</button></div></div>`;
   m.classList.remove('hidden');
+  document.getElementById('qrCopier').onclick = () => { navigator.clipboard.writeText(url); toast('Lien copié ✓'); };
   try {
     await maintChargerQr();
     const box = document.getElementById('mtQrBox'); box.innerHTML = '';
@@ -714,14 +719,15 @@ async function maintQr() {
     document.getElementById('mtQrImg').src = cv ? cv.toDataURL('image/png') : (box.querySelector('img') || {}).src;
   } catch (e) { toast(e.message, false); }
 }
+function maintQr() { qrAfficher(maintData.formPublic, 'Signaler un problème (maintenance)', '', 'QR-formulaire-maintenance-HECG.png'); }
 function maintQrTelecharger() {
   const box = document.getElementById('mtQrBox'), cv = box && box.querySelector('canvas');
   if (!cv) { toast('QR code pas encore prêt', false); return; }
   // marge blanche (zone de silence) autour du code, indispensable à l'impression
   const marge = 120, out = document.createElement('canvas'); out.width = cv.width + 2 * marge; out.height = cv.height + 2 * marge;
   const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height); ctx.drawImage(cv, marge, marge);
-  const a = document.createElement('a'); a.href = out.toDataURL('image/png'); a.download = 'QR-formulaire-maintenance-HECG.png'; a.click();
-  try { api('updateTicketMaintenance', { op: 'logqr' }).catch(() => {}); } catch (e) {}
+  const a = document.createElement('a'); a.href = out.toDataURL('image/png'); a.download = _qrCourant.fichier; a.click();
+  try { api('updateTicketMaintenance', { op: 'logqr', cible: _qrCourant.cible }).catch(() => {}); } catch (e) {}
 }
 function ouvrirTicket(cle) {
   const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
@@ -830,16 +836,17 @@ function renderFormulaires() {
         <div class="fm-btns">
           <button onclick="fmReponses('${f.id}')">📊 Réponses</button>
           ${f.type === 'interne' ? `<button onclick="fmEditer('${f.id}')">✏️ Modifier</button>` : `<button onclick="fmExterne('${f.id}')">✏️ Modifier</button>`}
-          ${f.lienPublic ? `<a href="${vxEsc(f.lienPublic)}" target="_blank">👁 Ouvrir</a><button onclick="navigator.clipboard.writeText('${vxEsc(f.lienPublic)}');toast('Lien copié ✓')">📋 Lien</button><button onclick="fmQr('${vxEsc(f.lienPublic)}','${vxEsc(f.titre).replace(/'/g, '')}')">▦ QR</button>` : ''}
+          ${f.lienPublic ? `<a href="${vxEsc(f.lienPublic)}" target="_blank">👁 Ouvrir</a><button onclick="navigator.clipboard.writeText('${vxEsc(f.lienPublic)}');toast('Lien copié ✓')">📋 Lien</button><button onclick="fmQr('${f.id}')">🔳 QR code</button>` : ''}
           <button onclick="fmArchiver('${f.id}')" style="background:#fef2f2;color:#dc2626">🗑</button>
         </div></div>`;
     }).join('')}
   </div>`;
 }
-function fmQr(url, titre) {
-  const src = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=16&data=' + encodeURIComponent(url);
-  const w = window.open('', '_blank');
-  w.document.write(`<title>QR — ${titre}</title><body style="font-family:Arial;text-align:center;padding:40px"><h2>${titre}</h2><img src="${src}" style="width:340px"><p style="color:#666;word-break:break-all">${url}</p><button onclick="print()">Imprimer</button></body>`);
+function fmQr(id) {
+  const f = formsData.find(x => x.id === id); if (!f || !f.lienPublic) { toast("Ce formulaire n'a pas encore de lien", false); return; }
+  const slug = String(f.titre || 'formulaire').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+  const avert = f.type === 'interne' && f.statut !== 'publié' ? `Ce formulaire est « ${f.statut || 'brouillon'} » : il faut le publier pour que le QR code permette d'y répondre.` : '';
+  qrAfficher(f.lienPublic, f.titre, f.description ? 'À scanner pour répondre : ' + f.description.slice(0, 140) : '', 'QR-' + (slug || 'formulaire') + '-HECG.png', avert);
 }
 async function fmArchiver(id) {
   const f = formsData.find(x => x.id === id);

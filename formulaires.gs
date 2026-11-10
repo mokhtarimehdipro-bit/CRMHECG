@@ -65,6 +65,13 @@ function _maintMailAttribution_(ss, p, nom, mail, numLib, statut, priorite, comm
   logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Envoi mail", "Vie scolaire — Maintenance — attribution", numLib, "Ticket attribué à " + nom + " (" + mail + "), mail envoyé avec le détail");
   return mail;
 }
+// Date de cellule (Date ou texte « jj/mm/aaaa ») → « jj/mm/aaaa » ; jamais d'exception
+function _maintDateTxt_(v) {
+  if (!v) return "";
+  if (v instanceof Date) return isNaN(v.getTime()) ? "" : Utilities.formatDate(v, "Europe/Paris", "dd/MM/yyyy");
+  var m = String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3];
+  var d = new Date(v); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, "Europe/Paris", "dd/MM/yyyy");
+}
 function _maintJson_(v, def) { try { var x = JSON.parse(String(v || "")); return x == null ? def : x; } catch (e) { return def; } }
 // Équipe pouvant être désignée responsable (nom + mail) — sert à la relance par mail
 function _maintEquipe_(ss) {
@@ -182,7 +189,7 @@ function handleGetTicketsMaintenance(p, ss) {
     var numerotes = 0; try { numerotes = _maintNumeroter_(ss, rep); } catch (eN) { console.warn(eN); }
     var NC = MAINT_ENTETES.length, wsS = _maintSuiviFeuille_(ss), dS = wsS.getRange(1, 1, Math.max(wsS.getLastRow(), 1), NC).getValues(), suivi = {};
     for (var k = 1; k < dS.length; k++) if (dS[k][0]) suivi[String(dS[k][0])] = { statut: String(dS[k][1] || ""), responsable: String(dS[k][2] || ""), commentaire: String(dS[k][3] || ""),
-      priorite: String(dS[k][4] || ""), resolu: dS[k][5] ? Utilities.formatDate(new Date(dS[k][5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: String(dS[k][6] || ""), par: String(dS[k][7] || ""),
+      priorite: String(dS[k][4] || ""), resolu: _maintDateTxt_(dS[k][5]), maj: String(dS[k][6] || ""), par: String(dS[k][7] || ""),
       archive: dS[k][8] === true || String(dS[k][8]).toUpperCase() === "TRUE", journal: _maintJson_(dS[k][9], []), corr: _maintJson_(dS[k][10], {}),
       relances: Number(dS[k][11] || 0), derniereRelance: String(dS[k][12] || ""), responsableMail: String(dS[k][13] || ""), num: Number(dS[k][NC - 1] || 0) };
     var tickets = [];
@@ -222,7 +229,7 @@ function handleGetTicketsMaintenance(p, ss) {
 // Le classeur des réponses n'est jamais modifié : les corrections de contenu vont dans Corrections_JSON.
 function handleUpdateTicketMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
-  if (String(p.op || "") === "logqr") { logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Export", "Vie scolaire — Maintenance — QR code", "Formulaire", "QR code du formulaire de maintenance téléchargé"); return createJsonResponse({ success: true }); }
+  if (String(p.op || "") === "logqr") { logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Export", "Vie scolaire — Formulaires — QR code", String(p.cible || "Formulaire").slice(0, 80), "QR code téléchargé : " + String(p.cible || "formulaire").slice(0, 120)); return createJsonResponse({ success: true }); }
   if (String(p.op || "") === "creer") {   // ticket ouvert depuis l'application — admin maître
     if (!_maintMaitre_(p)) return createJsonResponse({ success: false, message: "Réservé à l'admin maître." });
     var desc = String(p.description || "").trim().slice(0, 3000);
@@ -330,7 +337,7 @@ function handleUpdateTicketMaintenance(p, ss) {
       ligne[9] = JSON.stringify(journal); ligne[10] = JSON.stringify(corr);
       if (iL != null) data[iL] = ligne; else { aAjouter.push(ligne); index[cle] = -1; }
       resultats.push({ cle: cle, statut: statutFinal, archive: ligne[8] === true, journal: journal, relances: Number(ligne[11] || 0), derniereRelance: String(ligne[12] || ""), responsable: String(ligne[2] || ""), responsableMail: String(ligne[13] || ""),
-        resolu: ligne[5] ? Utilities.formatDate(new Date(ligne[5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: maintenant, par: par, corr: corr });
+        resolu: _maintDateTxt_(ligne[5]), maj: maintenant, par: par, corr: corr });
       logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Maintenance" + (op !== "maj" ? " — " + op : ""), cle, "Ticket « " + resume + " » : " + evt);
     });
     if (data.length > 1) ws.getRange(1, 1, data.length, MAINT_ENTETES.length).setValues(data.map(function (r) { while (r.length < MAINT_ENTETES.length) r.push(""); return r.slice(0, MAINT_ENTETES.length); }));
@@ -402,11 +409,11 @@ function handleGetFormulaires(p, ss) {
     var nb = {}, dR = _fReponsesFeuille_(ss).getDataRange().getValues(), der = {};
     for (var i = 1; i < dR.length; i++) { var k = String(dR[i][0]); nb[k] = (nb[k] || 0) + 1; der[k] = dR[i][1]; }
     forms.forEach(function (f) {
-      f.lienPublic = f.type === "interne" ? FORM_PAGE_URL + "?f=" + encodeURIComponent(f.id) : f.urlExterne;
+      f.lienPublic = f.type === "interne" ? FORM_PAGE_URL + "?f=" + encodeURIComponent(f.id) : _maintLienPublic_(f.urlExterne);
       if (f.type === "interne") { f.nbReponses = nb[f.id] || 0; f.derniere = der[f.id] ? Utilities.formatDate(new Date(der[f.id]), "Europe/Paris", "dd/MM/yyyy HH:mm") : ""; }
       else if (f.sheetExterne) {
         try { var w = SpreadsheetApp.openById(f.sheetExterne).getSheets()[0]; f.nbReponses = Math.max(0, w.getLastRow() - 1); f.sheetUrl = "https://docs.google.com/spreadsheets/d/" + f.sheetExterne + "/edit";
-          if (!f.urlExterne) { try { f.urlExterne = f.lienPublic = w.getFormUrl() || ""; } catch (eU) {} } }
+          if (!f.urlExterne) { try { f.urlExterne = w.getFormUrl() || ""; f.lienPublic = _maintLienPublic_(f.urlExterne); } catch (eU) {} } }
         catch (eS) { f.nbReponses = null; f.accesRefuse = true; }
       }
     });
