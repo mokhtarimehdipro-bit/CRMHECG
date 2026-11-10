@@ -180,7 +180,17 @@
                     </div>
                     <button onclick="openTsuiviModal()" class="bg-[#1A4E8A] text-white px-5 py-2.5 rounded-2xl font-black text-sm hover:bg-blue-800 transition shadow-md whitespace-nowrap">+ Nouvelle candidature</button>
                 </div>
-                <div id="tsuiviList" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+                <div id="tsuiviTools" class="hidden mb-5 space-y-3">
+                    <div id="tsKpis" class="flex flex-wrap gap-2"></div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="tsQ" type="search" oninput="tsRecherche(this.value)" placeholder="🔎 Rechercher une société, un contact, une note…" class="flex-1 min-w-[220px] border-2 border-gray-100 px-3 py-2 rounded-xl bg-gray-50 font-bold text-sm outline-none focus:border-[#1A4E8A]">
+                        <select onchange="tsTri(this.value)" class="border-2 border-gray-100 px-3 py-2 rounded-xl bg-gray-50 font-bold text-sm outline-none focus:border-[#1A4E8A]">
+                            <option value="recentes">Plus récentes d'abord</option><option value="anciennes">Plus anciennes d'abord</option><option value="societe">Société (A → Z)</option>
+                        </select>
+                    </div>
+                    <div id="tsTypes" class="flex flex-wrap gap-1.5"></div>
+                </div>
+                <div id="tsuiviList" class="grid grid-cols-1 xl:grid-cols-2 gap-5"><div class="xl:col-span-2 space-y-3 animate-pulse"><div class="h-28 bg-slate-100 rounded-3xl"></div><div class="h-28 bg-slate-100 rounded-3xl"></div></div></div>
             </div>
 
             <!-- ═══ SECTION DOCUMENTS (GED étudiant) ═══ -->
@@ -298,10 +308,11 @@
             </div>
             <input type="hidden" id="tsuiviEditId">
             <div class="space-y-4">
+                <p id="tsDoublon" class="hidden text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3"></p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Nom de la société *</label>
-                        <input type="text" id="tsSociete" placeholder="Ex: Cabinet Durand & Associés" class="w-full border-2 border-gray-100 p-2.5 rounded-xl bg-gray-50 font-bold text-sm outline-none focus:border-[#1A4E8A]">
+                        <input type="text" id="tsSociete" oninput="tsVerifDoublon()" autocomplete="off" placeholder="Ex: Cabinet Durand & Associés" class="w-full border-2 border-gray-100 p-2.5 rounded-xl bg-gray-50 font-bold text-sm outline-none focus:border-[#1A4E8A]">
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase font-black text-gray-400 mb-1 ml-1">Activité</label>
@@ -493,9 +504,16 @@
             }
         }, DOSSIER_CACHE_TTL_MS);
 
+        let _dossierSig = '', _dossierRendu = false, _gedCharge = false;
         function _renderDossierPayload(data) {
             try {
                 if (data.success) {
+                    // Perf : le cache local puis la réponse serveur (et le rafraîchissement toutes les 90 s)
+                    // renvoient souvent exactement les mêmes données → rien à reconstruire.
+                    const sig = JSON.stringify(data);
+                    if (sig === _dossierSig) return;
+                    _dossierSig = sig;
+                    const silencieux = _dossierRendu; _dossierRendu = true;
                     document.getElementById('loader').classList.add('hidden');
                     document.getElementById('content').classList.remove('hidden');
 
@@ -585,11 +603,11 @@
                     document.getElementById('listOffresPartagees').innerHTML =
                         (enCours.map(carteOffre).join('') || `<p class="text-slate-300 italic text-center py-4 text-sm">${offres.length ? 'Aucune offre en cours pour le moment.' : 'Aucune offre partagée pour le moment.'}</p>`)
                         + (obsoletes.length ? `<button type="button" id="btnOffresObsoletes" onclick="basculerOffresObsoletes()" class="w-full mt-1 py-3 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-black hover:bg-slate-50 transition">🗂 Voir les ${obsoletes.length} offre${obsoletes.length > 1 ? 's' : ''} obsolète${obsoletes.length > 1 ? 's' : ''}</button><div id="listOffresObsoletes" class="hidden space-y-3 mt-3"></div>` : '');
-                    // GED - chargement documents
-                    loadGedEtu();
+                    // GED : un seul chargement à l'ouverture (appel Drive lent) ; rechargée après chaque dépôt/liaison
+                    if (!_gedCharge) { _gedCharge = true; loadGedEtu(); }
 
                     // Suivi des candidatures d'alternance
-                    try { renderTsuivi(data.suiviCandidatures || [], data.suiviTypes || []); }
+                    try { renderTsuivi(data.suiviCandidatures || [], data.suiviTypes || [], { silencieux }); }
                     catch (eTs) { console.error('renderTsuivi', eTs); }
                 }
             } catch (err) { alert("Erreur réseau"); }
@@ -601,10 +619,14 @@
         let tsuiviData = [];
         let tsuiviTypes = ['Spontanée', 'Offre reçu HECG', 'Offre internet', 'Bouche à oreille'];
         let _tsDeplacement = 'Non';
+        // État d'affichage : recherche, filtre de type, tri, nombre de cartes affichées
+        const TS = { q: '', type: '', tri: 'recentes', limite: 12 };
+        const TS_PAGE = 12;
 
         function tsEsc(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
+        function tsNorm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
         function tsFmtDateFr(s) {
             if (!s) return '';
             const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -616,6 +638,8 @@
             const d = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
             return d ? `${d[3]}/${d[2]}/${d[1]}` : '';
         }
+        function tsNowStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+        function tsJoursDepuis(iso) { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if (!m) return null; const t = new Date(+m[1], +m[2] - 1, +m[3]); const a = new Date(); a.setHours(0, 0, 0, 0); return Math.round((a - t) / 86400000); }
         function tsTypeChip(type) {
             const map = {
                 'Spontanée':        ['bg-indigo-50', 'text-indigo-600', 'border-indigo-200'],
@@ -628,28 +652,130 @@
             return `<span class="shrink-0 ${c[0]} ${c[1]} border ${c[2]} px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide">${tsEsc(type)}</span>`;
         }
 
+        // Petit message de confirmation (remplace les alert bloquants)
+        function tsToast(msg, ok = true) {
+            let t = document.getElementById('tsToast');
+            if (!t) { t = document.createElement('div'); t.id = 'tsToast'; t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:200;padding:12px 20px;border-radius:14px;font-weight:800;font-size:13px;color:#fff;box-shadow:0 10px 30px -10px rgba(0,0,0,.45);transition:opacity .25s;max-width:90vw'; document.body.appendChild(t); }
+            t.style.background = ok ? '#1A4E8A' : '#dc2626'; t.textContent = msg; t.style.opacity = '1';
+            clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, ok ? 2400 : 5000);
+        }
+
+        // Garde le cache local du dossier aligné sur les modifications faites dans la page
+        function tsSyncCache() {
+            try {
+                const k = _dossierCacheKey(), c = JSON.parse(sessionStorage.getItem(k) || 'null');
+                if (c && c.data) { c.data.suiviCandidatures = tsuiviData.filter(x => !x._tmp); sessionStorage.setItem(k, JSON.stringify(c)); }
+            } catch (e) {}
+        }
+        function tsTrier(list) {
+            const l = list.slice();
+            if (TS.tri === 'societe') l.sort((a, b) => (a.societe || '').localeCompare(b.societe || '', 'fr'));
+            else if (TS.tri === 'anciennes') l.sort((a, b) => (a.priseContact || '9').localeCompare(b.priseContact || '9'));
+            else l.sort((a, b) => (b.priseContact || '0').localeCompare(a.priseContact || '0'));
+            return l;
+        }
+
         function renderTsuiviJournal(entries, id, champ, label, emoji, accentClass) {
-            const items = (entries || []).map(e => `
-                <div class="border-l-2 ${accentClass} pl-2 py-0.5">
-                    <p class="text-[9px] text-gray-400 font-bold">${tsFmtEntryDate(e.date)}${e.auteur ? ' — ' + tsEsc(e.auteur) : ''}</p>
-                    <p class="text-[11px] text-gray-700 font-medium leading-snug">${tsEsc(e.texte)}</p>
+            const list = entries || [];
+            const items = list.map(e => `
+                <div class="border-l-2 ${accentClass} pl-2 py-0.5 ${e._pending ? 'opacity-50' : ''}">
+                    <p class="text-[9px] text-gray-400 font-bold">${e._pending ? '⏳ envoi…' : tsFmtEntryDate(e.date)}${e.auteur ? ' — ' + tsEsc(e.auteur) : ''}</p>
+                    <p class="text-[11px] text-gray-700 font-medium leading-snug whitespace-pre-line">${tsEsc(e.texte)}</p>
                 </div>
             `).join('') || `<p class="text-[10px] text-gray-300 italic py-1">Rien pour l'instant.</p>`;
             return `
                 <div>
-                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">${emoji} ${label}</p>
-                    <div class="space-y-1 max-h-32 overflow-y-auto pr-1 custom-scrollbar mb-2">${items}</div>
+                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">${emoji} ${label}${list.length ? ` <span class="text-gray-300">(${list.length})</span>` : ''}</p>
+                    <div class="space-y-1 max-h-32 overflow-y-auto pr-1 custom-scrollbar mb-2" data-ts-scroll>${items}</div>
                     <div class="flex gap-1.5">
-                        <input type="text" data-ts-note="${champ}" placeholder="Ajouter…"
-                               onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}"
-                               class="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium outline-none focus:border-[#1A4E8A] bg-gray-50">
-                        <button type="button" onclick="addTsuiviNote('${id}','${champ}',this)"
+                        <input type="text" data-ts-note="${champ}" data-ts-id="${tsEsc(id)}" placeholder="Ajouter… (Entrée pour valider)"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();addTsuiviNote('${tsEsc(id)}','${champ}',this.nextElementSibling);}"
+                               class="flex-1 min-w-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium outline-none focus:border-[#1A4E8A] bg-gray-50">
+                        <button type="button" onclick="addTsuiviNote('${tsEsc(id)}','${champ}',this)"
                                 class="shrink-0 bg-[#1A4E8A] text-white px-3 rounded-lg text-[11px] font-black hover:bg-blue-800 transition">+</button>
                     </div>
                 </div>`;
         }
 
-        function renderTsuivi(list, types) {
+        function tsCarte(c) {
+            const depOui = c.deplacement === 'Oui', id = tsEsc(c.id);
+            const nbRep = (c.reponses || []).length, nbRel = (c.suivi || []).length;
+            return `
+                <div class="border border-gray-100 rounded-3xl p-5 bg-gradient-to-br from-white to-slate-50/60 shadow-sm hover:shadow-md transition flex flex-col gap-3 ${c._tmp ? 'opacity-60 pointer-events-none' : ''}" data-ts-card="${id}">
+                    <div class="flex justify-between items-start gap-2">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h4 class="font-black text-[#1A4E8A] text-base truncate">${tsEsc(c.societe || 'Société non renseignée')}</h4>
+                                ${tsTypeChip(c.type)}
+                                ${c._tmp ? '<span class="text-[9px] font-black text-gray-400 uppercase">⏳ enregistrement…</span>' : ''}
+                                ${nbRep ? `<span class="text-[9px] font-black bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full uppercase">💬 ${nbRep} réponse${nbRep > 1 ? 's' : ''}</span>` : ''}
+                            </div>
+                            <p class="text-[11px] text-gray-400 font-bold mt-0.5">
+                                ${c.activite ? tsEsc(c.activite) : '<span class="italic text-gray-300">Activité —</span>'}
+                                ${c.priseContact ? ' · 📅 ' + tsFmtDateFr(c.priseContact) : ''}
+                                ${c.majLe ? ' · <span class="font-medium">MAJ ' + tsEsc(String(c.majLe).slice(0, 10)) + '</span>' : ''}
+                            </p>
+                        </div>
+                        <div class="flex gap-1 shrink-0">
+                            <button onclick="openTsuiviModal('${id}')" title="Modifier" class="text-gray-300 hover:text-[#1A4E8A] hover:bg-blue-50 w-7 h-7 flex items-center justify-center rounded-lg transition">✏️</button>
+                            <button onclick="deleteTsuiviCandidature('${id}')" title="Supprimer" class="text-gray-300 hover:text-red-500 hover:bg-red-50 w-7 h-7 flex items-center justify-center rounded-lg transition">🗑️</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/70 rounded-xl p-2.5 border border-gray-100">
+                        <p class="text-gray-600 font-bold truncate">👤 ${c.interlocuteur ? tsEsc(c.interlocuteur) : '<span class="text-gray-300 italic">—</span>'}${c.fonction ? ' · <span class="font-medium text-gray-400">' + tsEsc(c.fonction) + '</span>' : ''}</p>
+                        <p class="text-gray-600 font-bold truncate" title="${tsEsc(c.coordonnees)}">📇 ${c.coordonnees ? tsEsc(c.coordonnees) : '<span class="text-gray-300 italic">—</span>'}</p>
+                        <div class="sm:col-span-2 flex items-center gap-2 pt-1">
+                            <span class="text-[10px] font-black text-gray-400 uppercase">🚗 Déplacement</span>
+                            <div class="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                                <button onclick="quickToggleDeplacement('${id}','Non')" class="px-2.5 py-0.5 rounded-md text-[10px] font-black transition ${!depOui ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-400'}">Non</button>
+                                <button onclick="quickToggleDeplacement('${id}','Oui')" class="px-2.5 py-0.5 rounded-md text-[10px] font-black transition ${depOui ? 'bg-green-500 text-white shadow-sm' : 'text-gray-400'}">Oui</button>
+                            </div>
+                            ${nbRel ? `<span class="ml-auto text-[10px] font-black text-orange-600">📌 ${nbRel} relance${nbRel > 1 ? 's' : ''}</span>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3 pt-1">
+                        ${renderTsuiviJournal(c.suivi, c.id, 'suivi', 'Suivi & relances', '📌', 'border-[#F26522]')}
+                        ${renderTsuiviJournal(c.reponses, c.id, 'reponses', 'Réponses / remarques', '💬', 'border-[#1A4E8A]')}
+                    </div>
+                </div>`;
+        }
+
+        // Barre d'indicateurs + recherche / filtres (reconstruite seulement si nécessaire pour ne pas perdre le focus)
+        function tsRenderOutils() {
+            const box = document.getElementById('tsuiviTools'); if (!box) return;
+            const L = tsuiviData.filter(c => !c._tmp);
+            box.classList.toggle('hidden', !L.length);
+            if (!L.length) return;
+            const dates = L.map(c => c.priseContact).filter(Boolean).sort();
+            const derniere = dates[dates.length - 1], j = tsJoursDepuis(derniere);
+            const moisCourant = new Date().toISOString().slice(0, 7);
+            const k = {
+                total: L.length,
+                mois: L.filter(c => String(c.priseContact || '').slice(0, 7) === moisCourant).length,
+                rep: L.filter(c => (c.reponses || []).length).length,
+                dep: L.filter(c => c.deplacement === 'Oui').length
+            };
+            const couleurJ = j == null ? 'text-gray-400' : (j <= 3 ? 'text-green-600' : (j <= 10 ? 'text-orange-500' : 'text-red-600'));
+            const kpi = (v, l, cls = 'text-[#1A4E8A]') => `<div class="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-2.5 min-w-[110px]"><p class="text-xl font-black ${cls} leading-none">${v}</p><p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mt-1">${l}</p></div>`;
+            document.getElementById('tsKpis').innerHTML =
+                kpi(k.total, 'Candidatures') + kpi(k.mois, 'Ce mois-ci') + kpi(k.rep, 'Avec réponse', 'text-green-600') + kpi(k.dep, 'Déplacements', 'text-teal-600')
+                + kpi(j == null ? '—' : (j <= 0 ? "Aujourd'hui" : 'il y a ' + j + ' j'), 'Dernière démarche', couleurJ);
+            const typesPresents = tsuiviTypes.filter(t => L.some(c => c.type === t));
+            document.getElementById('tsTypes').innerHTML = ['', ...typesPresents].map(t => {
+                const n = t ? L.filter(c => c.type === t).length : L.length, on = TS.type === t;
+                return `<button type="button" onclick="tsFiltreType('${tsEsc(t)}')" class="px-3 py-1 rounded-full text-[11px] font-black border transition ${on ? 'bg-[#1A4E8A] text-white border-[#1A4E8A]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#1A4E8A]'}">${t ? tsEsc(t) : 'Toutes'} <span class="opacity-60">${n}</span></button>`;
+            }).join('');
+        }
+        function tsFiltreType(t) { TS.type = t; TS.limite = TS_PAGE; renderTsuivi(tsuiviData, null, { force: true }); }
+        function tsRecherche(v) { TS.q = v; TS.limite = TS_PAGE; clearTimeout(tsRecherche._h); tsRecherche._h = setTimeout(() => renderTsuivi(tsuiviData, null, { force: true, garderOutils: true }), 120); }
+        function tsTri(v) { TS.tri = v; renderTsuivi(tsuiviData, null, { force: true, garderOutils: true }); }
+        function tsPlus() { TS.limite += TS_PAGE; renderTsuivi(tsuiviData, null, { force: true, garderOutils: true }); }
+
+        // opts.silencieux : rafraîchissement automatique → on ne touche pas à une saisie en cours
+        function renderTsuivi(list, types, opts = {}) {
+            if (opts.silencieux && (_tsEnvoi || tsuiviData.some(c => c._tmp || [...(c.suivi || []), ...(c.reponses || [])].some(e => e._pending)))) return;
             tsuiviData = Array.isArray(list) ? list : [];
             if (Array.isArray(types) && types.length) tsuiviTypes = types;
 
@@ -657,17 +783,22 @@
             if (!section) return;
             section.classList.remove('hidden');
 
-            // Remplit le menu déroulant du type une seule fois
             const sel = document.getElementById('tsType');
             if (sel && sel.options.length <= 1) {
                 sel.innerHTML = '<option value="">— Type —</option>' + tsuiviTypes.map(t => `<option value="${tsEsc(t)}">${tsEsc(t)}</option>`).join('');
             }
 
-            document.getElementById('tsuiviCount').innerText = tsuiviData.length + ' candidature' + (tsuiviData.length > 1 ? 's' : '');
+            const nReel = tsuiviData.filter(c => !c._tmp).length;
+            document.getElementById('tsuiviCount').innerText = nReel + ' candidature' + (nReel > 1 ? 's' : '');
 
             const listEl = document.getElementById('tsuiviList');
-            // Ne pas écraser une saisie en cours (rafraîchissement silencieux toutes les 90s)
-            if (document.activeElement && listEl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+            if (opts.silencieux) {
+                // une action locale est en cours d'envoi : la réponse du serveur fera foi, on n'écrase rien
+                if (tsuiviData.some(c => c._tmp || [...(c.suivi || []), ...(c.reponses || [])].some(e => e._pending))) return;
+                const saisie = [...listEl.querySelectorAll('input[data-ts-note]')].some(i => i.value.trim()) || (document.activeElement && listEl.contains(document.activeElement));
+                if (saisie) return;
+            }
+            if (!opts.garderOutils) tsRenderOutils();
 
             if (tsuiviData.length === 0) {
                 listEl.className = 'grid grid-cols-1 gap-5';
@@ -681,46 +812,29 @@
                 return;
             }
 
+            const q = tsNorm(TS.q);
+            const filtres = tsTrier(tsuiviData.filter(c => (!TS.type || c.type === TS.type)
+                && (!q || tsNorm([c.societe, c.activite, c.interlocuteur, c.fonction, c.coordonnees, ...(c.suivi || []).map(e => e.texte), ...(c.reponses || []).map(e => e.texte)].join(' ')).includes(q))));
+            // Les candidatures en cours d'enregistrement restent en tête
+            const visibles = filtres.filter(c => c._tmp).concat(filtres.filter(c => !c._tmp)).slice(0, TS.limite);
+
+            // Conserve les saisies en cours et la position des journaux pendant le re-rendu
+            const brouillons = {};
+            listEl.querySelectorAll('input[data-ts-note]').forEach(i => { if (i.value) brouillons[i.dataset.tsId + '|' + i.dataset.tsNote] = i.value; });
+            const actif = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.tsId + '|' + document.activeElement.dataset.tsNote : '';
+
             listEl.className = 'grid grid-cols-1 xl:grid-cols-2 gap-5';
-            listEl.innerHTML = tsuiviData.map(c => {
-                const depOui = c.deplacement === 'Oui';
-                return `
-                <div class="border border-gray-100 rounded-3xl p-5 bg-gradient-to-br from-white to-slate-50/60 shadow-sm hover:shadow-md transition flex flex-col gap-3">
-                    <div class="flex justify-between items-start gap-2">
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <h4 class="font-black text-[#1A4E8A] text-base truncate">${tsEsc(c.societe || 'Société non renseignée')}</h4>
-                                ${tsTypeChip(c.type)}
-                            </div>
-                            <p class="text-[11px] text-gray-400 font-bold mt-0.5">
-                                ${c.activite ? tsEsc(c.activite) : '<span class="italic text-gray-300">Activité —</span>'}
-                                ${c.priseContact ? ' · 📅 ' + tsFmtDateFr(c.priseContact) : ''}
-                            </p>
-                        </div>
-                        <div class="flex gap-1 shrink-0">
-                            <button onclick="openTsuiviModal('${c.id}')" title="Modifier" class="text-gray-300 hover:text-[#1A4E8A] hover:bg-blue-50 w-7 h-7 flex items-center justify-center rounded-lg transition">✏️</button>
-                            <button onclick="deleteTsuiviCandidature('${c.id}')" title="Supprimer" class="text-gray-300 hover:text-red-500 hover:bg-red-50 w-7 h-7 flex items-center justify-center rounded-lg transition">🗑️</button>
-                        </div>
-                    </div>
+            listEl.innerHTML = visibles.length
+                ? visibles.map(tsCarte).join('')
+                    + (filtres.length > visibles.length ? `<button type="button" onclick="tsPlus()" class="xl:col-span-2 w-full py-3 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-black hover:bg-slate-50 transition">Afficher ${Math.min(TS_PAGE, filtres.length - visibles.length)} de plus (${filtres.length - visibles.length} restante${filtres.length - visibles.length > 1 ? 's' : ''})</button>` : '')
+                : `<p class="xl:col-span-2 text-center text-sm text-gray-400 font-bold py-8">Aucune candidature ne correspond à la recherche.</p>`;
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/70 rounded-xl p-2.5 border border-gray-100">
-                        <p class="text-gray-600 font-bold truncate">👤 ${c.interlocuteur ? tsEsc(c.interlocuteur) : '<span class="text-gray-300 italic">—</span>'}${c.fonction ? ' · <span class="font-medium text-gray-400">' + tsEsc(c.fonction) + '</span>' : ''}</p>
-                        <p class="text-gray-600 font-bold truncate">📇 ${c.coordonnees ? tsEsc(c.coordonnees) : '<span class="text-gray-300 italic">—</span>'}</p>
-                        <div class="sm:col-span-2 flex items-center gap-2 pt-1">
-                            <span class="text-[10px] font-black text-gray-400 uppercase">🚗 Déplacement</span>
-                            <div class="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
-                                <button onclick="quickToggleDeplacement('${c.id}','Non')" class="px-2.5 py-0.5 rounded-md text-[10px] font-black transition ${!depOui ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-400'}">Non</button>
-                                <button onclick="quickToggleDeplacement('${c.id}','Oui')" class="px-2.5 py-0.5 rounded-md text-[10px] font-black transition ${depOui ? 'bg-green-500 text-white shadow-sm' : 'text-gray-400'}">Oui</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 pt-1">
-                        ${renderTsuiviJournal(c.suivi, c.id, 'suivi', 'Suivi & relances', '📌', 'border-[#F26522]')}
-                        ${renderTsuiviJournal(c.reponses, c.id, 'reponses', 'Réponses / remarques', '💬', 'border-[#1A4E8A]')}
-                    </div>
-                </div>`;
-            }).join('');
+            listEl.querySelectorAll('input[data-ts-note]').forEach(i => {
+                const k = i.dataset.tsId + '|' + i.dataset.tsNote;
+                if (brouillons[k]) i.value = brouillons[k];
+                if (k === actif) i.focus();
+            });
+            listEl.querySelectorAll('[data-ts-scroll]').forEach(d => { d.scrollTop = d.scrollHeight; });   // dernière entrée visible
         }
 
         function openTsuiviModal(id) {
@@ -734,11 +848,21 @@
             document.getElementById('tsInterlocuteur').value = c ? (c.interlocuteur || '') : '';
             document.getElementById('tsFonction').value = c ? (c.fonction || '') : '';
             document.getElementById('tsCoordonnees').value = c ? (c.coordonnees || '') : '';
+            document.getElementById('tsDoublon').classList.add('hidden');
             setTsDeplacement(c ? (c.deplacement || 'Non') : 'Non');
             document.getElementById('tsuiviModal').classList.replace('hidden', 'flex');
             setTimeout(() => document.getElementById('tsSociete').focus(), 80);
         }
         function closeTsuiviModal() { document.getElementById('tsuiviModal').classList.replace('flex', 'hidden'); }
+
+        // Avertit (sans bloquer) si une candidature existe déjà pour cette société
+        function tsVerifDoublon() {
+            const v = tsNorm(document.getElementById('tsSociete').value).replace(/[^a-z0-9]/g, ''), idEd = document.getElementById('tsuiviEditId').value;
+            const d = v.length >= 3 ? tsuiviData.find(c => c.id !== idEd && tsNorm(c.societe).replace(/[^a-z0-9]/g, '') === v) : null;
+            const el = document.getElementById('tsDoublon');
+            el.classList.toggle('hidden', !d);
+            if (d) el.innerHTML = `⚠️ Une candidature existe déjà chez <b>${tsEsc(d.societe)}</b>${d.priseContact ? ' (' + tsFmtDateFr(d.priseContact) + ')' : ''}. <button type="button" class="underline font-black" onclick="closeTsuiviModal();openTsuiviModal('${tsEsc(d.id)}')">La modifier</button> ou ajoutez plutôt une relance.`;
+        }
 
         function setTsDeplacement(val) {
             _tsDeplacement = (val === 'Oui') ? 'Oui' : 'Non';
@@ -749,16 +873,15 @@
             });
         }
 
+        // Enregistrement optimiste : la carte apparaît / se met à jour tout de suite, le serveur confirme ensuite.
+        // Plus de rechargement complet du dossier après chaque action.
+        let _tsEnvoi = false;
         async function saveTsuiviCandidature() {
+            if (_tsEnvoi) return;
             const societe = document.getElementById('tsSociete').value.trim();
             if (!societe) { document.getElementById('tsSociete').focus(); return; }
-            const btn = document.getElementById('btnSaveTsuivi');
-            btn.disabled = true; btn.innerText = '…';
             const editId = document.getElementById('tsuiviEditId').value;
-            const payload = {
-                action: editId ? 'updateSuiviCandidature' : 'addSuiviCandidature',
-                targetId: studentId,
-                id: editId || undefined,
+            const champs = {
                 societe: societe,
                 activite: document.getElementById('tsActivite').value.trim(),
                 priseContact: document.getElementById('tsPriseContact').value,
@@ -768,38 +891,83 @@
                 coordonnees: document.getElementById('tsCoordonnees').value.trim(),
                 deplacement: _tsDeplacement
             };
-            const res = await apiPost(payload);
-            btn.disabled = false; btn.innerText = 'Enregistrer';
-            if (res.success) { closeTsuiviModal(); loadDossier(true); }
-            else alert('Erreur : ' + (res.message || 'échec'));
+            const avant = tsuiviData.map(c => ({ ...c }));
+            let tmpId = null;
+            if (editId) {
+                const c = tsuiviData.find(x => x.id === editId); if (c) Object.assign(c, champs);
+            } else {
+                tmpId = 'tmp-' + Date.now();
+                tsuiviData.unshift({ id: tmpId, ...champs, suivi: [], reponses: [], _tmp: true });
+                TS.type = ''; TS.q = ''; const qi = document.getElementById('tsQ'); if (qi) qi.value = '';
+            }
+            _tsEnvoi = true;
+            closeTsuiviModal();
+            renderTsuivi(tsuiviData, null, { force: true });
+            const res = await apiPost({ action: editId ? 'updateSuiviCandidature' : 'addSuiviCandidature', targetId: studentId, id: editId || undefined, ...champs });
+            _tsEnvoi = false;
+            if (!res.success) {
+                tsuiviData = avant; renderTsuivi(tsuiviData, null, { force: true });
+                tsToast('Échec de l\'enregistrement : ' + (res.message || 'erreur'), false);
+                openTsuiviModal(editId || undefined); Object.entries({ tsSociete: champs.societe, tsActivite: champs.activite, tsInterlocuteur: champs.interlocuteur, tsFonction: champs.fonction, tsCoordonnees: champs.coordonnees }).forEach(([k, v]) => { document.getElementById(k).value = v; });
+                return;
+            }
+            const idx = tsuiviData.findIndex(x => x.id === (tmpId || editId));
+            if (idx >= 0) {
+                if (res.item) tsuiviData[idx] = res.item;
+                else { delete tsuiviData[idx]._tmp; if (res.id) tsuiviData[idx].id = res.id; }
+            }
+            renderTsuivi(tsuiviData, null, { force: true }); tsSyncCache();
+            tsToast(editId ? 'Candidature mise à jour ✓' : 'Candidature ajoutée ✓');
         }
 
         async function deleteTsuiviCandidature(id) {
             const c = tsuiviData.find(x => x.id === id);
             if (!confirm('Supprimer la candidature' + (c && c.societe ? ' « ' + c.societe + ' »' : '') + ' et tout son suivi ?')) return;
+            const avant = tsuiviData.slice();
+            tsuiviData = tsuiviData.filter(x => x.id !== id); renderTsuivi(tsuiviData, null, { force: true });
             const res = await apiPost({ action: 'deleteSuiviCandidature', id: id });
-            if (res.success) loadDossier(true);
-            else alert('Erreur : ' + (res.message || 'échec'));
+            if (res.success) { tsSyncCache(); tsToast('Candidature supprimée'); }
+            else { tsuiviData = avant; renderTsuivi(tsuiviData, null, { force: true }); tsToast('Suppression impossible : ' + (res.message || 'erreur'), false); }
         }
 
         async function addTsuiviNote(id, champ, btnEl) {
             const input = btnEl.previousElementSibling;
             const texte = (input.value || '').trim();
             if (!texte) { input.focus(); return; }
-            btnEl.disabled = true; input.disabled = true;
+            const c = tsuiviData.find(x => x.id === id); if (!c) return;
+            const cle = champ === 'reponses' ? 'reponses' : 'suivi';
+            const entree = { date: tsNowStamp(), auteur: currentUser.nom || '', texte, _pending: true };
+            c[cle] = (c[cle] || []).concat([entree]);
+            input.value = '';
+            renderTsuivi(tsuiviData, null, { force: true, garderOutils: true });
             const res = await apiPost({ action: 'addSuiviCandidatureNote', id: id, champ: champ, texte: texte });
-            btnEl.disabled = false; input.disabled = false;
-            if (res.success) { input.value = ''; loadDossier(true); }
-            else alert('Erreur : ' + (res.message || 'échec'));
+            const c2 = tsuiviData.find(x => x.id === id);
+            if (res.success) {
+                if (c2) { c2[cle] = res.journal || c2[cle].map(e => e === entree ? { ...e, _pending: false } : e); if (res.nouvelId) c2.id = res.nouvelId; }
+                renderTsuivi(tsuiviData, null, { force: true }); tsSyncCache();
+            } else {
+                if (c2) c2[cle] = c2[cle].filter(e => e !== entree);
+                renderTsuivi(tsuiviData, null, { force: true });
+                const inp = document.querySelector(`input[data-ts-id="${CSS.escape(id)}"][data-ts-note="${champ}"]`); if (inp) { inp.value = texte; inp.focus(); }
+                tsToast('Note non enregistrée : ' + (res.message || 'erreur'), false);
+            }
         }
 
         async function quickToggleDeplacement(id, val) {
             const c = tsuiviData.find(x => x.id === id);
-            if (c && c.deplacement === val) return;
-            if (c) { c.deplacement = val; renderTsuivi(tsuiviData, tsuiviTypes); }
+            if (!c || c.deplacement === val) return;
+            const ancien = c.deplacement;
+            c.deplacement = val; renderTsuivi(tsuiviData, null, { force: true });
             const res = await apiPost({ action: 'updateSuiviCandidature', id: id, deplacement: val });
-            if (!res.success) { alert('Erreur : ' + (res.message || 'échec')); loadDossier(true); }
+            if (!res.success) { c.deplacement = ancien; renderTsuivi(tsuiviData, null, { force: true }); tsToast('Erreur : ' + (res.message || 'échec'), false); }
+            else { if (res.item && res.item.id !== id) c.id = res.item.id; tsSyncCache(); }
         }
+        document.addEventListener('keydown', e => {
+            const m = document.getElementById('tsuiviModal');
+            if (!m || m.classList.contains('hidden')) return;
+            if (e.key === 'Escape') closeTsuiviModal();
+            else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); saveTsuiviCandidature(); }
+        });
 
         async function addNote() {
             const txt = document.getElementById('noteTexte').value;

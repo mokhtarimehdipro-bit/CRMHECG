@@ -926,7 +926,12 @@ function handleStudentDetails(params, ss) {
   const dP = getSheetSafe(ss, "PARTAGES").getDataRange().getValues();
   const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues();
   const offersMap = {};
+  // Perf : on ne classe (alternance / stage…) que les offres partagées à cet étudiant,
+  // et non toute la feuille OFFRES à chaque ouverture de dossier.
+  const _idxEtuPre = _indexEtudiantsPourPartages_(dE), _idPre = String(id).trim().toUpperCase(), _offresEtu = {};
+  for (let s = 1; s < dP.length; s++) if (String(_resoudreEtuPartage_(_idxEtuPre, dP[s][0]) || "").toUpperCase() === _idPre) _offresEtu[String(dP[s][1] || "").trim()] = true;
   for(let j=1; j<dO.length; j++) {
+    if (!_offresEtu[String(dO[j][0]).trim()]) continue;
     // Colonne J (index 9) = Qualité (Vérifiée/À qualifier/Obsolète) ; colonne B = lien à jour.
     offersMap[String(dO[j][0]).trim()] = { poste: dO[j][14], ent: dO[j][4], url: dO[j][1], qualite: dO[j][9],
       alt: _classerContratOffre_(dO[j][0], dO[j][3], dO[j][14], dO[j][15], dO[j][6]) };
@@ -934,8 +939,8 @@ function handleStudentDetails(params, ss) {
   // Toutes les offres partagées sont affichées (y compris obsolètes, signalées « expirées ») :
   // les masquer faisait disparaître du dossier des offres annoncées dans la relance hebdo.
   // Le rattachement passe par _resoudreEtuPartage_ (ID insensible à la casse + partages « EXT-mail »).
-  const idxEtu = _indexEtudiantsPourPartages_(dE);
-  const idNorm = String(id).trim().toUpperCase();
+  const idxEtu = _idxEtuPre;
+  const idNorm = _idPre;
   const vus = {};
   const studentOffers = [];
   for (let s = 1; s < dP.length; s++) {
@@ -1351,12 +1356,13 @@ function handleAddSuiviCandidature(p, ss) {
     if (!targetId) return createJsonResponse({ success: false, message: "Étudiant non précisé." });
     if (!_tsCanAccess(p, targetId)) return createJsonResponse({ success: false, message: "Accès refusé." });
 
+    var lock = _tsLock_();
     var ws = _getTsuiviSheet(ss);
     var idLigne = "TS-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + "-" + Math.floor(Math.random() * 900 + 100);
     var type = TSUIVI_TYPES_CANDIDATURE.indexOf(String(p.type || "").trim()) >= 0 ? String(p.type).trim() : "";
     var now = new Date();
 
-    ws.appendRow([
+    var ligne = [
       targetId,
       String(p.priseContact || ""),
       type,
@@ -1372,12 +1378,15 @@ function handleAddSuiviCandidature(p, ss) {
       now,
       now,
       _tsAuteurLabel(p)
-    ]);
+    ];
+    ws.appendRow(ligne);
+    var rowNum = ws.getLastRow();
+    lock.releaseLock();
 
     _invalidateStudentDetailsCache_(targetId);
     logAction(p.idAuteur, p.roleAuteur, "Création", "Suivi candidatures", targetId,
       "Nouvelle candidature : " + (String(p.societe || "").trim() || "sans société"));
-    return createJsonResponse({ success: true, id: idLigne });
+    return createJsonResponse({ success: true, id: idLigne, item: _tsRowToObj(ligne, rowNum) });
   } catch (e) {
     return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
   }
@@ -1389,16 +1398,30 @@ function _tsFindRowByIdLigne(ws, idLigne) {
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][11] || "").trim() === needle) return { rowNumber: i + 1, row: data[i] };
   }
+  // Ligne saisie directement dans la feuille (colonne L vide) : l'appli l'identifie « TSR-<n° de ligne> ».
+  // Sans ce repli, modifier / supprimer / annoter ces lignes échouait (« Ligne introuvable »).
+  var m = needle.match(/^TSR-(\d+)$/);
+  if (m) {
+    var n = Number(m[1]);
+    if (n >= 2 && n <= data.length && !String(data[n - 1][11] || "").trim()) {
+      var nouvelId = "TS-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + "-" + Math.floor(Math.random() * 900 + 100);
+      ws.getRange(n, 12).setValue(nouvelId);
+      data[n - 1][11] = nouvelId;
+      return { rowNumber: n, row: data[n - 1], nouvelId: nouvelId };
+    }
+  }
   return null;
 }
+function _tsLock_() { var l = LockService.getScriptLock(); l.waitLock(15000); return l; }
 
 function handleUpdateSuiviCandidature(p, ss) {
   try {
+    var lock = _tsLock_();
     var ws = _getTsuiviSheet(ss);
     var found = _tsFindRowByIdLigne(ws, p.id);
-    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
+    if (!found) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Ligne introuvable." }); }
     var idEtu = String(found.row[0] || "").trim();
-    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
+    if (!_tsCanAccess(p, idEtu)) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Accès refusé." }); }
 
     // Champs structurés modifiables (les deux journaux ont leur propre route).
     var map = {
@@ -1412,16 +1435,23 @@ function handleUpdateSuiviCandidature(p, ss) {
       var val = p[k];
       if (k === "type") val = TSUIVI_TYPES_CANDIDATURE.indexOf(String(val || "").trim()) >= 0 ? String(val).trim() : "";
       if (k === "deplacement") val = _tsNormDeplacement(val);
-      ws.getRange(found.rowNumber, col).setValue(val);
+      else val = String(val == null ? "" : val).trim();
+      found.row[col - 1] = val;
       changed.push(k);
     });
-    if (changed.length === 0) return createJsonResponse({ success: false, message: "Rien à mettre à jour." });
+    if (changed.length === 0) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Rien à mettre à jour." }); }
 
-    ws.getRange(found.rowNumber, 14).setValue(new Date()); // Dernière MAJ
+    // Perf : B-H en une seule écriture (au lieu d'une écriture par champ) ; K à part (I-J = journaux, non touchés)
+    var majLe = new Date();
+    if (changed.some(function(k) { return k !== "deplacement"; })) ws.getRange(found.rowNumber, 2, 1, 7).setValues([found.row.slice(1, 8)]);
+    if (changed.indexOf("deplacement") !== -1) ws.getRange(found.rowNumber, 11).setValue(found.row[10]);
+    ws.getRange(found.rowNumber, 14).setValue(majLe); // Dernière MAJ
+    found.row[13] = majLe;
+    lock.releaseLock();
     _invalidateStudentDetailsCache_(idEtu);
     logAction(p.idAuteur, p.roleAuteur, "Modification", "Suivi candidatures", idEtu,
       "Candidature « " + (String(found.row[3] || "").trim() || p.id) + " » — champs : " + changed.join(", "));
-    return createJsonResponse({ success: true });
+    return createJsonResponse({ success: true, item: _tsRowToObj(found.row, found.rowNumber) });
   } catch (e) {
     return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
   }
@@ -1429,14 +1459,16 @@ function handleUpdateSuiviCandidature(p, ss) {
 
 function handleDeleteSuiviCandidature(p, ss) {
   try {
+    var lock = _tsLock_();
     var ws = _getTsuiviSheet(ss);
     var found = _tsFindRowByIdLigne(ws, p.id);
-    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
+    if (!found) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Ligne introuvable." }); }
     var idEtu = String(found.row[0] || "").trim();
-    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
+    if (!_tsCanAccess(p, idEtu)) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Accès refusé." }); }
 
     var nomSoc = String(found.row[3] || "").trim();
     ws.deleteRow(found.rowNumber);
+    lock.releaseLock();
     _invalidateStudentDetailsCache_(idEtu);
     logAction(p.idAuteur, p.roleAuteur, "Suppression", "Suivi candidatures", idEtu,
       "Candidature supprimée : " + (nomSoc || p.id));
@@ -1449,14 +1481,14 @@ function handleDeleteSuiviCandidature(p, ss) {
 // Ajoute une entrée horodatée dans l'un des deux journaux (colonne I ou J).
 function handleAddSuiviCandidatureNote(p, ss) {
   try {
-    var ws = _getTsuiviSheet(ss);
-    var found = _tsFindRowByIdLigne(ws, p.id);
-    if (!found) return createJsonResponse({ success: false, message: "Ligne introuvable." });
-    var idEtu = String(found.row[0] || "").trim();
-    if (!_tsCanAccess(p, idEtu)) return createJsonResponse({ success: false, message: "Accès refusé." });
-
     var texte = String(p.texte || "").trim();
     if (!texte) return createJsonResponse({ success: false, message: "Message vide." });
+    var lock = _tsLock_();
+    var ws = _getTsuiviSheet(ss);
+    var found = _tsFindRowByIdLigne(ws, p.id);
+    if (!found) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Ligne introuvable." }); }
+    var idEtu = String(found.row[0] || "").trim();
+    if (!_tsCanAccess(p, idEtu)) { lock.releaseLock(); return createJsonResponse({ success: false, message: "Accès refusé." }); }
 
     var champ = String(p.champ || "suivi").trim().toLowerCase();
     var col = (champ === "reponses" || champ === "réponses") ? 10 : 9; // J ou I
@@ -1468,10 +1500,11 @@ function handleAddSuiviCandidatureNote(p, ss) {
     });
     ws.getRange(found.rowNumber, col).setValue(JSON.stringify(journal));
     ws.getRange(found.rowNumber, 14).setValue(new Date());
+    lock.releaseLock();
     _invalidateStudentDetailsCache_(idEtu);
     logAction(p.idAuteur, p.roleAuteur, "Création", "Suivi candidatures", idEtu,
       (col === 10 ? "Réponse/remarque" : "Relance") + " sur « " + (String(found.row[3] || "").trim() || p.id) + " »");
-    return createJsonResponse({ success: true, journal: journal });
+    return createJsonResponse({ success: true, journal: journal, nouvelId: found.nouvelId || "" });
   } catch (e) {
     return createJsonResponse({ success: false, message: "Erreur : " + e.toString() });
   }
