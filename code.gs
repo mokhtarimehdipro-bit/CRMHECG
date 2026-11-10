@@ -816,6 +816,8 @@ function handleAddStudent(p, ss) {
   const id = "ETU" + new Date().getTime().toString().slice(-5);
   
   const typoAAppliquer = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
+  // Référent pédagogique fixé selon la classe / le campus (positionnement.gs)
+  try { const refAuto = _referentPourClasse_(p.classe, p.campus); if (refAuto) p.refPerso = refAuto; } catch (eRef) {}
 
   const newRow = [
     id, 
@@ -1999,6 +2001,14 @@ function handleUpdateOffre(p, ss) {
         rowCopy[14] = p.poste;
         rowCopy[9] = p.qualite;
         if (p.etat) rowCopy[13] = p.etat;
+        // Offre déjà partagée : jamais « Non partagée », et qualité au moins « Vérifiée » (sauf Obsolète)
+        try {
+          const dejaPartagee = getSheetSafe(ss, "PARTAGES").getDataRange().getValues().some(r => String(r[1]).trim() === String(p.id).trim());
+          if (dejaPartagee) {
+            if (String(rowCopy[13] || "").indexOf("Partagée") === -1) rowCopy[13] = "Partagée";
+            if (String(rowCopy[9] || "").trim() !== "Obsolète") rowCopy[9] = "Vérifiée";
+          }
+        } catch (eP) {}
         sheet.getRange(i + 1, 1, 1, rowCopy.length).setValues([rowCopy]);
 
         const logDetail = changes.length > 0
@@ -5246,14 +5256,33 @@ function handlePartagerOffre(p, ss) {
 
     // Mise à jour du statut AVANT l'envoi : si le script time out pendant les emails,
     // le statut est déjà correct dans le sheet.
+    // Une offre partagée est forcément « Vérifiée » (col. J) et « Partagée » (col. N) — demande direction 2026-11-10.
     for (let i = 1; i < dataOffres.length; i++) {
       if (String(dataOffres[i][0]).trim() === String(p.id_offre).trim()) {
-        sheetOffres.getRange(i + 1, 14).setValue("Partagée"); // Colonne N
+        const ligneJN = sheetOffres.getRange(i + 1, 10, 1, 5).getValues()[0];   // J..N
+        ligneJN[0] = "Vérifiée"; ligneJN[4] = "Partagée";
+        sheetOffres.getRange(i + 1, 10, 1, 5).setValues([ligneJN]);
         break;
       }
     }
     SpreadsheetApp.flush();
     _invalidateOffresCache_();
+
+    // Émetteur du partage : nommé dans le mail, en copie, et destinataire des réponses
+    const emetteurMail = String(p.emailAuteur || "").trim().toLowerCase();
+    let emetteurNom = String(p.nomAuteur || p.idAuteur || "").trim(), emetteurFonction = "";
+    try {
+      const dPers = getPersonnelDataCached_(ss);
+      for (let k = 1; k < dPers.length; k++) {
+        if (emetteurMail && String(dPers[k][6] || "").trim().toLowerCase() === emetteurMail) {
+          emetteurNom = (String(dPers[k][2] || "") + " " + String(dPers[k][1] || "").toUpperCase()).trim() || emetteurNom;
+          emetteurFonction = String(dPers[k][3] || "").trim();
+          break;
+        }
+      }
+    } catch (ePers) {}
+    const FONCTIONS = { RP: "Responsable pédagogique", CP: "Chargé(e) de placement", DIR: "Direction", COM: "Communication" };
+    const libEmetteur = emetteurNom ? emetteurNom + (FONCTIONS[emetteurFonction] ? " (" + FONCTIONS[emetteurFonction] + ")" : "") : "l'équipe HECG";
 
     let nbAjoutes = 0;
     var mailsEnvoyes = [];
@@ -5271,27 +5300,29 @@ function handlePartagerOffre(p, ss) {
         }
         try {
           const msgCorps = String(p.messagePersonnalise || "").trim() || "Tu peux postuler directement depuis ton dossier étudiant HECG.";
-          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p>Une nouvelle offre a été sélectionnée pour ton profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>${msgCorps}</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a></div>`;
+          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p><b>${libEmetteur}</b> a sélectionné une nouvelle offre pour ton profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>${msgCorps}</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a><p style="margin-top:18px;font-size:13px;color:#64748b">Offre partagée par ${libEmetteur}${emetteurMail ? ` — <a href="mailto:${emetteurMail}" style="color:#1A4E8A">${emetteurMail}</a>` : ""}. Tu peux répondre directement à ce mail pour toute question.</p></div>`;
           corpsOffre = corps;
-          GmailApp.sendEmail(etu.mail, sujetOffre, "", { htmlBody: corps + getSignatureHTML() });
+          const optMail = { htmlBody: corps + getSignatureHTML() };
+          if (emetteurMail.indexOf("@") > 0 && emetteurMail !== etu.mail) { optMail.cc = emetteurMail; optMail.replyTo = emetteurMail; }
+          GmailApp.sendEmail(etu.mail, sujetOffre, "", optMail);
           mailsEnvoyes.push(etu.mail);
         } catch(e) {}
         nbAjoutes++;
       }
     });
-    logAction(p.idAuteur, p.roleAuteur, "Action", "Offres", p.id_offre, "A partagé l'offre avec " + nbAjoutes + " étudiant(s)");
+    logAction(p.idAuteur, p.roleAuteur, "Action", "Offres", p.id_offre, "A partagé l'offre avec " + nbAjoutes + " étudiant(s) — offre passée en Vérifiée / Partagée" + (emetteurMail ? " — émetteur en copie (" + emetteurMail + ")" : ""));
     if (mailsEnvoyes.length > 0) {
       logMailDetail(ss, {
         auteur: p.idAuteur || "Système",
         categorie: "Offre partagée",
         sousCat: infoMail.poste + " — " + infoMail.ent,
         objet: sujetOffre,
-        destinataires: mailsEnvoyes,
+        destinataires: emetteurMail ? mailsEnvoyes.concat(["cc : " + emetteurMail]) : mailsEnvoyes,
         corps: corpsOffre,
         sourceId: p.id_offre
       });
     }
-    return createJsonResponse({ success: true, message: nbAjoutes + " partage(s) effectué(s). L'offre est passée en 'Partagée'." });
+    return createJsonResponse({ success: true, message: nbAjoutes + " partage(s) effectué(s). L'offre est passée en « Vérifiée » et « Partagée »." + (emetteurMail ? " Vous êtes en copie des mails." : "") });
   } catch(e) { return createJsonResponse({ success: false, message: "Erreur serveur : " + e.toString() }); }
 }
 
@@ -7913,6 +7944,12 @@ function handleUpdateStudent(p, ss) {
         });
       } catch(e) {}
     }
+
+    // Changement de classe / campus (ou référent vide) : référent pédagogique fixé selon la classe
+    try {
+      const classeChange = String(oldRow[14] || "").trim() !== String(p.classe || "").trim() || String(oldRow[22] || "").trim() !== String(p.campus || "").trim();
+      if (classeChange || !String(p.refPerso || "").trim()) { const refAuto = _referentPourClasse_(p.classe, p.campus); if (refAuto) p.refPerso = refAuto; }
+    } catch (eRef) {}
 
     let typoFinale = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
     // Si une date de sortie est définie, la typo est forcément SORTIE

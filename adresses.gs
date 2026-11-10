@@ -891,6 +891,8 @@ function auditAdressesTick() {
   try { _rcAuto_(); } catch (eR) { console.error('audit recruteurs : ' + eR); }   // audit espace recruteurs, chaque nuit (recruteurs.gs)
   try { if (typeof _frisesAuto_ === 'function') _frisesAuto_(); } catch (eF) { console.error('rappels frises : ' + eF); }   // rappels d'échéances des frises (vs_extras.gs)
   try { _relCandAuto_(); } catch (eC) { console.error('relance candidatures : ' + eC); }   // relance quotidienne 9 h, jours ouvrés (relances.gs)
+  try { if (typeof _ofAuto_ === 'function') _ofAuto_(t0); } catch (eO) { console.error('offres (lieux / partages) : ' + eO); }   // offres_lieux.gs
+  try { if (typeof _fpAuto_ === 'function') _fpAuto_(t0); } catch (eP) { console.error('fiches de positionnement : ' + eP); }   // positionnement.gs
   _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();
   var h = Number(Utilities.formatDate(new Date(), "Europe/Paris", "H"));

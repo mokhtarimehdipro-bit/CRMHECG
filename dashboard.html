@@ -1297,5 +1297,31 @@ async function envoyerSaveEtu(finalCvUrl) {
                 .catch(e => console.error("Erreur envoi mail export :", e));
         }
     </script>
+<script>
+// Référent pédagogique proposé automatiquement selon la classe / le campus (même règle que le serveur, positionnement.gs)
+(function () {
+  function refPourClasse(classe, campus) {
+    var c = String(classe || '').toUpperCase().replace(/[\s_\-]/g, '');
+    var aix = String(campus || '').toUpperCase() === 'HECG_AIX' || c.indexOf('AIX') !== -1;
+    if (!c) return aix ? 'VVEL' : '';
+    if (aix) return 'VVEL';
+    if (/BACHELOR/.test(c)) return 'DBEN';
+    if (/DSCG/.test(c)) return 'MMOK';
+    if (/DCG[123]/.test(c)) return 'RBEN';
+    if (/GPME/.test(c)) return 'LKEB';
+    if (/BTSCG1|CG1/.test(c)) return 'NMAS';
+    if (/BTSCG2|CG2/.test(c)) return 'AMHO';
+    return '';
+  }
+  function maj() {
+    var sel = document.getElementById('formReferent'); if (!sel) return;
+    var nv = document.getElementById('formNewClasse'), cl = (nv && nv.value.trim()) || (document.getElementById('formClasse') || {}).value;
+    var r = refPourClasse(cl, (document.getElementById('formCampus') || {}).value);
+    if (r && [].some.call(sel.options, function (o) { return o.value === r; })) sel.value = r;
+  }
+  document.addEventListener('change', function (e) { if (e.target && /^(formClasse|formCampus)$/.test(e.target.id)) maj(); });
+  document.addEventListener('input', function (e) { if (e.target && e.target.id === 'formNewClasse') maj(); });
+})();
+</script>
 </body>
 </html>
