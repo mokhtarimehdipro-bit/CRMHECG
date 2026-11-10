@@ -127,6 +127,23 @@ function _maintMiroir_(ss, rep) {
   ws.getRange(1, 1, rows.length, rows[0].length).setNumberFormat("@").setValues(rows);
   ws.getRange(1, 1, 1, rows[0].length).setFontWeight("bold"); ws.setFrozenRows(1);
 }
+// ── Tickets ouverts directement dans l'application (admin maître) : feuille MAINTENANCE_INTERNES ──
+var MAINT_INT_ENTETES = ["ID", "Horodatage", "Mail demandeur", "Demandeur", "Campus", "Lieu", "Catégorie", "Urgence", "Description", "Créé par"];
+function _maintMaitre_(p) { return String(p.vieScRole || "") === "Super-admin" || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr"; }
+function _maintInternesFeuille_(ss) {
+  var ws = ss.getSheetByName("MAINTENANCE_INTERNES");
+  if (!ws) { ws = ss.insertSheet("MAINTENANCE_INTERNES"); ws.getRange(1, 1, 1, MAINT_INT_ENTETES.length).setValues([MAINT_INT_ENTETES]).setFontWeight("bold"); ws.setFrozenRows(1); }
+  return ws;
+}
+function _maintInternes_(ss) {
+  var ws = ss.getSheetByName("MAINTENANCE_INTERNES"); if (!ws || ws.getLastRow() < 2) return [];
+  return ws.getRange(2, 1, ws.getLastRow() - 1, MAINT_INT_ENTETES.length).getDisplayValues().filter(function (r) { return r[0]; }).map(function (r) {
+    return { cle: "I|" + r[0], date: r[1], email: r[2], nom: r[3], campus: r[4], lieu: r[5], categorie: r[6], urgence: r[7], description: r[8], par: r[9],
+      champs: MAINT_INT_ENTETES.map(function (h, j) { return [h, r[j]]; }).filter(function (x) { return x[1] && x[0] !== "ID"; }) };
+  });
+}
+// Lien public du formulaire (…/viewform), à partir de l'URL renvoyée par le Sheet
+function _maintLienPublic_(u) { var m = String(u || "").match(/\/forms\/d\/(e\/)?([A-Za-z0-9_-]{20,})/); return m ? "https://docs.google.com/forms/d/" + (m[1] || "") + m[2] + "/viewform" : String(u || ""); }
 function handleGetTicketsMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
   var ext;
@@ -157,9 +174,19 @@ function handleGetTicketsMaintenance(p, ss) {
         statut: s.statut || "Nouveau", responsable: s.responsable || "", responsableMail: s.responsableMail || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "",
         archive: !!s.archive, journal: s.journal || [], relances: s.relances || 0, derniereRelance: s.derniereRelance || "" });
     });
+    var nbSheet = tickets.length;
+    _maintInternes_(ss).forEach(function (x) {
+      var s = suivi[x.cle] || {}, corr = s.corr || {}, orig = { campus: x.campus, lieu: x.lieu, categorie: x.categorie, description: x.description };
+      tickets.push({ cle: x.cle, ancienneCle: "", ligne: 0, numero: _maintNumLib_(s.num), num: s.num || 0, source: "application", date: x.date, email: x.email, nom: x.nom,
+        campus: corr.campus != null ? corr.campus : orig.campus, lieu: corr.lieu != null ? corr.lieu : orig.lieu,
+        categorie: corr.categorie != null ? corr.categorie : orig.categorie, description: corr.description != null ? corr.description : orig.description,
+        original: orig, corrige: Object.keys(corr).length > 0, urgence: x.urgence, photo: "", champs: x.champs.concat([["Source", "Ouvert depuis l'application"]]),
+        statut: s.statut || "Nouveau", responsable: s.responsable || "", responsableMail: s.responsableMail || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "",
+        archive: !!s.archive, journal: s.journal || [], relances: s.relances || 0, derniereRelance: s.derniereRelance || "" });
+    });
     tickets.sort(function (x, y) { return (y.num || 0) - (x.num || 0) || y.ligne - x.ligne; });   // plus récents d'abord
-    return createJsonResponse({ success: true, tickets: tickets, formUrl: formUrl, sheetUrl: ext.getUrl(), titre: ext.getName(), colonnes: h, equipe: _maintEquipe_(ss), contacts: _maintContacts_(ss),
-      controle: { onglet: ws.getName(), lignesSheet: rep.lignes.length, affiches: tickets.length, numerotes: numerotes, colonnesReperees: C, lu: _fDate_(), dernier: tickets.length ? tickets[0].date : "" } });
+    return createJsonResponse({ success: true, tickets: tickets, formUrl: formUrl, formPublic: _maintLienPublic_(formUrl), peutCreer: _maintMaitre_(p), sheetUrl: ext.getUrl(), titre: ext.getName(), colonnes: h, equipe: _maintEquipe_(ss), contacts: _maintContacts_(ss),
+      controle: { onglet: ws.getName(), lignesSheet: rep.lignes.length, affiches: nbSheet, internes: tickets.length - nbSheet, numerotes: numerotes, colonnesReperees: C, lu: _fDate_(), dernier: tickets.length ? tickets[0].date : "" } });
   } catch (e2) { return createJsonResponse({ success: false, message: e2.toString() }); }
 }
 
@@ -168,6 +195,29 @@ function handleGetTicketsMaintenance(p, ss) {
 // Le classeur des réponses n'est jamais modifié : les corrections de contenu vont dans Corrections_JSON.
 function handleUpdateTicketMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
+  if (String(p.op || "") === "logqr") { logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Export", "Vie scolaire — Maintenance — QR code", "Formulaire", "QR code du formulaire de maintenance téléchargé"); return createJsonResponse({ success: true }); }
+  if (String(p.op || "") === "creer") {   // ticket ouvert depuis l'application — admin maître
+    if (!_maintMaitre_(p)) return createJsonResponse({ success: false, message: "Réservé à l'admin maître." });
+    var desc = String(p.description || "").trim().slice(0, 3000);
+    if (desc.length < 5) return createJsonResponse({ success: false, message: "Décrivez le problème." });
+    var lockC = LockService.getScriptLock();
+    if (!lockC.tryLock(20000)) return createJsonResponse({ success: false, message: "Serveur occupé, réessayez dans quelques secondes." });
+    try {
+      var wsI = _maintInternesFeuille_(ss), idI = "INT-" + Utilities.formatDate(new Date(), "Europe/Paris", "yyMMddHHmmss") + "-" + Math.floor(Math.random() * 90 + 10);
+      var horo = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm:ss"), par0 = p.nomAuteur || p.emailAuteur || "";
+      var ligneI = [idI, horo, String(p.mailDemandeur || p.emailAuteur || "").trim(), String(p.demandeur || par0).trim(), String(p.campus || "").trim(), String(p.lieu || "").trim(),
+        String(p.categorie || "").trim(), String(p.priorite || "").trim(), desc, par0];
+      wsI.getRange(wsI.getLastRow() + 1, 1, 1, ligneI.length).setNumberFormat("@").setValues([ligneI]);
+      var wsS0 = _maintSuiviFeuille_(ss), NC0 = MAINT_ENTETES.length, dN = wsS0.getLastRow() > 1 ? wsS0.getRange(2, NC0, wsS0.getLastRow() - 1, 1).getValues() : [], max0 = 0;
+      dN.forEach(function (r) { max0 = Math.max(max0, Number(r[0] || 0)); });
+      var num0 = max0 + 1, maint0 = _fDate_();
+      var ligneS = ["I|" + idI, p.responsable ? "Pris en charge" : "Nouveau", String(p.responsable || ""), "", String(p.priorite || ""), "", maint0, par0, false,
+        JSON.stringify([{ d: maint0, par: par0, evt: "Ticket ouvert depuis l'application — n° " + _maintNumLib_(num0) }]), "{}", 0, "", String(p.responsableMail || ""), num0];
+      wsS0.getRange(wsS0.getLastRow() + 1, 1, 1, NC0).setValues([ligneS]);
+      logAction(par0, p.vieScRole || "", "Création", "Vie scolaire — Maintenance — ticket", _maintNumLib_(num0), "Ticket ouvert depuis l'application : " + desc.slice(0, 80));
+      return createJsonResponse({ success: true, numero: _maintNumLib_(num0) });
+    } finally { lockC.releaseLock(); }
+  }
   if (String(p.op || "") === "contact") {   // création d'un contact externe
     var nomC = String(p.nom || "").trim().slice(0, 120), mailC = String(p.mail || "").trim().slice(0, 200);
     if (!nomC) return createJsonResponse({ success: false, message: "Nom du contact obligatoire." });

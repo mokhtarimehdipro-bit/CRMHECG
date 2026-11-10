@@ -369,11 +369,14 @@ function renderMaintenance() {
     <div><h1 class="text-2xl font-black text-[#1A4E8A]">🛠️ Tickets de maintenance</h1>
       <p class="text-sm text-gray-500 mt-1">Signalements reçus par le formulaire « ${vxEsc(r.titre)} » — le suivi est enregistré dans le CRM, les réponses d'origine ne sont pas modifiées.</p></div>
     <div class="flex gap-2 flex-wrap">${r.formUrl ? `<button onclick="navigator.clipboard.writeText('${vxEsc(r.formUrl)}');toast('Lien du formulaire copié ✓')" class="btn-ghost text-sm">📋 Copier le lien du formulaire</button><a href="${vxEsc(r.formUrl)}" target="_blank" class="btn-ghost text-sm">📝 Ouvrir le formulaire</a>` : ''}
-      <a href="${vxEsc(r.sheetUrl)}" target="_blank" class="btn-ghost text-sm">📊 Réponses (Sheet)</a><button onclick="loadMaintenance()" class="btn-orange text-sm">↻ Actualiser</button></div>
+      ${r.formPublic ? `<button onclick="maintQr()" class="btn-ghost text-sm">🔳 QR code du formulaire</button>` : ''}
+      <a href="${vxEsc(r.sheetUrl)}" target="_blank" class="btn-ghost text-sm">📊 Réponses (Sheet)</a>
+      ${r.peutCreer ? `<button onclick="maintNouveau()" class="btn-orange text-sm">➕ Nouveau ticket</button>` : ''}
+      <button onclick="loadMaintenance()" class="btn-ghost text-sm">↻ Actualiser</button></div>
   </div>
   <div class="mt-2 text-xs rounded-xl px-3 py-2 inline-flex flex-wrap gap-x-3 gap-y-1 items-center" style="background:${synchroOk ? '#ecfdf5' : '#fef2f2'};color:${synchroOk ? '#065f46' : '#991b1b'}">
     <b>${synchroOk ? '✅ Synchronisé' : '⚠️ Écart de synchronisation'}</b>
-    <span>${ctl.lignesSheet != null ? `${ctl.lignesSheet} réponse(s) dans le Sheet (onglet « ${vxEsc(ctl.onglet || '')} ») · ${ctl.affiches} ticket(s) dans l'application` : ''}</span>
+    <span>${ctl.lignesSheet != null ? `${ctl.lignesSheet} réponse(s) dans le Sheet (onglet « ${vxEsc(ctl.onglet || '')} ») · ${ctl.affiches} ticket(s) reçus du formulaire dans l'application${ctl.internes ? ` · + ${ctl.internes} ouvert(s) depuis l'application` : ''}` : ''}</span>
     ${ctl.dernier ? `<span>· dernier reçu : ${vxEsc(ctl.dernier)}</span>` : ''}${ctl.lu ? `<span>· lu à ${vxEsc(String(ctl.lu).slice(11))}</span>` : ''}
     ${r.nouveaux && r.nouveaux.length ? `<span class="mt-new">${r.nouveaux.length} nouveau(x) depuis votre dernière visite</span>` : ''}
     ${ctl.colonnesReperees && (ctl.colonnesReperees.date < 0 || ctl.colonnesReperees.description < 0) ? `<span>· ⚠️ colonne ${ctl.colonnesReperees.date < 0 ? '« horodatage »' : '« description »'} non reconnue dans le Sheet</span>` : ''}
@@ -417,7 +420,7 @@ function maintTableau(liste, nouveaux) {
     <th><input type="checkbox" ${tous ? 'checked' : ''} onchange="maintToutSel(this.checked)"></th><th>N°</th><th>Reçu le</th><th>Statut</th><th>Priorité</th><th>Signalement</th><th>Lieu</th><th>Demandeur</th><th>Responsable</th><th>Suivi</th><th class="text-right">Actions</th></tr></thead><tbody>
     ${liste.map(t => { const c = vxEsc(t.cle).replace(/'/g, "\\'"), u = maintUrgent(t); return `<tr class="${maintSel.has(t.cle) ? 'sel' : ''}" style="cursor:pointer;${t._enCours ? 'opacity:.55' : ''}" onclick="ouvrirTicket('${c}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" ${maintSel.has(t.cle) ? 'checked' : ''} onchange="maintBasculer('${c}',this.checked)"></td>
-      <td>${maintNum(t)}</td>
+      <td>${maintNum(t)}${t.source === 'application' ? '<div class="text-[9px] font-bold text-indigo-500">via l\'appli</div>' : ''}</td>
       <td class="whitespace-nowrap text-gray-500 text-xs">${vxEsc(t.date)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</td>
       <td>${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄</span>' : ''}</td>
       <td class="text-xs ${u ? 'text-red-700 font-black' : 'text-gray-500'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence || '—')}</td>
@@ -632,11 +635,97 @@ function maintSelectCategorie(val) {
       <option value="__autre">✏️ Autre (à préciser)…</option></select>
     <input type="text" id="mtCatAutre" class="hidden mt-2" placeholder="Catégorie personnalisée">`;
 }
+// ── Ouverture d'un ticket depuis l'application (admin maître) ──
+function maintModal() {
+  let m = document.getElementById('mtModal');
+  if (!m) { m = document.createElement('div'); m.id = 'mtModal'; m.className = 'modal-overlay hidden'; m.onclick = e => { if (e.target === m) m.classList.add('hidden'); }; document.body.appendChild(m); }
+  return m;
+}
+function maintNouveau() {
+  const m = maintModal(), t0 = { responsable: '', responsableMail: '' };
+  m.innerHTML = `<div class="modal-box p-6" style="max-width:700px">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">➕ Nouveau ticket de maintenance</h3>
+    <p class="text-xs text-gray-500 mb-4">Ouvert depuis l'application : il reçoit son numéro tout de suite et apparaît dans la liste comme les tickets du formulaire.</p>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="col-span-2"><label>Problème constaté *</label><textarea id="mtDesc" rows="3" placeholder="Ex. : le vidéoprojecteur de la salle 4 ne s'allume plus"></textarea></div>
+      <div><label>Catégorie</label>${maintSelectCategorie('')}</div>
+      <div><label>Campus</label><select id="mtCampus"><option value="">— Choisir —</option>${MAINT_CAMPUS.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select></div>
+      <div><label>Lieu / salle</label><input type="text" id="mtLieu" placeholder="Salle, étage, bureau…"></div>
+      <div><label>Priorité</label><select id="mtPrio">${['', 'Basse', 'Normale', 'Haute', 'Urgente'].map(s => `<option>${s}</option>`).join('')}</select></div>
+      <div><label>Demandeur</label><input type="text" id="mtDemandeur" placeholder="Laisser vide = vous"></div>
+      <div><label>Qui s'en occupe ?</label><select id="mtResp" onchange="maintRespChange(this)">${maintOptionsResp(t0)}</select></div>
+      <div id="mtNouveauContact" class="col-span-2 hidden rounded-2xl border border-dashed border-[#1A4E8A] p-3 bg-blue-50/40">
+        <p class="text-xs font-black text-[#1A4E8A] mb-2">Nouveau contact (prestataire, propriétaire, technicien…)</p>
+        <div class="grid grid-cols-2 gap-2"><input id="mtNcNom" type="text" placeholder="Nom *"><input id="mtNcSoc" type="text" placeholder="Société / rôle">
+          <input id="mtNcMail" type="email" placeholder="Mail (pour les relances)"><input id="mtNcTel" type="tel" placeholder="Téléphone"></div>
+        <div class="flex justify-end gap-2 mt-2"><button onclick="document.getElementById('mtResp').value='';maintRespChange(document.getElementById('mtResp'))" class="btn-ghost text-xs">Annuler</button><button onclick="maintCreerContact()" class="btn-orange text-xs">Créer le contact</button></div></div>
+    </div>
+    <div class="flex justify-end gap-3 mt-5"><button onclick="document.getElementById('mtModal').classList.add('hidden')" class="btn-ghost">Fermer</button>
+      <button id="mtSave" onclick="maintCreerTicket()" class="btn-orange">Ouvrir le ticket</button></div></div>`;
+  m.classList.remove('hidden');
+  document.getElementById('mtDesc').focus();
+}
+async function maintCreerTicket() {
+  const desc = document.getElementById('mtDesc').value.trim(), sel = document.getElementById('mtResp'), btn = document.getElementById('mtSave');
+  if (desc.length < 5) { toast('Décrivez le problème', false); document.getElementById('mtDesc').focus(); return; }
+  if (sel.value === '__nouveau') { toast("Créez le contact ou choisissez une personne", false); return; }
+  if (document.getElementById('mtCatSel').value === '__autre' && !document.getElementById('mtCatAutre').value.trim()) { toast('Précisez la catégorie personnalisée', false); return; }
+  if (btn.disabled) return; btn.disabled = true; btn.textContent = '⏳ Ouverture…';
+  const opt = sel.selectedOptions[0];
+  const d = { op: 'creer', description: desc, categorie: maintCategorieChoisie({ categorie: '' }), campus: document.getElementById('mtCampus').value, lieu: document.getElementById('mtLieu').value.trim(),
+    priorite: document.getElementById('mtPrio').value, demandeur: document.getElementById('mtDemandeur').value.trim(),
+    responsable: sel.value ? sel.value.split('|').slice(1).join('|') : '', responsableMail: sel.value && opt ? (opt.dataset.mail || '') : '' };
+  let r; try { r = await api('updateTicketMaintenance', d); } catch (e) { r = { success: false, message: 'Pas de réponse du serveur' }; }
+  if (!r.success) { btn.disabled = false; btn.textContent = 'Ouvrir le ticket'; toast(r.message || 'Erreur', false); return; }
+  document.getElementById('mtModal').classList.add('hidden');
+  toast(`Ticket ${r.numero} ouvert ✓`);
+  maintFiltre.statut = 'ouverts'; await loadMaintenance();
+}
+
+// ── QR code du formulaire (à transmettre à la communication pour l'affiche) ──
+let _qrLib = null;
+function maintChargerQr() {
+  if (window.QRCode) return Promise.resolve();
+  if (_qrLib) return _qrLib;
+  _qrLib = new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = ok; sc.onerror = () => { _qrLib = null; ko(new Error('Bibliothèque QR indisponible (réseau)')); }; document.head.appendChild(sc); });
+  return _qrLib;
+}
+async function maintQr() {
+  const url = maintData.formPublic, m = maintModal();
+  m.innerHTML = `<div class="modal-box p-6 text-center" style="max-width:520px">
+    <h3 class="text-xl font-black text-[#1A4E8A] mb-1">🔳 QR code — signaler un problème</h3>
+    <p class="text-xs text-gray-500 mb-4">À scanner pour ouvrir directement le formulaire de maintenance. Téléchargez l'image en haute définition pour l'équipe communication.</p>
+    <div id="mtQrBox" style="display:none"></div>
+    <img id="mtQrImg" alt="QR code du formulaire de maintenance" style="width:280px;height:280px;margin:0 auto;image-rendering:pixelated;border:12px solid #fff;box-shadow:0 0 0 1px #e2e8f0;border-radius:8px">
+    <p class="text-[11px] text-gray-400 mt-3 break-all">${vxEsc(url)}</p>
+    <div class="flex flex-wrap justify-center gap-2 mt-4">
+      <button onclick="maintQrTelecharger()" class="btn-orange text-sm">⬇ Télécharger (PNG haute définition)</button>
+      <button onclick="navigator.clipboard.writeText(maintData.formPublic);toast('Lien copié ✓')" class="btn-ghost text-sm">📋 Copier le lien</button>
+      <a href="mailto:?subject=${encodeURIComponent('Affiche — QR code signalement maintenance')}&body=${encodeURIComponent("Bonjour,\n\nPour l'affiche de signalement des problèmes de maintenance, voici le lien du formulaire à encoder dans le QR code (l'image PNG est jointe) :\n" + url + "\n\nMerci !")}" class="btn-ghost text-sm">✉️ Préparer le mail à la com</a>
+      <a href="${vxEsc(url)}" target="_blank" class="btn-ghost text-sm">↗ Tester le lien</a></div>
+    <div class="flex justify-end mt-5"><button onclick="document.getElementById('mtModal').classList.add('hidden')" class="btn-ghost">Fermer</button></div></div>`;
+  m.classList.remove('hidden');
+  try {
+    await maintChargerQr();
+    const box = document.getElementById('mtQrBox'); box.innerHTML = '';
+    new QRCode(box, { text: url, width: 1200, height: 1200, colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+    const cv = box.querySelector('canvas');
+    document.getElementById('mtQrImg').src = cv ? cv.toDataURL('image/png') : (box.querySelector('img') || {}).src;
+  } catch (e) { toast(e.message, false); }
+}
+function maintQrTelecharger() {
+  const box = document.getElementById('mtQrBox'), cv = box && box.querySelector('canvas');
+  if (!cv) { toast('QR code pas encore prêt', false); return; }
+  // marge blanche (zone de silence) autour du code, indispensable à l'impression
+  const marge = 120, out = document.createElement('canvas'); out.width = cv.width + 2 * marge; out.height = cv.height + 2 * marge;
+  const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height); ctx.drawImage(cv, marge, marge);
+  const a = document.createElement('a'); a.href = out.toDataURL('image/png'); a.download = 'QR-formulaire-maintenance-HECG.png'; a.click();
+  try { api('updateTicketMaintenance', { op: 'logqr' }).catch(() => {}); } catch (e) {}
+}
 function ouvrirTicket(cle) {
   const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
   const c = vxEsc(t.cle).replace(/'/g, "\\'");
-  let m = document.getElementById('mtModal');
-  if (!m) { m = document.createElement('div'); m.id = 'mtModal'; m.className = 'modal-overlay hidden'; m.onclick = e => { if (e.target === m) m.classList.add('hidden'); }; document.body.appendChild(m); }
+  const m = maintModal();
   const champ = (id, lab, k, rows) => `<div class="${rows ? 'col-span-2' : ''}"><label>${lab}${t.original && t.original[k] !== t[k] ? ` <span class="text-[10px] text-orange-600" title="${vxEsc(t.original[k])}">(corrigé — original au survol)</span>` : ''}</label>
     ${rows ? `<textarea id="${id}" rows="${rows}">${vxEsc(t[k])}</textarea>` : `<input type="text" id="${id}" value="${vxEsc(t[k])}">`}</div>`;
   m.innerHTML = `<div class="modal-box p-6" style="max-width:760px">
