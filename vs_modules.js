@@ -177,6 +177,20 @@ function injectCss() {
   .fr-rem label{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--li);font-size:12.5px;font-weight:600;cursor:pointer;user-select:none;text-transform:none;letter-spacing:0;color:var(--tx);margin:0}
   .fr-rem input{display:none}
   .fr-rem label:has(input:checked){background:var(--b);border-color:var(--b);color:#fff}
+  .fr-pp{border:1px solid var(--li);border-radius:13px;padding:12px;background:#fff}
+  .fr-tabs{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .fr-tabs button{padding:6px 12px;border-radius:999px;border:1px solid var(--li);background:#fff;font:600 12.5px 'Plus Jakarta Sans',Inter,sans-serif;cursor:pointer;color:var(--tx)}
+  .fr-tabs button.on{background:var(--b);border-color:var(--b);color:#fff}
+  .fr-sel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .fr-sel:empty{display:none}
+  .fr-sel .vx-chip{padding:4px 6px 4px 10px;font-size:12px}
+  .fr-sel .vx-chip.etu{background:#e8f0fb;color:#1A4E8A}.fr-sel .vx-chip.equipe{background:#fff1e8;color:#c2410c}.fr-sel .vx-chip.form{background:#e8f6ee;color:#15803d}
+  .fr-sel .vx-chip button{border:0;background:rgba(0,0,0,.06);border-radius:50%;width:18px;height:18px;line-height:16px;cursor:pointer;color:inherit;font-size:13px;padding:0}
+  .fr-res{max-height:220px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:1px}
+  .fr-res .o{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:9px;cursor:pointer;font-size:13px;color:var(--ink)}
+  .fr-res .o:hover{background:var(--li2)}
+  .fr-res .o small{color:var(--mu);margin-left:auto;text-align:right;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fr-res .o .plus{color:var(--b);font-weight:800}
   .vx-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--li)}
   .vx-dot.on{box-shadow:0 0 0 2px var(--ink)}
   @media(max-width:760px){.vx .g2{grid-template-columns:1fr}.fr-step{grid-template-columns:1fr 1fr}}
@@ -968,7 +982,7 @@ const REMS = [[30, 'J-30'], [14, 'J-14'], [7, 'J-7'], [3, 'J-3'], [2, 'J-2'], [1
 async function frLoad(force) {
   const r = await api('getFrises', {}, force ? { forceRefresh: true } : {});
   if (!r.success) { $('frBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('clock', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
-  F.data = r.data || [];
+  F.data = r.data || []; F.personnes = r.personnes || [];
   if (!F.data.find(f => f.id === F.cur)) F.cur = (F.data[0] || {}).id || null;
   frRender();
 }
@@ -1018,7 +1032,7 @@ function frBoard(f) {
   const progX = Math.min(x(today), width);
   return `<div class="fr-board" style="--c:${esc(f.couleur)}">
     <div class="fr-head"><div><h2><i></i>${esc(f.titre)}</h2>${f.description ? `<p style="margin:6px 0 0;color:var(--mu)">${esc(f.description)}</p>` : ''}
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"><span class="vx-chip">${svg('bell', 12)} Rappels : ${String(f.rappels).split(',').map(r => +r === 0 ? 'jour J' : (+r === 1 ? 'veille' : 'J-' + r)).join(', ')}</span><span class="vx-chip">${svg('mail', 12)} ${esc(f.destinataires || f.emailCreateur)}</span><span class="vx-chip b">${doneCount}/${steps.length} rendue(s)</span></div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"><span class="vx-chip">${svg('bell', 12)} Rappels : ${String(f.rappels).split(',').map(r => +r === 0 ? 'jour J' : (+r === 1 ? 'veille' : 'J-' + r)).join(', ')}</span>${frDestChip(f)}<span class="vx-chip b">${doneCount}/${steps.length} rendue(s)</span></div></div>
       <div style="display:flex;gap:8px"><button class="vx-btn" onclick="VX.frPdf('${jsq(f.id)}')">${svg('down', 14)} Exporter en PDF</button><button class="vx-btn" onclick="VX.frEdit('${jsq(f.id)}')">${svg('edit', 14)} Modifier</button></div></div>
     ${n ? `<div class="fr-next"><div class="fr-cd"><b>${daysTo(n.date) < 0 ? '!' : (daysTo(n.date) === 0 ? 'J' : 'J-' + daysTo(n.date))}</b><span>${daysTo(n.date) < 0 ? 'retard' : (daysTo(n.date) === 0 ? "aujourd'hui" : 'jours')}</span></div>
       <div><div style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--mu)">Prochaine échéance · ${fmtLong(n.date)}</div><div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">${esc(n.titre)}</div>${n.aRendre ? `<div style="color:var(--tx);margin-top:2px">À rendre : ${esc(n.aRendre)}</div>` : ''}</div>
@@ -1035,6 +1049,14 @@ function frBoard(f) {
     </div></div></div>`;
 }
 function frSel(id) { F.cur = id; frRender(); }
+const FR_TYPES = { etu: ['Étudiants', 'étudiant'], equipe: ['Équipe', 'membre de l\'équipe'], form: ['Formateurs', 'formateur'] };
+function frDestChip(f) {
+  const tous = String(f.destinataires || f.emailCreateur || '').split(/[,;\s]+/).filter(x => x.includes('@'));
+  const parts = f.participants || [], n = t => parts.filter(p => p.t === t).length;
+  const det = ['etu', 'equipe', 'form'].filter(t => n(t)).map(t => n(t) + ' ' + FR_TYPES[t][1] + (n(t) > 1 ? 's' : '')).join(' · ');
+  const titre = parts.map(p => p.nom + ' <' + p.email + '>').concat(tous.filter(e => !parts.some(p => p.email === e))).join('\n');
+  return `<span class="vx-chip" title="${esc(titre)}">${svg('mail', 12)} ${tous.length} destinataire(s) des rappels${det ? ' — ' + esc(det) : ''}</span>`;
+}
 
 // Export PDF : document A4 paysage mis en page (frise + tableau détaillé), puis impression
 // « Enregistrer au format PDF » du navigateur.
@@ -1115,23 +1137,49 @@ async function frToggle(id, rendu) {
 }
 function frEdit(id) {
   const f = id ? F.data.find(x => x.id === id) : null;
-  const E = { couleur: f ? f.couleur : PALETTE[0], rappels: (f ? f.rappels : '7,2,0').split(',').map(Number), etapes: f ? f.etapes.map(e => ({ ...e })) : [{ date: '', titre: '', aRendre: '' }] };
-  const dlg = modal(`<h2>${f ? 'Modifier la frise' : 'Nouvelle frise'}</h2><p class="sub">Vous recevrez un mail de rappel avant chaque échéance non rendue.</p>
+  const E = { couleur: f ? f.couleur : PALETTE[0], rappels: (f ? f.rappels : '7,2,0').split(',').map(Number), etapes: f ? f.etapes.map(e => ({ ...e })) : [{ date: '', titre: '', aRendre: '' }],
+    parts: f ? (f.participants || []).map(p => ({ ...p })) : [], tab: 'etu', q: '' };
+  const autres = f ? String(f.destinataires || '').split(/[,;\s]+/).filter(e => e.includes('@') && !E.parts.some(p => p.email === e.toLowerCase())).join(', ') : (user.email || '');
+  const dlg = modal(`<h2>${f ? 'Modifier la frise' : 'Nouvelle frise'}</h2><p class="sub">Un mail de rappel est envoyé avant chaque échéance non rendue à toutes les personnes ajoutées ci-dessous (étudiants, équipe, formateurs).</p>
     <label class="fl">Titre</label><input class="in" id="frT" value="${esc(f ? f.titre : '')}" placeholder="Ex : Calendrier des mémoires BTS CG 2026">
     <label class="fl">Description</label><input class="in" id="frD" value="${esc(f ? f.description : '')}" placeholder="Facultatif">
     <label class="fl">Couleur</label><div style="display:flex;gap:8px" id="frC"></div>
     <label class="fl">Échéances</label><div class="fr-steps" id="frSteps"></div>
     <button class="vx-btn sm" style="margin-top:10px" id="frAdd">${svg('plus', 14, 2.4)} Ajouter une échéance</button>
     <label class="fl">Rappels par mail</label><div class="fr-rem" id="frR">${REMS.map(([n, l]) => `<label><input type="checkbox" value="${n}" ${E.rappels.includes(n) ? 'checked' : ''}>${l}</label>`).join('')}</div>
-    <label class="fl">Destinataires des rappels</label><input class="in" id="frDest" value="${esc(f ? f.destinataires : (user.email || ''))}" placeholder="email1@hecg.fr, email2@hecg.fr">
+    <label class="fl">Personnes qui reçoivent les rappels</label>
+    <div class="fr-pp"><div class="fr-sel" id="frSel"></div>
+      <div class="fr-tabs" id="frTabs"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input class="in" id="frQ" style="flex:1;min-width:220px" placeholder="Rechercher un nom, une classe, un mail…"><select class="in" id="frCls" style="width:auto;flex:0 0 auto"></select></div>
+      <div class="fr-res" id="frRes"></div></div>
+    <label class="fl">Autres adresses mail (facultatif)</label><input class="in" id="frDest" value="${esc(autres)}" placeholder="email1@hecg.fr, email2@hecg.fr">
     <div class="mft">${f ? `<button class="vx-btn danger" style="margin-right:auto" id="frDel">${svg('trash', 14)} Supprimer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frSave">Enregistrer</button></div>`, 900);
   const drawC = () => { $('frC').innerHTML = PALETTE.map(c => `<span class="vx-dot ${c === E.couleur ? 'on' : ''}" style="background:${c}" data-c="${c}"></span>`).join(''); };
   const readSteps = () => { dlg.querySelectorAll('.fr-step').forEach((row, i) => { E.etapes[i].date = row.querySelector('[data-k=date]').value; E.etapes[i].titre = row.querySelector('[data-k=titre]').value; E.etapes[i].aRendre = row.querySelector('[data-k=ar]').value; }); };
   const drawS = () => {
     $('frSteps').innerHTML = E.etapes.map((e, i) => `<div class="fr-step"><input type="date" class="in" data-k="date" value="${esc(e.date)}"><input class="in" data-k="titre" value="${esc(e.titre)}" placeholder="Échéance (ex : Remise du plan)"><input class="in" data-k="ar" value="${esc(e.aRendre)}" placeholder="À rendre (ex : plan détaillé + biblio)"><button class="vx-btn ico danger" data-del="${i}" title="Retirer">${svg('trash', 14)}</button></div>`).join('');
   };
-  drawC(); drawS();
+  const P = F.personnes || [];
+  const drawP = () => {
+    $('frSel').innerHTML = E.parts.map((p, i) => `<span class="vx-chip ${p.t}" title="${esc(FR_TYPES[p.t][1] + ' — ' + p.email)}">${esc(p.nom || p.email)}<button type="button" data-rm="${i}" title="Retirer">×</button></span>`).join('');
+    $('frTabs').innerHTML = Object.keys(FR_TYPES).map(t => `<button type="button" data-tab="${t}" class="${E.tab === t ? 'on' : ''}">${FR_TYPES[t][0]} (${P.filter(p => p.t === t).length})</button>`).join('')
+      + `<span style="margin-left:auto;font-size:12px;color:var(--mu)">${E.parts.length} sélectionné(s)</span>`;
+    const pris = new Set(E.parts.map(p => p.email)), q = norm(E.q);
+    const liste = P.filter(p => p.t === E.tab && !pris.has(p.email) && (!q || norm(p.nom + ' ' + p.info + ' ' + p.email).includes(q)));
+    $('frRes').innerHTML = liste.slice(0, 60).map(p => `<div class="o" data-add="${esc(p.email)}"><span class="plus">+</span>${esc(p.nom)}<small>${esc(p.info || p.email)}</small></div>`).join('')
+      || `<div style="padding:8px;color:var(--mu);font-size:13px">${P.length ? 'Aucune personne à ajouter' : 'Liste des personnes indisponible (rechargez la page)'}</div>`;
+    const cls = [...new Set(P.filter(p => p.t === 'etu').map(p => p.info).filter(Boolean))].sort();
+    $('frCls').style.display = E.tab === 'etu' ? '' : 'none';
+    $('frCls').innerHTML = '<option value="">+ Ajouter toute une classe</option>' + cls.map(c => `<option value="${esc(c)}">${esc(c)} (${P.filter(p => p.t === 'etu' && p.info === c).length})</option>`).join('');
+  };
+  const addP = p => { if (p && !E.parts.some(x => x.email === p.email)) E.parts.push({ t: p.t, id: p.id, nom: p.nom, email: p.email }); };
+  $('frQ').oninput = () => { E.q = $('frQ').value; drawP(); };
+  $('frCls').onchange = () => { const c = $('frCls').value; if (!c) return; P.filter(p => p.t === 'etu' && p.info === c).forEach(addP); toast(`Classe ${c} ajoutée aux rappels`); drawP(); };
+  drawC(); drawS(); drawP();
   dlg.addEventListener('click', ev => {
+    const tb = ev.target.closest('[data-tab]'); if (tb) { E.tab = tb.dataset.tab; drawP(); return; }
+    const ad = ev.target.closest('[data-add]'); if (ad) { addP(P.find(p => p.email === ad.dataset.add && p.t === E.tab)); drawP(); return; }
+    const rm = ev.target.closest('[data-rm]'); if (rm) { E.parts.splice(+rm.dataset.rm, 1); drawP(); return; }
     const c = ev.target.closest('[data-c]'); if (c) { E.couleur = c.dataset.c; drawC(); }
     const d = ev.target.closest('[data-del]'); if (d) { readSteps(); E.etapes.splice(+d.dataset.del, 1); drawS(); }
   });
@@ -1142,8 +1190,9 @@ function frEdit(id) {
     const incompletes = E.etapes.filter(e => (e.date || e.titre) && !(e.date && e.titre.trim()));
     if (incompletes.length) { toast('Chaque échéance doit avoir une date et un titre', false); return; }
     const rappels = [...dlg.querySelectorAll('#frR input:checked')].map(i => i.value).join(',');
-    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
+    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, participants: E.parts, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    if (!E.parts.length && !$('frDest').value.includes('@')) toast('Aucun destinataire : les rappels iront au créateur de la frise', false);
     dlg.remove(); F.cur = r.id; toast(f ? 'Frise mise à jour ✓' : 'Frise créée ✓ — rappels activés'); frLoad(true);
   };
   if ($('frDel')) $('frDel').onclick = async () => {

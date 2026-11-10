@@ -889,6 +889,7 @@ function auditAdressesTick() {
   try { _qualiopiPackAuto_(); } catch (eQ) { console.error('pack Qualiopi : ' + eQ); }   // import unique (qualiopi.gs)
   try { if (typeof _initSecrets_ === 'function') _initSecrets_(); } catch (eS) {}   // paramètres sensibles posés une fois (fichier hors dépôt)
   try { _rcAuto_(); } catch (eR) { console.error('audit recruteurs : ' + eR); }   // audit espace recruteurs, chaque nuit (recruteurs.gs)
+  try { if (typeof _frisesAuto_ === 'function') _frisesAuto_(); } catch (eF) { console.error('rappels frises : ' + eF); }   // rappels d'échéances des frises (vs_extras.gs)
   try { _relCandAuto_(); } catch (eC) { console.error('relance candidatures : ' + eC); }   // relance quotidienne 9 h, jours ouvrés (relances.gs)
   _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();

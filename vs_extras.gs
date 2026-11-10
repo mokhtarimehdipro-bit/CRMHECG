@@ -119,7 +119,7 @@ function handleSaveMemoire(p, ss) {
 }
 
 // ═══════════════════════════ FRISES CHRONOLOGIQUES ═══════════════════════════
-var FRISE_HEADERS = ["ID", "Titre", "Description", "Couleur", "Destinataires", "Rappels (jours avant)", "Créé par", "Email créateur", "Créé le", "Archivée"];
+var FRISE_HEADERS = ["ID", "Titre", "Description", "Couleur", "Destinataires", "Rappels (jours avant)", "Créé par", "Email créateur", "Créé le", "Archivée", "Participants"];
 var ETAPE_HEADERS = ["ID", "ID frise", "Date", "Titre", "À rendre", "Statut", "Rappels envoyés", "Rendu le"];
 
 function _friseVisible_(p, row) {
@@ -148,9 +148,15 @@ function handleGetFrises(p, ss) {
       const et = (etapes[String(fd[i][0])] || []).sort(function(a, b) { return a.date < b.date ? -1 : 1; });
       list.push({ id: String(fd[i][0]), titre: String(fd[i][1] || ""), description: String(fd[i][2] || ""), couleur: String(fd[i][3] || "#1A4E8A"),
         destinataires: String(fd[i][4] || ""), rappels: String(fd[i][5] || "7,2,0"), createur: String(fd[i][6] || ""), emailCreateur: String(fd[i][7] || ""),
-        creeLe: fd[i][8] instanceof Date ? Utilities.formatDate(fd[i][8], tz, "yyyy-MM-dd") : "", etapes: et });
+        creeLe: fd[i][8] instanceof Date ? Utilities.formatDate(fd[i][8], tz, "yyyy-MM-dd") : "", etapes: et,
+        participants: _friseParticipants_(fd[i][10]) });
     }
-    return createJsonResponse({ success: true, data: list });
+    // Référentiel du sélecteur de participants : étudiants actifs, équipe, formateurs (avec mail)
+    const ref = _vsxRef_(ss), personnes = [];
+    ref.etudiants.forEach(function(e) { if (!e.sortie && e.mail.indexOf("@") > 0) personnes.push({ t: "etu", id: e.id, nom: (e.prenom + " " + e.nom).trim(), info: e.classe, email: e.mail.toLowerCase() }); });
+    ref.personnel.forEach(function(x) { if (x.email.indexOf("@") > 0) personnes.push({ t: "equipe", id: x.ref, nom: x.nom, info: x.role, email: x.email }); });
+    ref.formateurs.forEach(function(x) { if (x.email.indexOf("@") > 0) personnes.push({ t: "form", id: x.ref, nom: x.nom, info: x.matieres, email: x.email.toLowerCase() }); });
+    return createJsonResponse({ success: true, data: list, personnes: personnes });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
@@ -164,7 +170,11 @@ function handleSaveFrise(p, ss) {
     const now = new Date();
     const me = String(p.emailAuteur || "").toLowerCase();
     const rappels = String(f.rappels || "7,2,0").split(/[,;\s]+/).map(Number).filter(function(n) { return !isNaN(n) && n >= 0 && n <= 60; }).join(",") || "7,2,0";
-    const dest = String(f.destinataires || me).toLowerCase().split(/[,;\s]+/).filter(function(s) { return s.indexOf("@") > 0; }).join(", ");
+    const parts = _friseParticipants_(f.participants);
+    const emails = String(f.destinataires || (parts.length ? "" : me)).toLowerCase().split(/[,;\s]+/).filter(function(s) { return s.indexOf("@") > 0; });
+    parts.forEach(function(x) { if (emails.indexOf(x.email) === -1) emails.push(x.email); });
+    const dest = emails.join(", "), partsJson = JSON.stringify(parts);
+    if (!String(fws.getRange(1, 11).getValue() || "")) fws.getRange(1, 11).setValue("Participants").setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
     let id = f.id;
     if (id) {
       const d = fws.getDataRange().getValues(); let found = false;
@@ -172,13 +182,14 @@ function handleSaveFrise(p, ss) {
         if (!_vsxIsSuper_(p) && String(d[i][7]).toLowerCase() !== me) return createJsonResponse({ success: false, message: "Seul le créateur peut modifier cette frise." });
         fws.getRange(i + 1, 2, 1, 5).setValues([[String(f.titre || ""), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels]]);
         if (f.archiver) fws.getRange(i + 1, 10).setValue("Oui");
+        else if (f.participants !== undefined) fws.getRange(i + 1, 11).setValue(partsJson);
         found = true; break;
       }
       if (!found) return createJsonResponse({ success: false, message: "Frise introuvable." });
     } else {
       if (!String(f.titre || "").trim()) return createJsonResponse({ success: false, message: "Donnez un titre à la frise." });
       id = "FR" + now.getTime();
-      fws.appendRow([id, String(f.titre), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels, String(p.nomAuteur || me), me, now, ""]);
+      fws.appendRow([id, String(f.titre), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels, String(p.nomAuteur || me), me, now, "", partsJson]);
     }
     // Étapes : remplacement de la liste (on conserve l'historique des rappels envoyés par ID)
     if (Array.isArray(f.etapes)) {
@@ -199,7 +210,7 @@ function handleSaveFrise(p, ss) {
       }
     }
     _ensureFriseTrigger_();
-    logAction(p.nomAuteur || me, p.vieScRole || "", f.id ? (f.archiver ? "Suppression" : "Modification") : "Création", "Vie scolaire", id, "Frise : " + String(f.titre || ""));
+    logAction(p.nomAuteur || me, p.vieScRole || "", f.id ? (f.archiver ? "Suppression" : "Modification") : "Création", "Vie scolaire", id, "Frise : " + String(f.titre || "") + (parts.length ? " — " + parts.length + " participant(s) aux rappels" : ""));
     return createJsonResponse({ success: true, id: id });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
@@ -216,6 +227,28 @@ function handleToggleEtapeFrise(p, ss) {
     }
     return createJsonResponse({ success: false, message: "Étape introuvable." });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// Participants d'une frise : [{t: "etu"|"equipe"|"form", id, nom, email}] (colonne K, JSON)
+function _friseParticipants_(v) {
+  let a = v;
+  if (typeof a === "string") { try { a = a ? JSON.parse(a) : []; } catch (e) { a = []; } }
+  if (!Array.isArray(a)) return [];
+  const vu = {};
+  return a.map(function(x) { return { t: ["etu", "equipe", "form"].indexOf(x && x.t) !== -1 ? x.t : "equipe", id: String(x && x.id || ""), nom: String(x && x.nom || ""), email: String(x && x.email || "").trim().toLowerCase() }; })
+    .filter(function(x) { if (x.email.indexOf("@") < 1 || vu[x.email]) return false; vu[x.email] = 1; return true; });
+}
+
+// Filet de sécurité : la limite de 20 déclencheurs peut empêcher la création de « rappelsFrises ».
+// auditAdressesTick (toutes les 5 min) lance donc aussi les rappels une fois par jour à partir de 7 h.
+// rappelsFrises mémorise par étape les rappels déjà envoyés : pas de doublon si le déclencheur existe aussi.
+function _frisesAuto_() {
+  const props = PropertiesService.getScriptProperties(), now = new Date();
+  if (Number(Utilities.formatDate(now, "Europe/Paris", "H")) < 7) return;
+  const auj = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd");
+  if (props.getProperty("FRISES_RAPPEL_JOUR") === auj) return;
+  props.setProperty("FRISES_RAPPEL_JOUR", auj);
+  rappelsFrises();
 }
 
 function _ensureFriseTrigger_() {
@@ -235,6 +268,8 @@ function rappelsFrises() {
   for (let i = 1; i < fd.length; i++) if (fd[i][0] && String(fd[i][9]) !== "Oui") frises[String(fd[i][0])] = fd[i];
   const today = new Date(Utilities.formatDate(new Date(), tz, "yyyy-MM-dd") + "T12:00:00");
   const parDest = {}; // email → [{frise, étape, jours}]
+  const qui = {};     // email → participant (prénom, type) pour personnaliser le mail
+  Object.keys(frises).forEach(function(k) { _friseParticipants_(frises[k][10]).forEach(function(x) { if (!qui[x.email] || x.t === "etu") qui[x.email] = x; }); });
   for (let i = 1; i < ed.length; i++) {
     const fr = frises[String(ed[i][1])];
     if (!fr || String(ed[i][5]) === "Rendu") continue;
@@ -252,6 +287,7 @@ function rappelsFrises() {
     });
     ews.getRange(i + 1, 7).setValue(deja.concat(due.map(String)).join(","));
   }
+  let envoyes = 0;
   Object.keys(parDest).forEach(function(em) {
     const items = parDest[em].sort(function(a, b) { return a.jours - b.jours; });
     const esc = function(s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
@@ -264,13 +300,21 @@ function rappelsFrises() {
         + (it.et[4] ? '<div style="font-size:13.5px;color:#475569;margin-top:4px">À rendre : ' + esc(it.et[4]) + '</div>' : '')
         + '<div style="font-size:12.5px;color:#94a3b8;margin-top:4px">Échéance : ' + Utilities.formatDate(new Date(it.ds + "T12:00:00"), tz, "EEEE d MMMM yyyy") + '</div></td></tr>';
     }).join("");
+    const pq = qui[em], etu = !!(pq && pq.t === "etu");
+    const prenom = pq && pq.nom ? (etu ? pq.nom.split(/\s+/)[0] : pq.nom) : "";
+    // Les étudiants n'ont pas accès à Vie scolaire : pas de lien vers les frises pour eux.
     const html = '<div style="font-family:Segoe UI,Arial,sans-serif;background:#f5f7fb;padding:28px"><div style="max-width:580px;margin:0 auto;background:#fff;border-radius:16px;border:1px solid #e6ebf2;overflow:hidden">'
       + '<div style="background:#1A4E8A;color:#fff;padding:20px 26px;font-size:18px;font-weight:700">⏰ Prochaines échéances</div>'
-      + '<div style="padding:8px 26px 24px"><table style="width:100%;border-collapse:collapse">' + lignes + '</table>'
-      + '<a href="https://mokhtarimehdipro-bit.github.io/CRMHECG/vie_scolaire.html" style="display:inline-block;margin-top:20px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">Ouvrir les frises</a></div></div></div>';
-    try { MailApp.sendEmail({ to: em, subject: "[HECG] ⏰ " + (items[0].jours === 0 ? "Échéance aujourd'hui" : "Échéance proche") + " : " + items[0].et[3], htmlBody: html, name: "CRM HECG" }); }
+      + '<div style="padding:8px 26px 24px">'
+      + (prenom ? '<p style="font-size:14.5px;color:#1f2937;margin:16px 0 4px">Bonjour ' + esc(prenom) + ',</p><p style="font-size:14px;color:#475569;margin:0 0 6px">' + (items.length > 1 ? 'voici les échéances qui approchent :' : "voici l'échéance qui approche :") + '</p>' : '')
+      + '<table style="width:100%;border-collapse:collapse">' + lignes + '</table>'
+      + (etu ? '<p style="font-size:13px;color:#64748b;margin-top:18px">Une question ? Contactez le pôle pédagogique : polepedagogique@hecg.fr</p>'
+             : '<a href="https://mokhtarimehdipro-bit.github.io/CRMHECG/vie_scolaire.html" style="display:inline-block;margin-top:20px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">Ouvrir les frises</a>')
+      + '</div></div></div>';
+    try { MailApp.sendEmail({ to: em, subject: "[HECG] ⏰ " + (items[0].jours === 0 ? "Échéance aujourd'hui" : "Échéance proche") + " : " + items[0].et[3], htmlBody: html, name: "HECG — Rappel d'échéance" }); envoyes++; }
     catch (e) { Logger.log("Rappel frise " + em + " : " + e); }
   });
+  if (envoyes) { try { logAction("Rappel automatique", "", "Action", "Vie scolaire — frises (rappels)", "FRISES", envoyes + " rappel(s) d'échéance envoyé(s) par mail"); } catch (eL) {} }
 }
 
 // ═══════════════════════════ PROSPECTS SALON (salon.html) ═══════════════════════════
