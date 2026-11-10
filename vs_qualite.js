@@ -964,48 +964,224 @@ async function fmSauver() {
 }
 
 // ── Réponses & statistiques ──
-async function fmReponses(id) {
-  const f = formsData.find(x => x.id === id);
-  let m = document.getElementById('frModal');
-  if (!m) { m = document.createElement('div'); m.id = 'frModal'; m.className = 'modal-overlay hidden'; m.onclick = e => { if (e.target === m) m.classList.add('hidden'); }; document.body.appendChild(m); }
-  m.innerHTML = `<div class="modal-box p-6" style="max-width:1000px;width:95vw;max-height:90vh;overflow:auto"><p class="text-gray-400">Chargement des réponses…</p></div>`;
-  m.classList.remove('hidden');
-  const r = await api('getFormulaireReponses', { id });
-  const box = m.firstElementChild;
-  if (!r.success) { box.innerHTML = `<p class="text-red-600 font-bold">${vxEsc(r.message)}</p>`; return; }
-  const th = f.theme || {}, coul = th.couleur || '#1A4E8A', acc = th.accent || '#F26522';
-  let cols, lignes, questions;
-  if (r.externe) { cols = r.colonnes; lignes = r.lignes; questions = cols.map((c, i) => ({ id: String(i), label: c, type: 'auto' })); }
-  else { questions = r.questions.filter(q => q.type !== 'section'); cols = ['Date'].concat(questions.map(q => q.label)); lignes = r.reponses.map(x => [x.date].concat(questions.map(q => Array.isArray(x.reponses[q.id]) ? x.reponses[q.id].join(', ') : (x.reponses[q.id] ?? '')))); }
-  const n = lignes.length;
-  const stats = questions.map((q, qi) => {
-    const col = r.externe ? qi : qi + 1;
-    const vals = lignes.map(l => String(l[col] ?? '').trim()).filter(Boolean);
-    if (!vals.length || (r.externe && qi === 0)) return '';
-    const nums = vals.map(Number).filter(v => !isNaN(v));
-    const estNum = nums.length === vals.length && (q.type !== 'texte');
-    if (q.type === 'nps' || (estNum && Math.max(...nums) === 10 && Math.min(...nums) >= 0 && q.type === 'nps')) {
-      const p = nums.filter(v => v >= 9).length, d = nums.filter(v => v <= 6).length, score = Math.round((p - d) / nums.length * 100);
-      return fmCarteStat(q.label, `<b style="font-size:1.8rem;color:${score >= 0 ? '#059669' : '#dc2626'}">${score > 0 ? '+' : ''}${score}</b><span class="text-xs text-gray-400 ml-2">score de recommandation (${nums.length} rép.)</span>`);
-    }
-    if (estNum && ['etoiles', 'echelle', 'nombre', 'auto'].includes(q.type)) {
-      const moy = nums.reduce((a, b) => a + b, 0) / nums.length, max = q.type === 'etoiles' ? 5 : (q.max || Math.max(...nums, 5));
-      return fmCarteStat(q.label, `<b style="font-size:1.8rem;color:${coul}">${moy.toFixed(1).replace('.', ',')}</b><span class="text-gray-400"> / ${max}</span>
-        <div style="height:8px;background:#f1f5f9;border-radius:9px;margin-top:.4rem"><div style="height:8px;width:${Math.min(100, moy / max * 100)}%;border-radius:9px;background:linear-gradient(90deg,${coul},${acc})"></div></div><p class="text-xs text-gray-400 mt-1">${nums.length} réponse(s)</p>`);
-    }
-    const freq = {}; vals.forEach(v => v.split(/,\s*/).forEach(x => { freq[x] = (freq[x] || 0) + 1; }));
-    const ent = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-    if (ent.length <= 12 && vals.every(v => v.length < 80)) return fmCarteStat(q.label, ent.map(([k, c]) => `<div style="margin-top:.35rem"><div class="flex justify-between text-xs"><span class="font-semibold">${vxEsc(k)}</span><span class="text-gray-400">${c} (${Math.round(c / vals.length * 100)} %)</span></div>
-      <div style="height:7px;background:#f1f5f9;border-radius:9px"><div style="height:7px;width:${c / ent[0][1] * 100}%;border-radius:9px;background:${coul}"></div></div></div>`).join(''));
-    return fmCarteStat(q.label, `<div style="max-height:160px;overflow:auto">${vals.slice(-12).reverse().map(v => `<p class="text-xs bg-gray-50 rounded-lg px-2 py-1 mt-1">« ${vxEsc(v)} »</p>`).join('')}</div>`, true);
-  }).join('');
-  box.innerHTML = `<div class="flex justify-between items-start gap-3 mb-4"><div><h3 class="text-xl font-black" style="color:${coul}">📊 ${vxEsc(f.titre)}</h3><p class="text-sm text-gray-500">${n} réponse(s)${r.externe ? ' — formulaire Google' : ''}</p></div>
-    <div class="flex gap-2">${n ? `<button onclick="fmCsv()" class="btn-ghost text-sm">⬇️ CSV</button>` : ''}<button onclick="document.getElementById('frModal').classList.add('hidden')" class="btn-ghost text-sm">Fermer</button></div></div>
-    ${n ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.8rem">${stats}</div>
-    <details class="mt-5"><summary class="cursor-pointer font-bold text-sm text-gray-600">Voir le tableau des réponses</summary><div style="overflow:auto;margin-top:.6rem"><table class="text-xs w-full"><thead><tr>${cols.map(c => `<th class="text-left p-2 bg-gray-50">${vxEsc(c)}</th>`).join('')}</tr></thead>
-      <tbody>${lignes.slice().reverse().map(l => `<tr class="border-t">${cols.map((c, i) => `<td class="p-2 align-top">${vxEsc(l[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>` : '<p class="text-gray-400">Aucune réponse pour le moment.</p>'}`;
-  window._fmExport = { cols, lignes, titre: f.titre };
+// ══ Réponses d'un formulaire : espace de consultation + analyse (données relues dans le Sheet) ══
+let FR = null;
+const FR_VIDES = new Set('dans pour avec sans plus pas est sont une des les aux sur par qui que quoi elle il ils nous vous cette cet ces son sa ses leur leurs mais donc car tres très fait faire être etre avoir peut depuis encore aussi bien tout tous toute toutes merci bonjour cela comme ainsi entre etait était chez quand rien autre autres meme même votre notre leur vos nos'.split(' '));
+function frDate(v) {
+  const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
+  const i = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return i ? new Date(+i[1], +i[2] - 1, +i[3]) : null;
 }
+function frNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+// Type de chaque colonne : date, email, num, cat, multi, texte, id
+function frTypes(cols, lignes, qtypes) {
+  return cols.map((c, i) => {
+    const qt = qtypes && qtypes[i], vals = lignes.map(l => String(l[i] ?? '').trim()).filter(Boolean), h = frNorm(c);
+    if (qt === 'date' || /horodat|timestamp|^date$/.test(h)) return 'date';
+    if (qt === 'email' || /e-?mail|courriel/.test(h)) return 'email';
+    if (qt === 'tel' || /telephone|portable|^tel/.test(h)) return 'id';
+    if (['etoiles', 'echelle', 'nombre', 'nps'].includes(qt)) return 'num';
+    if (qt === 'cases') return 'multi';
+    if (['choix', 'liste', 'oui_non'].includes(qt)) return 'cat';
+    if (!vals.length) return 'texte';
+    const nums = vals.map(v => Number(String(v).replace(',', '.')));
+    if (nums.every(n => !isNaN(n)) && new Set(vals).size <= 11) return 'num';
+    const distinct = new Set(vals).size, moy = vals.reduce((a, v) => a + v.length, 0) / vals.length;
+    if (!qt && /comment|remarque|suggestion|precise|pourquoi|observation|avis libre|expliquez|detaill/.test(h)) return 'texte';
+    if (!qt && vals.filter(v => /,\s/.test(v)).length >= vals.length * 0.25) {
+      const morceaux = new Set(vals.flatMap(v => v.split(/,\s*/)));
+      if (morceaux.size <= 15 && morceaux.size <= distinct && vals.flatMap(v => v.split(/,\s*/)).every(m => m.length < 60)) return 'multi';
+    }
+    if (moy < 60 && (distinct <= 12 || distinct <= vals.length * 0.4)) return 'cat';
+    return 'texte';
+  });
+}
+async function fmReponses(id) {
+  const f = formsData.find(x => x.id === id); if (!f) return;
+  const s = document.getElementById('section-formulaires');
+  s.innerHTML = `<div class="text-center text-gray-400 py-16">Lecture des réponses dans le Sheet…</div>`;
+  let r; try { r = await api('getFormulaireReponses', { id }, { forceRefresh: true }); } catch (e) { r = { success: false, message: 'Pas de réponse du serveur' }; }
+  if (!r.success) { s.innerHTML = `<button onclick="renderFormulaires()" class="btn-ghost text-sm mb-4">← Formulaires</button><p class="text-red-600 font-bold">${vxEsc(r.message)}</p>`; return; }
+  let cols, lignes, qtypes;
+  if (r.externe) { cols = r.colonnes || []; lignes = r.lignes || []; qtypes = null; }
+  else { const qs = (r.questions || []).filter(q => q.type !== 'section'); cols = ['Date'].concat(qs.map(q => q.label)); qtypes = ['date'].concat(qs.map(q => q.type));
+    lignes = (r.reponses || []).map(x => [x.date].concat(qs.map(q => Array.isArray(x.reponses[q.id]) ? x.reponses[q.id].join(', ') : (x.reponses[q.id] ?? '')))); }
+  const types = frTypes(cols, lignes, qtypes), iDate = types.indexOf('date');
+  const garde = FR && FR.f.id === id ? FR : null;
+  FR = { f, r, cols, lignes, types, iDate, dates: lignes.map(l => iDate >= 0 ? frDate(l[iDate]) : null),
+    onglet: garde ? garde.onglet : 'analyse', q: garde ? garde.q : '', du: garde ? garde.du : '', au: garde ? garde.au : '', filtre: garde ? garde.filtre : null,
+    tri: garde ? garde.tri : { col: iDate, desc: true }, page: 0, idx: 0, croixA: garde ? garde.croixA : '', croixB: garde ? garde.croixB : '' };
+  frRendre();
+}
+function frFiltrees() {
+  const q = frNorm(FR.q), du = FR.du ? new Date(FR.du) : null, au = FR.au ? new Date(FR.au + 'T23:59:59') : null, fl = FR.filtre;
+  const out = [];
+  FR.lignes.forEach((l, i) => {
+    const d = FR.dates[i];
+    if (du && (!d || d < du)) return; if (au && (!d || d > au)) return;
+    if (q && !frNorm(l.join(' ')).includes(q)) return;
+    if (fl) { const v = String(l[fl.col] ?? '').trim(); if (FR.types[fl.col] === 'multi' ? !v.split(/,\s*/).includes(fl.val) : v !== fl.val) return; }
+    out.push(i);
+  });
+  return out;
+}
+function frFiltrer(col, val) { FR.filtre = FR.filtre && FR.filtre.col === col && FR.filtre.val === val ? null : { col, val }; FR.page = 0; frRendre(); }
+function frBarres(paires, total, col) {
+  const max = Math.max(1, ...paires.map(p => p[1]));
+  return paires.map(([lib, n]) => { const actif = FR.filtre && FR.filtre.col === col && FR.filtre.val === lib;
+    return `<div class="fr-bar ${col != null ? 'cursor-pointer' : ''}" ${col != null ? `data-col="${col}" data-val="${vxEsc(lib)}"` : ''} title="${vxEsc(lib)} : ${n} (${total ? Math.round(n * 100 / total) : 0} %)${col != null ? ' — cliquer pour filtrer' : ''}">
+      <div class="flex justify-between gap-2 text-xs"><span class="font-semibold ${actif ? 'text-[#F26522]' : 'text-gray-700'} truncate">${actif ? '● ' : ''}${vxEsc(lib)}</span><span class="text-gray-500 whitespace-nowrap" style="font-variant-numeric:tabular-nums"><b class="text-gray-800">${n}</b> · ${total ? Math.round(n * 100 / total) : 0} %</span></div>
+      <div style="height:8px;background:#eef2f7;border-radius:4px;margin-top:3px"><div style="height:8px;width:${Math.max(2, n * 100 / max)}%;background:${actif ? '#F26522' : 'var(--fr-c)'};border-radius:4px"></div></div></div>`; }).join('');
+}
+function frCompte(idx, col, multi) {
+  const c = {}; idx.forEach(i => { const v = String(FR.lignes[i][col] ?? '').trim(); if (!v) return; (multi ? v.split(/,\s*/) : [v]).forEach(x => { if (x) c[x] = (c[x] || 0) + 1; }); });
+  return Object.entries(c).sort((a, b) => b[1] - a[1]);
+}
+function frCarte(col, idx) {
+  const t = FR.types[col], lib = FR.cols[col], vals = idx.map(i => String(FR.lignes[i][col] ?? '').trim()).filter(Boolean), nRep = vals.length;
+  const entete = `<div class="flex justify-between gap-2 mb-2"><p class="text-xs font-black text-gray-600">${vxEsc(lib)}</p><span class="text-[10px] text-gray-400 whitespace-nowrap">${nRep}/${idx.length} rép.</span></div>`;
+  if (!nRep) return `<div class="fr-card">${entete}<p class="text-xs text-gray-400">Pas de réponse</p></div>`;
+  if (t === 'num') {
+    const n = vals.map(v => Number(String(v).replace(',', '.'))).filter(x => !isNaN(x)).sort((a, b) => a - b);
+    const moy = n.reduce((a, b) => a + b, 0) / n.length, med = n[Math.floor(n.length / 2)], max = Math.max(...n), min = Math.min(...n);
+    const nps = (FR.r.questions || []).some(q => q.label === lib && q.type === 'nps') || (/recommand/.test(frNorm(lib)) && max <= 10);
+    let score = '';
+    if (nps) { const p = n.filter(v => v >= 9).length, d = n.filter(v => v <= 6).length, sc = Math.round((p - d) / n.length * 100);
+      score = `<p class="text-xs mt-1">Score de recommandation : <b class="${sc >= 0 ? 'text-emerald-700' : 'text-red-700'}">${sc > 0 ? '+' : ''}${sc}</b> <span class="text-gray-400">(${p} promoteurs, ${d} détracteurs)</span></p>`; }
+    const echelle = max <= 5 ? 5 : max <= 10 ? 10 : max;
+    const dist = {}; n.forEach(v => dist[v] = (dist[v] || 0) + 1);
+    const paires = Object.keys(dist).map(Number).sort((a, b) => b - a).map(v => [String(v), dist[v]]);
+    return `<div class="fr-card">${entete}<p><b style="font-size:1.7rem;color:var(--fr-c);font-variant-numeric:tabular-nums">${moy.toFixed(1).replace('.', ',')}</b><span class="text-gray-400"> / ${echelle}</span>
+      <span class="text-[11px] text-gray-400 ml-2">médiane ${String(med).replace('.', ',')} · min ${min} · max ${max}</span></p>${score}
+      <div class="space-y-1.5 mt-2">${frBarres(paires, n.length, col)}</div></div>`;
+  }
+  if (t === 'cat' || t === 'multi') {
+    const ent = frCompte(idx, col, t === 'multi'), top = ent.slice(0, 12), reste = ent.slice(12).reduce((a, x) => a + x[1], 0);
+    if (reste) top.push(['Autres (' + (ent.length - 12) + ')', reste]);
+    return `<div class="fr-card">${entete}${t === 'multi' ? '<p class="text-[10px] text-gray-400 -mt-1 mb-1">Plusieurs réponses possibles</p>' : ''}<div class="space-y-1.5">${frBarres(top, t === 'multi' ? nRep : nRep, col)}</div></div>`;
+  }
+  if (t === 'email' || t === 'id') {
+    const uniq = new Set(vals.map(v => v.toLowerCase())).size;
+    return `<div class="fr-card">${entete}<p><b style="font-size:1.5rem;color:var(--fr-c)">${uniq}</b> <span class="text-xs text-gray-500">répondant(s) distinct(s)</span></p>${uniq < nRep ? `<p class="text-xs text-amber-700 mt-1">${nRep - uniq} réponse(s) multiple(s) d'une même personne</p>` : ''}</div>`;
+  }
+  if (t === 'date') return '';
+  const mots = {}; vals.forEach(v => [...new Set(frNorm(v).match(/[a-z]{4,}/g) || [])].forEach(w => { if (!FR_VIDES.has(w)) mots[w] = (mots[w] || 0) + 1; }));
+  const top = Object.entries(mots).filter(x => x[1] >= 2).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  return `<div class="fr-card" style="grid-column:span 2">${entete}
+    ${top.length ? `<div class="flex flex-wrap gap-1 mb-2">${top.map(([w, k]) => `<button class="fr-mot" data-mot="${w}" title="Filtrer les réponses contenant « ${w} »">${w} · ${k}</button>`).join('')}</div>` : ''}
+    <div style="max-height:180px;overflow:auto" class="space-y-1">${idx.slice().reverse().map(i => String(FR.lignes[i][col] ?? '').trim()).filter(Boolean).slice(0, 20).map(v => `<p class="text-xs bg-gray-50 rounded-lg px-2 py-1">« ${vxEsc(v)} »</p>`).join('')}</div></div>`;
+}
+function frChrono(idx) {
+  const ds = idx.map(i => FR.dates[i]).filter(Boolean); if (ds.length < 2) return '';
+  const min = new Date(Math.min(...ds)), max = new Date(Math.max(...ds)), jours = (max - min) / 86400000, parMois = jours > 120;
+  const cle = d => parMois ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : (() => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); })();
+  const seaux = []; const cur = new Date(min); if (parMois) cur.setDate(1); else cur.setDate(cur.getDate() - ((cur.getDay() + 6) % 7)); cur.setHours(0, 0, 0, 0);
+  while (cur <= max && seaux.length < 60) { seaux.push({ k: cle(cur), lib: parMois ? cur.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) : cur.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), n: 0 }); if (parMois) cur.setMonth(cur.getMonth() + 1); else cur.setDate(cur.getDate() + 7); }
+  ds.forEach(d => { const s = seaux.find(x => x.k === cle(d)); if (s) s.n++; });
+  const m = Math.max(1, ...seaux.map(s => s.n)), pas = Math.ceil(seaux.length / 14);
+  return `<div class="fr-card mb-4"><p class="text-xs font-black text-gray-600 mb-3">Réponses reçues par ${parMois ? 'mois' : 'semaine'}</p>
+    <div style="display:grid;grid-template-columns:repeat(${seaux.length},1fr);gap:3px;align-items:end;height:130px">${seaux.map(s => `<div title="${s.lib} : ${s.n} réponse(s)" style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%">
+      <span class="text-[9px] text-gray-500" style="font-variant-numeric:tabular-nums">${s.n || ''}</span><div style="width:80%;max-width:30px;height:${s.n ? Math.max(3, s.n * 105 / m) : 1}px;background:${s.n ? 'var(--fr-c)' : '#e2e8f0'};border-radius:3px 3px 0 0"></div></div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(${seaux.length},1fr);gap:3px;border-top:1px solid #e2e8f0;padding-top:3px">${seaux.map((s, i) => `<span class="text-[9px] text-gray-400 text-center">${i % pas === 0 ? s.lib : ''}</span>`).join('')}</div></div>`;
+}
+function frCroisement(idx) {
+  const opts = FR.cols.map((c, i) => [i, c]).filter(([i]) => ['cat', 'multi', 'num'].includes(FR.types[i]));
+  if (opts.length < 2) return '';
+  const sel = (id, v) => `<select id="${id}" class="border border-gray-200 rounded-lg px-2 py-1 text-xs max-w-[260px]"><option value="">— Question —</option>${opts.map(([i, c]) => `<option value="${i}" ${String(v) === String(i) ? 'selected' : ''}>${vxEsc(c.slice(0, 70))}</option>`).join('')}</select>`;
+  let table = '';
+  if (FR.croixA !== '' && FR.croixB !== '' && FR.croixA !== FR.croixB) {
+    const a = +FR.croixA, b = +FR.croixB, va = frCompte(idx, a, FR.types[a] === 'multi').slice(0, 10).map(x => x[0]), vb = frCompte(idx, b, FR.types[b] === 'multi').slice(0, 8).map(x => x[0]);
+    const parts = (i, c) => { const v = String(FR.lignes[i][c] ?? '').trim(); return FR.types[c] === 'multi' ? v.split(/,\s*/) : [v]; };
+    const M = va.map(x => vb.map(y => idx.filter(i => parts(i, a).includes(x) && parts(i, b).includes(y)).length));
+    const maxC = Math.max(1, ...M.flat());
+    table = `<div class="overflow-auto mt-3"><table class="text-xs"><thead><tr><th class="p-1.5 text-left text-gray-500">${vxEsc(FR.cols[a].slice(0, 40))} ↓ / ${vxEsc(FR.cols[b].slice(0, 40))} →</th>${vb.map(y => `<th class="p-1.5 text-gray-600 font-bold">${vxEsc(y)}</th>`).join('')}<th class="p-1.5 text-gray-500">Total</th></tr></thead>
+      <tbody>${va.map((x, r) => { const tot = M[r].reduce((p, q) => p + q, 0); return `<tr class="border-t"><td class="p-1.5 font-semibold text-gray-700">${vxEsc(x)}</td>${M[r].map(c => `<td class="p-1.5 text-center" style="background:rgba(26,78,138,${(c / maxC * 0.55).toFixed(2)});color:${c / maxC > 0.55 ? '#fff' : '#1f2937'};font-variant-numeric:tabular-nums" title="${c} réponse(s) — ${tot ? Math.round(c * 100 / tot) : 0} % de la ligne">${c || ''}${c && tot ? `<span class="text-[9px] opacity-70"> ${Math.round(c * 100 / tot)}%</span>` : ''}</td>`).join('')}<td class="p-1.5 text-center font-bold">${tot}</td></tr>`; }).join('')}</tbody></table></div>`;
+  }
+  return `<div class="fr-card mt-4"><p class="text-xs font-black text-gray-600 mb-2">🔀 Croiser deux questions</p><div class="flex flex-wrap gap-2 items-center">${sel('frCroixA', FR.croixA)}<span class="text-xs text-gray-400">×</span>${sel('frCroixB', FR.croixB)}</div>${table || '<p class="text-[11px] text-gray-400 mt-2">Choisissez deux questions pour voir comment les réponses se répartissent l\'une par rapport à l\'autre.</p>'}</div>`;
+}
+function frRendre() {
+  const s = document.getElementById('section-formulaires'), f = FR.f, th = f.theme || {}, coul = th.couleur || '#1A4E8A';
+  const idx = frFiltrees(), n = idx.length, total = FR.lignes.length;
+  const ds = idx.map(i => FR.dates[i]).filter(Boolean), dMin = ds.length ? new Date(Math.min(...ds)) : null, dMax = ds.length ? new Date(Math.max(...ds)) : null;
+  const semaines = dMin && dMax ? Math.max(1, (dMax - dMin) / (7 * 86400000)) : 1, recent = ds.filter(d => (Date.now() - d) / 86400000 <= 30).length;
+  const qCols = FR.cols.map((c, i) => i).filter(i => FR.types[i] !== 'date');
+  const remplies = idx.reduce((a, i) => a + qCols.filter(c => String(FR.lignes[i][c] ?? '').trim()).length, 0), compl = n && qCols.length ? Math.round(remplies * 100 / (n * qCols.length)) : 0;
+  const fmt = d => d ? d.toLocaleDateString('fr-FR') : '—';
+  const tuile = (v, l, sub) => `<div class="fr-card"><p class="text-2xl font-black text-gray-800" style="font-variant-numeric:tabular-nums">${v}</p><p class="text-[11px] font-bold text-gray-500 uppercase">${l}</p>${sub ? `<p class="text-[11px] text-gray-400 mt-0.5">${sub}</p>` : ''}</div>`;
+  let corps = '';
+  if (!total) corps = '<p class="text-gray-400 py-10 text-center">Aucune réponse pour le moment.</p>';
+  else if (FR.onglet === 'analyse') {
+    corps = `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        ${tuile(n, 'Réponses', n !== total ? 'sur ' + total + ' au total' : '')}
+        ${tuile(recent, '30 derniers jours', '')}
+        ${tuile((n / semaines).toFixed(1).replace('.', ','), 'Par semaine', 'en moyenne sur la période')}
+        ${tuile(compl + ' %', 'Taux de complétion', 'questions renseignées')}
+        ${tuile(fmt(dMax), 'Dernière réponse', 'première : ' + fmt(dMin))}</div>
+      ${frChrono(idx)}
+      <div class="fr-grid">${qCols.map(c => frCarte(c, idx)).join('')}</div>
+      ${frCroisement(idx)}`;
+  } else if (FR.onglet === 'tableau') {
+    const tri = FR.tri, ord = idx.slice().sort((a, b) => {
+      if (tri.col == null || tri.col < 0) return 0;
+      let x, y; if (tri.col === FR.iDate) { x = FR.dates[a] || 0; y = FR.dates[b] || 0; } else { x = String(FR.lignes[a][tri.col] ?? ''); y = String(FR.lignes[b][tri.col] ?? ''); const nx = Number(x.replace(',', '.')), ny = Number(y.replace(',', '.')); if (x && y && !isNaN(nx) && !isNaN(ny)) { x = nx; y = ny; } }
+      return (x > y ? 1 : x < y ? -1 : 0) * (tri.desc ? -1 : 1); });
+    const PAGE = 50, pages = Math.max(1, Math.ceil(ord.length / PAGE)); FR.page = Math.min(FR.page, pages - 1);
+    const vue = ord.slice(FR.page * PAGE, FR.page * PAGE + PAGE);
+    corps = `<div class="bg-white rounded-2xl border border-gray-100 overflow-auto" style="max-height:68vh"><table class="text-xs w-full fr-tab"><thead><tr><th>#</th>${FR.cols.map((c, i) => `<th data-tri="${i}" title="Trier">${vxEsc(c.length > 50 ? c.slice(0, 50) + '…' : c)}${tri.col === i ? (tri.desc ? ' ▼' : ' ▲') : ''}</th>`).join('')}</tr></thead>
+      <tbody>${vue.map(i => `<tr data-fiche="${i}"><td class="text-gray-400">${i + 1}</td>${FR.cols.map((c, k) => `<td>${vxEsc(String(FR.lignes[i][k] ?? '').slice(0, 160))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="flex justify-between items-center mt-2 text-xs text-gray-500"><span>${ord.length} réponse(s) · cliquer une ligne pour l'ouvrir · cliquer un titre pour trier</span>
+        ${pages > 1 ? `<span class="flex gap-1 items-center"><button class="btn-ghost text-xs" data-page="${FR.page - 1}" ${FR.page ? '' : 'disabled'}>‹</button> page ${FR.page + 1}/${pages} <button class="btn-ghost text-xs" data-page="${FR.page + 1}" ${FR.page < pages - 1 ? '' : 'disabled'}>›</button></span>` : ''}</div>`;
+  } else {
+    const ord = idx.slice().sort((a, b) => (FR.dates[b] || 0) - (FR.dates[a] || 0)); if (!ord.length) corps = '<p class="text-gray-400">Aucune réponse pour ces filtres.</p>';
+    else { const pos = Math.max(0, ord.indexOf(FR.idx)), i = ord[pos]; FR.idx = i;
+      corps = `<div class="flex justify-between items-center mb-3"><button class="btn-ghost text-sm" data-nav="${ord[pos - 1] ?? ''}" ${pos ? '' : 'disabled'}>‹ Plus récente</button>
+        <span class="text-sm font-bold text-gray-600">Réponse ${pos + 1} / ${ord.length}${FR.iDate >= 0 ? ' — ' + vxEsc(FR.lignes[i][FR.iDate]) : ''}</span>
+        <button class="btn-ghost text-sm" data-nav="${ord[pos + 1] ?? ''}" ${pos < ord.length - 1 ? '' : 'disabled'}>Plus ancienne ›</button></div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">${FR.cols.map((c, k) => k === FR.iDate ? '' : `<div><p class="text-[11px] font-black text-gray-500 uppercase">${vxEsc(c)}</p><p class="text-sm text-gray-800 whitespace-pre-wrap">${vxEsc(FR.lignes[i][k]) || '<span class="text-gray-300">—</span>'}</p></div>`).join('')}</div>`; }
+  }
+  s.innerHTML = `<style>
+      #section-formulaires{--fr-c:${coul}}
+      .fr-card{background:#fff;border:1px solid #eef2f7;border-radius:1rem;padding:.9rem 1rem}
+      .fr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.8rem}
+      .fr-tab th{position:sticky;top:0;background:#f8fafc;text-align:left;padding:.5rem;color:#475569;cursor:pointer;white-space:nowrap;border-bottom:1px solid #e2e8f0}
+      .fr-tab td{padding:.45rem .5rem;border-bottom:1px solid #f1f5f9;vertical-align:top;max-width:280px}
+      .fr-tab tbody tr{cursor:pointer}.fr-tab tbody tr:hover td{background:#f8fbff}
+      .fr-mot{background:#f1f5f9;color:#334155;font-size:.68rem;font-weight:700;padding:.15rem .5rem;border-radius:.5rem}
+      .fr-ong{padding:.45rem .9rem;font-size:.8rem;font-weight:800;border-radius:.7rem}
+    </style>
+    <div class="flex flex-wrap justify-between items-start gap-3 mb-3">
+      <div><button onclick="renderFormulaires()" class="text-xs font-bold text-gray-500 hover:underline">← Tous les formulaires</button>
+        <h1 class="text-2xl font-black" style="color:${coul}">📊 ${vxEsc(f.titre)}</h1>
+        <p class="text-xs text-gray-500">${total} réponse(s) ${FR.r.externe ? `· lues dans le Google Sheet${FR.r.onglet ? ' (onglet « ' + vxEsc(FR.r.onglet) + ' »)' : ''}` : '· formulaire HECG'}${FR.r.lu ? ' · actualisé à ' + vxEsc(FR.r.lu.slice(11)) : ''}</p></div>
+      <div class="flex gap-2 flex-wrap">${FR.r.sheetUrl ? `<a href="${vxEsc(FR.r.sheetUrl)}" target="_blank" class="btn-ghost text-sm">📊 Ouvrir le Sheet</a>` : ''}
+        ${total ? `<button onclick="frCsv()" class="btn-ghost text-sm">⬇️ Export CSV${n !== total ? ' (filtré)' : ''}</button>` : ''}
+        <button onclick="fmReponses('${f.id}')" class="btn-orange text-sm">↻ Actualiser</button></div></div>
+    ${total ? `<div class="flex flex-wrap gap-2 items-center mb-3">
+      <div class="inline-flex bg-gray-100 rounded-xl p-1">${[['analyse', '📈 Analyse'], ['tableau', '📋 Tableau'], ['fiche', '🔍 Réponse par réponse']].map(([k, l]) => `<button class="fr-ong ${FR.onglet === k ? 'bg-white shadow text-[#1A4E8A]' : 'text-gray-500'}" data-ong="${k}">${l}</button>`).join('')}</div>
+      <input id="frQ" type="search" value="${vxEsc(FR.q)}" placeholder="🔎 Rechercher dans les réponses…" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[200px]">
+      ${FR.iDate >= 0 ? `<label class="text-xs text-gray-500">Du <input id="frDu" type="date" value="${FR.du}" class="border border-gray-200 rounded-lg px-2 py-1"></label><label class="text-xs text-gray-500">au <input id="frAu" type="date" value="${FR.au}" class="border border-gray-200 rounded-lg px-2 py-1"></label>` : ''}
+      ${FR.filtre || FR.q || FR.du || FR.au ? `<button id="frRaz" class="text-xs font-bold text-[#F26522]">✕ Effacer les filtres</button>` : ''}</div>
+      ${FR.filtre ? `<p class="text-xs mb-3"><span class="bg-orange-50 text-orange-800 font-bold rounded-full px-3 py-1">Filtre : ${vxEsc(FR.cols[FR.filtre.col].slice(0, 60))} = « ${vxEsc(FR.filtre.val)} »</span></p>` : ''}` : ''}
+    ${corps}`;
+  // Événements
+  s.querySelectorAll('[data-ong]').forEach(b => b.onclick = () => { FR.onglet = b.dataset.ong; frRendre(); });
+  const q = document.getElementById('frQ'); if (q) q.oninput = () => { FR.q = q.value; FR.page = 0; clearTimeout(FR._t); FR._t = setTimeout(() => { frRendre(); const e = document.getElementById('frQ'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250); };
+  ['frDu', 'frAu'].forEach(id => { const e = document.getElementById(id); if (e) e.onchange = () => { FR[id === 'frDu' ? 'du' : 'au'] = e.value; FR.page = 0; frRendre(); }; });
+  const raz = document.getElementById('frRaz'); if (raz) raz.onclick = () => { Object.assign(FR, { filtre: null, q: '', du: '', au: '', page: 0 }); frRendre(); };
+  s.querySelectorAll('.fr-bar[data-col]').forEach(b => b.onclick = () => frFiltrer(+b.dataset.col, b.dataset.val.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')));
+  s.querySelectorAll('.fr-mot').forEach(b => b.onclick = () => { FR.q = b.dataset.mot; frRendre(); });
+  s.querySelectorAll('[data-tri]').forEach(h => h.onclick = () => { const c = +h.dataset.tri; FR.tri = { col: c, desc: FR.tri.col === c ? !FR.tri.desc : true }; frRendre(); });
+  s.querySelectorAll('[data-page]').forEach(b => b.onclick = () => { FR.page = +b.dataset.page; frRendre(); });
+  s.querySelectorAll('[data-fiche]').forEach(tr => tr.onclick = () => { FR.idx = +tr.dataset.fiche; FR.onglet = 'fiche'; frRendre(); });
+  s.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { if (b.dataset.nav !== '') { FR.idx = +b.dataset.nav; frRendre(); } });
+  ['frCroixA', 'frCroixB'].forEach(id => { const e = document.getElementById(id); if (e) e.onchange = () => { FR[id === 'frCroixA' ? 'croixA' : 'croixB'] = e.value; frRendre(); }; });
+}
+function frCsv() {
+  const idx = frFiltrees();
+  window._fmExport = { cols: FR.cols, lignes: idx.map(i => FR.lignes[i]), titre: FR.f.titre + (idx.length !== FR.lignes.length ? '_filtre' : '') };
+  fmCsv();
+}
+
 function fmCarteStat(titre, corps, large) { return `<div style="background:#fff;border:1px solid #eef2f7;border-radius:1rem;padding:.9rem 1rem;${large ? 'grid-column:span 1' : ''}"><p class="text-xs font-black text-gray-500 mb-2">${vxEsc(titre)}</p>${corps}</div>`; }
 function fmCsv() {
   const e = window._fmExport; if (!e) return;

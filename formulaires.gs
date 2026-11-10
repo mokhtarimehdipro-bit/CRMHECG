@@ -474,11 +474,16 @@ function handleGetFormulaireReponses(p, ss) {
     if (!f) return createJsonResponse({ success: false, message: "Formulaire introuvable." });
     if (f.type === "externe") {
       if (!f.sheetExterne) return createJsonResponse({ success: true, externe: true, colonnes: [], lignes: [] });
-      var w;
-      try { w = SpreadsheetApp.openById(f.sheetExterne).getSheets()[0]; }
+      var w, cl;
+      try { cl = SpreadsheetApp.openById(f.sheetExterne); w = _maintOngletReponses_(cl); }
       catch (eA) { return createJsonResponse({ success: false, message: "Le CRM n'a pas accès au classeur des réponses : partagez-le avec m.mokhtari@hecg.fr." }); }
       var d = w.getDataRange().getDisplayValues();
-      return createJsonResponse({ success: true, externe: true, colonnes: d[0] || [], lignes: d.slice(1).filter(function (r) { return r.join("").trim(); }) });
+      // colonnes entièrement vides retirées (questions supprimées du formulaire)
+      var garde = (d[0] || []).map(function (h, j) { return String(h || "").trim() || d.slice(1).some(function (r) { return String(r[j] || "").trim(); }); });
+      var filtre = function (r) { return r.filter(function (x, j) { return garde[j]; }); };
+      logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Consultation", "Vie scolaire — Formulaires — réponses", f.id, "Réponses consultées : " + f.titre);
+      return createJsonResponse({ success: true, externe: true, colonnes: filtre(d[0] || []), lignes: d.slice(1).filter(function (r) { return r.join("").trim(); }).map(filtre),
+        onglet: w.getName(), sheetUrl: cl.getUrl(), lu: _fDate_() });
     }
     var dR = _fReponsesFeuille_(ss).getDataRange().getValues(), out = [];
     for (var i = 1; i < dR.length; i++) if (String(dR[i][0]) === f.id) {
@@ -486,7 +491,8 @@ function handleGetFormulaireReponses(p, ss) {
       try { rep = JSON.parse(dR[i][2] || "{}"); } catch (e) {}
       out.push({ date: Utilities.formatDate(new Date(dR[i][1]), "Europe/Paris", "dd/MM/yyyy HH:mm"), duree: dR[i][3], reponses: rep });
     }
-    return createJsonResponse({ success: true, externe: false, questions: f.questions, reponses: out });
+    logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Consultation", "Vie scolaire — Formulaires — réponses", f.id, "Réponses consultées : " + f.titre);
+    return createJsonResponse({ success: true, externe: false, questions: f.questions, reponses: out, lu: _fDate_(), sheetUrl: ss.getUrl() + "#gid=" + _fReponsesFeuille_(ss).getSheetId() });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
