@@ -892,6 +892,7 @@ function auditAdressesTick() {
   try { if (typeof _frisesAuto_ === 'function') _frisesAuto_(); } catch (eF) { console.error('rappels frises : ' + eF); }   // rappels d'échéances des frises (vs_extras.gs)
   try { _relCandAuto_(); } catch (eC) { console.error('relance candidatures : ' + eC); }   // relance quotidienne 9 h, jours ouvrés (relances.gs)
   try { if (typeof _ofAuto_ === 'function') _ofAuto_(t0); } catch (eO) { console.error('offres (lieux / partages) : ' + eO); }   // offres_lieux.gs
+  try { if (typeof _maintAuto_ === 'function') _maintAuto_(); } catch (eM) { console.warn('tickets : ' + eM); }   // formulaires.gs — numérotation
   try { if (typeof _fpAuto_ === 'function') _fpAuto_(t0); } catch (eP) { console.error('fiches de positionnement : ' + eP); }   // positionnement.gs
   _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();

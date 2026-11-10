@@ -334,9 +334,9 @@ async function loadMaintenance() {
 }
 function maintListe() {
   const T = maintData.tickets, q = maintFiltre.texte.toLowerCase(), f = maintFiltre.statut;
-  return T.filter(t => (f === 'archives' ? t.archive : !t.archive)
-    && (f === 'tous' || f === 'archives' || (f === 'ouverts' ? maintOuvert(t) : t.statut === f))
-    && (!q || [t.description, t.lieu, t.categorie, t.nom, t.email, t.campus, t.commentaire, t.responsable, t.statut].join(' ').toLowerCase().includes(q)));
+  return T.filter(t => t._enCours || (f === 'archives' ? t.archive : !t.archive)
+    && (t._enCours || f === 'tous' || f === 'archives' || (f === 'ouverts' ? maintOuvert(t) : t.statut === f))
+    && (!q || [t.numero, t.description, t.lieu, t.categorie, t.nom, t.email, t.campus, t.commentaire, t.responsable, t.statut].join(' ').toLowerCase().includes(q)));
 }
 function renderMaintenance() {
   const s = document.getElementById('section-maintenance'), r = maintData, T = r.tickets, A = T.filter(t => !t.archive);
@@ -389,7 +389,7 @@ function renderMaintenance() {
   <div class="flex flex-wrap gap-2 mb-4 items-center">
     <select onchange="maintFiltre.statut=this.value;maintSel.clear();renderMaintenance()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm">
       ${[['ouverts', 'Tickets ouverts'], ['tous', 'Tous (hors archives)']].concat(MAINT_STATUTS.map(x => [x, x]), [['archives', '🗄 Archivés']]).map(o => `<option value="${o[0]}" ${maintFiltre.statut === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
-    <input id="mtRecherche" type="search" placeholder="🔎 Lieu, catégorie, description, responsable…" value="${vxEsc(maintFiltre.texte)}" oninput="maintFiltre.texte=this.value;renderMaintenance();const e=document.getElementById('mtRecherche');e.focus();e.setSelectionRange(e.value.length,e.value.length)" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[220px]">
+    <input id="mtRecherche" type="search" placeholder="🔎 N° de ticket, lieu, catégorie, description, responsable…" value="${vxEsc(maintFiltre.texte)}" oninput="maintFiltre.texte=this.value;renderMaintenance();const e=document.getElementById('mtRecherche');e.focus();e.setSelectionRange(e.value.length,e.value.length)" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[220px]">
     <div class="inline-flex rounded-xl border border-gray-200 overflow-hidden text-sm font-bold">
       ${[['liste', '☰ Liste'], ['cartes', '▦ Cartes']].map(([v, l]) => `<button onclick="maintVue='${v}';try{localStorage.setItem('maintVue','${v}')}catch(e){};renderMaintenance()" class="px-3 py-2 ${maintVue === v ? 'bg-[#1A4E8A] text-white' : 'bg-white text-gray-600'}">${l}</button>`).join('')}</div>
   </div>
@@ -402,19 +402,22 @@ function renderMaintenance() {
 }
 function maintBoutons(t) {
   const c = vxEsc(t.cle).replace(/'/g, "\\'"), o = maintOuvert(t);
+  if (t._enCours) return `<span class="text-xs font-bold text-[#1A4E8A] whitespace-nowrap">⏳ ${vxEsc(t._enCours)}…</span>`;
   return `<button class="mt-act" title="Modifier" onclick="event.stopPropagation();ouvrirTicket('${c}')">✏️</button>
     ${o ? `<button class="mt-act" title="Clôturer" onclick="event.stopPropagation();maintAction('${c}','cloturer')">✓</button>` : `<button class="mt-act" title="Rouvrir" onclick="event.stopPropagation();maintAction('${c}','rouvrir')">↺</button>`}
     <button class="mt-act" title="Relancer le responsable par mail" onclick="event.stopPropagation();maintAction('${c}','relancer')">🔔</button>
     <button class="mt-act" title="Annuler" ${t.statut === 'Annulé' ? 'disabled' : ''} onclick="event.stopPropagation();maintAction('${c}','annuler')">✕</button>
     ${t.archive ? `<button class="mt-act" title="Désarchiver" onclick="event.stopPropagation();maintAction('${c}','desarchiver')">↩</button>` : `<button class="mt-act" title="Archiver" onclick="event.stopPropagation();maintAction('${c}','archiver')">🗄</button>`}`;
 }
+function maintNum(t) { return t.numero ? `<span class="font-black text-[#1A4E8A] whitespace-nowrap" style="font-variant-numeric:tabular-nums">${vxEsc(t.numero)}</span>` : '<span class="text-gray-300">—</span>'; }
 function maintPill(t) { const [bg, fg] = MAINT_COUL[t.statut] || MAINT_COUL['Nouveau']; return `<span class="mt-pill" style="background:${bg};color:${fg}">${vxEsc(t.statut)}</span>`; }
 function maintTableau(liste, nouveaux) {
   const tous = liste.every(t => maintSel.has(t.cle));
   return `<div class="bg-white rounded-2xl border border-gray-100 overflow-auto" style="max-height:70vh"><table class="mt-tab"><thead><tr>
-    <th><input type="checkbox" ${tous ? 'checked' : ''} onchange="maintToutSel(this.checked)"></th><th>Reçu le</th><th>Statut</th><th>Priorité</th><th>Signalement</th><th>Lieu</th><th>Demandeur</th><th>Responsable</th><th>Suivi</th><th class="text-right">Actions</th></tr></thead><tbody>
-    ${liste.map(t => { const c = vxEsc(t.cle).replace(/'/g, "\\'"), u = maintUrgent(t); return `<tr class="${maintSel.has(t.cle) ? 'sel' : ''}" style="cursor:pointer" onclick="ouvrirTicket('${c}')">
+    <th><input type="checkbox" ${tous ? 'checked' : ''} onchange="maintToutSel(this.checked)"></th><th>N°</th><th>Reçu le</th><th>Statut</th><th>Priorité</th><th>Signalement</th><th>Lieu</th><th>Demandeur</th><th>Responsable</th><th>Suivi</th><th class="text-right">Actions</th></tr></thead><tbody>
+    ${liste.map(t => { const c = vxEsc(t.cle).replace(/'/g, "\\'"), u = maintUrgent(t); return `<tr class="${maintSel.has(t.cle) ? 'sel' : ''}" style="cursor:pointer;${t._enCours ? 'opacity:.55' : ''}" onclick="ouvrirTicket('${c}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" ${maintSel.has(t.cle) ? 'checked' : ''} onchange="maintBasculer('${c}',this.checked)"></td>
+      <td>${maintNum(t)}</td>
       <td class="whitespace-nowrap text-gray-500 text-xs">${vxEsc(t.date)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</td>
       <td>${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄</span>' : ''}</td>
       <td class="text-xs ${u ? 'text-red-700 font-black' : 'text-gray-500'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence || '—')}</td>
@@ -430,7 +433,7 @@ function maintCartes(liste, nouveaux) {
   return `<div class="mt-grid">${liste.map(t => {
     const fg = (MAINT_COUL[t.statut] || MAINT_COUL['Nouveau'])[1], u = maintUrgent(t), c = vxEsc(t.cle).replace(/'/g, "\\'");
     return `<div class="mt-card" style="--bord:${u ? '#dc2626' : fg}" onclick="ouvrirTicket('${c}')">
-      <div class="flex justify-between gap-2"><span>${maintPill(t)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</span>
+      <div class="flex justify-between gap-2"><span>${maintNum(t)} ${maintPill(t)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</span>
         ${t.urgence || t.priorite ? `<span class="mt-pill" style="background:${u ? '#fee2e2' : '#f8fafc'};color:${u ? '#b91c1c' : '#64748b'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence)}</span>` : ''}</div>
       <p class="font-bold text-gray-800 text-sm" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.description || t.categorie || 'Signalement')}</p>
       <div class="flex flex-wrap gap-1">${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.campus ? `<span class="mt-chip">🏫 ${vxEsc(t.campus)}</span>` : ''}${t.lieu ? `<span class="mt-chip">📍 ${vxEsc(t.lieu)}</span>` : ''}</div>
@@ -443,6 +446,7 @@ function maintToutSel(on) { maintListe().forEach(t => on ? maintSel.add(t.cle) :
 
 const MAINT_LIB = { cloturer: 'clôturer', annuler: 'annuler', archiver: 'archiver', desarchiver: 'désarchiver', rouvrir: 'rouvrir', relancer: 'relancer' };
 function maintResume(t) { return (t.description || t.categorie || 'Signalement').slice(0, 80); }
+const maintNom = t => (t.numero ? t.numero + ' — ' : '') + maintResume(t).slice(0, 50);
 function maintAppliquer(res) {
   (res || []).forEach(x => { const t = maintData.tickets.find(y => y.cle === x.cle); if (!t) return;
     Object.assign(t, { statut: x.statut, archive: x.archive, journal: x.journal, relances: x.relances, derniereRelance: x.derniereRelance, resolu: x.resolu, maj: x.maj, par: x.par, responsable: x.responsable, responsableMail: x.responsableMail, ancienneCle: '' });
@@ -451,23 +455,37 @@ function maintAppliquer(res) {
 async function maintEnvoyer(cles, op, extra = {}) {
   const T = maintData.tickets.filter(t => cles.includes(t.cle)), resumes = {}, anciennesCles = {};
   T.forEach(t => { resumes[t.cle] = maintResume(t); if (t.ancienneCle) anciennesCles[t.cle] = t.ancienneCle; });
-  const r = await api('updateTicketMaintenance', Object.assign({ op, cles, resumes, anciennesCles }, extra));
+  let r;
+  try { r = await api('updateTicketMaintenance', Object.assign({ op, cles, resumes, anciennesCles }, extra)); }
+  catch (e) { r = { success: false, message: 'Pas de réponse du serveur (' + (e && e.message || e) + '). Réessayez.' }; }
+  if (!r || typeof r !== 'object') r = { success: false, message: 'Réponse du serveur illisible' };
   if (r.resultats) maintAppliquer(r.resultats);
   return r;
 }
+const MAINT_EN_COURS = { cloturer: 'Clôture', annuler: 'Annulation', archiver: 'Archivage', desarchiver: 'Désarchivage', rouvrir: 'Réouverture', relancer: 'Relance', maj: 'Enregistrement' };
+function maintOptimiste(t, op) {
+  if (op === 'cloturer') t.statut = 'Clôturé'; else if (op === 'annuler') t.statut = 'Annulé'; else if (op === 'rouvrir') { t.statut = 'Pris en charge'; t.archive = false; }
+  else if (op === 'archiver') t.archive = true; else if (op === 'desarchiver') t.archive = false;
+}
+function maintRafraichirModal(cle) { const m = document.getElementById('mtModal'); if (m && !m.classList.contains('hidden')) ouvrirTicket(cle); }
 async function maintAction(cle, op) {
-  const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
+  const t = maintData.tickets.find(x => x.cle === cle); if (!t || t._enCours) return;
   let extra = {};
   if (op === 'relancer') {
     if (!t.responsable) { toast("Désignez d'abord un responsable (✏️ Modifier)", false); ouvrirTicket(cle); return; }
-    const msg = prompt(`Relancer ${t.responsable} par mail (copie direction) ?\nMessage complémentaire (facultatif) :`, '');
+    const msg = prompt(`Relancer ${t.responsable} par mail (copie direction) pour le ticket ${t.numero || ''} ?\nMessage complémentaire (facultatif) :`, '');
     if (msg === null) return; extra.message = msg;
-  } else if (op === 'annuler' && !confirm(`Annuler le ticket « ${maintResume(t)} » ?`)) return;
+  } else if (op === 'annuler' && !confirm(`Annuler le ticket ${maintNom(t)} ?`)) return;
+  const avant = { statut: t.statut, archive: t.archive };
+  maintOptimiste(t, op); t._enCours = MAINT_EN_COURS[op] || 'En cours';
+  renderMaintenance(); maintRafraichirModal(cle);
   const r = await maintEnvoyer([cle], op, extra);
-  if (!r.success || (r.erreurs && r.erreurs.length)) toast((r.message || 'Erreur'), false);
-  else toast(op === 'relancer' ? 'Relance envoyée ✓' : `Ticket ${MAINT_LIB[op] === 'rouvrir' ? 'rouvert' : MAINT_LIB[op].replace(/er$/, 'é')} ✓`);
-  const m = document.getElementById('mtModal'); if (m && !m.classList.contains('hidden')) ouvrirTicket(cle);
-  renderMaintenance();
+  delete t._enCours;
+  if (!r.success || (r.erreurs && r.erreurs.length) || !(r.resultats || []).length) {
+    Object.assign(t, avant);
+    toast(`${t.numero || 'Ticket'} : ${r.message || (r.erreurs || []).join(' ; ') || 'action non enregistrée'}`, false);
+  } else toast(op === 'relancer' ? `${t.numero} : relance envoyée à ${t.responsable} ✓` : `${t.numero || 'Ticket'} ${op === 'rouvrir' ? 'rouvert' : MAINT_LIB[op].replace(/er$/, 'é')} ✓`);
+  renderMaintenance(); maintRafraichirModal(cle);
 }
 async function maintActionGroupee(op) {
   const visibles = new Set(maintListe().map(t => t.cle)), cles = [...maintSel].filter(c => visibles.has(c));
@@ -478,10 +496,15 @@ async function maintActionGroupee(op) {
     const msg = prompt(`Relancer par mail les responsables de ${cles.length} ticket(s)${sans ? ` (${sans} sans responsable seront ignorés)` : ''} ?\nMessage complémentaire (facultatif) :`, '');
     if (msg === null) return; extra.message = msg;
   } else if (!confirm(`${MAINT_LIB[op][0].toUpperCase() + MAINT_LIB[op].slice(1)} ${cles.length} ticket(s) ?`)) return;
-  const r = await maintEnvoyer(cles, op, extra);
-  const ok = (r.resultats || []).length;
-  toast(`${ok} ticket(s) traité(s)${op === 'relancer' ? ` · ${r.relances || 0} relance(s) envoyée(s)` : ''}${r.erreurs && r.erreurs.length ? ` · ${r.erreurs.length} non traité(s) : ${r.erreurs.slice(0, 2).join(' ; ')}` : ''}`, !(r.erreurs && r.erreurs.length) && r.success !== false);
+  const T = maintData.tickets.filter(t => cles.includes(t.cle)), avant = T.map(t => ({ t, statut: t.statut, archive: t.archive }));
+  T.forEach(t => { if (op !== 'relancer') maintOptimiste(t, op); t._enCours = MAINT_EN_COURS[op]; });
   maintSel.clear(); renderMaintenance();
+  const r = await maintEnvoyer(cles, op, extra);
+  const faits = new Set((r.resultats || []).map(x => x.cle));
+  avant.forEach(a => { delete a.t._enCours; if (!faits.has(a.t.cle)) Object.assign(a.t, { statut: a.statut, archive: a.archive }); });
+  const ok = faits.size;
+  toast(r.success === false && !ok ? 'Erreur : ' + r.message : `${ok} ticket(s) traité(s)${op === 'relancer' ? ` · ${r.relances || 0} relance(s) envoyée(s)` : ''}${r.erreurs && r.erreurs.length ? ` · ${r.erreurs.length} non traité(s) : ${r.erreurs.slice(0, 2).join(' ; ')}` : ''}`, !(r.erreurs && r.erreurs.length) && r.success !== false);
+  renderMaintenance();
 }
 
 // Responsable : membre du personnel ou contact externe (création à la volée)
@@ -504,7 +527,7 @@ async function maintCreerContact() {
   const d = { op: 'contact', nom: document.getElementById('mtNcNom').value.trim(), mail: document.getElementById('mtNcMail').value.trim(), tel: document.getElementById('mtNcTel').value.trim(), societe: document.getElementById('mtNcSoc').value.trim() };
   if (!d.nom) { toast('Nom obligatoire', false); return; }
   if (!d.mail && !confirm("Sans adresse mail, ce contact ne pourra pas être relancé par mail. Continuer ?")) return;
-  const r = await api('updateTicketMaintenance', d);
+  let r; try { r = await api('updateTicketMaintenance', d); } catch (e) { r = { success: false, message: 'Pas de réponse du serveur' }; }
   if (!r.success) { toast(r.message, false); return; }
   maintData.contacts = (maintData.contacts || []).concat([r.contact]);
   const sel = document.getElementById('mtResp'), o = document.createElement('option');
@@ -521,7 +544,7 @@ function ouvrirTicket(cle) {
   const champ = (id, lab, k, rows) => `<div class="${rows ? 'col-span-2' : ''}"><label>${lab}${t.original && t.original[k] !== t[k] ? ` <span class="text-[10px] text-orange-600" title="${vxEsc(t.original[k])}">(corrigé — original au survol)</span>` : ''}</label>
     ${rows ? `<textarea id="${id}" rows="${rows}">${vxEsc(t[k])}</textarea>` : `<input type="text" id="${id}" value="${vxEsc(t[k])}">`}</div>`;
   m.innerHTML = `<div class="modal-box p-6" style="max-width:760px">
-    <div class="flex justify-between items-start gap-3 mb-3"><div><h3 class="text-xl font-black text-[#1A4E8A]">🛠️ Ticket du ${vxEsc(t.date)}</h3>
+    <div class="flex justify-between items-start gap-3 mb-3"><div><h3 class="text-xl font-black text-[#1A4E8A]">🛠️ Ticket ${vxEsc(t.numero || '')} <span class="text-sm font-bold text-gray-400">reçu le ${vxEsc(t.date)}</span></h3>
       <p class="text-xs text-gray-500">${vxEsc(t.nom || '')}${t.email ? ' · ' + vxEsc(t.email) : ''} ${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄 archivé</span>' : ''}</p></div>
       <div class="flex gap-1 flex-wrap justify-end">${maintBoutons(t)}</div></div>
     <details class="bg-gray-50 rounded-2xl p-3 mb-4 text-sm"><summary class="font-bold text-gray-600 cursor-pointer">Réponse d'origine du formulaire</summary>
@@ -543,7 +566,7 @@ function ouvrirTicket(cle) {
     ${t.journal && t.journal.length ? `<div class="mt-4"><p class="text-xs font-black text-gray-500 uppercase mb-1">Historique</p><div class="text-xs text-gray-600 space-y-1" style="max-height:20vh;overflow:auto">${t.journal.slice().reverse().map(j => `<p><span class="text-gray-400">${vxEsc(j.d)}</span> · <b>${vxEsc(j.par)}</b> — ${vxEsc(j.evt)}</p>`).join('')}</div></div>` : ''}
     ${t.maj ? `<p class="text-xs text-gray-400 mt-2">Dernière mise à jour : ${vxEsc(t.maj)} par ${vxEsc(t.par)}${t.resolu ? ' · clôturé le ' + vxEsc(t.resolu) : ''}${t.relances ? ' · ' + t.relances + ' relance(s)' : ''}</p>` : ''}
     <div class="flex justify-end gap-3 mt-5"><button onclick="document.getElementById('mtModal').classList.add('hidden')" class="btn-ghost">Fermer</button>
-      <button onclick="saveTicket('${c}')" class="btn-orange">Enregistrer</button></div></div>`;
+      <button id="mtSave" onclick="saveTicket('${c}')" class="btn-orange">Enregistrer</button></div></div>`;
   m.classList.remove('hidden');
 }
 async function saveTicket(cle) {
@@ -553,10 +576,12 @@ async function saveTicket(cle) {
   const corrections = { description: document.getElementById('mtDesc').value.trim(), categorie: document.getElementById('mtCat').value.trim(), campus: document.getElementById('mtCampus').value.trim(), lieu: document.getElementById('mtLieu').value.trim() };
   const d = { statut: document.getElementById('mtStatut').value, priorite: document.getElementById('mtPrio').value, responsable: respNom, responsableMail: sel.value && opt ? (opt.dataset.mail || '') : '',
     commentaire: document.getElementById('mtCom').value.trim(), corrections, originaux: t.original };
+  const btn = document.getElementById('mtSave');
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = '⏳ Enregistrement…'; }
   const r = await maintEnvoyer([cle], 'maj', d);
-  if (!r.success) { toast('Erreur : ' + r.message, false); return; }
+  if (!r.success || !(r.resultats || []).length) { if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; } toast('Erreur : ' + (r.message || 'non enregistré'), false); return; }
   Object.assign(t, { priorite: d.priorite, commentaire: d.commentaire });
-  document.getElementById('mtModal').classList.add('hidden'); toast('Ticket mis à jour ✓'); renderMaintenance();
+  document.getElementById('mtModal').classList.add('hidden'); toast(`${t.numero || 'Ticket'} mis à jour ✓`); renderMaintenance();
 }
 
 // ══ CENTRE DES FORMULAIRES ══

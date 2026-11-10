@@ -21,7 +21,8 @@ function _fDate_() { return Utilities.formatDate(new Date(), "Europe/Paris", "yy
 
 // ── 1. TICKETS DE MAINTENANCE ────────────────────────────────────────────────
 var MAINT_ENTETES = ["Clé ticket", "Statut", "Responsable", "Commentaire", "Priorité", "Résolu le", "Mis à jour le", "Par",
-  "Archivé", "Journal_JSON", "Corrections_JSON", "Relances", "Dernière relance", "Responsable — mail"];
+  "Archivé", "Journal_JSON", "Corrections_JSON", "Relances", "Dernière relance", "Responsable — mail", "N° ticket"];
+function _maintNumLib_(n) { n = Number(n || 0); return n ? "T-" + ("000" + n).slice(-4) : ""; }
 var MAINT_FERMES = ["Résolu", "Clôturé", "Annulé", "Sans suite"];
 function _maintSuiviFeuille_(ss) {
   var ws = ss.getSheetByName("MAINTENANCE_SUIVI");
@@ -67,6 +68,51 @@ function _maintOngletReponses_(ext) {
 }
 // Clé stable d'un ticket : horodatage + mail (ne bouge pas si le Sheet est trié) ; l'ancienne clé « L<ligne>|date » reste reconnue
 function _maintCle_(date, email, ligne) { return "T|" + String(date || "").trim() + "|" + String(email || "").trim().toLowerCase() + (date ? "" : "|L" + ligne); }
+// Lecture des réponses du formulaire → lignes avec leur clé stable (ordre d'arrivée = ordre des lignes)
+function _maintLireReponses_(ext) {
+  var ws = _maintOngletReponses_(ext), data = ws.getDataRange().getDisplayValues();
+  var h = data[0] || [], C = _maintColonnes_(h), lignes = [], vus = {};
+  for (var i = 1; i < data.length; i++) {
+    var r = data[i];
+    if (!r.join("").trim()) continue;
+    var d = C.date >= 0 ? String(r[C.date] || "").trim() : "", m = C.email >= 0 ? String(r[C.email] || "").trim() : "";
+    var cle = _maintCle_(d, m, i + 1);
+    if (vus[cle]) cle += "|L" + (i + 1);   // deux réponses à la même seconde par la même personne
+    vus[cle] = 1;
+    lignes.push({ i: i, r: r, cle: cle, ancienneCle: "L" + (i + 1) + "|" + d });
+  }
+  return { ws: ws, data: data, h: h, C: C, lignes: lignes };
+}
+// Attribue un numéro « T-0001 » à chaque nouvelle demande (ordre d'arrivée), une fois pour toutes.
+// Une ligne de suivi « Nouveau » est créée pour chaque nouveau ticket. Renvoie le nombre de numéros attribués.
+function _maintNumeroter_(ss, rep) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return 0;
+  try {
+    var ws = _maintSuiviFeuille_(ss), NC = MAINT_ENTETES.length, nL = Math.max(ws.getLastRow(), 1);
+    var d = ws.getRange(1, 1, nL, NC).getValues(), index = {}, max = 0, modif = false, ajouts = [];
+    for (var k = 1; k < d.length; k++) { if (d[k][0]) index[String(d[k][0])] = k; max = Math.max(max, Number(d[k][NC - 1] || 0)); }
+    rep.lignes.forEach(function (l) {
+      var k = index[l.cle];
+      if (k == null && index[l.ancienneCle] != null) { k = index[l.ancienneCle]; d[k][0] = l.cle; index[l.cle] = k; modif = true; }   // migration ancienne clé
+      if (k != null) { if (!Number(d[k][NC - 1] || 0)) { d[k][NC - 1] = ++max; modif = true; } return; }
+      var n = [l.cle, "Nouveau", "", "", "", "", _fDate_(), "Numérotation auto", false, JSON.stringify([{ d: _fDate_(), par: "Système", evt: "Ticket reçu — n° " + _maintNumLib_(max + 1) }]), "{}", 0, "", "", ++max];
+      ajouts.push(n); index[l.cle] = -1;
+    });
+    if (modif && d.length > 1) ws.getRange(1, 1, d.length, NC).setValues(d);
+    if (ajouts.length) ws.getRange(ws.getLastRow() + 1, 1, ajouts.length, NC).setValues(ajouts);
+    if (ajouts.length) logAction("Système", "", "Création", "Vie scolaire — Maintenance — numérotation", "MAINTENANCE_SUIVI", ajouts.length + " nouveau(x) ticket(s) numéroté(s) : " + ajouts.map(function (x) { return _maintNumLib_(x[NC - 1]); }).join(", "));
+    return ajouts.length;
+  } finally { lock.releaseLock(); }
+}
+// Passage automatique (auditAdressesTick) toutes les 15 min : les nouvelles demandes reçoivent leur numéro sans attendre l'ouverture de l'onglet
+function _maintAuto_() {
+  var props = PropertiesService.getScriptProperties(), der = Number(props.getProperty("MAINT_NUM_TS") || 0);
+  if (Date.now() - der < 15 * 60 * 1000) return;
+  props.setProperty("MAINT_NUM_TS", String(Date.now()));
+  try { _maintNumeroter_(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), _maintLireReponses_(SpreadsheetApp.openById(MAINT_SHEET_ID))); }
+  catch (e) { console.warn("numérotation tickets : " + e); }
+}
 function handleGetTicketsMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
   var ext;
@@ -75,36 +121,31 @@ function handleGetTicketsMaintenance(p, ss) {
     return createJsonResponse({ success: false, acces: false, message: "Le CRM n'a pas accès au classeur des tickets. Partagez-le (lecture) avec m.mokhtari@hecg.fr puis rechargez l'onglet.", lien: "https://docs.google.com/spreadsheets/d/" + MAINT_SHEET_ID + "/edit" });
   }
   try {
-    var ws = _maintOngletReponses_(ext), data = ws.getDataRange().getDisplayValues();
-    var h = data[0] || [], C = _maintColonnes_(h), formUrl = "";
+    var rep = _maintLireReponses_(ext), ws = rep.ws, h = rep.h, C = rep.C, formUrl = "";
     try { formUrl = ws.getFormUrl() || ext.getFormUrl() || ""; } catch (eF) {}
-    var suivi = {}, dS = _maintSuiviFeuille_(ss).getDataRange().getValues();
+    var numerotes = 0; try { numerotes = _maintNumeroter_(ss, rep); } catch (eN) { console.warn(eN); }
+    var NC = MAINT_ENTETES.length, wsS = _maintSuiviFeuille_(ss), dS = wsS.getRange(1, 1, Math.max(wsS.getLastRow(), 1), NC).getValues(), suivi = {};
     for (var k = 1; k < dS.length; k++) if (dS[k][0]) suivi[String(dS[k][0])] = { statut: String(dS[k][1] || ""), responsable: String(dS[k][2] || ""), commentaire: String(dS[k][3] || ""),
       priorite: String(dS[k][4] || ""), resolu: dS[k][5] ? Utilities.formatDate(new Date(dS[k][5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: String(dS[k][6] || ""), par: String(dS[k][7] || ""),
       archive: dS[k][8] === true || String(dS[k][8]).toUpperCase() === "TRUE", journal: _maintJson_(dS[k][9], []), corr: _maintJson_(dS[k][10], {}),
-      relances: Number(dS[k][11] || 0), derniereRelance: String(dS[k][12] || ""), responsableMail: String(dS[k][13] || "") };
-    var tickets = [], vus = {}, lignesRemplies = 0;
-    for (var i = 1; i < data.length; i++) {
-      var r = data[i];
-      if (!r.join("").trim()) continue;
-      lignesRemplies++;
-      var v = function (c) { return c >= 0 ? String(r[c] || "").trim() : ""; };
-      var ancienneCle = "L" + (i + 1) + "|" + v(C.date), cle = _maintCle_(v(C.date), v(C.email), i + 1);
-      if (vus[cle]) cle += "|L" + (i + 1);   // deux réponses à la même seconde par la même personne
-      vus[cle] = 1;
-      var s = suivi[cle] || suivi[ancienneCle] || {}, corr = s.corr || {};
+      relances: Number(dS[k][11] || 0), derniereRelance: String(dS[k][12] || ""), responsableMail: String(dS[k][13] || ""), num: Number(dS[k][NC - 1] || 0) };
+    var tickets = [];
+    rep.lignes.forEach(function (l) {
+      var r = l.r, v = function (c) { return c >= 0 ? String(r[c] || "").trim() : ""; };
+      var s = suivi[l.cle] || suivi[l.ancienneCle] || {}, corr = s.corr || {};
       var orig = { campus: v(C.campus), lieu: v(C.lieu), categorie: v(C.categorie), description: v(C.description) };
-      tickets.push({ cle: cle, ancienneCle: suivi[cle] ? "" : (suivi[ancienneCle] ? ancienneCle : ""), ligne: i + 1, date: v(C.date), email: v(C.email), nom: v(C.nom),
+      tickets.push({ cle: l.cle, ancienneCle: suivi[l.cle] ? "" : (suivi[l.ancienneCle] ? l.ancienneCle : ""), ligne: l.i + 1, numero: _maintNumLib_(s.num), num: s.num || 0,
+        date: v(C.date), email: v(C.email), nom: v(C.nom),
         campus: corr.campus != null ? corr.campus : orig.campus, lieu: corr.lieu != null ? corr.lieu : orig.lieu,
         categorie: corr.categorie != null ? corr.categorie : orig.categorie, description: corr.description != null ? corr.description : orig.description,
         original: orig, corrige: Object.keys(corr).length > 0,
         urgence: v(C.urgence), photo: v(C.photo), champs: h.map(function (t, j) { return [String(t), String(r[j] || "")]; }).filter(function (x) { return x[1]; }),
         statut: s.statut || "Nouveau", responsable: s.responsable || "", responsableMail: s.responsableMail || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "",
         archive: !!s.archive, journal: s.journal || [], relances: s.relances || 0, derniereRelance: s.derniereRelance || "" });
-    }
-    tickets.reverse();   // plus récents d'abord
+    });
+    tickets.sort(function (x, y) { return (y.num || 0) - (x.num || 0) || y.ligne - x.ligne; });   // plus récents d'abord
     return createJsonResponse({ success: true, tickets: tickets, formUrl: formUrl, sheetUrl: ext.getUrl(), titre: ext.getName(), colonnes: h, equipe: _maintEquipe_(ss), contacts: _maintContacts_(ss),
-      controle: { onglet: ws.getName(), lignesSheet: lignesRemplies, affiches: tickets.length, colonnesReperees: C, lu: _fDate_(), dernier: tickets.length ? tickets[0].date : "" } });
+      controle: { onglet: ws.getName(), lignesSheet: rep.lignes.length, affiches: tickets.length, numerotes: numerotes, colonnesReperees: C, lu: _fDate_(), dernier: tickets.length ? tickets[0].date : "" } });
   } catch (e2) { return createJsonResponse({ success: false, message: e2.toString() }); }
 }
 
@@ -123,7 +164,8 @@ function handleUpdateTicketMaintenance(p, ss) {
     logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Création", "Vie scolaire — Maintenance — contacts", nomC, "Contact externe créé" + (cSoc ? " (" + cSoc + ")" : ""));
     return createJsonResponse({ success: true, contact: { nom: nomC, mail: mailC, tel: cTel, societe: cSoc } });
   }
-  var lock = LockService.getScriptLock(); lock.waitLock(15000);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return createJsonResponse({ success: false, message: "Serveur occupé, réessayez dans quelques secondes." });
   try {
     var ws = _maintSuiviFeuille_(ss), data = ws.getRange(1, 1, Math.max(ws.getLastRow(), 1), MAINT_ENTETES.length).getValues();
     var cles = Array.isArray(p.cles) && p.cles.length ? p.cles.map(String) : (p.cle ? [String(p.cle)] : []);
@@ -136,11 +178,12 @@ function handleUpdateTicketMaintenance(p, ss) {
     cles.forEach(function (cle) {
       var anc = p.anciennesCles && p.anciennesCles[cle];
       if (index[cle] == null && anc && index[anc] != null && index[anc] >= 0) { index[cle] = index[anc]; data[index[cle]][0] = cle; }
-      var iL = index[cle], ligne = iL != null ? data[iL].slice() : [cle, "Nouveau", "", "", "", "", "", "", false, "[]", "{}", 0, "", ""];
+      var iL = index[cle], ligne = iL != null ? data[iL].slice() : [cle, "Nouveau", "", "", "", "", "", "", false, "[]", "{}", 0, "", "", ""];
       while (ligne.length < MAINT_ENTETES.length) ligne.push("");
       var ancienCom = String(ligne[3] || ""), ancienResp = String(ligne[2] || "");
       var avant = String(ligne[1] || "Nouveau"), journal = _maintJson_(ligne[9], []), corr = _maintJson_(ligne[10], {}), evt = "";
-      var resume = String(resumes[cle] || p.resume || "").slice(0, 80);
+      var resume = String(resumes[cle] || p.resume || "").slice(0, 80), numLib = _maintNumLib_(ligne[MAINT_ENTETES.length - 1]);
+      if (numLib) resume = numLib + " — " + resume;
       if (op === "maj") {
         var statut = String(p.statut || avant);
         ligne[1] = statut; ligne[2] = String(p.responsable || ""); ligne[13] = String(p.responsableMail || "").trim(); ligne[3] = String(p.commentaire || "").slice(0, 2000); ligne[4] = String(p.priorite || "");
