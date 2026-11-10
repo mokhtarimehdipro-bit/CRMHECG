@@ -391,14 +391,14 @@ function renderMaintenance() {
       ${[['ouverts', 'Tickets ouverts'], ['tous', 'Tous (hors archives)']].concat(MAINT_STATUTS.map(x => [x, x]), [['archives', '🗄 Archivés']]).map(o => `<option value="${o[0]}" ${maintFiltre.statut === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
     <input id="mtRecherche" type="search" placeholder="🔎 N° de ticket, lieu, catégorie, description, responsable…" value="${vxEsc(maintFiltre.texte)}" oninput="maintFiltre.texte=this.value;renderMaintenance();const e=document.getElementById('mtRecherche');e.focus();e.setSelectionRange(e.value.length,e.value.length)" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[220px]">
     <div class="inline-flex rounded-xl border border-gray-200 overflow-hidden text-sm font-bold">
-      ${[['liste', '☰ Liste'], ['cartes', '▦ Cartes']].map(([v, l]) => `<button onclick="maintVue='${v}';try{localStorage.setItem('maintVue','${v}')}catch(e){};renderMaintenance()" class="px-3 py-2 ${maintVue === v ? 'bg-[#1A4E8A] text-white' : 'bg-white text-gray-600'}">${l}</button>`).join('')}</div>
+      ${[['liste', '☰ Liste'], ['cartes', '▦ Cartes'], ['analyse', '📈 Analyse']].map(([v, l]) => `<button onclick="maintVue='${v}';try{localStorage.setItem('maintVue','${v}')}catch(e){};renderMaintenance()" class="px-3 py-2 ${maintVue === v ? 'bg-[#1A4E8A] text-white' : 'bg-white text-gray-600'}">${l}</button>`).join('')}</div>
   </div>
   ${nbSel ? `<div class="mt-bulk"><b class="text-sm mr-2">${nbSel} sélectionné(s)</b>
     <button onclick="maintActionGroupee('cloturer')">✓ Clôturer</button><button onclick="maintActionGroupee('relancer')">🔔 Relancer</button>
     <button onclick="maintActionGroupee('annuler')">✕ Annuler</button>
     ${maintFiltre.statut === 'archives' ? `<button onclick="maintActionGroupee('desarchiver')">↩ Désarchiver</button>` : `<button onclick="maintActionGroupee('archiver')">🗄 Archiver</button>`}
     <button onclick="maintSel.clear();renderMaintenance()" style="margin-left:auto">Désélectionner</button></div>` : ''}
-  ${liste.length ? (maintVue === 'liste' ? maintTableau(liste, r.nouveaux || []) : maintCartes(liste, r.nouveaux || [])) : '<p class="text-gray-400 text-sm">Aucun ticket pour ce filtre ✅</p>'}`;
+  ${maintVue === 'analyse' ? maintAnalyse() : liste.length ? (maintVue === 'liste' ? maintTableau(liste, r.nouveaux || []) : maintCartes(liste, r.nouveaux || [])) : '<p class="text-gray-400 text-sm">Aucun ticket pour ce filtre ✅</p>'}`;
 }
 function maintBoutons(t) {
   const c = vxEsc(t.cle).replace(/'/g, "\\'"), o = maintOuvert(t);
@@ -440,6 +440,78 @@ function maintCartes(liste, nouveaux) {
       <p class="text-[11px] text-gray-400 mt-auto">${vxEsc(t.date)}${t.nom ? ' · ' + vxEsc(t.nom) : t.email ? ' · ' + vxEsc(t.email) : ''}${t.responsable ? ' · 👤 ' + vxEsc(t.responsable) : ''}${t.relances ? ' · 🔔 ' + t.relances : ''}</p>
       <div class="flex gap-1 justify-end">${maintBoutons(t)}</div></div>`;
   }).join('')}</div>`;
+}
+// ══ Analyse des tickets (calculée dans le navigateur à partir des tickets chargés) ══
+let maintPeriode = 'tout';
+function maintDateTicket(t) { const m = String(t.date || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)) : null; }
+function maintDateFr(s) { const m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null; }
+function maintBarres(titre, paires, total, opts = {}) {
+  if (!paires.length) return `<div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs font-black uppercase text-gray-500 mb-2">${titre}</p><p class="text-sm text-gray-400">Pas de données</p></div>`;
+  const max = Math.max(...paires.map(x => x[1]));
+  return `<div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs font-black uppercase text-gray-500 mb-3">${titre}</p>
+    <div class="space-y-2">${paires.map(([lib, n, sous]) => `<div title="${vxEsc(lib)} : ${n} ticket(s)${total ? ' — ' + Math.round(n * 100 / total) + ' %' : ''}${sous ? ' — ' + vxEsc(sous) : ''}">
+      <div class="flex justify-between gap-2 text-xs"><span class="font-bold text-gray-700 truncate">${vxEsc(lib)}</span><span class="text-gray-500 whitespace-nowrap" style="font-variant-numeric:tabular-nums"><b class="text-gray-800">${n}</b>${total ? ' · ' + Math.round(n * 100 / total) + ' %' : ''}${sous ? ' · ' + vxEsc(sous) : ''}</span></div>
+      <div style="height:8px;background:#eef2f7;border-radius:4px;margin-top:3px"><div style="height:8px;width:${Math.max(2, n * 100 / max)}%;background:${opts.couleur || '#1A4E8A'};border-radius:4px"></div></div></div>`).join('')}</div></div>`;
+}
+function maintCompter(T, f, limite) {
+  const c = {}; T.forEach(t => { const k = f(t); if (k) c[k] = (c[k] || 0) + 1; });
+  return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, limite || 99);
+}
+function maintAnalyse() {
+  const maintenant = new Date(), jours = { '30j': 30, '3m': 92, '12m': 365 }[maintPeriode];
+  const T = maintData.tickets.filter(t => { if (!jours) return true; const d = maintDateTicket(t); return d && (maintenant - d) / 86400000 <= jours; });
+  const n = T.length, ouverts = T.filter(maintOuvert).length, faits = T.filter(t => ['Résolu', 'Clôturé'].includes(t.statut)), annules = T.filter(t => ['Annulé', 'Sans suite'].includes(t.statut)).length;
+  const delais = faits.map(t => { const a = maintDateTicket(t), b = maintDateFr(t.resolu); return a && b ? Math.max(0, Math.round((b - a) / 86400000)) : null; }).filter(x => x !== null);
+  const delaiMoy = delais.length ? Math.round(delais.reduce((x, y) => x + y, 0) / delais.length) : null;
+  const delaiMed = delais.length ? delais.slice().sort((a, b) => a - b)[Math.floor(delais.length / 2)] : null;
+  const urgents = T.filter(maintUrgent).length;
+  // Par mois (12 derniers mois glissants, mois vides inclus)
+  const mois = []; for (let i = 11; i >= 0; i--) { const d = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1); mois.push({ k: d.getFullYear() + '-' + d.getMonth(), lib: d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '') + (d.getMonth() === 0 || i === 11 ? ' ' + String(d.getFullYear()).slice(2) : ''), n: 0 }); }
+  maintData.tickets.forEach(t => { const d = maintDateTicket(t); if (!d) return; const m = mois.find(x => x.k === d.getFullYear() + '-' + d.getMonth()); if (m) m.n++; });
+  const maxM = Math.max(1, ...mois.map(m => m.n)), moyM = (mois.reduce((a, m) => a + m.n, 0) / 12).toFixed(1);
+  // Catégories avec part encore ouverte
+  const cats = maintCompter(T, t => t.categorie || 'Non classé').map(([c, k]) => [c, k, T.filter(t => (t.categorie || 'Non classé') === c && maintOuvert(t)).length + ' ouvert(s)']);
+  const campus = maintCompter(T, t => maintCampusCode(t.campus) || t.campus || 'Non précisé');
+  const lieux = maintCompter(T, t => (t.lieu || '').trim() ? ((maintCampusCode(t.campus) ? maintCampusCode(t.campus) + ' · ' : '') + t.lieu.trim()) : '', 10);
+  const resp = maintCompter(T, t => t.responsable || 'Non attribué', 8);
+  // Problèmes récurrents : même catégorie au même lieu, au moins 2 fois
+  const rec = {}; T.forEach(t => { if (!t.lieu || !t.categorie) return; const k = (maintCampusCode(t.campus) || t.campus || '') + ' · ' + t.lieu.trim() + ' — ' + t.categorie; (rec[k] = rec[k] || []).push(t); });
+  const recurrents = Object.entries(rec).filter(([, l]) => l.length >= 2).sort((a, b) => b[1].length - a[1].length).slice(0, 8);
+  // Mots les plus fréquents dans les descriptions
+  const VIDES = new Set('dans pour avec sans plus pas est sont une des les aux sur par qui que quoi elle il ils nous vous cette cet ces son sa ses leur leurs mais donc car tres très fait faire être etre avoir peut depuis encore aussi bien tout tous toute toutes salle merci bonjour niveau problème probleme marche fonctionne'.split(' '));
+  const mots = {}; T.forEach(t => [...new Set(String(t.description || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-z]{4,}/g) || [])].forEach(w => { if (!VIDES.has(w)) mots[w] = (mots[w] || 0) + 1; }));
+  const topMots = Object.entries(mots).filter(x => x[1] >= 2).sort((a, b) => b[1] - a[1]).slice(0, 18);
+  const tuile = (v, l, sous) => `<div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-2xl font-black text-gray-800" style="font-variant-numeric:tabular-nums">${v}</p><p class="text-[11px] font-bold text-gray-500 uppercase">${l}</p>${sous ? `<p class="text-[11px] text-gray-400 mt-1">${sous}</p>` : ''}</div>`;
+  return `<div class="flex flex-wrap gap-2 items-center mb-3"><span class="text-xs font-black uppercase text-gray-500 mr-1">Période</span>
+      ${[['tout', 'Depuis le début'], ['12m', '12 mois'], ['3m', '3 mois'], ['30j', '30 jours']].map(([v, l]) => `<button onclick="maintPeriode='${v}';renderMaintenance()" class="text-xs font-bold px-3 py-1.5 rounded-full border ${maintPeriode === v ? 'bg-[#1A4E8A] text-white border-[#1A4E8A]' : 'bg-white text-gray-600 border-gray-200'}">${l}</button>`).join('')}
+      <span class="text-[11px] text-gray-400 ml-auto">Archives incluses · ${n} ticket(s) analysé(s)</span></div>
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+      ${tuile(n, 'Tickets reçus', `${moyM} / mois en moyenne (12 mois)`)}
+      ${tuile(ouverts, 'Encore ouverts', n ? Math.round(ouverts * 100 / n) + ' % du total' : '')}
+      ${tuile(faits.length, 'Résolus / clôturés', n ? Math.round(faits.length * 100 / n) + ' % du total' : '')}
+      ${tuile(annules, 'Annulés / sans suite', '')}
+      ${tuile(delaiMoy === null ? '—' : delaiMoy + ' j', 'Délai moyen de résolution', delaiMed === null ? '' : 'médiane ' + delaiMed + ' j · ' + delais.length + ' ticket(s)')}
+      ${tuile(urgents, 'Signalés urgents', n ? Math.round(urgents * 100 / n) + ' % du total' : '')}
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-4"><p class="text-xs font-black uppercase text-gray-500 mb-3">Tickets reçus par mois — 12 derniers mois</p>
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:6px;align-items:end;height:150px">${mois.map(m => `<div title="${m.lib} : ${m.n} ticket(s)" style="display:flex;flex-direction:column;justify-content:flex-end;height:100%;align-items:center">
+        <span class="text-[10px] font-bold text-gray-600" style="font-variant-numeric:tabular-nums">${m.n || ''}</span>
+        <div style="width:70%;max-width:34px;height:${m.n ? Math.max(4, m.n * 120 / maxM) : 1}px;background:${m.n ? '#1A4E8A' : '#e2e8f0'};border-radius:4px 4px 0 0"></div></div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:6px;border-top:1px solid #e2e8f0;margin-top:2px;padding-top:4px">${mois.map(m => `<span class="text-[10px] text-gray-400 text-center">${m.lib}</span>`).join('')}</div></div>
+    <div class="grid md:grid-cols-2 gap-4 mb-4">
+      ${maintBarres('Problématiques les plus fréquentes (catégories)', cats, n)}
+      <div class="space-y-4">${maintBarres('Par campus', campus, n)}${maintBarres('Responsables', resp, n)}</div>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4 mb-4">
+      ${maintBarres('Lieux les plus concernés (top 10)', lieux, n)}
+      <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs font-black uppercase text-gray-500 mb-3">Problèmes récurrents (même lieu, même catégorie)</p>
+        ${recurrents.length ? `<div class="space-y-2">${recurrents.map(([k, l]) => `<div class="text-xs"><p><b class="text-gray-800">${l.length}×</b> <span class="text-gray-700">${vxEsc(k)}</span></p>
+          <p class="text-[11px] text-gray-400">${l.map(t => `<a href="#" onclick="event.preventDefault();ouvrirTicket('${vxEsc(t.cle).replace(/'/g, "\\'")}')" class="underline">${vxEsc(t.numero || t.date)}</a>`).join(', ')}</p></div>`).join('')}</div>` : '<p class="text-sm text-gray-400">Aucune récurrence détectée</p>'}
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs font-black uppercase text-gray-500 mb-3">Mots qui reviennent dans les descriptions</p>
+      ${topMots.length ? `<div class="flex flex-wrap gap-2">${topMots.map(([w, k]) => `<button onclick="maintFiltre.texte='${w}';maintFiltre.statut='tous';maintVue='liste';renderMaintenance()" class="mt-chip" title="Voir les ${k} tickets">${vxEsc(w)} · ${k}</button>`).join('')}</div>` : '<p class="text-sm text-gray-400">Pas assez de tickets</p>'}
+    </div>`;
 }
 function maintBasculer(cle, on) { on ? maintSel.add(cle) : maintSel.delete(cle); renderMaintenance(); }
 function maintToutSel(on) { maintListe().forEach(t => on ? maintSel.add(t.cle) : maintSel.delete(t.cle)); renderMaintenance(); }

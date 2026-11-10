@@ -110,8 +110,22 @@ function _maintAuto_() {
   var props = PropertiesService.getScriptProperties(), der = Number(props.getProperty("MAINT_NUM_TS") || 0);
   if (Date.now() - der < 15 * 60 * 1000) return;
   props.setProperty("MAINT_NUM_TS", String(Date.now()));
-  try { _maintNumeroter_(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), _maintLireReponses_(SpreadsheetApp.openById(MAINT_SHEET_ID))); }
-  catch (e) { console.warn("numérotation tickets : " + e); }
+  try {
+    var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), rep = _maintLireReponses_(SpreadsheetApp.openById(MAINT_SHEET_ID));
+    _maintNumeroter_(ss, rep);
+    _maintMiroir_(ss, rep);
+  } catch (e) { console.warn("numérotation tickets : " + e); }
+}
+// Copie en lecture seule des réponses (feuille MAINTENANCE_COPIE du CRM) avec le n° de ticket — sert à l'analyse et aux contrôles
+function _maintMiroir_(ss, rep) {
+  var NC = MAINT_ENTETES.length, wsS = _maintSuiviFeuille_(ss), dS = wsS.getRange(1, 1, Math.max(wsS.getLastRow(), 1), NC).getValues(), num = {};
+  for (var k = 1; k < dS.length; k++) if (dS[k][0]) num[String(dS[k][0])] = _maintNumLib_(dS[k][NC - 1]);
+  var w = rep.h.length, rows = [["N° ticket", "Clé ticket"].concat(rep.h)];
+  rep.lignes.forEach(function (l) { var r = l.r.slice(0, w); while (r.length < w) r.push(""); rows.push([num[l.cle] || "", l.cle].concat(r)); });
+  var ws = ss.getSheetByName("MAINTENANCE_COPIE") || ss.insertSheet("MAINTENANCE_COPIE");
+  ws.clearContents();
+  ws.getRange(1, 1, rows.length, rows[0].length).setNumberFormat("@").setValues(rows);
+  ws.getRange(1, 1, 1, rows[0].length).setFontWeight("bold"); ws.setFrozenRows(1);
 }
 function handleGetTicketsMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
