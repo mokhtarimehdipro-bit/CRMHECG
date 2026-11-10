@@ -614,7 +614,8 @@ async function maintCreerContact() {
 // Catégories proposées (+ « Autre » à préciser au cas par cas) et campus normalisés
 const MAINT_CATEGORIES = ['Informatique / réseau / Wi-Fi', 'Vidéoprojecteur / écran / son', 'Impression / photocopieur', 'Téléphonie',
   'Électricité / éclairage', 'Chauffage / climatisation', 'Plomberie / sanitaires', 'Serrurerie / accès / badges',
-  'Mobilier', 'Bâtiment (murs, sols, fenêtres, plafonds)', 'Ménage / propreté', 'Sécurité / incendie', 'Fournitures / consommables'];
+  'Mobilier / équipement de salle', 'Bâtiment (murs, sols, fenêtres, plafonds)', 'Ménage / propreté', 'Sécurité / incendie', 'Fournitures / consommables', 'Distributeurs automatiques',
+  'Pédagogique / logiciels', 'Vie étudiante / conflit', 'Entreprise / alternance', 'Social / logement', 'Administratif / visa / titre de séjour'];
 const MAINT_CAMPUS = [['MRS', 'MRS — Marseille'], ['AIX', 'AIX — Aix-en-Provence'], ['ANNX_MRS', 'ANNX_MRS — Annexe Marseille']];
 function maintCampusCode(v) {
   const x = String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -678,7 +679,7 @@ async function maintCreerTicket() {
   let r; try { r = await api('updateTicketMaintenance', d); } catch (e) { r = { success: false, message: 'Pas de réponse du serveur' }; }
   if (!r.success) { btn.disabled = false; btn.textContent = 'Ouvrir le ticket'; toast(r.message || 'Erreur', false); return; }
   document.getElementById('mtModal').classList.add('hidden');
-  toast(`Ticket ${r.numero} ouvert ✓`);
+  toast(`Ticket ${r.numero} ouvert ✓${r.mailAttribution ? ' · mail envoyé à ' + r.mailAttribution : ''}`);
   maintFiltre.statut = 'ouverts'; await loadMaintenance();
 }
 
@@ -743,7 +744,7 @@ function ouvrirTicket(cle) {
       ${champ('mtLieu', 'Lieu / salle', 'lieu')}
       <div><label>Statut</label><select id="mtStatut">${MAINT_STATUTS.map(s => `<option ${s === t.statut ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       <div><label>Priorité</label><select id="mtPrio">${['', 'Basse', 'Normale', 'Haute', 'Urgente'].map(s => `<option ${s === t.priorite ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-      <div><label>Qui s'en occupe ?</label><select id="mtResp" onchange="maintRespChange(this)">${maintOptionsResp(t)}</select></div>
+      <div><label>Qui s'en occupe ? <span class="text-[10px] text-gray-400 font-normal">(un mail lui est envoyé à l'attribution)</span></label><select id="mtResp" onchange="maintRespChange(this)">${maintOptionsResp(t)}</select></div>
       <div id="mtNouveauContact" class="col-span-2 hidden rounded-2xl border border-dashed border-[#1A4E8A] p-3 bg-blue-50/40">
         <p class="text-xs font-black text-[#1A4E8A] mb-2">Nouveau contact (prestataire, propriétaire, technicien…)</p>
         <div class="grid grid-cols-2 gap-2"><input id="mtNcNom" type="text" placeholder="Nom *"><input id="mtNcSoc" type="text" placeholder="Société / rôle">
@@ -769,13 +770,16 @@ async function saveTicket(cle) {
   const opt = sel.selectedOptions[0], respNom = sel.value ? sel.value.split('|').slice(1).join('|') : '';
   const corrections = { description: document.getElementById('mtDesc').value.trim(), categorie: maintCategorieChoisie(t), campus: document.getElementById('mtCampus').value || (maintCampusCode(t.campus) ? '' : t.campus), lieu: document.getElementById('mtLieu').value.trim() };
   const d = { statut: document.getElementById('mtStatut').value, priorite: document.getElementById('mtPrio').value, responsable: respNom, responsableMail: sel.value && opt ? (opt.dataset.mail || '') : '',
-    commentaire: document.getElementById('mtCom').value.trim(), corrections, originaux: t.original };
+    commentaire: document.getElementById('mtCom').value.trim(), corrections, originaux: t.original,
+    details: { description: corrections.description || t.description, categorie: corrections.categorie, campus: corrections.campus, lieu: corrections.lieu, date: t.date, demandeur: t.nom || t.email, priorite: document.getElementById('mtPrio').value } };
   const btn = document.getElementById('mtSave');
   if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = '⏳ Enregistrement…'; }
   const r = await maintEnvoyer([cle], 'maj', d);
   if (!r.success || !(r.resultats || []).length) { if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; } toast('Erreur : ' + (r.message || 'non enregistré'), false); return; }
   Object.assign(t, { priorite: d.priorite, commentaire: d.commentaire });
-  document.getElementById('mtModal').classList.add('hidden'); toast(`${t.numero || 'Ticket'} mis à jour ✓`); renderMaintenance();
+  document.getElementById('mtModal').classList.add('hidden');
+  toast(`${t.numero || 'Ticket'} mis à jour ✓${r.attributions ? ` · mail envoyé à ${d.responsable}` : ''}${r.erreurs && r.erreurs.length ? ' · ' + r.erreurs.join(' ; ') : ''}`, !(r.erreurs && r.erreurs.length));
+  renderMaintenance();
 }
 
 // ══ CENTRE DES FORMULAIRES ══

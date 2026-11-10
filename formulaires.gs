@@ -37,9 +37,33 @@ function _maintColonnes_(h) {
   function f(re, sauf) { for (var i = 0; i < n.length; i++) if (re.test(n[i]) && !(sauf && sauf.test(n[i]))) return i; return -1; }
   return {
     date: f(/horodat|timestamp|date/), email: f(/e-?mail|courriel/), nom: f(/\bnom\b|prenom|demandeur|qui /),
-    campus: f(/campus|site|etablissement/), lieu: f(/salle|lieu|localisation|emplacement|ou se/), categorie: f(/categorie|type|nature|domaine|objet/),
-    urgence: f(/urgen|priorit|gravit|criticit/), description: f(/descri|probleme|detail|precis|commentaire|message/, /photo/), photo: f(/photo|image|piece|fichier|capture/)
+    campus: f(/campus|site|etablissement/), lieu: f(/salle|lieu|localisation|emplacement|ou se/), categorie: f(/categorie|typolog|type|nature|domaine|objet/),
+    urgence: f(/urgen|priorit|gravit|criticit/), description: f(/descri|probleme|detail|precis|commentaire|message/, /photo|action|curat/), photo: f(/photo|image|piece|fichier|capture/),
+    etat: f(/etat de resolution|etat|resolution ticket/, /date|duree/), action: f(/action cur|curat|action correct/), numSheet: f(/numero ticket|n° ticket|num ticket/), delaiJ: f(/date resolution|j ?\+/)
   };
+}
+// Mail au responsable quand un ticket lui est attribué : n° de ticket + ce qu'il y a à réaliser
+function _maintMailAttribution_(ss, p, nom, mail, numLib, statut, priorite, commentaire) {
+  nom = String(nom || "").trim(); mail = String(mail || "").trim();
+  if (!mail && nom.indexOf("@") > 0) mail = nom;
+  if (!mail) { var n = nom.toLowerCase(); _maintEquipe_(ss).concat(_maintContacts_(ss)).forEach(function (x) { if (!mail && x.mail && n && x.nom.toLowerCase() === n) mail = x.mail; }); }
+  if (mail.indexOf("@") < 1) return "";
+  var d = p.details || {}, esc = function (x) { return String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  var lignes = [["N° de ticket", numLib], ["Reçu le", d.date], ["Demandeur", d.demandeur], ["Catégorie", d.categorie], ["Campus", d.campus], ["Lieu / salle", d.lieu], ["Priorité", priorite || d.priorite], ["Statut", statut]]
+    .filter(function (x) { return String(x[1] || "").trim(); }).map(function (x) { return '<tr><td style="padding:5px 12px 5px 0;color:#64748b;white-space:nowrap">' + x[0] + '</td><td style="padding:5px 0"><b>' + esc(x[1]) + "</b></td></tr>"; }).join("");
+  var urgent = /urgent|haute/i.test(String(priorite || d.priorite || ""));
+  var corps = '<div style="font-family:Arial;padding:20px;max-width:640px"><h2 style="color:#1A4E8A;margin:0 0 6px">🛠️ Ticket ' + esc(numLib) + " — vous en êtes responsable</h2>" +
+    "<p>Bonjour " + esc(nom.split(" ")[0]) + ",</p><p>Le ticket de maintenance ci-dessous vous a été attribué" + (p.nomAuteur ? " par <b>" + esc(p.nomAuteur) + "</b>" : "") + "." + (urgent ? ' <b style="color:#b91c1c">Il est signalé prioritaire.</b>' : "") + "</p>" +
+    '<div style="background:#fff7ed;border-left:5px solid #F26522;padding:12px 14px;margin:14px 0"><p style="margin:0 0 4px;font-size:12px;color:#9a3412;font-weight:bold;text-transform:uppercase">À réaliser</p><p style="margin:0;font-size:15px">' + esc(d.description || "Voir le ticket").replace(/\n/g, "<br>") + "</p></div>" +
+    '<table style="border-collapse:collapse;font-size:14px">' + lignes + "</table>" +
+    (commentaire ? '<p style="margin-top:12px"><b>Consignes / suivi :</b> ' + esc(commentaire).replace(/\n/g, "<br>") + "</p>" : "") +
+    "<p style=\"margin-top:16px\">Merci d'indiquer l'avancement (pris en charge, intervention prévue, résolu) en répondant à ce mail en rappelant le n° <b>" + esc(numLib) + "</b>.</p></div>";
+  var opt = { htmlBody: corps + getSignatureHTML() };
+  if (mail.toLowerCase() !== "m.mokhtari@hecg.fr") opt.cc = "m.mokhtari@hecg.fr";
+  if (p.emailAuteur && String(p.emailAuteur).indexOf("@") > 0 && String(p.emailAuteur).toLowerCase() !== mail.toLowerCase()) opt.replyTo = String(p.emailAuteur);
+  GmailApp.sendEmail(mail, "[" + numLib + "] Ticket de maintenance attribué : " + String(d.description || "").slice(0, 70), "", opt);
+  logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Envoi mail", "Vie scolaire — Maintenance — attribution", numLib, "Ticket attribué à " + nom + " (" + mail + "), mail envoyé avec le détail");
+  return mail;
 }
 function _maintJson_(v, def) { try { var x = JSON.parse(String(v || "")); return x == null ? def : x; } catch (e) { return def; } }
 // Équipe pouvant être désignée responsable (nom + mail) — sert à la relance par mail
@@ -76,6 +100,7 @@ function _maintLireReponses_(ext) {
     var r = data[i];
     if (!r.join("").trim()) continue;
     var d = C.date >= 0 ? String(r[C.date] || "").trim() : "", m = C.email >= 0 ? String(r[C.email] || "").trim() : "";
+    if (!d && !m && (C.description < 0 || !String(r[C.description] || "").trim())) continue;   // ligne pré-numérotée encore vide
     var cle = _maintCle_(d, m, i + 1);
     if (vus[cle]) cle += "|L" + (i + 1);   // deux réponses à la même seconde par la même personne
     vus[cle] = 1;
@@ -165,13 +190,15 @@ function handleGetTicketsMaintenance(p, ss) {
       var r = l.r, v = function (c) { return c >= 0 ? String(r[c] || "").trim() : ""; };
       var s = suivi[l.cle] || suivi[l.ancienneCle] || {}, corr = s.corr || {};
       var orig = { campus: v(C.campus), lieu: v(C.lieu), categorie: v(C.categorie), description: v(C.description) };
+      var etatF = v(C.etat).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(), statutF = /clotur|resolu|termin/.test(etatF) ? "Clôturé" : /decal|attente|report/.test(etatF) ? "En attente" : /cours|pris/.test(etatF) ? "Pris en charge" : "";
       tickets.push({ cle: l.cle, ancienneCle: suivi[l.cle] ? "" : (suivi[l.ancienneCle] ? l.ancienneCle : ""), ligne: l.i + 1, numero: _maintNumLib_(s.num), num: s.num || 0,
         date: v(C.date), email: v(C.email), nom: v(C.nom),
         campus: corr.campus != null ? corr.campus : orig.campus, lieu: corr.lieu != null ? corr.lieu : orig.lieu,
         categorie: corr.categorie != null ? corr.categorie : orig.categorie, description: corr.description != null ? corr.description : orig.description,
         original: orig, corrige: Object.keys(corr).length > 0,
         urgence: v(C.urgence), photo: v(C.photo), champs: h.map(function (t, j) { return [String(t), String(r[j] || "")]; }).filter(function (x) { return x[1]; }),
-        statut: s.statut || "Nouveau", responsable: s.responsable || "", responsableMail: s.responsableMail || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "",
+        statut: (s.statut && s.statut !== "Nouveau") ? s.statut : (statutF || s.statut || "Nouveau"), responsable: s.responsable || "", responsableMail: s.responsableMail || "",
+        commentaire: s.commentaire || v(C.action), priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "", numSheet: v(C.numSheet),
         archive: !!s.archive, journal: s.journal || [], relances: s.relances || 0, derniereRelance: s.derniereRelance || "" });
     });
     var nbSheet = tickets.length;
@@ -215,7 +242,12 @@ function handleUpdateTicketMaintenance(p, ss) {
         JSON.stringify([{ d: maint0, par: par0, evt: "Ticket ouvert depuis l'application — n° " + _maintNumLib_(num0) }]), "{}", 0, "", String(p.responsableMail || ""), num0];
       wsS0.getRange(wsS0.getLastRow() + 1, 1, 1, NC0).setValues([ligneS]);
       logAction(par0, p.vieScRole || "", "Création", "Vie scolaire — Maintenance — ticket", _maintNumLib_(num0), "Ticket ouvert depuis l'application : " + desc.slice(0, 80));
-      return createJsonResponse({ success: true, numero: _maintNumLib_(num0) });
+      var mailA = "";
+      if (String(p.responsable || "").trim()) {
+        p.details = { description: desc, categorie: ligneI[6], campus: ligneI[4], lieu: ligneI[5], date: horo, demandeur: ligneI[3], priorite: ligneI[7] };
+        try { mailA = _maintMailAttribution_(ss, p, p.responsable, p.responsableMail, _maintNumLib_(num0), ligneS[1], ligneI[7], ""); } catch (eA) {}
+      }
+      return createJsonResponse({ success: true, numero: _maintNumLib_(num0), mailAttribution: mailA });
     } finally { lockC.releaseLock(); }
   }
   if (String(p.op || "") === "contact") {   // création d'un contact externe
@@ -235,7 +267,7 @@ function handleUpdateTicketMaintenance(p, ss) {
     var cles = Array.isArray(p.cles) && p.cles.length ? p.cles.map(String) : (p.cle ? [String(p.cle)] : []);
     if (!cles.length) return createJsonResponse({ success: false, message: "Ticket inconnu." });
     var op = String(p.op || "maj"), par = p.nomAuteur || p.emailAuteur || "", maintenant = _fDate_();
-    var equipe = op === "relancer" ? _maintEquipe_(ss) : [], resumes = p.resumes || {}, resultats = [], relancesEnvoyees = 0, erreurs = [];
+    var equipe = op === "relancer" ? _maintEquipe_(ss) : [], resumes = p.resumes || {}, resultats = [], relancesEnvoyees = 0, erreurs = [], attributions = 0;
     var index = {}; for (var i = 1; i < data.length; i++) if (data[i][0]) index[String(data[i][0])] = i;
     var aAjouter = [];
 
@@ -259,6 +291,10 @@ function handleUpdateTicketMaintenance(p, ss) {
           });
         }
         evt = statut !== avant ? avant + " → " + statut : "Modifié";
+        if (String(ligne[2] || "").trim() && String(ligne[2]) !== ancienResp && p.notifier !== false) {
+          try { var envoye = _maintMailAttribution_(ss, p, ligne[2], ligne[13], numLib || cle, statut, ligne[4], ligne[3]); evt += envoye ? " — mail d'attribution envoyé à " + envoye : " — responsable sans adresse mail : pas de mail"; if (envoye) attributions++; }
+          catch (eA) { evt += " — échec du mail d'attribution (" + eA.message + ")"; erreurs.push(numLib + " : mail d'attribution non envoyé (" + eA.message + ")"); }
+        }
       } else if (op === "cloturer") { ligne[1] = "Clôturé"; evt = avant + " → Clôturé"; }
       else if (op === "annuler") { ligne[1] = "Annulé"; evt = avant + " → Annulé"; }
       else if (op === "rouvrir") { ligne[1] = "Pris en charge"; ligne[8] = false; evt = avant + " → rouvert"; }
@@ -299,7 +335,7 @@ function handleUpdateTicketMaintenance(p, ss) {
     });
     if (data.length > 1) ws.getRange(1, 1, data.length, MAINT_ENTETES.length).setValues(data.map(function (r) { while (r.length < MAINT_ENTETES.length) r.push(""); return r.slice(0, MAINT_ENTETES.length); }));
     if (aAjouter.length) ws.getRange(ws.getLastRow() + 1, 1, aAjouter.length, MAINT_ENTETES.length).setValues(aAjouter);
-    return createJsonResponse({ success: resultats.length > 0 || !erreurs.length, resultats: resultats, relances: relancesEnvoyees, erreurs: erreurs,
+    return createJsonResponse({ success: resultats.length > 0 || !erreurs.length, resultats: resultats, relances: relancesEnvoyees, attributions: attributions, erreurs: erreurs,
       message: erreurs.length ? erreurs.join(" ; ") : "" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { lock.releaseLock(); }
