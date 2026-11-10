@@ -10295,15 +10295,13 @@ function handleGedGetStudentDocs(p, ss) {
     }
     if (!folderId) return createJsonResponse({ success: true, linked: false });
     var folder = DriveApp.getFolderById(folderId);
-    var files = [];
+    var files = [], fichesPos = _fpRegistreParFichier_(ss);
     var fils = folder.getFiles();
     while (fils.hasNext()) {
       var f = fils.next();
-      files.push({ id: f.getId(), name: f.getName(), url: f.getUrl(),
-        mimeType: f.getMimeType(), size: f.getSize(),
-        date: Utilities.formatDate(f.getLastUpdated(), Session.getScriptTimeZone(), "dd/MM/yyyy") });
+      files.push(_gedFichierInfo_(f, fichesPos));
     }
-    files.sort(function(a,b){ return b.date.localeCompare(a.date); });
+    files.sort(function(a,b){ return String(b.tri).localeCompare(String(a.tri)); });
     var subfolders = [];
     var subs = folder.getFolders();
     while (subs.hasNext()) {
@@ -11644,15 +11642,13 @@ function handleGedGetSubfolder(p, ss) {
   try {
     if (!p.folderId) return createJsonResponse({ success: false, message: "folderId manquant." });
     var folder = DriveApp.getFolderById(p.folderId);
-    var files = [];
+    var files = [], fichesPos = _fpRegistreParFichier_(ss);
     var fils = folder.getFiles();
     while (fils.hasNext()) {
       var f = fils.next();
-      files.push({ id: f.getId(), name: f.getName(), url: f.getUrl(),
-        mimeType: f.getMimeType(), size: f.getSize(),
-        date: Utilities.formatDate(f.getLastUpdated(), Session.getScriptTimeZone(), "dd/MM/yyyy") });
+      files.push(_gedFichierInfo_(f, fichesPos));
     }
-    files.sort(function(a,b){ return b.date.localeCompare(a.date); });
+    files.sort(function(a,b){ return String(b.tri).localeCompare(String(a.tri)); });
     var subfolders = [];
     var subs = folder.getFolders();
     while (subs.hasNext()) {

@@ -1364,12 +1364,18 @@
                 </div>`).join('');
 
             const filesHtml = files.map(f => {
-                const icon = f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : '📎';
-                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid #e5e7eb;background:#f9fafb">
+                const fp = f.fichePositionnement;
+                const icon = fp ? '📋' : f.mimeType?.includes('pdf') ? '📄' : f.mimeType?.includes('image') ? '🖼' : f.mimeType?.includes('spreadsheet') ? '📊' : f.mimeType?.includes('document') ? '📝' : '📎';
+                const taille = f.size ? ' · ' + (f.size / 1024).toFixed(0) + ' KB' : '';
+                const dates = fp
+                    ? `<p style="font-size:0.7rem;color:#475569;margin-top:2px"><span style="background:#e0e7ff;color:#3730a3;font-weight:800;border-radius:999px;padding:1px 7px;margin-right:4px">Fiche de positionnement</span>
+                         📅 Créée le <b>${fp.creeLe}</b> <span style="color:#9ca3af">(date d'entrée)</span> · ✏️ Dernière modification : <b>${fp.modifiee ? fp.modifieLe : fp.creeLe}</b>${fp.modifiee ? '' : ' <span style="color:#9ca3af">(non modifiée)</span>'}</p>`
+                    : `<p style="font-size:0.7rem;color:#9ca3af">${f.creeLe ? 'Ajouté le ' + f.creeLe + ' · modifié le ' + (f.modifieLe || f.date) : f.date}${taille}</p>`;
+                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:0.75rem;border:1px solid ${fp ? '#c7d2fe' : '#e5e7eb'};background:${fp ? '#f5f7ff' : '#f9fafb'}">
                     <span style="font-size:1.3rem">${icon}</span>
                     <div style="flex:1;min-width:0">
                         <p style="font-weight:600;font-size:0.8rem;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</p>
-                        <p style="font-size:0.7rem;color:#9ca3af">${f.date} · ${(f.size/1024).toFixed(0)} KB</p>
+                        ${dates}
                     </div>
                     <a href="${f.url}" target="_blank" style="font-size:0.75rem;font-weight:700;color:#1A4E8A;white-space:nowrap">Ouvrir</a>
                 </div>`;

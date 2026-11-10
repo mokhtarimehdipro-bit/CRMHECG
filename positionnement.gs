@@ -146,6 +146,35 @@ function _fpDate_(v) {
 }
 
 // Dossier GED de l'étudiant (lié, retrouvé par nom, ou créé et lié)
+// ── Dates affichées dans les Documents du dossier étudiant (code.gs › GED) ──────
+// Fiche de positionnement : « créée le » = date de rédaction (date d'entrée / création de l'étudiant),
+// « dernière modification » = dernière modification Drive APRÈS la génération automatique (sinon = date de création).
+function _fpRegistreParFichier_(ss) {
+  var out = {};
+  try {
+    var ws = ss.getSheetByName("FICHES_POSITIONNEMENT"); if (!ws || ws.getLastRow() < 2) return out;
+    ws.getRange(2, 1, ws.getLastRow() - 1, 11).getValues().forEach(function (r) {
+      var fid = String(r[9] || "").trim(); if (!fid) return;
+      out[fid] = { redaction: r[7] instanceof Date ? Utilities.formatDate(r[7], "Europe/Paris", "dd/MM/yyyy") : String(r[7] || "").trim(),
+        generee: r[10] instanceof Date ? r[10] : (function (t) { var m = String(t || "").match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) : null; })(r[10]) };
+    });
+  } catch (e) {}
+  return out;
+}
+function _gedFichierInfo_(f, fichesPos) {
+  var tz = "Europe/Paris", cree = f.getDateCreated(), modif = f.getLastUpdated();
+  var o = { id: f.getId(), name: f.getName(), url: f.getUrl(), mimeType: f.getMimeType(), size: f.getSize(),
+    date: Utilities.formatDate(modif, tz, "dd/MM/yyyy"), tri: Utilities.formatDate(modif, tz, "yyyy-MM-dd HH:mm"),
+    creeLe: Utilities.formatDate(cree, tz, "dd/MM/yyyy"), modifieLe: Utilities.formatDate(modif, tz, "dd/MM/yyyy à HH:mm") };
+  var fp = fichesPos && fichesPos[o.id];
+  if (fp) {
+    // La génération (copie + remplissage) touche le fichier quelques minutes : ce n'est pas une modification humaine
+    var gen = fp.generee ? fp.generee.getTime() : cree.getTime(), retouche = modif.getTime() > gen + 15 * 60 * 1000;
+    o.fichePositionnement = { creeLe: fp.redaction || o.creeLe, modifieLe: retouche ? o.modifieLe : "", modifiee: retouche };
+  }
+  return o;
+}
+
 function _fpDossierGed_(ss, id, nom, prenom) {
   var ws = getOrCreateGedEtuSheet(ss), d = ws.getDataRange().getValues();
   for (var i = 1; i < d.length; i++) if (String(d[i][0]).trim() === id && String(d[i][2] || "").trim()) {
