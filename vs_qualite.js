@@ -308,32 +308,45 @@ async function deleteQualiopiPreuve(id) {
 }
 
 // ══ TICKETS DE MAINTENANCE ══
-let maintData = null, maintFiltre = { statut: 'ouverts', texte: '' };
-const MAINT_STATUTS = ['Nouveau', 'Pris en charge', 'En attente', 'Résolu', 'Sans suite'];
-const MAINT_COUL = { 'Nouveau': ['#dbeafe', '#1d4ed8'], 'Pris en charge': ['#fef3c7', '#b45309'], 'En attente': ['#ede9fe', '#6d28d9'], 'Résolu': ['#dcfce7', '#15803d'], 'Sans suite': ['#f3f4f6', '#6b7280'] };
+let maintData = null, maintFiltre = { statut: 'ouverts', texte: '' }, maintSel = new Set();
+let maintVue = (() => { try { return localStorage.getItem('maintVue') || 'liste'; } catch (e) { return 'liste'; } })();
+const MAINT_STATUTS = ['Nouveau', 'Pris en charge', 'En attente', 'Résolu', 'Clôturé', 'Annulé', 'Sans suite'];
+const MAINT_FERMES = ['Résolu', 'Clôturé', 'Annulé', 'Sans suite'];
+const MAINT_COUL = { 'Nouveau': ['#dbeafe', '#1d4ed8'], 'Pris en charge': ['#fef3c7', '#b45309'], 'En attente': ['#ede9fe', '#6d28d9'], 'Résolu': ['#dcfce7', '#15803d'],
+  'Clôturé': ['#d1fae5', '#065f46'], 'Annulé': ['#fee2e2', '#991b1b'], 'Sans suite': ['#f3f4f6', '#6b7280'] };
+const maintOuvert = t => !MAINT_FERMES.includes(t.statut);
+const maintUrgent = t => /urgent|haute|critique|bloquant/i.test(t.urgence + ' ' + t.priorite);
 async function loadMaintenance() {
   const s = document.getElementById('section-maintenance');
-  s.innerHTML = `<div class="text-center text-gray-400 py-16">Chargement des tickets…</div>`;
+  if (!maintData) s.innerHTML = `<div class="text-center text-gray-400 py-16">Chargement des tickets…</div>`;
   const r = await api('getTicketsMaintenance');
   if (!r.success) {
     s.innerHTML = `<h1 class="text-2xl font-black text-[#1A4E8A] mb-4">🛠️ Tickets de maintenance</h1><div class="qualiopi-card" style="border-left:4px solid #dc2626">
       <p class="font-bold text-red-700">${vxEsc(r.message)}</p>${r.lien ? `<a href="${vxEsc(r.lien)}" target="_blank" class="text-sm text-blue-600 underline">Ouvrir le classeur des réponses</a>` : ''}</div>`;
     return;
   }
-  maintData = r; renderMaintenance();
+  // Nouveaux tickets depuis la dernière visite (contrôle d'arrivée)
+  let vus = []; try { vus = JSON.parse(localStorage.getItem('maintVus') || '[]'); } catch (e) {}
+  r.nouveaux = vus.length ? r.tickets.filter(t => !vus.includes(t.cle)).map(t => t.cle) : [];
+  try { localStorage.setItem('maintVus', JSON.stringify(r.tickets.map(t => t.cle))); } catch (e) {}
+  maintData = r; maintSel = new Set([...maintSel].filter(c => r.tickets.some(t => t.cle === c)));
+  renderMaintenance();
+}
+function maintListe() {
+  const T = maintData.tickets, q = maintFiltre.texte.toLowerCase(), f = maintFiltre.statut;
+  return T.filter(t => (f === 'archives' ? t.archive : !t.archive)
+    && (f === 'tous' || f === 'archives' || (f === 'ouverts' ? maintOuvert(t) : t.statut === f))
+    && (!q || [t.description, t.lieu, t.categorie, t.nom, t.email, t.campus, t.commentaire, t.responsable, t.statut].join(' ').toLowerCase().includes(q)));
 }
 function renderMaintenance() {
-  const s = document.getElementById('section-maintenance'), r = maintData, T = r.tickets;
-  const ouverts = T.filter(t => !['Résolu', 'Sans suite'].includes(t.statut));
-  const urg = ouverts.filter(t => /urgent|haute|critique|bloquant/i.test(t.urgence + ' ' + t.priorite));
-  const resolus30 = T.filter(t => t.statut === 'Résolu').length;
-  const q = maintFiltre.texte.toLowerCase();
-  const liste = T.filter(t => (maintFiltre.statut === 'tous' || (maintFiltre.statut === 'ouverts' ? !['Résolu', 'Sans suite'].includes(t.statut) : t.statut === maintFiltre.statut))
-    && (!q || [t.description, t.lieu, t.categorie, t.nom, t.campus, t.commentaire].join(' ').toLowerCase().includes(q)));
+  const s = document.getElementById('section-maintenance'), r = maintData, T = r.tickets, A = T.filter(t => !t.archive);
+  const ouverts = A.filter(maintOuvert), urg = ouverts.filter(maintUrgent), liste = maintListe(), ctl = r.controle || {};
   const cats = {}; ouverts.forEach(t => { const c = t.categorie || 'Autre'; cats[c] = (cats[c] || 0) + 1; });
+  const synchroOk = ctl.lignesSheet == null || ctl.lignesSheet === ctl.affiches;
+  const visibles = new Set(liste.map(t => t.cle)), nbSel = [...maintSel].filter(c => visibles.has(c)).length;
   s.innerHTML = `<style>
-    .mt-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin:1rem 0 1.25rem}
-    .mt-kpi div{border-radius:1.1rem;padding:1rem 1.1rem;color:#fff;box-shadow:0 12px 24px -16px rgba(15,23,42,.5)}
+    .mt-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin:1rem 0 1.25rem}
+    .mt-kpi div{border-radius:1.1rem;padding:1rem 1.1rem;color:#fff;box-shadow:0 12px 24px -16px rgba(15,23,42,.5);cursor:pointer}
     .mt-kpi b{display:block;font-size:1.8rem;font-weight:900;line-height:1}.mt-kpi span{font-size:.72rem;font-weight:700;opacity:.9}
     .mt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.9rem}
     .mt-card{background:#fff;border:1px solid #eef2f7;border-radius:1.1rem;padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;transition:transform .15s,box-shadow .15s;cursor:pointer;position:relative;overflow:hidden}
@@ -341,6 +354,16 @@ function renderMaintenance() {
     .mt-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bord)}
     .mt-pill{font-size:.65rem;font-weight:800;padding:.18rem .55rem;border-radius:999px;white-space:nowrap}
     .mt-chip{background:#f1f5f9;color:#475569;font-size:.68rem;font-weight:700;padding:.15rem .5rem;border-radius:.5rem}
+    .mt-tab{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem}
+    .mt-tab th{position:sticky;top:0;background:#f8fafc;text-align:left;font-size:.66rem;text-transform:uppercase;color:#64748b;padding:.55rem .6rem;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+    .mt-tab td{padding:.55rem .6rem;border-bottom:1px solid #f1f5f9;vertical-align:top}
+    .mt-tab tr:hover td{background:#f8fbff}.mt-tab tr.sel td{background:#eff6ff}
+    .mt-act{display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.55rem;border:1px solid #e2e8f0;background:#fff;font-size:.8rem;cursor:pointer}
+    .mt-act:hover{background:#f1f5f9}.mt-act[disabled]{opacity:.35;cursor:default}
+    .mt-bulk{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;background:#1A4E8A;color:#fff;border-radius:.9rem;padding:.55rem .8rem;margin-bottom:.75rem}
+    .mt-bulk button{background:rgba(255,255,255,.15);border-radius:.6rem;padding:.3rem .7rem;font-size:.75rem;font-weight:800}
+    .mt-bulk button:hover{background:rgba(255,255,255,.28)}
+    .mt-new{background:#f97316;color:#fff;font-size:.6rem;font-weight:900;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem}
   </style>
   <div class="flex flex-wrap justify-between items-start gap-3">
     <div><h1 class="text-2xl font-black text-[#1A4E8A]">🛠️ Tickets de maintenance</h1>
@@ -348,55 +371,191 @@ function renderMaintenance() {
     <div class="flex gap-2 flex-wrap">${r.formUrl ? `<button onclick="navigator.clipboard.writeText('${vxEsc(r.formUrl)}');toast('Lien du formulaire copié ✓')" class="btn-ghost text-sm">📋 Copier le lien du formulaire</button><a href="${vxEsc(r.formUrl)}" target="_blank" class="btn-ghost text-sm">📝 Ouvrir le formulaire</a>` : ''}
       <a href="${vxEsc(r.sheetUrl)}" target="_blank" class="btn-ghost text-sm">📊 Réponses (Sheet)</a><button onclick="loadMaintenance()" class="btn-orange text-sm">↻ Actualiser</button></div>
   </div>
+  <div class="mt-2 text-xs rounded-xl px-3 py-2 inline-flex flex-wrap gap-x-3 gap-y-1 items-center" style="background:${synchroOk ? '#ecfdf5' : '#fef2f2'};color:${synchroOk ? '#065f46' : '#991b1b'}">
+    <b>${synchroOk ? '✅ Synchronisé' : '⚠️ Écart de synchronisation'}</b>
+    <span>${ctl.lignesSheet != null ? `${ctl.lignesSheet} réponse(s) dans le Sheet (onglet « ${vxEsc(ctl.onglet || '')} ») · ${ctl.affiches} ticket(s) dans l'application` : ''}</span>
+    ${ctl.dernier ? `<span>· dernier reçu : ${vxEsc(ctl.dernier)}</span>` : ''}${ctl.lu ? `<span>· lu à ${vxEsc(String(ctl.lu).slice(11))}</span>` : ''}
+    ${r.nouveaux && r.nouveaux.length ? `<span class="mt-new">${r.nouveaux.length} nouveau(x) depuis votre dernière visite</span>` : ''}
+    ${ctl.colonnesReperees && (ctl.colonnesReperees.date < 0 || ctl.colonnesReperees.description < 0) ? `<span>· ⚠️ colonne ${ctl.colonnesReperees.date < 0 ? '« horodatage »' : '« description »'} non reconnue dans le Sheet</span>` : ''}
+  </div>
   <div class="mt-kpi">
-    <div style="background:linear-gradient(135deg,#1A4E8A,#3b82f6)"><b>${ouverts.length}</b><span>tickets ouverts</span></div>
-    <div style="background:linear-gradient(135deg,#dc2626,#f97316)"><b>${urg.length}</b><span>urgents ouverts</span></div>
-    <div style="background:linear-gradient(135deg,#d97706,#fbbf24)"><b>${T.filter(t => t.statut === 'Nouveau').length}</b><span>non pris en charge</span></div>
-    <div style="background:linear-gradient(135deg,#059669,#34d399)"><b>${resolus30}</b><span>résolus</span></div>
-    <div style="background:linear-gradient(135deg,#475569,#94a3b8)"><b>${T.length}</b><span>tickets reçus</span></div>
+    <div onclick="maintFiltre.statut='ouverts';renderMaintenance()" style="background:linear-gradient(135deg,#1A4E8A,#3b82f6)"><b>${ouverts.length}</b><span>tickets ouverts</span></div>
+    <div onclick="maintFiltre.statut='ouverts';maintFiltre.texte='';renderMaintenance()" style="background:linear-gradient(135deg,#dc2626,#f97316)"><b>${urg.length}</b><span>urgents ouverts</span></div>
+    <div onclick="maintFiltre.statut='Nouveau';renderMaintenance()" style="background:linear-gradient(135deg,#d97706,#fbbf24)"><b>${A.filter(t => t.statut === 'Nouveau').length}</b><span>non pris en charge</span></div>
+    <div onclick="maintFiltre.statut='Clôturé';renderMaintenance()" style="background:linear-gradient(135deg,#059669,#34d399)"><b>${A.filter(t => ['Résolu', 'Clôturé'].includes(t.statut)).length}</b><span>résolus / clôturés</span></div>
+    <div onclick="maintFiltre.statut='archives';renderMaintenance()" style="background:linear-gradient(135deg,#475569,#94a3b8)"><b>${T.filter(t => t.archive).length}</b><span>archivés · ${T.length} reçus</span></div>
   </div>
   ${Object.keys(cats).length ? `<div class="flex flex-wrap gap-2 mb-3">${Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<span class="mt-chip">${vxEsc(c)} · ${n}</span>`).join('')}</div>` : ''}
-  <div class="flex flex-wrap gap-2 mb-4">
-    <select onchange="maintFiltre.statut=this.value;renderMaintenance()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm">
-      ${[['ouverts', 'Tickets ouverts'], ['tous', 'Tous les tickets']].concat(MAINT_STATUTS.map(x => [x, x])).map(o => `<option value="${o[0]}" ${maintFiltre.statut === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
-    <input type="search" placeholder="🔎 Lieu, catégorie, description…" value="${vxEsc(maintFiltre.texte)}" oninput="maintFiltre.texte=this.value;renderMaintenance()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[220px]">
+  <div class="flex flex-wrap gap-2 mb-4 items-center">
+    <select onchange="maintFiltre.statut=this.value;maintSel.clear();renderMaintenance()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm">
+      ${[['ouverts', 'Tickets ouverts'], ['tous', 'Tous (hors archives)']].concat(MAINT_STATUTS.map(x => [x, x]), [['archives', '🗄 Archivés']]).map(o => `<option value="${o[0]}" ${maintFiltre.statut === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
+    <input id="mtRecherche" type="search" placeholder="🔎 Lieu, catégorie, description, responsable…" value="${vxEsc(maintFiltre.texte)}" oninput="maintFiltre.texte=this.value;renderMaintenance();const e=document.getElementById('mtRecherche');e.focus();e.setSelectionRange(e.value.length,e.value.length)" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[220px]">
+    <div class="inline-flex rounded-xl border border-gray-200 overflow-hidden text-sm font-bold">
+      ${[['liste', '☰ Liste'], ['cartes', '▦ Cartes']].map(([v, l]) => `<button onclick="maintVue='${v}';try{localStorage.setItem('maintVue','${v}')}catch(e){};renderMaintenance()" class="px-3 py-2 ${maintVue === v ? 'bg-[#1A4E8A] text-white' : 'bg-white text-gray-600'}">${l}</button>`).join('')}</div>
   </div>
-  <div class="mt-grid">${liste.length ? liste.map(t => {
-    const [bg, fg] = MAINT_COUL[t.statut] || MAINT_COUL['Nouveau'];
-    const urgent = /urgent|haute|critique|bloquant/i.test(t.urgence + ' ' + t.priorite);
-    return `<div class="mt-card" style="--bord:${urgent ? '#dc2626' : fg}" onclick="ouvrirTicket('${vxEsc(t.cle)}')">
-      <div class="flex justify-between gap-2"><span class="mt-pill" style="background:${bg};color:${fg}">${vxEsc(t.statut)}</span>
-        ${t.urgence || t.priorite ? `<span class="mt-pill" style="background:${urgent ? '#fee2e2' : '#f8fafc'};color:${urgent ? '#b91c1c' : '#64748b'}">${urgent ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence)}</span>` : ''}</div>
+  ${nbSel ? `<div class="mt-bulk"><b class="text-sm mr-2">${nbSel} sélectionné(s)</b>
+    <button onclick="maintActionGroupee('cloturer')">✓ Clôturer</button><button onclick="maintActionGroupee('relancer')">🔔 Relancer</button>
+    <button onclick="maintActionGroupee('annuler')">✕ Annuler</button>
+    ${maintFiltre.statut === 'archives' ? `<button onclick="maintActionGroupee('desarchiver')">↩ Désarchiver</button>` : `<button onclick="maintActionGroupee('archiver')">🗄 Archiver</button>`}
+    <button onclick="maintSel.clear();renderMaintenance()" style="margin-left:auto">Désélectionner</button></div>` : ''}
+  ${liste.length ? (maintVue === 'liste' ? maintTableau(liste, r.nouveaux || []) : maintCartes(liste, r.nouveaux || [])) : '<p class="text-gray-400 text-sm">Aucun ticket pour ce filtre ✅</p>'}`;
+}
+function maintBoutons(t) {
+  const c = vxEsc(t.cle).replace(/'/g, "\\'"), o = maintOuvert(t);
+  return `<button class="mt-act" title="Modifier" onclick="event.stopPropagation();ouvrirTicket('${c}')">✏️</button>
+    ${o ? `<button class="mt-act" title="Clôturer" onclick="event.stopPropagation();maintAction('${c}','cloturer')">✓</button>` : `<button class="mt-act" title="Rouvrir" onclick="event.stopPropagation();maintAction('${c}','rouvrir')">↺</button>`}
+    <button class="mt-act" title="Relancer le responsable par mail" onclick="event.stopPropagation();maintAction('${c}','relancer')">🔔</button>
+    <button class="mt-act" title="Annuler" ${t.statut === 'Annulé' ? 'disabled' : ''} onclick="event.stopPropagation();maintAction('${c}','annuler')">✕</button>
+    ${t.archive ? `<button class="mt-act" title="Désarchiver" onclick="event.stopPropagation();maintAction('${c}','desarchiver')">↩</button>` : `<button class="mt-act" title="Archiver" onclick="event.stopPropagation();maintAction('${c}','archiver')">🗄</button>`}`;
+}
+function maintPill(t) { const [bg, fg] = MAINT_COUL[t.statut] || MAINT_COUL['Nouveau']; return `<span class="mt-pill" style="background:${bg};color:${fg}">${vxEsc(t.statut)}</span>`; }
+function maintTableau(liste, nouveaux) {
+  const tous = liste.every(t => maintSel.has(t.cle));
+  return `<div class="bg-white rounded-2xl border border-gray-100 overflow-auto" style="max-height:70vh"><table class="mt-tab"><thead><tr>
+    <th><input type="checkbox" ${tous ? 'checked' : ''} onchange="maintToutSel(this.checked)"></th><th>Reçu le</th><th>Statut</th><th>Priorité</th><th>Signalement</th><th>Lieu</th><th>Demandeur</th><th>Responsable</th><th>Suivi</th><th class="text-right">Actions</th></tr></thead><tbody>
+    ${liste.map(t => { const c = vxEsc(t.cle).replace(/'/g, "\\'"), u = maintUrgent(t); return `<tr class="${maintSel.has(t.cle) ? 'sel' : ''}" style="cursor:pointer" onclick="ouvrirTicket('${c}')">
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${maintSel.has(t.cle) ? 'checked' : ''} onchange="maintBasculer('${c}',this.checked)"></td>
+      <td class="whitespace-nowrap text-gray-500 text-xs">${vxEsc(t.date)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</td>
+      <td>${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄</span>' : ''}</td>
+      <td class="text-xs ${u ? 'text-red-700 font-black' : 'text-gray-500'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence || '—')}</td>
+      <td style="min-width:240px;max-width:380px"><p class="font-bold text-gray-800" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.description || t.categorie || 'Signalement')}</p>${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.corrige ? ' <span class="mt-chip" title="Contenu corrigé dans le CRM">✎ corrigé</span>' : ''}</td>
+      <td class="text-xs text-gray-600">${vxEsc([t.campus, t.lieu].filter(Boolean).join(' · ') || '—')}</td>
+      <td class="text-xs text-gray-600">${vxEsc(t.nom || t.email || '—')}</td>
+      <td class="text-xs">${t.responsable ? `👤 ${vxEsc(t.responsable)}` : '<span class="text-gray-300">—</span>'}${t.relances ? `<div class="text-[10px] text-orange-600">🔔 ${t.relances} relance(s)${t.derniereRelance ? ' · ' + vxEsc(t.derniereRelance.slice(0, 10)) : ''}</div>` : ''}</td>
+      <td class="text-xs text-gray-500" style="max-width:220px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.commentaire || '')}</span>${t.maj ? `<div class="text-[10px] text-gray-400">${vxEsc(t.maj)}</div>` : ''}</td>
+      <td class="whitespace-nowrap text-right">${maintBoutons(t)}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
+function maintCartes(liste, nouveaux) {
+  return `<div class="mt-grid">${liste.map(t => {
+    const fg = (MAINT_COUL[t.statut] || MAINT_COUL['Nouveau'])[1], u = maintUrgent(t), c = vxEsc(t.cle).replace(/'/g, "\\'");
+    return `<div class="mt-card" style="--bord:${u ? '#dc2626' : fg}" onclick="ouvrirTicket('${c}')">
+      <div class="flex justify-between gap-2"><span>${maintPill(t)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</span>
+        ${t.urgence || t.priorite ? `<span class="mt-pill" style="background:${u ? '#fee2e2' : '#f8fafc'};color:${u ? '#b91c1c' : '#64748b'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence)}</span>` : ''}</div>
       <p class="font-bold text-gray-800 text-sm" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.description || t.categorie || 'Signalement')}</p>
       <div class="flex flex-wrap gap-1">${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.campus ? `<span class="mt-chip">🏫 ${vxEsc(t.campus)}</span>` : ''}${t.lieu ? `<span class="mt-chip">📍 ${vxEsc(t.lieu)}</span>` : ''}</div>
-      <p class="text-[11px] text-gray-400 mt-auto">${vxEsc(t.date)}${t.nom ? ' · ' + vxEsc(t.nom) : t.email ? ' · ' + vxEsc(t.email) : ''}${t.responsable ? ' · 👤 ' + vxEsc(t.responsable) : ''}</p></div>`;
-  }).join('') : '<p class="text-gray-400 text-sm">Aucun ticket pour ce filtre ✅</p>'}</div>`;
+      <p class="text-[11px] text-gray-400 mt-auto">${vxEsc(t.date)}${t.nom ? ' · ' + vxEsc(t.nom) : t.email ? ' · ' + vxEsc(t.email) : ''}${t.responsable ? ' · 👤 ' + vxEsc(t.responsable) : ''}${t.relances ? ' · 🔔 ' + t.relances : ''}</p>
+      <div class="flex gap-1 justify-end">${maintBoutons(t)}</div></div>`;
+  }).join('')}</div>`;
+}
+function maintBasculer(cle, on) { on ? maintSel.add(cle) : maintSel.delete(cle); renderMaintenance(); }
+function maintToutSel(on) { maintListe().forEach(t => on ? maintSel.add(t.cle) : maintSel.delete(t.cle)); renderMaintenance(); }
+
+const MAINT_LIB = { cloturer: 'clôturer', annuler: 'annuler', archiver: 'archiver', desarchiver: 'désarchiver', rouvrir: 'rouvrir', relancer: 'relancer' };
+function maintResume(t) { return (t.description || t.categorie || 'Signalement').slice(0, 80); }
+function maintAppliquer(res) {
+  (res || []).forEach(x => { const t = maintData.tickets.find(y => y.cle === x.cle); if (!t) return;
+    Object.assign(t, { statut: x.statut, archive: x.archive, journal: x.journal, relances: x.relances, derniereRelance: x.derniereRelance, resolu: x.resolu, maj: x.maj, par: x.par, responsable: x.responsable, responsableMail: x.responsableMail, ancienneCle: '' });
+    if (x.corr) { ['campus', 'lieu', 'categorie', 'description'].forEach(k => { t[k] = x.corr[k] != null ? x.corr[k] : t.original[k]; }); t.corrige = Object.keys(x.corr).length > 0; } });
+}
+async function maintEnvoyer(cles, op, extra = {}) {
+  const T = maintData.tickets.filter(t => cles.includes(t.cle)), resumes = {}, anciennesCles = {};
+  T.forEach(t => { resumes[t.cle] = maintResume(t); if (t.ancienneCle) anciennesCles[t.cle] = t.ancienneCle; });
+  const r = await api('updateTicketMaintenance', Object.assign({ op, cles, resumes, anciennesCles }, extra));
+  if (r.resultats) maintAppliquer(r.resultats);
+  return r;
+}
+async function maintAction(cle, op) {
+  const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
+  let extra = {};
+  if (op === 'relancer') {
+    if (!t.responsable) { toast("Désignez d'abord un responsable (✏️ Modifier)", false); ouvrirTicket(cle); return; }
+    const msg = prompt(`Relancer ${t.responsable} par mail (copie direction) ?\nMessage complémentaire (facultatif) :`, '');
+    if (msg === null) return; extra.message = msg;
+  } else if (op === 'annuler' && !confirm(`Annuler le ticket « ${maintResume(t)} » ?`)) return;
+  const r = await maintEnvoyer([cle], op, extra);
+  if (!r.success || (r.erreurs && r.erreurs.length)) toast((r.message || 'Erreur'), false);
+  else toast(op === 'relancer' ? 'Relance envoyée ✓' : `Ticket ${MAINT_LIB[op] === 'rouvrir' ? 'rouvert' : MAINT_LIB[op].replace(/er$/, 'é')} ✓`);
+  const m = document.getElementById('mtModal'); if (m && !m.classList.contains('hidden')) ouvrirTicket(cle);
+  renderMaintenance();
+}
+async function maintActionGroupee(op) {
+  const visibles = new Set(maintListe().map(t => t.cle)), cles = [...maintSel].filter(c => visibles.has(c));
+  if (!cles.length) return;
+  let extra = {};
+  if (op === 'relancer') {
+    const sans = maintData.tickets.filter(t => cles.includes(t.cle) && !t.responsable).length;
+    const msg = prompt(`Relancer par mail les responsables de ${cles.length} ticket(s)${sans ? ` (${sans} sans responsable seront ignorés)` : ''} ?\nMessage complémentaire (facultatif) :`, '');
+    if (msg === null) return; extra.message = msg;
+  } else if (!confirm(`${MAINT_LIB[op][0].toUpperCase() + MAINT_LIB[op].slice(1)} ${cles.length} ticket(s) ?`)) return;
+  const r = await maintEnvoyer(cles, op, extra);
+  const ok = (r.resultats || []).length;
+  toast(`${ok} ticket(s) traité(s)${op === 'relancer' ? ` · ${r.relances || 0} relance(s) envoyée(s)` : ''}${r.erreurs && r.erreurs.length ? ` · ${r.erreurs.length} non traité(s) : ${r.erreurs.slice(0, 2).join(' ; ')}` : ''}`, !(r.erreurs && r.erreurs.length) && r.success !== false);
+  maintSel.clear(); renderMaintenance();
+}
+
+// Responsable : membre du personnel ou contact externe (création à la volée)
+function maintOptionsResp(t) {
+  const eq = (maintData.equipe || []).slice().sort((a, b) => a.nom.localeCompare(b.nom)), ct = (maintData.contacts || []).slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  const connu = !t.responsable || eq.some(x => x.nom === t.responsable) || ct.some(x => x.nom === t.responsable);
+  const opt = (x, g) => `<option value="${vxEsc(g + '|' + x.nom)}" data-mail="${vxEsc(x.mail || '')}" ${x.nom === t.responsable ? 'selected' : ''}>${vxEsc(x.nom)}${x.societe ? ' — ' + vxEsc(x.societe) : ''}${x.mail ? '' : ' (sans mail)'}</option>`;
+  return `<option value="">— Personne —</option>
+    ${!connu ? `<option value="${vxEsc('libre|' + t.responsable)}" data-mail="${vxEsc(t.responsableMail || '')}" selected>${vxEsc(t.responsable)} (saisie libre)</option>` : ''}
+    <optgroup label="Équipe HECG">${eq.map(x => opt(x, 'eq')).join('')}</optgroup>
+    <optgroup label="Contacts externes">${ct.map(x => opt(x, 'ct')).join('')}</optgroup>
+    <option value="__nouveau">➕ Créer un autre contact…</option>`;
+}
+function maintRespChange(sel) {
+  const box = document.getElementById('mtNouveauContact');
+  box.classList.toggle('hidden', sel.value !== '__nouveau');
+  if (sel.value === '__nouveau') document.getElementById('mtNcNom').focus();
+}
+async function maintCreerContact() {
+  const d = { op: 'contact', nom: document.getElementById('mtNcNom').value.trim(), mail: document.getElementById('mtNcMail').value.trim(), tel: document.getElementById('mtNcTel').value.trim(), societe: document.getElementById('mtNcSoc').value.trim() };
+  if (!d.nom) { toast('Nom obligatoire', false); return; }
+  if (!d.mail && !confirm("Sans adresse mail, ce contact ne pourra pas être relancé par mail. Continuer ?")) return;
+  const r = await api('updateTicketMaintenance', d);
+  if (!r.success) { toast(r.message, false); return; }
+  maintData.contacts = (maintData.contacts || []).concat([r.contact]);
+  const sel = document.getElementById('mtResp'), o = document.createElement('option');
+  o.value = 'ct|' + r.contact.nom; o.dataset.mail = r.contact.mail; o.textContent = r.contact.nom + (r.contact.societe ? ' — ' + r.contact.societe : '');
+  sel.querySelector('optgroup[label="Contacts externes"]').appendChild(o); sel.value = o.value;
+  document.getElementById('mtNouveauContact').classList.add('hidden');
+  toast('Contact créé ✓');
 }
 function ouvrirTicket(cle) {
   const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
+  const c = vxEsc(t.cle).replace(/'/g, "\\'");
   let m = document.getElementById('mtModal');
   if (!m) { m = document.createElement('div'); m.id = 'mtModal'; m.className = 'modal-overlay hidden'; m.onclick = e => { if (e.target === m) m.classList.add('hidden'); }; document.body.appendChild(m); }
-  m.innerHTML = `<div class="modal-box p-6" style="max-width:640px">
-    <h3 class="text-xl font-black text-[#1A4E8A] mb-3">🛠️ Ticket du ${vxEsc(t.date)}</h3>
-    <div class="bg-gray-50 rounded-2xl p-4 mb-4 space-y-1 text-sm" style="max-height:38vh;overflow:auto">${t.champs.map(([k, v]) => `<p><span class="font-bold text-gray-500">${vxEsc(k)} :</span> ${/^https?:\/\//.test(v) ? `<a href="${vxEsc(v)}" target="_blank" class="text-blue-600 underline">ouvrir</a>` : vxEsc(v)}</p>`).join('')}</div>
+  const champ = (id, lab, k, rows) => `<div class="${rows ? 'col-span-2' : ''}"><label>${lab}${t.original && t.original[k] !== t[k] ? ` <span class="text-[10px] text-orange-600" title="${vxEsc(t.original[k])}">(corrigé — original au survol)</span>` : ''}</label>
+    ${rows ? `<textarea id="${id}" rows="${rows}">${vxEsc(t[k])}</textarea>` : `<input type="text" id="${id}" value="${vxEsc(t[k])}">`}</div>`;
+  m.innerHTML = `<div class="modal-box p-6" style="max-width:760px">
+    <div class="flex justify-between items-start gap-3 mb-3"><div><h3 class="text-xl font-black text-[#1A4E8A]">🛠️ Ticket du ${vxEsc(t.date)}</h3>
+      <p class="text-xs text-gray-500">${vxEsc(t.nom || '')}${t.email ? ' · ' + vxEsc(t.email) : ''} ${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄 archivé</span>' : ''}</p></div>
+      <div class="flex gap-1 flex-wrap justify-end">${maintBoutons(t)}</div></div>
+    <details class="bg-gray-50 rounded-2xl p-3 mb-4 text-sm"><summary class="font-bold text-gray-600 cursor-pointer">Réponse d'origine du formulaire</summary>
+      <div class="space-y-1 mt-2" style="max-height:30vh;overflow:auto">${t.champs.map(([k, v]) => `<p><span class="font-bold text-gray-500">${vxEsc(k)} :</span> ${/^https?:\/\//.test(v) ? `<a href="${vxEsc(v)}" target="_blank" class="text-blue-600 underline">ouvrir</a>` : vxEsc(v)}</p>`).join('')}</div></details>
     <div class="grid grid-cols-2 gap-3">
+      ${champ('mtDesc', 'Description', 'description', 3)}
+      ${champ('mtCat', 'Catégorie', 'categorie')}${champ('mtCampus', 'Campus', 'campus')}
+      ${champ('mtLieu', 'Lieu / salle', 'lieu')}
       <div><label>Statut</label><select id="mtStatut">${MAINT_STATUTS.map(s => `<option ${s === t.statut ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       <div><label>Priorité</label><select id="mtPrio">${['', 'Basse', 'Normale', 'Haute', 'Urgente'].map(s => `<option ${s === t.priorite ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-      <div class="col-span-2"><label>Responsable</label><input type="text" id="mtResp" value="${vxEsc(t.responsable)}" placeholder="Qui s'en occupe ?"></div>
+      <div><label>Qui s'en occupe ?</label><select id="mtResp" onchange="maintRespChange(this)">${maintOptionsResp(t)}</select></div>
+      <div id="mtNouveauContact" class="col-span-2 hidden rounded-2xl border border-dashed border-[#1A4E8A] p-3 bg-blue-50/40">
+        <p class="text-xs font-black text-[#1A4E8A] mb-2">Nouveau contact (prestataire, propriétaire, technicien…)</p>
+        <div class="grid grid-cols-2 gap-2"><input id="mtNcNom" type="text" placeholder="Nom *"><input id="mtNcSoc" type="text" placeholder="Société / rôle">
+          <input id="mtNcMail" type="email" placeholder="Mail (pour les relances)"><input id="mtNcTel" type="tel" placeholder="Téléphone"></div>
+        <div class="flex justify-end gap-2 mt-2"><button onclick="document.getElementById('mtResp').value='';maintRespChange(document.getElementById('mtResp'))" class="btn-ghost text-xs">Annuler</button><button onclick="maintCreerContact()" class="btn-orange text-xs">Créer le contact</button></div></div>
       <div class="col-span-2"><label>Suivi / commentaire</label><textarea id="mtCom" rows="3" placeholder="Intervention prévue, pièce commandée, résolu le…">${vxEsc(t.commentaire)}</textarea></div>
     </div>
-    ${t.maj ? `<p class="text-xs text-gray-400 mt-2">Dernière mise à jour : ${vxEsc(t.maj)} par ${vxEsc(t.par)}${t.resolu ? ' · résolu le ' + vxEsc(t.resolu) : ''}</p>` : ''}
+    ${t.journal && t.journal.length ? `<div class="mt-4"><p class="text-xs font-black text-gray-500 uppercase mb-1">Historique</p><div class="text-xs text-gray-600 space-y-1" style="max-height:20vh;overflow:auto">${t.journal.slice().reverse().map(j => `<p><span class="text-gray-400">${vxEsc(j.d)}</span> · <b>${vxEsc(j.par)}</b> — ${vxEsc(j.evt)}</p>`).join('')}</div></div>` : ''}
+    ${t.maj ? `<p class="text-xs text-gray-400 mt-2">Dernière mise à jour : ${vxEsc(t.maj)} par ${vxEsc(t.par)}${t.resolu ? ' · clôturé le ' + vxEsc(t.resolu) : ''}${t.relances ? ' · ' + t.relances + ' relance(s)' : ''}</p>` : ''}
     <div class="flex justify-end gap-3 mt-5"><button onclick="document.getElementById('mtModal').classList.add('hidden')" class="btn-ghost">Fermer</button>
-      <button onclick="saveTicket('${vxEsc(t.cle)}')" class="btn-orange">Enregistrer</button></div></div>`;
+      <button onclick="saveTicket('${c}')" class="btn-orange">Enregistrer</button></div></div>`;
   m.classList.remove('hidden');
 }
 async function saveTicket(cle) {
-  const t = maintData.tickets.find(x => x.cle === cle);
-  const d = { cle, statut: document.getElementById('mtStatut').value, priorite: document.getElementById('mtPrio').value, responsable: document.getElementById('mtResp').value.trim(),
-    commentaire: document.getElementById('mtCom').value.trim(), resume: (t.description || t.categorie || '').slice(0, 80) };
-  const r = await api('updateTicketMaintenance', d);
+  const t = maintData.tickets.find(x => x.cle === cle), sel = document.getElementById('mtResp');
+  if (sel.value === '__nouveau') { toast("Créez le contact ou choisissez une personne", false); return; }
+  const opt = sel.selectedOptions[0], respNom = sel.value ? sel.value.split('|').slice(1).join('|') : '';
+  const corrections = { description: document.getElementById('mtDesc').value.trim(), categorie: document.getElementById('mtCat').value.trim(), campus: document.getElementById('mtCampus').value.trim(), lieu: document.getElementById('mtLieu').value.trim() };
+  const d = { statut: document.getElementById('mtStatut').value, priorite: document.getElementById('mtPrio').value, responsable: respNom, responsableMail: sel.value && opt ? (opt.dataset.mail || '') : '',
+    commentaire: document.getElementById('mtCom').value.trim(), corrections, originaux: t.original };
+  const r = await maintEnvoyer([cle], 'maj', d);
   if (!r.success) { toast('Erreur : ' + r.message, false); return; }
-  Object.assign(t, d, { maj: new Date().toLocaleString('fr-FR') });
+  Object.assign(t, { priorite: d.priorite, commentaire: d.commentaire });
   document.getElementById('mtModal').classList.add('hidden'); toast('Ticket mis à jour ✓'); renderMaintenance();
 }
 

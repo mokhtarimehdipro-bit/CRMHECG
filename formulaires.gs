@@ -20,13 +20,14 @@ function _fPeutGerer_(p) { var r = _fRole_(p); return r === "Super-admin" || r =
 function _fDate_() { return Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd HH:mm"); }
 
 // ── 1. TICKETS DE MAINTENANCE ────────────────────────────────────────────────
+var MAINT_ENTETES = ["Clé ticket", "Statut", "Responsable", "Commentaire", "Priorité", "Résolu le", "Mis à jour le", "Par",
+  "Archivé", "Journal_JSON", "Corrections_JSON", "Relances", "Dernière relance", "Responsable — mail"];
+var MAINT_FERMES = ["Résolu", "Clôturé", "Annulé", "Sans suite"];
 function _maintSuiviFeuille_(ss) {
   var ws = ss.getSheetByName("MAINTENANCE_SUIVI");
-  if (!ws) {
-    ws = ss.insertSheet("MAINTENANCE_SUIVI");
-    ws.getRange(1, 1, 1, 8).setValues([["Clé ticket", "Statut", "Responsable", "Commentaire", "Priorité", "Résolu le", "Mis à jour le", "Par"]]).setFontWeight("bold");
-    ws.setFrozenRows(1);
-  }
+  if (!ws) { ws = ss.insertSheet("MAINTENANCE_SUIVI"); ws.setFrozenRows(1); }
+  var h = ws.getRange(1, 1, 1, MAINT_ENTETES.length).getValues()[0];
+  if (String(h[MAINT_ENTETES.length - 1] || "") !== MAINT_ENTETES[MAINT_ENTETES.length - 1]) ws.getRange(1, 1, 1, MAINT_ENTETES.length).setValues([MAINT_ENTETES]).setFontWeight("bold");
   return ws;
 }
 // Repère les colonnes utiles d'après l'intitulé des questions du formulaire
@@ -39,6 +40,33 @@ function _maintColonnes_(h) {
     urgence: f(/urgen|priorit|gravit|criticit/), description: f(/descri|probleme|detail|precis|commentaire|message/, /photo/), photo: f(/photo|image|piece|fichier|capture/)
   };
 }
+function _maintJson_(v, def) { try { var x = JSON.parse(String(v || "")); return x == null ? def : x; } catch (e) { return def; } }
+// Équipe pouvant être désignée responsable (nom + mail) — sert à la relance par mail
+function _maintEquipe_(ss) {
+  var out = [];
+  try { var d = getPersonnelDataCached_(ss); for (var i = 1; i < d.length; i++) { var nom = (String(d[i][2] || "") + " " + String(d[i][1] || "").toUpperCase()).trim(), mail = String(d[i][6] || "").trim(); if (nom) out.push({ nom: nom, mail: mail }); } } catch (e) {}
+  return out;
+}
+// Contacts externes (prestataires, propriétaire, informaticien…) créés depuis les tickets
+function _maintContactsFeuille_(ss) {
+  var ws = ss.getSheetByName("MAINTENANCE_CONTACTS");
+  if (!ws) { ws = ss.insertSheet("MAINTENANCE_CONTACTS"); ws.getRange(1, 1, 1, 6).setValues([["Nom", "Mail", "Téléphone", "Société / rôle", "Créé le", "Par"]]).setFontWeight("bold"); ws.setFrozenRows(1); }
+  return ws;
+}
+function _maintContacts_(ss) {
+  var d = _maintContactsFeuille_(ss).getDataRange().getValues(), out = [];
+  for (var i = 1; i < d.length; i++) if (String(d[i][0] || "").trim()) out.push({ nom: String(d[i][0]).trim(), mail: String(d[i][1] || "").trim(), tel: String(d[i][2] || "").trim(), societe: String(d[i][3] || "").trim() });
+  return out;
+}
+// Onglet des réponses : celui relié au formulaire (sinon celui qui a le plus de lignes) — pas forcément le 1er onglet
+function _maintOngletReponses_(ext) {
+  var tous = ext.getSheets(), meilleur = tous[0];
+  for (var i = 0; i < tous.length; i++) { try { if (tous[i].getFormUrl()) return tous[i]; } catch (e) {} }
+  tous.forEach(function (w) { if (w.getLastRow() > meilleur.getLastRow()) meilleur = w; });
+  return meilleur;
+}
+// Clé stable d'un ticket : horodatage + mail (ne bouge pas si le Sheet est trié) ; l'ancienne clé « L<ligne>|date » reste reconnue
+function _maintCle_(date, email, ligne) { return "T|" + String(date || "").trim() + "|" + String(email || "").trim().toLowerCase() + (date ? "" : "|L" + ligne); }
 function handleGetTicketsMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
   var ext;
@@ -47,47 +75,127 @@ function handleGetTicketsMaintenance(p, ss) {
     return createJsonResponse({ success: false, acces: false, message: "Le CRM n'a pas accès au classeur des tickets. Partagez-le (lecture) avec m.mokhtari@hecg.fr puis rechargez l'onglet.", lien: "https://docs.google.com/spreadsheets/d/" + MAINT_SHEET_ID + "/edit" });
   }
   try {
-    var ws = ext.getSheets()[0], data = ws.getDataRange().getDisplayValues();
+    var ws = _maintOngletReponses_(ext), data = ws.getDataRange().getDisplayValues();
     var h = data[0] || [], C = _maintColonnes_(h), formUrl = "";
     try { formUrl = ws.getFormUrl() || ext.getFormUrl() || ""; } catch (eF) {}
     var suivi = {}, dS = _maintSuiviFeuille_(ss).getDataRange().getValues();
     for (var k = 1; k < dS.length; k++) if (dS[k][0]) suivi[String(dS[k][0])] = { statut: String(dS[k][1] || ""), responsable: String(dS[k][2] || ""), commentaire: String(dS[k][3] || ""),
-      priorite: String(dS[k][4] || ""), resolu: dS[k][5] ? Utilities.formatDate(new Date(dS[k][5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: String(dS[k][6] || ""), par: String(dS[k][7] || "") };
-    var tickets = [];
+      priorite: String(dS[k][4] || ""), resolu: dS[k][5] ? Utilities.formatDate(new Date(dS[k][5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: String(dS[k][6] || ""), par: String(dS[k][7] || ""),
+      archive: dS[k][8] === true || String(dS[k][8]).toUpperCase() === "TRUE", journal: _maintJson_(dS[k][9], []), corr: _maintJson_(dS[k][10], {}),
+      relances: Number(dS[k][11] || 0), derniereRelance: String(dS[k][12] || ""), responsableMail: String(dS[k][13] || "") };
+    var tickets = [], vus = {}, lignesRemplies = 0;
     for (var i = 1; i < data.length; i++) {
       var r = data[i];
       if (!r.join("").trim()) continue;
-      var cle = "L" + (i + 1) + "|" + String(C.date >= 0 ? r[C.date] : "").trim();
+      lignesRemplies++;
       var v = function (c) { return c >= 0 ? String(r[c] || "").trim() : ""; };
-      var s = suivi[cle] || {};
-      tickets.push({ cle: cle, ligne: i + 1, date: v(C.date), email: v(C.email), nom: v(C.nom), campus: v(C.campus), lieu: v(C.lieu), categorie: v(C.categorie),
-        urgence: v(C.urgence), description: v(C.description), photo: v(C.photo), champs: h.map(function (t, j) { return [String(t), String(r[j] || "")]; }).filter(function (x) { return x[1]; }),
-        statut: s.statut || "Nouveau", responsable: s.responsable || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "" });
+      var ancienneCle = "L" + (i + 1) + "|" + v(C.date), cle = _maintCle_(v(C.date), v(C.email), i + 1);
+      if (vus[cle]) cle += "|L" + (i + 1);   // deux réponses à la même seconde par la même personne
+      vus[cle] = 1;
+      var s = suivi[cle] || suivi[ancienneCle] || {}, corr = s.corr || {};
+      var orig = { campus: v(C.campus), lieu: v(C.lieu), categorie: v(C.categorie), description: v(C.description) };
+      tickets.push({ cle: cle, ancienneCle: suivi[cle] ? "" : (suivi[ancienneCle] ? ancienneCle : ""), ligne: i + 1, date: v(C.date), email: v(C.email), nom: v(C.nom),
+        campus: corr.campus != null ? corr.campus : orig.campus, lieu: corr.lieu != null ? corr.lieu : orig.lieu,
+        categorie: corr.categorie != null ? corr.categorie : orig.categorie, description: corr.description != null ? corr.description : orig.description,
+        original: orig, corrige: Object.keys(corr).length > 0,
+        urgence: v(C.urgence), photo: v(C.photo), champs: h.map(function (t, j) { return [String(t), String(r[j] || "")]; }).filter(function (x) { return x[1]; }),
+        statut: s.statut || "Nouveau", responsable: s.responsable || "", responsableMail: s.responsableMail || "", commentaire: s.commentaire || "", priorite: s.priorite || "", resolu: s.resolu || "", maj: s.maj || "", par: s.par || "",
+        archive: !!s.archive, journal: s.journal || [], relances: s.relances || 0, derniereRelance: s.derniereRelance || "" });
     }
     tickets.reverse();   // plus récents d'abord
-    return createJsonResponse({ success: true, tickets: tickets, formUrl: formUrl, sheetUrl: ext.getUrl(), titre: ext.getName(), colonnes: h });
+    return createJsonResponse({ success: true, tickets: tickets, formUrl: formUrl, sheetUrl: ext.getUrl(), titre: ext.getName(), colonnes: h, equipe: _maintEquipe_(ss), contacts: _maintContacts_(ss),
+      controle: { onglet: ws.getName(), lignesSheet: lignesRemplies, affiches: tickets.length, colonnesReperees: C, lu: _fDate_(), dernier: tickets.length ? tickets[0].date : "" } });
   } catch (e2) { return createJsonResponse({ success: false, message: e2.toString() }); }
 }
+
+// Mise à jour d'un ou plusieurs tickets. p.op : "maj" (défaut, formulaire complet), "cloturer", "annuler",
+// "rouvrir", "archiver", "desarchiver", "relancer". p.cle (un ticket) ou p.cles (action groupée).
+// Le classeur des réponses n'est jamais modifié : les corrections de contenu vont dans Corrections_JSON.
 function handleUpdateTicketMaintenance(p, ss) {
   if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
+  if (String(p.op || "") === "contact") {   // création d'un contact externe
+    var nomC = String(p.nom || "").trim().slice(0, 120), mailC = String(p.mail || "").trim().slice(0, 200);
+    if (!nomC) return createJsonResponse({ success: false, message: "Nom du contact obligatoire." });
+    if (mailC && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mailC)) return createJsonResponse({ success: false, message: "Adresse mail invalide." });
+    if (_maintContacts_(ss).some(function (c) { return c.nom.toLowerCase() === nomC.toLowerCase(); })) return createJsonResponse({ success: false, message: "Un contact porte déjà ce nom." });
+    var cTel = String(p.tel || "").trim().slice(0, 40), cSoc = String(p.societe || "").trim().slice(0, 120);
+    _maintContactsFeuille_(ss).appendRow([nomC, mailC, cTel, cSoc, _fDate_(), p.nomAuteur || p.emailAuteur || ""]);
+    logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Création", "Vie scolaire — Maintenance — contacts", nomC, "Contact externe créé" + (cSoc ? " (" + cSoc + ")" : ""));
+    return createJsonResponse({ success: true, contact: { nom: nomC, mail: mailC, tel: cTel, societe: cSoc } });
+  }
+  var lock = LockService.getScriptLock(); lock.waitLock(15000);
   try {
-    var ws = _maintSuiviFeuille_(ss), data = ws.getDataRange().getValues(), cle = String(p.cle || "");
-    if (!cle) return createJsonResponse({ success: false, message: "Ticket inconnu." });
-    var statut = String(p.statut || "Nouveau"), par = p.nomAuteur || p.emailAuteur || "";
-    var ligne = [cle, statut, String(p.responsable || ""), String(p.commentaire || "").slice(0, 2000), String(p.priorite || ""),
-      statut === "Résolu" ? new Date() : "", _fDate_(), par];
-    var avant = "";
-    for (var i = 1; i < data.length; i++) if (String(data[i][0]) === cle) {
-      avant = String(data[i][1] || "");
-      if (statut === "Résolu" && data[i][5]) ligne[5] = data[i][5];
-      ws.getRange(i + 1, 1, 1, 8).setValues([ligne]);
-      break;
-    }
-    if (i >= data.length) ws.appendRow(ligne);
-    logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Maintenance", cle,
-      "Ticket « " + String(p.resume || "").slice(0, 80) + " » : " + (avant || "Nouveau") + " → " + statut + (p.responsable ? " (responsable : " + p.responsable + ")" : ""));
-    return createJsonResponse({ success: true });
+    var ws = _maintSuiviFeuille_(ss), data = ws.getRange(1, 1, Math.max(ws.getLastRow(), 1), MAINT_ENTETES.length).getValues();
+    var cles = Array.isArray(p.cles) && p.cles.length ? p.cles.map(String) : (p.cle ? [String(p.cle)] : []);
+    if (!cles.length) return createJsonResponse({ success: false, message: "Ticket inconnu." });
+    var op = String(p.op || "maj"), par = p.nomAuteur || p.emailAuteur || "", maintenant = _fDate_();
+    var equipe = op === "relancer" ? _maintEquipe_(ss) : [], resumes = p.resumes || {}, resultats = [], relancesEnvoyees = 0, erreurs = [];
+    var index = {}; for (var i = 1; i < data.length; i++) if (data[i][0]) index[String(data[i][0])] = i;
+    var aAjouter = [];
+
+    cles.forEach(function (cle) {
+      var anc = p.anciennesCles && p.anciennesCles[cle];
+      if (index[cle] == null && anc && index[anc] != null && index[anc] >= 0) { index[cle] = index[anc]; data[index[cle]][0] = cle; }
+      var iL = index[cle], ligne = iL != null ? data[iL].slice() : [cle, "Nouveau", "", "", "", "", "", "", false, "[]", "{}", 0, "", ""];
+      while (ligne.length < MAINT_ENTETES.length) ligne.push("");
+      var ancienCom = String(ligne[3] || ""), ancienResp = String(ligne[2] || "");
+      var avant = String(ligne[1] || "Nouveau"), journal = _maintJson_(ligne[9], []), corr = _maintJson_(ligne[10], {}), evt = "";
+      var resume = String(resumes[cle] || p.resume || "").slice(0, 80);
+      if (op === "maj") {
+        var statut = String(p.statut || avant);
+        ligne[1] = statut; ligne[2] = String(p.responsable || ""); ligne[13] = String(p.responsableMail || "").trim(); ligne[3] = String(p.commentaire || "").slice(0, 2000); ligne[4] = String(p.priorite || "");
+        if (p.corrections && typeof p.corrections === "object") {
+          ["campus", "lieu", "categorie", "description"].forEach(function (k) {
+            if (p.corrections[k] === undefined) return;
+            var val = String(p.corrections[k] || "").slice(0, 2000), orig = p.originaux ? String(p.originaux[k] || "") : null;
+            if (orig !== null && val === orig) delete corr[k]; else corr[k] = val;
+          });
+        }
+        evt = statut !== avant ? avant + " → " + statut : "Modifié";
+      } else if (op === "cloturer") { ligne[1] = "Clôturé"; evt = avant + " → Clôturé"; }
+      else if (op === "annuler") { ligne[1] = "Annulé"; evt = avant + " → Annulé"; }
+      else if (op === "rouvrir") { ligne[1] = "Pris en charge"; ligne[8] = false; evt = avant + " → rouvert"; }
+      else if (op === "archiver") { ligne[8] = true; evt = "Archivé"; }
+      else if (op === "desarchiver") { ligne[8] = false; evt = "Désarchivé"; }
+      else if (op === "relancer") {
+        var resp = String(ligne[2] || p.responsable || "").trim(), mail = String(ligne[13] || "").trim();
+        if (mail.indexOf("@") < 1) mail = "";
+        if (!mail && resp.indexOf("@") > 0) mail = resp;
+        else { var n = resp.toLowerCase(); equipe.forEach(function (x) { if (!mail && x.mail && n && (x.nom.toLowerCase() === n || x.nom.toLowerCase().indexOf(n) !== -1 || n.indexOf(x.nom.toLowerCase()) !== -1)) mail = x.mail; }); }
+        if (!mail) { erreurs.push((resume || cle) + " : aucun responsable avec adresse mail"); return; }
+        if (MAINT_FERMES.indexOf(avant) !== -1) ligne[1] = "Pris en charge";
+        var esc = function (x) { return String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+        var msg = String(p.message || "").trim();
+        var corps = '<div style="font-family:Arial;padding:20px"><h2 style="color:#1A4E8A;margin:0 0 10px">Relance — ticket de maintenance</h2><p>Bonjour,</p><p>Le ticket ci-dessous, dont vous êtes responsable, est toujours en attente de traitement' +
+          (Number(ligne[11] || 0) ? " (relance n° " + (Number(ligne[11] || 0) + 1) + ")" : "") + ".</p>" + (msg ? '<p style="background:#fff7ed;border-left:4px solid #F26522;padding:10px">' + esc(msg).replace(/\n/g, "<br>") + "</p>" : "") +
+          '<div style="background:#f8fafc;border-left:4px solid #1A4E8A;padding:12px;margin:14px 0"><b>' + esc(resume || "Signalement") + "</b><br><span style=\"color:#64748b;font-size:13px\">Statut : " + esc(ligne[1]) +
+          (ligne[4] ? " · Priorité : " + esc(ligne[4]) : "") + (ligne[3] ? "<br>Suivi : " + esc(ligne[3]) : "") + "</span></div><p>Merci de mettre à jour le ticket dans Vie scolaire › Tickets maintenance.</p><p style=\"color:#64748b;font-size:13px\">Relance envoyée par " + esc(par) + ".</p></div>";
+        try {
+          var opt = { htmlBody: corps + getSignatureHTML() };
+          if (mail.toLowerCase() !== "m.mokhtari@hecg.fr") opt.cc = "m.mokhtari@hecg.fr";
+          if (p.emailAuteur && String(p.emailAuteur).indexOf("@") > 0) opt.replyTo = String(p.emailAuteur);
+          GmailApp.sendEmail(mail, "Relance — ticket de maintenance : " + (resume || "signalement"), "", opt);
+          relancesEnvoyees++;
+        } catch (eM) { erreurs.push((resume || cle) + " : " + eM.message); return; }
+        ligne[11] = Number(ligne[11] || 0) + 1; ligne[12] = maintenant; evt = "Relance envoyée à " + resp + " (" + mail + ")";
+      } else return;
+      var statutFinal = String(ligne[1]);
+      if (statutFinal === "Résolu" || statutFinal === "Clôturé") { if (!ligne[5]) ligne[5] = new Date(); } else ligne[5] = "";
+      ligne[6] = maintenant; ligne[7] = par;
+      journal.push({ d: maintenant, par: par, evt: evt + (op === "maj" && String(p.commentaire || "") !== ancienCom ? " — suivi mis à jour" : "") + (op === "maj" && String(ligne[2]) !== ancienResp ? " — responsable : " + (ligne[2] || "aucun") : "") });
+      if (journal.length > 60) journal = journal.slice(-60);
+      ligne[9] = JSON.stringify(journal); ligne[10] = JSON.stringify(corr);
+      if (iL != null) data[iL] = ligne; else { aAjouter.push(ligne); index[cle] = -1; }
+      resultats.push({ cle: cle, statut: statutFinal, archive: ligne[8] === true, journal: journal, relances: Number(ligne[11] || 0), derniereRelance: String(ligne[12] || ""), responsable: String(ligne[2] || ""), responsableMail: String(ligne[13] || ""),
+        resolu: ligne[5] ? Utilities.formatDate(new Date(ligne[5]), "Europe/Paris", "dd/MM/yyyy") : "", maj: maintenant, par: par, corr: corr });
+      logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Maintenance" + (op !== "maj" ? " — " + op : ""), cle, "Ticket « " + resume + " » : " + evt);
+    });
+    if (data.length > 1) ws.getRange(1, 1, data.length, MAINT_ENTETES.length).setValues(data.map(function (r) { while (r.length < MAINT_ENTETES.length) r.push(""); return r.slice(0, MAINT_ENTETES.length); }));
+    if (aAjouter.length) ws.getRange(ws.getLastRow() + 1, 1, aAjouter.length, MAINT_ENTETES.length).setValues(aAjouter);
+    return createJsonResponse({ success: resultats.length > 0 || !erreurs.length, resultats: resultats, relances: relancesEnvoyees, erreurs: erreurs,
+      message: erreurs.length ? erreurs.join(" ; ") : "" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { lock.releaseLock(); }
 }
 
 // ── 2. FORMULAIRES ───────────────────────────────────────────────────────────
