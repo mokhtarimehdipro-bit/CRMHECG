@@ -5219,16 +5219,18 @@ function handlePartagerOffre(p, ss) {
       p.emailsCibles.forEach(rawMail => {
         const mail = String(rawMail || "").trim().toLowerCase();
         if (!mail.includes('@')) return;
-        let prenom = mail.split('@')[0];
+        let prenom = mail.split('@')[0], nom = "", classeEtu = "";
         let id = 'EXT-' + mail;
         for (let i = 1; i < dataEtu.length; i++) {
           if (String(dataEtu[i][4]).trim().toLowerCase() === mail) {
             prenom = String(dataEtu[i][3] || prenom);
+            nom = String(dataEtu[i][2] || "");
+            classeEtu = String(dataEtu[i][14] || "");
             id = dataEtu[i][0];
             break;
           }
         }
-        if (!cibles.some(c => c.mail === mail)) cibles.push({ id, mail, prenom });
+        if (!cibles.some(c => c.mail === mail)) cibles.push({ id, mail, prenom, nom, classe: classeEtu });
       });
     } else {
       // Mode filtrage par classe (comportement existant)
@@ -5247,7 +5249,7 @@ function handlePartagerOffre(p, ss) {
           if (p.classesCibles && p.classesCibles.length > 0 && !p.classesCibles.includes("TOUS")) {
             matchClasse = p.classesCibles.includes(classe);
           }
-          if (matchClasse) cibles.push({ id, mail, prenom });
+          if (matchClasse) cibles.push({ id, mail, prenom, nom: String(dataEtu[i][2] || ""), classe });
         }
       }
     }
@@ -5270,24 +5272,24 @@ function handlePartagerOffre(p, ss) {
 
     // Émetteur du partage : nommé dans le mail, en copie, et destinataire des réponses
     const emetteurMail = String(p.emailAuteur || "").trim().toLowerCase();
-    let emetteurNom = String(p.nomAuteur || p.idAuteur || "").trim(), emetteurFonction = "";
+    let emetteurNom = String(p.nomAuteur || p.idAuteur || "").trim();
     try {
       const dPers = getPersonnelDataCached_(ss);
       for (let k = 1; k < dPers.length; k++) {
         if (emetteurMail && String(dPers[k][6] || "").trim().toLowerCase() === emetteurMail) {
           emetteurNom = (String(dPers[k][2] || "") + " " + String(dPers[k][1] || "").toUpperCase()).trim() || emetteurNom;
-          emetteurFonction = String(dPers[k][3] || "").trim();
           break;
         }
       }
     } catch (ePers) {}
-    const FONCTIONS = { RP: "Responsable pédagogique", CP: "Chargé(e) de placement", DIR: "Direction", COM: "Communication" };
-    const libEmetteur = emetteurNom ? emetteurNom + (FONCTIONS[emetteurFonction] ? " (" + FONCTIONS[emetteurFonction] + ")" : "") : "l'équipe HECG";
+    // Nom + mail uniquement (pas de fonction) — demande direction 2026-11-10
+    const libEmetteur = emetteurNom || "l'équipe HECG";
 
     let nbAjoutes = 0;
     var mailsEnvoyes = [];
     var sujetOffre = "Nouvelle offre ciblée : " + infoMail.poste;
     var corpsOffre = "";
+    var recap = [];
     cibles.forEach(etu => {
       const dejaFait = dataPartages.some(r => String(r[0]).trim() === String(etu.id).trim() && String(r[1]).trim() === String(p.id_offre).trim());
       // En mode explicite, on envoie à tous les destinataires sélectionnés même s'ils ont déjà reçu l'offre.
@@ -5299,18 +5301,31 @@ function handlePartagerOffre(p, ss) {
           _invalidateStudentDetailsCache_(String(etu.id).trim()); // l'offre apparaît tout de suite dans le dossier
         }
         try {
-          const msgCorps = String(p.messagePersonnalise || "").trim() || "Tu peux postuler directement depuis ton dossier étudiant HECG.";
-          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p><b>${libEmetteur}</b> a sélectionné une nouvelle offre pour ton profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>${msgCorps}</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a><p style="margin-top:18px;font-size:13px;color:#64748b">Offre partagée par ${libEmetteur}${emetteurMail ? ` — <a href="mailto:${emetteurMail}" style="color:#1A4E8A">${emetteurMail}</a>` : ""}. Tu peux répondre directement à ce mail pour toute question.</p></div>`;
+          const msgCorps = String(p.messagePersonnalise || "").trim() || "Vous pouvez postuler directement depuis votre dossier étudiant HECG.";
+          const corps = `<div style="font-family:Arial; padding:20px; border:1px solid #eee; border-radius:15px;"><h2 style="color:#1A4E8A;">Bonjour ${etu.prenom},</h2><p><b>${libEmetteur}</b> a sélectionné une nouvelle offre pour votre profil :</p><div style="background:#f9f9f9; padding:15px; border-left:5px solid #F26522; margin:20px 0;"><b style="font-size:16px;">${infoMail.poste}</b><br><span>Entreprise : ${infoMail.ent}</span></div><p>${msgCorps}</p><a href="${infoMail.url}" style="display:inline-block; padding:12px 25px; background:#F26522; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Voir l'annonce</a><p style="margin-top:18px;font-size:13px;color:#64748b">Offre partagée par ${libEmetteur}${emetteurMail ? ` — <a href="mailto:${emetteurMail}" style="color:#1A4E8A">${emetteurMail}</a>` : ""}. Vous pouvez répondre directement à ce mail pour toute question.</p></div>`;
           corpsOffre = corps;
           const optMail = { htmlBody: corps + getSignatureHTML() };
           if (emetteurMail.indexOf("@") > 0 && emetteurMail !== etu.mail) { optMail.cc = emetteurMail; optMail.replyTo = emetteurMail; }
           GmailApp.sendEmail(etu.mail, sujetOffre, "", optMail);
           mailsEnvoyes.push(etu.mail);
-        } catch(e) {}
+          recap.push({ etu: etu, ok: true, deja: dejaFait });
+        } catch(e) { recap.push({ etu: etu, ok: false, deja: dejaFait, err: String(e.message || e) }); }
         nbAjoutes++;
       }
     });
     logAction(p.idAuteur, p.roleAuteur, "Action", "Offres", p.id_offre, "A partagé l'offre avec " + nbAjoutes + " étudiant(s) — offre passée en Vérifiée / Partagée" + (emetteurMail ? " — émetteur en copie (" + emetteurMail + ")" : ""));
+    // Récapitulatif unique envoyé à l'émetteur (en plus des copies)
+    if (recap.length > 0 && emetteurMail.indexOf("@") > 0) {
+      try {
+        const esc = x => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const td = 'style="padding:6px 10px;border-bottom:1px solid #eee"';
+        const lignes = recap.map(r => `<tr><td ${td}>${esc((String(r.etu.nom || "").toUpperCase() + " " + r.etu.prenom).trim())}</td><td ${td}>${esc(r.etu.classe || "")}</td><td ${td}>${esc(r.etu.mail)}</td><td ${td}>${r.ok ? (r.deja ? "Renvoyé" : "Envoyé") : "<span style='color:#b91c1c'>Échec : " + esc(r.err) + "</span>"}</td></tr>`).join("");
+        const nbOk = recap.filter(r => r.ok).length;
+        const corpsRecap = `<div style="font-family:Arial;padding:20px"><h2 style="color:#1A4E8A;margin:0 0 10px">Récapitulatif de partage</h2><p>Bonjour ${esc(emetteurNom.split(" ")[0] || "")},</p><p>Vous avez partagé l'offre <b>${esc(infoMail.poste)}</b> (${esc(infoMail.ent)}) avec <b>${nbOk}</b> étudiant(s)${nbOk < recap.length ? " — " + (recap.length - nbOk) + " échec(s)" : ""}. L'offre est passée en « Vérifiée » et « Partagée ».</p><table style="border-collapse:collapse;font-size:13px;width:100%"><thead><tr style="background:#f1f5f9;text-align:left"><th style="padding:6px 10px">Étudiant</th><th style="padding:6px 10px">Classe</th><th style="padding:6px 10px">Mail</th><th style="padding:6px 10px">Envoi</th></tr></thead><tbody>${lignes}</tbody></table>${infoMail.url ? `<p style="margin-top:14px"><a href="${infoMail.url}" style="color:#1A4E8A">Voir l'annonce</a></p>` : ""}</div>`;
+        GmailApp.sendEmail(emetteurMail, "Récapitulatif — offre partagée : " + infoMail.poste + " (" + nbOk + " étudiant" + (nbOk > 1 ? "s" : "") + ")", "", { htmlBody: corpsRecap + getSignatureHTML() });
+        logAction(p.idAuteur, p.roleAuteur, "Action", "Offres — Récapitulatif partage", p.id_offre, "Récapitulatif envoyé à " + emetteurMail + " (" + nbOk + "/" + recap.length + ")");
+      } catch (eRecap) {}
+    }
     if (mailsEnvoyes.length > 0) {
       logMailDetail(ss, {
         auteur: p.idAuteur || "Système",
@@ -5322,7 +5337,7 @@ function handlePartagerOffre(p, ss) {
         sourceId: p.id_offre
       });
     }
-    return createJsonResponse({ success: true, message: nbAjoutes + " partage(s) effectué(s). L'offre est passée en « Vérifiée » et « Partagée »." + (emetteurMail ? " Vous êtes en copie des mails." : "") });
+    return createJsonResponse({ success: true, message: nbAjoutes + " partage(s) effectué(s). L'offre est passée en « Vérifiée » et « Partagée »." + (emetteurMail ? " Vous êtes en copie des mails et recevez un récapitulatif." : "") });
   } catch(e) { return createJsonResponse({ success: false, message: "Erreur serveur : " + e.toString() }); }
 }
 

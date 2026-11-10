@@ -15,6 +15,8 @@
 // =============================================================================
 var OF_LIEU_HEADERS = { cp: "Lieu — code postal", lat: "Lieu — latitude", lon: "Lieu — longitude", statut: "Lieu statut", origine: "Lieu d'origine" };
 var OF_DEPTS = { "bouches du rhone": "13", "var": "83", "vaucluse": "84", "alpes de haute provence": "04", "hautes alpes": "05", "alpes maritimes": "06", "gard": "30", "herault": "34", "provence alpes cote d azur": "", "ile de france": "", "paris": "75" };
+// Communes à plusieurs codes postaux : la BAN renvoie un code arbitraire (13001, 13080…) → code principal ou vide
+var OF_CP_MULTI = { "marseille": "", "aix en provence": "13100", "toulon": "", "martigues": "13500", "la seyne sur mer": "83500" };
 var OF_PAS_LIEU = /^(alternance|cdi|cdd|stage|interim|teletravail|tele travail|remote|france|a distance|hybride|non precise|n a|na|nan|undefined|null|-)$/;
 
 function _ofCols_(ws) {
@@ -105,7 +107,7 @@ function _ofHarmoniserLieux_(ss, forcer, limiteMs) {
       var m = res["marseille|13"]; if (m) { out.lat = m.lat; out.lon = m.lon; } }
     else {
       var r = res[_adrNorm_(a.ville) + "|" + (a.dep || "")];
-      if (r) { out.f = r.ville + " (" + String(r.cp).slice(0, 2) + ")"; out.cp = a.cp || r.cp; out.lat = r.lat; out.lon = r.lon; out.statut = "BAN"; nb.ban++; }
+      if (r) { out.f = r.ville + " (" + String(r.cp).slice(0, 2) + ")"; out.cp = a.cp || (OF_CP_MULTI[_adrNorm_(r.ville)] !== undefined ? OF_CP_MULTI[_adrNorm_(r.ville)] : r.cp); out.lat = r.lat; out.lon = r.lon; out.statut = "BAN"; nb.ban++; }
       else { out.f = _ofAffichage_(a); out.cp = a.cp || ""; out.statut = "À vérifier"; nb.verif++; }
     }
     if (exemples.length < 15 && out.f !== a.brut) exemples.push("« " + a.brut + " » → « " + (out.f || "(vide)") + " »");
@@ -149,13 +151,15 @@ function _ofAuto_(t0) {
     props.setProperty("OFFRES_PARTAGES_REPARE_RESUME", JSON.stringify(rp));
   }
   var h = Number(Utilities.formatDate(new Date(), "Europe/Paris", "H")), auj = Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd");
-  var enCours = props.getProperty("OFFRES_LIEUX_SUITE") === "1" || props.getProperty("OFFRES_LIEUX_V1") !== "1";
+  var enCours = props.getProperty("OFFRES_LIEUX_SUITE") === "1" || props.getProperty("OFFRES_LIEUX_V1") !== "1" || props.getProperty("OFFRES_LIEUX_V2") !== "1";
   if (!enCours && !(h === 2 && props.getProperty("OFFRES_LIEUX_JOUR") !== auj)) return;
   var budget = Math.min(120000, 200000 - (Date.now() - (t0 || Date.now())));
   if (budget < 30000) return;
   props.setProperty("OFFRES_LIEUX_JOUR", auj);
-  var R = _ofHarmoniserLieux_(ss, false, budget);
+  var forcer = props.getProperty("OFFRES_LIEUX_V2") !== "1";   // V2 : codes postaux des communes multi-CP corrigés
+  var R = _ofHarmoniserLieux_(ss, forcer, budget);
   props.setProperty("OFFRES_LIEUX_V1", "1");
+  if (forcer && R.reste === 0) props.setProperty("OFFRES_LIEUX_V2", "1");
   if (R.reste > 0) props.setProperty("OFFRES_LIEUX_SUITE", "1"); else props.deleteProperty("OFFRES_LIEUX_SUITE");
   if (R.traitees) {
     logAction("Harmonisation automatique", "", "Modification", "Offres — lieux", "OFFRES",

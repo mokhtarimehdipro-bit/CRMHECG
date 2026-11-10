@@ -166,6 +166,7 @@ function _fpGenerer_(ss, r, persoMap, modele) {
   var refId = _referentPourClasse_(classe, campus) || String(r[7] || "").trim();
   var ref = persoMap[refId] || "";
   var dCrea = _fpDate_(r[modele.colCrea]) || _fpDate_(r[17]) || new Date();
+  dCrea = new Date(dCrea.getFullYear(), dCrea.getMonth(), dCrea.getDate(), 12);   // midi : pas de décalage de fuseau dans la cellule date
   var formation = _fpFormation_(classe), filiere = _fpFiliere_(formation);
   var aix = campus.toUpperCase() === "HECG_AIX" || /AIX/i.test(classe);
   var g = _fpGrille_(id, alternance), n = g.niveaux;
@@ -175,8 +176,8 @@ function _fpGenerer_(ss, r, persoMap, modele) {
   var V = modele.valeurs.map(function (l) { return l.slice(); });
   function set(a1, v) { var col = a1.charCodeAt(0) - 66, row = Number(a1.slice(1)) - 2; V[row][col] = v; }
   set("B4", "Date de rédaction : " + Utilities.formatDate(dCrea, "Europe/Paris", "dd/MM/yyyy"));
-  set("B7", formation); set("E7", aix ? "AIX-EN-PROVENCE" : "MARSEILLE");
-  set("D8", alternance ? "Alternance (contrat d'apprentissage)" : "Formation initiale");
+  set("B7", formation); set("E7", aix ? "Aix" : "MARSEILLE");   // listes imposées par le modèle
+  set("D8", alternance ? "Contrat d'apprentissage" : "Initiale");
   set("H7", dCrea); set("H8", ref); set("L8", "Admis");
   ["C11", "C14", "C15", "C16", "C17", "C18", "C19", "C22", "C23", "C24", "C30", "D30"].forEach(function (a) { set(a, ""); });   // ni titre de séjour ni RQTH
   set("C12", nom.toUpperCase()); set("C13", prenom);
@@ -199,11 +200,17 @@ function _fpGenerer_(ss, r, persoMap, modele) {
   set("B32", synth);
 
   var dossier = _fpDossierGed_(ss, id, nom, prenom);
-  var fichier = DriveApp.getFileById(modele.id).makeCopy("Fiche de positionnement - " + nom.toUpperCase() + " " + prenom, dossier);
-  var sh = SpreadsheetApp.openById(fichier.getId()).getSheets()[0];
-  sh.getRange(2, 2, V.length, V[0].length).setValues(V);
-  sh.getRange("B4").setFontWeight("bold").setFontColor("#1A4E8A").setHorizontalAlignment("right");
-  SpreadsheetApp.flush();
+  var nomFichier = "Fiche de positionnement - " + nom.toUpperCase() + " " + prenom;
+  // Copie orpheline d'un essai précédent (créée par ce module depuis le 10/11/2026) : supprimée
+  var anciens = dossier.getFilesByName(nomFichier), debut = new Date(2026, 10, 10);
+  while (anciens.hasNext()) { var a = anciens.next(); if (a.getMimeType() === MimeType.GOOGLE_SHEETS && a.getDateCreated() >= debut) { try { a.setTrashed(true); } catch (eA) {} } }
+  var fichier = DriveApp.getFileById(modele.id).makeCopy(nomFichier, dossier);
+  try {
+    var sh = SpreadsheetApp.openById(fichier.getId()).getSheets()[0];
+    sh.getRange(2, 2, V.length, V[0].length).setValues(V);
+    sh.getRange("B4").setFontWeight("bold").setFontColor("#1A4E8A").setHorizontalAlignment("right");
+    SpreadsheetApp.flush();
+  } catch (eRemp) { try { fichier.setTrashed(true); } catch (eT) {} throw eRemp; }   // pas de fiche à moitié remplie
   return { fichier: fichier, note: g.note, ref: ref, dCrea: dCrea, alternance: alternance };
 }
 
@@ -228,7 +235,7 @@ function _fpLot_(ss, limiteMs) {
   // Garde-fou : une première fiche « test » est créée seule ; la génération complète ne démarre
   // qu'une fois « OK » écrit dans sa colonne Remarque (contrôle visuel du rendu).
   var test = dR.length < 2;
-  if (!test && String(dR[1][11] || "").indexOf("OK") === -1 && String(dR[1][11] || "").indexOf("TEST") !== -1) return 1;
+  if (!test && String(dR[1][11] || "").indexOf("OK") === -1 && /TEST|pause/i.test(String(dR[1][11] || ""))) return 1;
   for (var i = 1; i < dR.length; i++) if (dR[i][0]) deja[String(dR[i][0]).trim()] = 1;
   var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
   var cibles = dE.slice(1).filter(function (r) { var id = String(r[0] || "").trim(); return id && id.toUpperCase() !== "ETU000X" && !deja[id] && _fpEstCible_(r); });
@@ -245,26 +252,34 @@ function _fpLot_(ss, limiteMs) {
       faits++;
     } catch (e) {
       erreurs++;
-      reg.appendRow([id, r[2], r[3], r[14], "ERREUR", "", "", "", "", "", new Date(), String(e).slice(0, 300)]);
+      reg.appendRow([id, r[2], r[3], r[14], "ERREUR", "", "", "", "", "", new Date(), (test ? "FICHE TEST EN ERREUR - pause : " : "") + String(e).slice(0, 300)]);
     }
   }
   if (faits || erreurs) logAction("Génération automatique", "", "Création", "Étudiants — fiches de positionnement", "GED_ETU",
     faits + " fiche(s) de positionnement créée(s) dans les documents étudiants" + (erreurs ? ", " + erreurs + " erreur(s) (voir FICHES_POSITIONNEMENT)" : "") + " — reste " + Math.max(0, cibles.length - faits - erreurs));
-  return Math.max(0, cibles.length - faits - erreurs);
+  return test ? 1 : Math.max(0, cibles.length - faits - erreurs);   // après la fiche test : attente du « OK »
 }
 
 // Appelé par auditAdressesTick (toutes les 5 min) : passe des référents une fois, puis fiches par lots ;
 // ensuite un contrôle par jour pour les nouveaux inscrits / préinscrits.
 function _fpAuto_(t0) {
+  var ssD = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), etat = "";
+  try { etat = _fpAutoCorps_(t0); }
+  catch (e) { etat = "ERREUR : " + String(e).slice(0, 250); }
+  try { _fpRegistre_(ssD).getRange("N1").setValue("Dernier passage " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM HH:mm") + " — " + etat); } catch (eW) {}
+}
+function _fpAutoCorps_(t0) {
   var budget = Math.min(150000, 230000 - (Date.now() - (t0 || Date.now())));   // reste sous la limite de 6 min du passage
-  if (budget < 40000) return;
+  if (budget < 40000) return "temps insuffisant (" + Math.round(budget / 1000) + " s)";
   var props = PropertiesService.getScriptProperties();
-  if (props.getProperty("FICHES_POS_ACTIVE") === "0") return;
+  if (props.getProperty("FICHES_POS_ACTIVE") === "0") return "désactivé";
   var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  if (props.getProperty("REFERENTS_PASSE_V1") !== "1") { _referentsPasse_(ss, "Contrôle des référents (mise en place)"); props.setProperty("REFERENTS_PASSE_V1", "1"); return; }
+  if (props.getProperty("REFERENTS_PASSE_V1") !== "1") { _referentsPasse_(ss, "Contrôle des référents (mise en place)"); props.setProperty("REFERENTS_PASSE_V1", "1"); return "passe des référents faite"; }
   var auj = Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd");
-  if (props.getProperty("FICHES_POS_SUITE") !== "1" && props.getProperty("FICHES_POS_JOUR") === auj) return;
+  var regVide = _fpRegistre_(ss).getLastRow() < 2;   // registre vide : fiche test à (re)faire
+  if (!regVide && props.getProperty("FICHES_POS_SUITE") !== "1" && props.getProperty("FICHES_POS_JOUR") === auj) return "rien à faire aujourd'hui";
   props.setProperty("FICHES_POS_JOUR", auj);
   var reste = _fpLot_(ss, budget);
   if (reste > 0) props.setProperty("FICHES_POS_SUITE", "1"); else props.deleteProperty("FICHES_POS_SUITE");
+  return "lot traité, reste " + reste + " (budget " + Math.round(budget / 1000) + " s)";
 }
