@@ -422,7 +422,7 @@ function maintTableau(liste, nouveaux) {
       <td>${maintPill(t)}${t.archive ? ' <span class="mt-chip">🗄</span>' : ''}</td>
       <td class="text-xs ${u ? 'text-red-700 font-black' : 'text-gray-500'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence || '—')}</td>
       <td style="min-width:240px;max-width:380px"><p class="font-bold text-gray-800" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.description || t.categorie || 'Signalement')}</p>${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.corrige ? ' <span class="mt-chip" title="Contenu corrigé dans le CRM">✎ corrigé</span>' : ''}</td>
-      <td class="text-xs text-gray-600">${vxEsc([t.campus, t.lieu].filter(Boolean).join(' · ') || '—')}</td>
+      <td class="text-xs text-gray-600">${vxEsc([maintCampusCode(t.campus) || t.campus, t.lieu].filter(Boolean).join(' · ') || '—')}</td>
       <td class="text-xs text-gray-600">${vxEsc(t.nom || t.email || '—')}</td>
       <td class="text-xs">${t.responsable ? `👤 ${vxEsc(t.responsable)}` : '<span class="text-gray-300">—</span>'}${t.relances ? `<div class="text-[10px] text-orange-600">🔔 ${t.relances} relance(s)${t.derniereRelance ? ' · ' + vxEsc(t.derniereRelance.slice(0, 10)) : ''}</div>` : ''}</td>
       <td class="text-xs text-gray-500" style="max-width:220px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.commentaire || '')}</span>${t.maj ? `<div class="text-[10px] text-gray-400">${vxEsc(t.maj)}</div>` : ''}</td>
@@ -436,7 +436,7 @@ function maintCartes(liste, nouveaux) {
       <div class="flex justify-between gap-2"><span>${maintNum(t)} ${maintPill(t)}${nouveaux.includes(t.cle) ? '<span class="mt-new">nouveau</span>' : ''}</span>
         ${t.urgence || t.priorite ? `<span class="mt-pill" style="background:${u ? '#fee2e2' : '#f8fafc'};color:${u ? '#b91c1c' : '#64748b'}">${u ? '🔥 ' : ''}${vxEsc(t.priorite || t.urgence)}</span>` : ''}</div>
       <p class="font-bold text-gray-800 text-sm" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${vxEsc(t.description || t.categorie || 'Signalement')}</p>
-      <div class="flex flex-wrap gap-1">${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.campus ? `<span class="mt-chip">🏫 ${vxEsc(t.campus)}</span>` : ''}${t.lieu ? `<span class="mt-chip">📍 ${vxEsc(t.lieu)}</span>` : ''}</div>
+      <div class="flex flex-wrap gap-1">${t.categorie ? `<span class="mt-chip">🏷 ${vxEsc(t.categorie)}</span>` : ''}${t.campus ? `<span class="mt-chip">🏫 ${vxEsc(maintCampusCode(t.campus) || t.campus)}</span>` : ''}${t.lieu ? `<span class="mt-chip">📍 ${vxEsc(t.lieu)}</span>` : ''}</div>
       <p class="text-[11px] text-gray-400 mt-auto">${vxEsc(t.date)}${t.nom ? ' · ' + vxEsc(t.nom) : t.email ? ' · ' + vxEsc(t.email) : ''}${t.responsable ? ' · 👤 ' + vxEsc(t.responsable) : ''}${t.relances ? ' · 🔔 ' + t.relances : ''}</p>
       <div class="flex gap-1 justify-end">${maintBoutons(t)}</div></div>`;
   }).join('')}</div>`;
@@ -536,6 +536,30 @@ async function maintCreerContact() {
   document.getElementById('mtNouveauContact').classList.add('hidden');
   toast('Contact créé ✓');
 }
+// Catégories proposées (+ « Autre » à préciser au cas par cas) et campus normalisés
+const MAINT_CATEGORIES = ['Informatique / réseau / Wi-Fi', 'Vidéoprojecteur / écran / son', 'Impression / photocopieur', 'Téléphonie',
+  'Électricité / éclairage', 'Chauffage / climatisation', 'Plomberie / sanitaires', 'Serrurerie / accès / badges',
+  'Mobilier', 'Bâtiment (murs, sols, fenêtres, plafonds)', 'Ménage / propreté', 'Sécurité / incendie', 'Fournitures / consommables'];
+const MAINT_CAMPUS = [['MRS', 'MRS — Marseille'], ['AIX', 'AIX — Aix-en-Provence'], ['ANNX_MRS', 'ANNX_MRS — Annexe Marseille']];
+function maintCampusCode(v) {
+  const x = String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (!x.trim()) return '';
+  if (/ANNX|ANNEXE/.test(x)) return 'ANNX_MRS';
+  if (/AIX/.test(x)) return 'AIX';
+  if (/MRS|MARSEILLE/.test(x)) return 'MRS';
+  return '';
+}
+function maintSelectCategorie(val) {
+  const v = String(val || '').trim(), std = MAINT_CATEGORIES.includes(v);
+  // catégories libres déjà utilisées sur d'autres tickets : réutilisables d'un clic
+  const perso = [...new Set((maintData.tickets || []).map(t => String(t.categorie || '').trim()).filter(c => c && !MAINT_CATEGORIES.includes(c)))].sort((a, b) => a.localeCompare(b));
+  return `<select id="mtCatSel" onchange="document.getElementById('mtCatAutre').classList.toggle('hidden',this.value!=='__autre');if(this.value==='__autre')document.getElementById('mtCatAutre').focus()">
+      <option value="">— Choisir —</option>
+      <optgroup label="Catégories">${MAINT_CATEGORIES.map(c => `<option ${c === v ? 'selected' : ''}>${vxEsc(c)}</option>`).join('')}</optgroup>
+      ${perso.length ? `<optgroup label="Déjà utilisées">${perso.map(c => `<option ${c === v ? 'selected' : ''}>${vxEsc(c)}</option>`).join('')}</optgroup>` : ''}
+      <option value="__autre">✏️ Autre (à préciser)…</option></select>
+    <input type="text" id="mtCatAutre" class="hidden mt-2" placeholder="Catégorie personnalisée">`;
+}
 function ouvrirTicket(cle) {
   const t = maintData.tickets.find(x => x.cle === cle); if (!t) return;
   const c = vxEsc(t.cle).replace(/'/g, "\\'");
@@ -551,7 +575,10 @@ function ouvrirTicket(cle) {
       <div class="space-y-1 mt-2" style="max-height:30vh;overflow:auto">${t.champs.map(([k, v]) => `<p><span class="font-bold text-gray-500">${vxEsc(k)} :</span> ${/^https?:\/\//.test(v) ? `<a href="${vxEsc(v)}" target="_blank" class="text-blue-600 underline">ouvrir</a>` : vxEsc(v)}</p>`).join('')}</div></details>
     <div class="grid grid-cols-2 gap-3">
       ${champ('mtDesc', 'Description', 'description', 3)}
-      ${champ('mtCat', 'Catégorie', 'categorie')}${champ('mtCampus', 'Campus', 'campus')}
+      <div><label>Catégorie${t.original && t.original.categorie !== t.categorie ? ` <span class="text-[10px] text-orange-600" title="${vxEsc(t.original.categorie)}">(corrigé — original au survol)</span>` : ''}</label>${maintSelectCategorie(t.categorie)}</div>
+      <div><label>Campus${t.original && t.original.campus !== t.campus ? ` <span class="text-[10px] text-orange-600" title="${vxEsc(t.original.campus)}">(corrigé — original au survol)</span>` : ''}</label>
+        <select id="mtCampus"><option value="">— Choisir —</option>${MAINT_CAMPUS.map(([c, l]) => `<option value="${c}" ${maintCampusCode(t.campus) === c ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        ${t.campus && !maintCampusCode(t.campus) ? `<p class="text-[10px] text-gray-400 mt-1">Saisi dans le formulaire : « ${vxEsc(t.campus)} »</p>` : ''}</div>
       ${champ('mtLieu', 'Lieu / salle', 'lieu')}
       <div><label>Statut</label><select id="mtStatut">${MAINT_STATUTS.map(s => `<option ${s === t.statut ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       <div><label>Priorité</label><select id="mtPrio">${['', 'Basse', 'Normale', 'Haute', 'Urgente'].map(s => `<option ${s === t.priorite ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
@@ -569,11 +596,17 @@ function ouvrirTicket(cle) {
       <button id="mtSave" onclick="saveTicket('${c}')" class="btn-orange">Enregistrer</button></div></div>`;
   m.classList.remove('hidden');
 }
+function maintCategorieChoisie(t) {
+  const sel = document.getElementById('mtCatSel').value;
+  if (sel === '__autre') return document.getElementById('mtCatAutre').value.trim() || t.categorie;
+  return sel;
+}
 async function saveTicket(cle) {
   const t = maintData.tickets.find(x => x.cle === cle), sel = document.getElementById('mtResp');
   if (sel.value === '__nouveau') { toast("Créez le contact ou choisissez une personne", false); return; }
+  if (document.getElementById('mtCatSel').value === '__autre' && !document.getElementById('mtCatAutre').value.trim()) { toast('Précisez la catégorie personnalisée', false); document.getElementById('mtCatAutre').focus(); return; }
   const opt = sel.selectedOptions[0], respNom = sel.value ? sel.value.split('|').slice(1).join('|') : '';
-  const corrections = { description: document.getElementById('mtDesc').value.trim(), categorie: document.getElementById('mtCat').value.trim(), campus: document.getElementById('mtCampus').value.trim(), lieu: document.getElementById('mtLieu').value.trim() };
+  const corrections = { description: document.getElementById('mtDesc').value.trim(), categorie: maintCategorieChoisie(t), campus: document.getElementById('mtCampus').value || (maintCampusCode(t.campus) ? '' : t.campus), lieu: document.getElementById('mtLieu').value.trim() };
   const d = { statut: document.getElementById('mtStatut').value, priorite: document.getElementById('mtPrio').value, responsable: respNom, responsableMail: sel.value && opt ? (opt.dataset.mail || '') : '',
     commentaire: document.getElementById('mtCom').value.trim(), corrections, originaux: t.original };
   const btn = document.getElementById('mtSave');
