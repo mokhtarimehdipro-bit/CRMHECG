@@ -903,7 +903,7 @@ function handleStudentDetails(params, ss) {
   for (let i = 1; i < dE.length; i++) {
     if (String(dE[i][0]).trim() === id) { 
       prof = { id: id, mdp: dE[i][1], nom: dE[i][2], prenom: dE[i][3], mail: dE[i][4], tel: dE[i][5], cv: dE[i][6], refPerso: String(dE[i][7] || "").trim(), statut: dE[i][13], classe: dE[i][14], faitCV: dE[i][15], faitLI: dE[i][16], entree: dE[i][17], sortie: dE[i][18], motif: dE[i][19], typo: dE[i][20], id_ent: dE[i][11], id_cont: dE[i][12], entreprise: dE[i][21], campus: dE[i][22], cvTech: String(dE[i][24] || ""), mailHecg: String(dE[i][26] || "").trim(), dateCreation: colDateCrea >= 0 ? _formatDateCreation_(dE[i][colDateCrea]) : "", evenements: colEvts >= 0 ? String(dE[i][colEvts] || "").split(" | ").map(x => x.trim()).filter(Boolean) : [] };
-      try { prof.cvSite = _rcInfoEtudiant_(dE[0], dE[i]); } catch (eCv) {}   // audit espace recruteurs (recruteurs.gs)
+      if (!isEtudiant) { try { prof.cvSite = _rcInfoEtudiant_(dE[0], dE[i]); } catch (eCv) {} }   // audit espace recruteurs (recruteurs.gs) — réservé à l'équipe
       break;
     }
   }

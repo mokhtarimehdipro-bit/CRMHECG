@@ -1496,7 +1496,7 @@
         function renderCvSite(c) {
             const box = document.getElementById('etuCvSite');
             if (!box) return;
-            if (!c) { box.classList.add('hidden'); return; }
+            if (!c || (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'Etudiant')) { box.classList.add('hidden'); box.innerHTML = ''; return; }
             const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
             let html = '';
             if (c.lien) {
@@ -1513,7 +1513,8 @@
                 const pal = { green: ['bg-green-50 border-green-200', 'text-green-700', 'bg-green-500'], orange: ['bg-orange-50 border-orange-200', 'text-orange-700', 'bg-orange-500'],
                     red: ['bg-red-50 border-red-200', 'text-red-700', 'bg-red-500'], gray: ['bg-gray-50 border-gray-200', 'text-gray-600', 'bg-gray-400'] }[couleur];
                 html += `<div class="rounded-xl border ${pal[0]} p-3">
-                    <p class="text-[11px] font-black ${pal[1]} uppercase flex items-center gap-2"><span class="inline-block w-2.5 h-2.5 rounded-full ${pal[2]}"></span>CV disponible sur l'espace recruteurs</p>
+                    <p class="text-[11px] font-black ${pal[1]} uppercase flex items-center gap-2"><span class="inline-block w-2.5 h-2.5 rounded-full ${pal[2]}"></span>CV publié sur l'espace recruteurs</p>
+                    ${c.dispo ? (/indispon/i.test(c.dispo) ? `<p class="mt-1"><span class="text-[10px] font-black uppercase bg-slate-700 text-white rounded-full px-2 py-0.5">🔒 Affiché « Indisponible »</span> <span class="text-[10px] text-gray-500">profil déjà choisi, laissé en vitrine pour les recruteurs</span></p>` : `<p class="mt-1"><span class="text-[10px] font-black uppercase bg-emerald-600 text-white rounded-full px-2 py-0.5">✓ Affiché « Disponible »</span></p>`) : ''}
                     <p class="text-sm font-black text-gray-800 mt-1">Date d'édition : ${esc(dateTxt)}</p>
                     <p class="text-[11px] ${pal[1]} font-bold">CV de ${libAge}</p>
                     <div class="flex gap-2 mt-2 flex-wrap">
