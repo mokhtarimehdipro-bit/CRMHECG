@@ -1467,6 +1467,13 @@ function injectCss2() {
   .rdv-mois i.p{top:0;background:#fb923c}.rdv-mois i.h{bottom:0;background:#16a34a}
   .rdv-lg{display:inline-block;width:10px;height:7px;border-radius:3px;margin:0 3px 0 8px}.rdv-lg.p{background:#fb923c}.rdv-lg.h{background:#16a34a}
   .rdv-afaire{border-color:#fdba74;background:#fffbf5}.rdv-afaire .t{color:#c2410c}
+  .rdv-audit{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border:1px solid #fde68a;background:#fffbeb;color:#92400e;border-radius:14px;padding:10px 14px;margin-bottom:12px;font-size:13px}
+  .rdv-audit.ko{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
+  .rdv-audit-ent{border:1px solid #e3eaf3;border-radius:14px;padding:12px 14px;background:#fff}
+  .rdv-audit-ent.ko{border-color:#fca5a5}.rdv-audit-ent.ok{border-color:#bbf7d0;background:#f0fdf4}
+  .rdv-audit-ent .h{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rdv-audit-ent .h small{color:#7d8a9c;flex:1}
+  .rdv-audit-ent .e{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .rdv-audit-ent .c{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px}.rdv-audit-ent .c label{display:flex;gap:5px;align-items:center;cursor:pointer}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1513,6 +1520,7 @@ async function rdvInit() {
         <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sansresp">⚠ Alternants sans responsable visite</option><option value="prio">🚩 Drapeaux rouges (prioritaires)</option><option value="drap">⚑ Tous les drapeaux</option><option value="attente">⏳ RDV pris, non honorés</option><option value="venir">RDV à venir</option><option value="suivre">À suivre (date passée)</option><option value="sans">Sans aucun RDV</option><option value="nonenvoye">Lien de RDV non envoyé</option></select>
         <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="cp">Trier par code postal du lieu</option><option value="nom">Trier par étudiant</option></select>
       </div>
+      <div id="rdvAuditEnt"></div>
       <div id="rdvSelBar"></div>
       <div id="rdvQui"></div>
       <div id="rdvBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
@@ -1605,6 +1613,7 @@ function rdvRender() {
     <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
     <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>`;
   rdvSelBar();
+  rdvAuditBandeau();
   if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
   const maxR = Math.max(1, ...L.map(e => (parEtu[e.id] || []).length));
   const cell = v => {
@@ -1666,6 +1675,63 @@ function rdvRender() {
   }
 }
 // ── Sélection multiple : affectation en masse d'un responsable, drapeaux ──
+// ── Mini-audit : une même entreprise suivie par plusieurs visiteurs différents ──
+// Regroupement par entreprise (ID entreprise, sinon nom) des alternants de l'année ayant un responsable visite.
+function rdvAuditEntreprises() {
+  const g = {};
+  R.data.etudiants.filter(e => e.alternant && (e.entId || e.entreprise)).forEach(e => {
+    const k = e.entId ? 'id:' + e.entId.toUpperCase() : 'n:' + norm(e.entreprise).replace(/[^a-z0-9]/g, '');
+    (g[k] = g[k] || { cle: k, entreprise: e.entreprise, lieu: e.lieu, cp: e.cp, etudiants: [] }).etudiants.push(e);
+  });
+  return Object.values(g).map(x => {
+    const resp = {}; x.etudiants.forEach(e => { if (e.referent) (resp[e.referent] = resp[e.referent] || []).push(e); });
+    x.responsables = resp; x.nbResp = Object.keys(resp).length; x.sansResp = x.etudiants.filter(e => !e.referent);
+    return x;
+  });
+}
+function rdvAuditBandeau() {
+  const A = rdvAuditEntreprises(), conflits = A.filter(x => x.nbResp > 1), partiels = A.filter(x => x.nbResp === 1 && x.sansResp.length);
+  $('rdvAuditEnt').innerHTML = conflits.length || partiels.length ? `<div class="rdv-audit ${conflits.length ? 'ko' : ''}">
+    <span>${conflits.length ? `⚠ <b>${conflits.length} entreprise(s)</b> avec plusieurs visiteurs différents` : ''}${conflits.length && partiels.length ? ' · ' : ''}${partiels.length ? `<b>${partiels.length} entreprise(s)</b> où des alternants n'ont pas encore le visiteur de leurs collègues` : ''}</span>
+    <button class="vx-btn sm ${conflits.length ? 'pri' : ''}" onclick="VX.rdvAudit()">Mini-audit : un seul visiteur par entreprise</button></div>` : '';
+}
+function rdvAudit() {
+  const A = rdvAuditEntreprises(), conflits = A.filter(x => x.nbResp > 1), partiels = A.filter(x => x.nbResp === 1 && x.sansResp.length);
+  const L = conflits.sort((a, b) => b.nbResp - a.nbResp || b.etudiants.length - a.etudiants.length).concat(partiels);
+  if (!L.length) { toast('✅ Chaque entreprise est suivie par un seul visiteur'); return; }
+  const bloc = (x, i) => {
+    const choix = Object.entries(x.responsables).sort((a, b) => b[1].length - a[1].length);
+    return `<div class="rdv-audit-ent ${x.nbResp > 1 ? 'ko' : ''}" data-i="${i}">
+      <div class="h"><b>${esc(x.entreprise || 'Entreprise ?')}</b>${x.cp ? ` <span class="rdv-cp">${esc(x.cp)}</span>` : ''}<small>${esc(x.lieu || '')}</small>
+        <span class="st-b ${x.nbResp > 1 ? 'c-ko' : 'c-wa'}">${x.nbResp > 1 ? x.nbResp + ' visiteurs différents' : x.sansResp.length + ' alternant(s) sans visiteur'}</span></div>
+      <div class="e">${x.etudiants.map(e => `<span class="vx-chip" title="${esc(e.classe)}">${esc(e.nom)} → <b>${e.referent ? esc(e.referent) : '<i style="color:#c62828">aucun</i>'}</b></span>`).join('')}</div>
+      <div class="c"><span>Visiteur unique :</span>${choix.map(([r, l], k) => `<label><input type="radio" name="au${i}" value="${esc(r)}" ${k === 0 ? 'checked' : ''}> ${esc(r)} <small>(${l.length})</small></label>`).join('')}
+        <label><input type="radio" name="au${i}" value="__autre"> autre : <select class="in" style="margin:0;width:auto;padding:2px 6px" data-autre="${i}">${rdvEquipeOptions('')}</select></label>
+        <button class="vx-btn sm pri" data-appl="${i}">Appliquer aux ${x.etudiants.length} alternant(s)</button></div></div>`;
+  };
+  const dlg = modal(`<h2>Mini-audit — un seul visiteur par entreprise</h2>
+    <p class="sub">${conflits.length} entreprise(s) suivie(s) par plusieurs visiteurs${partiels.length ? ` et ${partiels.length} où certains alternants n'ont pas encore le visiteur de leurs collègues` : ''}. Choisissez le visiteur à garder : il devient le responsable visite de <b>tous</b> les alternants de l'entreprise (un seul déplacement). Le visiteur proposé est celui qui suit déjà le plus d'alternants.</p>
+    <div style="max-height:62vh;overflow:auto;display:flex;flex-direction:column;gap:10px">${L.map(bloc).join('')}</div>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 980);
+  dlg.querySelectorAll('[data-appl]').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.appl, x = L[i];
+    const v = dlg.querySelector(`[name="au${i}"]:checked`).value;
+    let nom = v, email = '';
+    if (v === '__autre') { const q = (R.data.equipe || []).find(z => z.email === dlg.querySelector(`[data-autre="${i}"]`).value); if (!q) { toast("Choisissez un membre de l'équipe", false); return; } nom = q.nom; email = q.email; }
+    else { const ex = x.responsables[v][0]; email = ex.referentEmail || ''; }
+    b.disabled = true; b.innerHTML = 'Enregistrement…';
+    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: x.etudiants.map(e => e.id), nom, email });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); b.disabled = false; return; }
+    x.etudiants.forEach(e => { e.referent = nom; e.referentEmail = email; });
+    const bl = dlg.querySelector(`.rdv-audit-ent[data-i="${i}"]`);
+    bl.classList.remove('ko'); bl.classList.add('ok'); bl.querySelector('.c').innerHTML = `<b style="color:#15803d">✓ ${esc(nom)} est désormais le visiteur unique de ${esc(x.entreprise)}</b>`;
+    toast(x.entreprise + ' : visiteur unique ' + nom + ' ✓');
+    R.dirtyAudit = true;
+  });
+  const fermer = () => { if (R.dirtyAudit) { R.dirtyAudit = false; rdvLoad(); } };
+  dlg.addEventListener('mousedown', ev => { if (ev.target === dlg) fermer(); });
+  dlg.querySelector('.mft button').addEventListener('click', fermer);
+}
 function rdvSelBar() {
   const n = R.sel.size;
   $('rdvSelBar').innerHTML = n ? `<div class="rdv-selbar"><b>${n} étudiant(s) sélectionné(s)</b>
@@ -2306,7 +2372,7 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
-  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
+  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
