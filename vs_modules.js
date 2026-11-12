@@ -1474,6 +1474,13 @@ function injectCss2() {
   .rdv-audit-ent .h{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rdv-audit-ent .h small{color:#7d8a9c;flex:1}
   .rdv-audit-ent .e{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
   .rdv-audit-ent .c{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px}.rdv-audit-ent .c label{display:flex;gap:5px;align-items:center;cursor:pointer}
+  .rdv-compteur{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin-bottom:12px}
+  .rdv-compteur>div{background:#fff;border:2px solid #e3eaf3;border-radius:14px;padding:8px 16px;min-width:170px}
+  .rdv-compteur>div:first-child{border-color:#fdba74;background:#fff7ed}
+  .rdv-compteur span{display:block;font-size:11px;font-weight:800;text-transform:uppercase;color:#64748b}.rdv-compteur b{font-size:26px;font-weight:800;line-height:1.15}
+  .rdv-compteur small{display:block;font-size:11px;color:#94a3b8}.rdv-compteur p{flex-basis:100%;margin:0;font-size:12px;color:#64748b}
+  .rdv-mcls{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 10px;border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe;font-size:13px}
+  .rdv-mcls label{display:flex;gap:5px;align-items:center;cursor:pointer}.rdv-mcls small{color:#94a3b8}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1522,6 +1529,7 @@ async function rdvInit() {
       </div>
       <div id="rdvAuditEnt"></div>
       <div id="rdvSelBar"></div>
+      <div id="rdvCompteur"></div>
       <div id="rdvQui"></div>
       <div id="rdvBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
     document.addEventListener('mousedown', ev => { const p = $('rdvClsPanel'); if (p && p.style.display !== 'none' && !ev.target.closest('#rdvClsPanel,#rdvClsBtn')) p.style.display = 'none'; });
@@ -1597,7 +1605,7 @@ function rdvFiltre(avecVue = true) {
 }
 function rdvRender() {
   const D = R.data; if (!D) return;
-  if (R.onglet === 'analyse') { $('rdvSelBar').innerHTML = ''; rdvAnalyse(); return; }
+  if (R.onglet === 'analyse') { $('rdvSelBar').innerHTML = ''; $('rdvCompteur').innerHTML = ''; rdvAnalyse(); return; }
   const { L, parEtu, vAnnee } = rdvFiltre(true);
   R.visibles = L.map(e => e.id);
   const histo = {}; D.visites.forEach(v => { histo[v.etuId] = (histo[v.etuId] || 0) + 1; });
@@ -1606,6 +1614,18 @@ function rdvRender() {
   const retard = vAnnee.filter(rdvAsuivre).length;
   const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(rdvPrio).length, sansResp = alts.filter(e => !e.referent).length;
   $('rdvQui').innerHTML = rdvAFaire(L, parEtu) + rdvParVisiteur(L, parEtu);
+  // Compteur dynamique (suit tous les filtres : visiteur, classes, diplôme, dates, vue, recherche)
+  //  • total = nombre de lignes affichées où un visiteur apparaît ;
+  //  • à réaliser = visites dont le RDV est pris mais pas encore honoré.
+  { const tot = L.filter(e => e.referent || (parEtu[e.id] || []).some(v => v.visiteur)).length;
+    const aReal = L.reduce((n, e) => n + (parEtu[e.id] || []).filter(rdvAttente).length, 0);
+    const hon = L.reduce((n, e) => n + (parEtu[e.id] || []).filter(v => v.statut === 'Honoré').length, 0);
+    const resp = $('rdvResp').value, cls = R.classes.size;
+    $('rdvCompteur').innerHTML = `<div class="rdv-compteur">
+      <div><span>Visites à réaliser</span><b style="color:#c2410c">${aReal}</b><small>RDV pris, pas encore honorés</small></div>
+      <div><span>Visites totales</span><b>${tot}</b><small>lignes où un visiteur apparaît</small></div>
+      <div><span>Honorées</span><b style="color:#15803d">${hon}</b><small>sur la sélection</small></div>
+      <p>${L.length} ligne(s) affichée(s)${resp ? ' · visiteur : <b>' + esc(resp === '__aucun' ? 'sans responsable' : resp) + '</b>' : ''}${cls ? ' · ' + cls + ' classe(s)' : ''}${$('rdvDip').value ? ' · ' + esc($('rdvDip').value) : ''}</p></div>`; }
   $('rdvKpis').innerHTML = `
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:${sansResp ? '#fca5a5' : '#e3eaf3'}" onclick="VX.rdvVue('sansresp')"><span>⚠ Sans responsable visite</span><b style="color:${sansResp ? '#c62828' : '#15803d'}">${sansResp}</b><small>alternant(s) sans visiteur désigné</small></div>
@@ -1997,19 +2017,35 @@ function rdvMails() {
     <label class="fl">Destinataires</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="radio" name="rmC" value="ma" checked> Le maître d'apprentissage (sinon un contact de l'entreprise)</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="radio" name="rmC" value="tous"> Tous les contacts de l'entreprise</label>
+    <label class="fl">Affiner</label>
+    <div id="rmCls" class="rdv-mcls"></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0 4px"><input type="checkbox" id="rmJamais"> Uniquement les alternants <b>n'ayant jamais eu de visite</b> (aucune visite honorée, toutes années)</label>
     <label class="fl">Exclure</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="checkbox" id="rmEx1" checked> les étudiants déjà visités ou ayant un RDV à venir</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="checkbox" id="rmEx2" checked> ceux à qui le lien a déjà été envoyé cette année</label>
     <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rmGo">${svg('search', 14)} Voir l'aperçu des mails</button></div>`, 620);
+  const jamaisVisite = e => !D.visites.some(v => v.etuId === e.id && v.statut === 'Honoré');
+  const clsCoches = () => [...dlg.querySelectorAll('[data-rmcls]:checked')].map(x => x.value);
+  const dessinerClasses = () => {
+    const l = D.etudiants.filter(e => e.referent === $('rmResp').value && e.alternant), g = {};
+    l.forEach(e => { const c = e.classe || 'Classe non renseignée'; g[c] = (g[c] || 0) + 1; });
+    $('rmCls').innerHTML = `<span class="sub" style="margin:0">Classes (aucune cochée = toutes) :</span>` + Object.keys(g).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+      .map(c => `<label><input type="checkbox" data-rmcls value="${esc(c)}"> ${esc(c)} <small>(${g[c]})</small></label>`).join('');
+    $('rmCls').querySelectorAll('[data-rmcls]').forEach(x => x.onchange = compte);
+  };
   const cibles = () => {
-    const resp = $('rmResp').value;
+    const resp = $('rmResp').value, cls = clsCoches();
     return D.etudiants.filter(e => e.referent === resp && e.alternant)
+      .filter(e => !cls.length || cls.includes(e.classe || 'Classe non renseignée'))
+      .filter(e => !$('rmJamais').checked || jamaisVisite(e))
       .filter(e => !($('rmEx1').checked && vAn.some(v => v.etuId === e.id && (v.statut === 'Honoré' || (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj())))))
       .filter(e => !($('rmEx2').checked && D.envois[e.id]));
   };
   const compte = () => { const t = D.etudiants.filter(e => e.referent === $('rmResp').value && e.alternant).length, c = cibles().length;
     $('rmCompte').innerHTML = `${svg('user', 14)} <span><b>${t}</b> alternant(s) attribué(s) à ${esc($('rmResp').value)} · <b>${c}</b> à contacter avec ces critères</span>`; };
-  ['rmResp', 'rmEx1', 'rmEx2'].forEach(id => $(id).onchange = compte); compte();
+  ['rmEx1', 'rmEx2', 'rmJamais'].forEach(id => $(id).onchange = compte);
+  $('rmResp').onchange = () => { dessinerClasses(); compte(); };
+  dessinerClasses(); compte();
   $('rmGo').onclick = async () => {
     const cible = dlg.querySelector('[name="rmC"]:checked').value, ids = cibles().map(e => e.id);
     if (!ids.length) { toast('Aucun étudiant à contacter avec ces critères', false); return; }
