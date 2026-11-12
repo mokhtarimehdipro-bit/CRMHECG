@@ -564,6 +564,22 @@ var RDV_EXPEDITEUR = "HECG — Équipe pédagogique";
 var RDV_VARIABLES = ["contact", "etudiant", "prenom_etudiant", "classe", "entreprise", "responsable", "lien_rdv", "annee"];
 var RDV_SS_ID = "1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ";
 var RDV_CC_POLE = "polepedagogique@hecg.fr";   // en copie de TOUS les envois du lien de RDV (demande direction 12/11/2026)
+var RDV_CC_FIXES = [RDV_CC_POLE, "contact@hecg.fr"];   // copies systématiques (pôle pédagogique + contact)
+// Retouche d'un mail dans l'aperçu : { to: [e-mails], objet, corps } ; les copies fixes sont toujours ajoutées.
+function _rdvAppliquerModif_(x, m) {
+  if (!m) return x;
+  var ok = function (e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || "").trim()); };
+  if (Array.isArray(m.to)) {
+    var to = m.to.map(function (e) { return String(e).trim(); }).filter(ok);
+    if (to.length) x.destinataires = to.map(function (e) { var c = x.destinataires.filter(function (d) { return d.email.toLowerCase() === e.toLowerCase(); })[0]; return c || { nom: "", email: e, ma: false }; });
+  }
+  if (Array.isArray(m.cc)) x.cc = m.cc.map(function (e) { return String(e).trim(); }).filter(ok);
+  if (m.objet && String(m.objet).trim()) x.objet = String(m.objet).trim();
+  if (m.corps && String(m.corps).trim()) x.corps = String(m.corps);
+  RDV_CC_FIXES.forEach(function (f) { if (x.cc.indexOf(f) === -1 && !x.destinataires.some(function (d) { return d.email.toLowerCase() === f; })) x.cc.push(f); });
+  x.modifie = true;
+  return x;
+}
 
 function _rdvResponsables_(ss) {
   var d = _vsxSheet_(ss, "RDV_RESPONSABLES", RDV_RESP_HEADERS).getDataRange().getValues(), out = [];
@@ -667,7 +683,7 @@ function _rdvPreparerMails_(ss, annee, etuIds, cible) {
       responsable: ref.nom, lien_rdv: lien, annee: annee };
     var rep = function (s) { return String(s).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (m, k) { return vars[k.toLowerCase()] !== undefined ? vars[k.toLowerCase()] : m; }); };
     it.objet = rep(M.objet); it.corps = rep(M.corps); it.lien = lien;
-    it.cc = [ref.email, RDV_CC_POLE].filter(function (m, k, a) { return m && a.indexOf(m) === k && !dest.some(function (c) { return c.email.toLowerCase() === String(m).toLowerCase(); }); });
+    it.cc = [ref.email].concat(RDV_CC_FIXES).filter(function (m, k, a) { return m && a.indexOf(m) === k && !dest.some(function (c) { return c.email.toLowerCase() === String(m).toLowerCase(); }); });
     out.push(it);
   });
   return out;
@@ -692,11 +708,13 @@ function handleSendMailsRdv(p, ss) {
   try {
     lock.waitLock(20000);
     var annee = String(p.annee || _ckAnneeCourante_()), par = String(p.nomAuteur || p.emailAuteur || "");
-    var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma")).filter(function (x) { return !x.bloquant; });
+    var modifs = p.modifs && typeof p.modifs === "object" ? p.modifs : {};
+    var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma")).filter(function (x) { return !x.bloquant; })
+      .map(function (x) { return _rdvAppliquerModif_(x, modifs[x.etuId]); });
     if (!items.length) return createJsonResponse({ success: false, message: "Aucun mail envoyable dans la sélection." });
     if (p.test) {   // mail de test : le 1er mail de la sélection, envoyé uniquement au pôle pédagogique
       var t = items[0], dest = "polepedagogique@hecg.fr";
-      var avert = "[MAIL DE TEST — destinataire(s) réel(s) : " + t.destinataires.map(function (c) { return c.nom + " <" + c.email + ">"; }).join(", ") + (t.responsableEmail ? " ; copie : " + t.responsableEmail : "") + "]\n\n";
+      var avert = "[MAIL DE TEST — destinataire(s) réel(s) : " + t.destinataires.map(function (c) { return (c.nom ? c.nom + " " : "") + "<" + c.email + ">"; }).join(", ") + (t.cc.length ? " ; copie : " + t.cc.join(", ") : "") + (t.modifie ? " ; mail retouché à la main" : "") + "]\n\n";
       MailApp.sendEmail({ to: dest, subject: "[TEST] " + t.objet, body: avert + t.corps, htmlBody: _rdvHtml_(avert + t.corps), name: RDV_EXPEDITEUR });
       logAction(par, p.vieScRole || "", "Action", "Vie scolaire — Suivi des RDV", "RDV_ENVOIS", "Mail de test du lien de RDV envoyé à " + dest + " (exemple : " + t.etudiant + ", responsable " + t.responsable + ")");
       return createJsonResponse({ success: true, test: true, a: dest, exemple: t.etudiant });
@@ -711,7 +729,7 @@ function handleSendMailsRdv(p, ss) {
         if ((x.cc || []).length) opt.cc = x.cc.join(",");
         if (x.responsableEmail) opt.replyTo = x.responsableEmail;
         MailApp.sendEmail(opt);
-        lignes.push([now, annee, x.etuId, x.etudiant, opt.to + (opt.cc ? " (cc " + opt.cc + ")" : ""), x.responsable, x.objet, par]);
+        lignes.push([now, annee, x.etuId, x.etudiant, opt.to + (opt.cc ? " (cc " + opt.cc + ")" : "") + (x.modifie ? " [retouché]" : ""), x.responsable, x.objet, par]);
       } catch (eS) { echecs.push(x.etudiant + " : " + eS.message); }
     });
     if (lignes.length) ws.getRange(ws.getLastRow() + 1, 1, lignes.length, RDV_ENVOI_HEADERS.length).setValues(lignes);

@@ -1490,6 +1490,10 @@ function injectCss2() {
   .rmp-it:hover{background:#f3f7fc}.rmp-it.on{background:#e8eff8;box-shadow:inset 3px 0 0 #1A4E8A}
   .rmp-it .t{flex:1;min-width:0}.rmp-it .t b{display:block;font-size:13px;color:#0e1a2b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rmp-it .t small{display:block;font-size:11.5px;color:#7d8a9c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rmp-it .m{font-size:12px}
+  .rmp-edit{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:4px}
+  .rmp-edit label{font-size:11px;font-weight:800;text-transform:uppercase;color:#64748b;margin-top:6px}.rmp-edit label small{text-transform:none;font-weight:600;color:#94a3b8}
+  .rmp-edit .in{margin:0}.rmp-edit textarea{flex:1;min-height:200px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55}
   .rmp-it .n{font-size:11px;font-weight:800;color:#1A4E8A;background:#eef3fa;border-radius:999px;padding:1px 7px}
   .rmp-r{display:flex;flex-direction:column;border:1px solid #e3eaf3;border-radius:14px;overflow:hidden;background:#fff}
   .rmp-env{padding:12px 16px;border-bottom:1px solid #e3eaf3;background:#f7f9fc;font-size:13px;display:flex;flex-direction:column;gap:5px}
@@ -2078,10 +2082,13 @@ function rdvApercu(r, cible, resp) {
   const ok = r.items.filter(x => !x.bloquant), ko = r.items.filter(x => x.bloquant);
   const raisons = {}; ko.forEach(x => (raisons[x.bloquant] = raisons[x.bloquant] || []).push(x.etudiant));
   const sel = new Set(ok.map(x => x.etuId));
-  let cur = 0;
+  const modifs = {};   // etuId → { to:[], cc:[], objet, corps } (retouches à la main)
+  const vue = x => Object.assign({}, x, modifs[x.etuId] ? { objet: modifs[x.etuId].objet, corps: modifs[x.etuId].corps, cc: modifs[x.etuId].cc,
+    destinataires: modifs[x.etuId].to.map(e => x.destinataires.find(d => d.email.toLowerCase() === e.toLowerCase()) || { nom: '', email: e }) } : {});
+  let cur = 0, edition = false;
   const corpsHtml = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g, '<br>');
   const dlg = modal(`<h2>Aperçu avant envoi${resp ? ' — ' + esc(resp) : ''}</h2>
-    <p class="sub"><b>${ok.length}</b> mail(s) prêt(s)${ko.length ? ` · <b style="color:#c2410c">${ko.length}</b> impossible(s)` : ''}${r.quota != null ? ` · quota restant aujourd'hui : ${r.quota}` : ''} · <b>polepedagogique@hecg.fr</b> est en copie de chaque mail. Cliquez sur une ligne (ou ↑ ↓) pour lire le mail.</p>
+    <p class="sub"><b>${ok.length}</b> mail(s) prêt(s)${ko.length ? ` · <b style="color:#c2410c">${ko.length}</b> impossible(s)` : ''}${r.quota != null ? ` · quota restant aujourd'hui : ${r.quota}` : ''} · <b>polepedagogique@hecg.fr</b> et <b>contact@hecg.fr</b> sont en copie de chaque mail. Chaque mail peut être retouché (✏️). Cliquez sur une ligne (ou ↑ ↓) pour lire le mail.</p>
     ${ko.length ? `<details class="vx-note" style="display:block;margin-bottom:10px"><summary><b>Non envoyables (${ko.length})</b> — à corriger avant</summary>${Object.keys(raisons).map(k => `<div style="margin-top:6px"><b>${esc(k)}</b> : ${raisons[k].map(esc).join(', ')}</div>`).join('')}</details>` : ''}
     ${ok.length ? `<div class="rmp">
       <div class="rmp-l">
@@ -2089,47 +2096,72 @@ function rdvApercu(r, cible, resp) {
         <div class="rmp-ls" id="rmListe">${ok.map((x, i) => `<div class="rmp-it" data-i="${i}">
           <input type="checkbox" data-ml="${esc(x.etuId)}" checked onclick="event.stopPropagation()">
           <div class="t"><b>${esc(x.etudiant)}</b><small>${esc(x.classe)} · ${esc(x.entreprise || '—')}</small></div>
-          <span class="n" title="destinataire(s)">${x.destinataires.length}</span></div>`).join('')}</div>
+          <span class="m" data-mod="${esc(x.etuId)}" title="mail retouché à la main"></span><span class="n" title="destinataire(s)">${x.destinataires.length}</span></div>`).join('')}</div>
       </div>
       <div class="rmp-r" id="rmVue"></div>
     </div>` : '<div class="vx-note">Aucun mail envoyable.</div>'}
     <div class="mft"><button class="vx-btn" style="margin-right:auto" id="rmTest" ${ok.length ? '' : 'disabled'} title="Envoie le mail affiché, uniquement à polepedagogique@hecg.fr">${svg('mail', 14)} Mail de test à polepedagogique@hecg.fr</button><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn ora" id="rmSend" ${ok.length ? '' : 'disabled'}>${svg('mail', 14)} Envoyer ${ok.length} mail(s)</button></div>`, 1180);
   const voir = i => {
     if (!ok.length) return;
-    cur = Math.max(0, Math.min(ok.length - 1, i));
-    const x = ok[cur];
+    const nc = Math.max(0, Math.min(ok.length - 1, i)); if (nc !== cur) edition = false; cur = nc;
+    const x0 = ok[cur], x = vue(x0);
     dlg.querySelectorAll('.rmp-it').forEach(el => el.classList.toggle('on', +el.dataset.i === cur));
+    dlg.querySelectorAll('[data-mod]').forEach(el => el.textContent = modifs[el.dataset.mod] ? '✏️' : '');
     const it = dlg.querySelector(`.rmp-it[data-i="${cur}"]`); if (it) it.scrollIntoView({ block: 'nearest' });
+    if (edition) {
+      $('rmVue').innerHTML = `<div class="rmp-edit">
+        <label>À <small>(e-mails séparés par des virgules)</small></label><input class="in" id="reTo" value="${esc(x.destinataires.map(c => c.email).join(', '))}">
+        <label>Cc <small>(polepedagogique@hecg.fr et contact@hecg.fr sont toujours ajoutés)</small></label><input class="in" id="reCc" value="${esc((x.cc || []).join(', '))}">
+        <label>Objet</label><input class="in" id="reObj" value="${esc(x.objet)}">
+        <label>Message</label><textarea class="in" id="reCorps">${esc(x.corps)}</textarea></div>
+        <div class="rmp-nav"><button class="vx-btn sm" id="reAnnul">Annuler</button><span>Retouche du mail de <b>${esc(x0.etudiant)}</b></span><button class="vx-btn sm pri" id="reOk">✓ Valider la retouche</button></div>`;
+      $('reAnnul').onclick = () => { edition = false; voir(cur); };
+      $('reOk').onclick = () => {
+        const liste = v => v.split(/[,;\s]+/).map(e => e.trim()).filter(Boolean);
+        const to = liste($('reTo').value), cc = liste($('reCc').value), bad = to.concat(cc).filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+        if (!to.length) { toast('Indiquez au moins un destinataire', false); return; }
+        if (bad.length) { toast('Adresse(s) invalide(s) : ' + bad.join(', '), false); return; }
+        ['polepedagogique@hecg.fr', 'contact@hecg.fr'].forEach(f => { if (!cc.includes(f) && !to.includes(f)) cc.push(f); });
+        modifs[x0.etuId] = { to, cc, objet: $('reObj').value.trim() || x0.objet, corps: $('reCorps').value || x0.corps };
+        edition = false; voir(cur); toast('Mail retouché ✓ (sera envoyé tel quel)');
+      };
+      setTimeout(() => $('reCorps') && $('reCorps').focus(), 30);
+      return;
+    }
     $('rmVue').innerHTML = `<div class="rmp-env">
         <div><span>De</span><b>HECG — Équipe pédagogique</b>${x.responsableEmail ? ` <small>(réponses à ${esc(x.responsableEmail)})</small>` : ''}</div>
         <div><span>À</span>${x.destinataires.map(c => `<span class="rmp-c">${esc(c.nom || c.email)} <small>${esc(c.email)}</small>${c.ma ? ' <em>MA</em>' : ''}</span>`).join('')}</div>
         <div><span>Cc</span>${(x.cc || []).map(m => `<span class="rmp-c">${esc(m)}</span>`).join('') || '—'}</div>
         <div><span>Objet</span><b>${esc(x.objet)}</b></div></div>
       <div class="rmp-body">${corpsHtml(x.corps)}</div>
-      <div class="rmp-nav"><button class="vx-btn sm" ${cur ? '' : 'disabled'} data-nav="-1">← Précédent</button><span>${cur + 1} / ${ok.length} · ${sel.has(x.etuId) ? '<b style="color:#15803d">sera envoyé</b>' : '<b style="color:#c62828">exclu de l\'envoi</b>'}</span><button class="vx-btn sm" ${cur < ok.length - 1 ? '' : 'disabled'} data-nav="1">Suivant →</button></div>`;
+      <div class="rmp-nav"><button class="vx-btn sm" ${cur ? '' : 'disabled'} data-nav="-1">← Précédent</button><span>${cur + 1} / ${ok.length} · ${sel.has(x.etuId) ? '<b style="color:#15803d">sera envoyé</b>' : '<b style="color:#c62828">exclu de l\'envoi</b>'}${modifs[x0.etuId] ? ' · <b style="color:#7c3aed">retouché</b> <button class="vx-link" style="margin:0" id="reRaz">rétablir</button>' : ''}</span>
+        <span style="display:flex;gap:6px"><button class="vx-btn sm" id="reEdit">✏️ Modifier ce mail</button><button class="vx-btn sm" ${cur < ok.length - 1 ? '' : 'disabled'} data-nav="1">Suivant →</button></span></div>`;
     $('rmVue').querySelectorAll('[data-nav]').forEach(b => b.onclick = () => voir(cur + +b.dataset.nav));
+    $('reEdit').onclick = () => { edition = true; voir(cur); };
+    if ($('reRaz')) $('reRaz').onclick = () => { delete modifs[x0.etuId]; voir(cur); };
   };
   const maj = () => { if (!ok.length) return; $('rmSend').innerHTML = svg('mail', 14) + ' Envoyer ' + sel.size + ' mail(s)'; $('rmSend').disabled = !sel.size; $('rmNb').textContent = sel.size + ' / ' + ok.length + ' cochés'; $('rmTout').checked = sel.size === ok.length; voir(cur); };
   dlg.querySelectorAll('[data-ml]').forEach(c => c.onchange = () => { if (c.checked) sel.add(c.dataset.ml); else sel.delete(c.dataset.ml); maj(); });
   dlg.querySelectorAll('.rmp-it').forEach(el => el.onclick = () => voir(+el.dataset.i));
   if (ok.length) {
     $('rmTout').onchange = () => { const on = $('rmTout').checked; dlg.querySelectorAll('[data-ml]').forEach(c => { c.checked = on; if (on) sel.add(c.dataset.ml); else sel.delete(c.dataset.ml); }); maj(); };
-    dlg.addEventListener('keydown', ev => { if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); voir(cur + (ev.key === 'ArrowDown' ? 1 : -1)); } });
+    dlg.addEventListener('keydown', ev => { if (!edition && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) { ev.preventDefault(); voir(cur + (ev.key === 'ArrowDown' ? 1 : -1)); } });
     dlg.tabIndex = -1; dlg.focus();
     maj();
   }
   $('rmTest').onclick = async () => {
     const x = ok[cur]; if (!x) return;
     $('rmTest').disabled = true;
-    const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [x.etuId], cible, test: true });
+    const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [x.etuId], cible, test: true, modifs: modifs[x.etuId] ? { [x.etuId]: modifs[x.etuId] } : {} });
     $('rmTest').disabled = false;
     if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); return; }
     toast('Mail de test envoyé à ' + o.a + ' (exemple : ' + o.exemple + ') ✓');
   };
   $('rmSend').onclick = async () => {
-    if (!sel.size || !confirm('Envoyer ' + sel.size + ' mail(s) maintenant ? (copie à polepedagogique@hecg.fr)')) return;
+    const nm = [...sel].filter(id => modifs[id]).length;
+    if (!sel.size || !confirm('Envoyer ' + sel.size + ' mail(s) maintenant ?' + (nm ? ' (' + nm + ' retouché(s))' : '') + '\nCopie à polepedagogique@hecg.fr et contact@hecg.fr')) return;
     $('rmSend').disabled = true; $('rmSend').innerHTML = 'Envoi en cours…';
-    const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [...sel], cible });
+    const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [...sel], cible, modifs: Object.fromEntries([...sel].filter(id => modifs[id]).map(id => [id, modifs[id]])) });
     if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); maj(); return; }
     dlg.remove(); toast(o.envoyes + ' mail(s) envoyé(s) ✓' + (o.echecs.length ? ' — ' + o.echecs.length + ' échec(s)' : ''), !o.echecs.length);
     if (o.echecs.length) alert('Échecs :\n' + o.echecs.join('\n'));
