@@ -1466,6 +1466,7 @@ function injectCss2() {
   .rdv-mois{position:relative;height:16px;background:#f1f4f8;border-radius:6px;overflow:hidden}.rdv-mois i{position:absolute;left:0;height:8px;border-radius:4px}
   .rdv-mois i.p{top:0;background:#fb923c}.rdv-mois i.h{bottom:0;background:#16a34a}
   .rdv-lg{display:inline-block;width:10px;height:7px;border-radius:3px;margin:0 3px 0 8px}.rdv-lg.p{background:#fb923c}.rdv-lg.h{background:#16a34a}
+  .rdv-afaire{border-color:#fdba74;background:#fffbf5}.rdv-afaire .t{color:#c2410c}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1596,7 +1597,7 @@ function rdvRender() {
   const honores = vAnnee.filter(v => v.statut === 'Honoré').length, venir = vAnnee.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()).length;
   const retard = vAnnee.filter(rdvAsuivre).length;
   const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(rdvPrio).length, sansResp = alts.filter(e => !e.referent).length;
-  $('rdvQui').innerHTML = rdvParVisiteur(L, parEtu);
+  $('rdvQui').innerHTML = rdvAFaire(L, parEtu) + rdvParVisiteur(L, parEtu);
   $('rdvKpis').innerHTML = `
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:${sansResp ? '#fca5a5' : '#e3eaf3'}" onclick="VX.rdvVue('sansresp')"><span>⚠ Sans responsable visite</span><b style="color:${sansResp ? '#c62828' : '#15803d'}">${sansResp}</b><small>alternant(s) sans visiteur désigné</small></div>
@@ -1713,6 +1714,22 @@ function rdvDrapeau(ids) {
   };
 }
 
+// ── « Qui a combien de visites à faire » : alternants attribués à chaque responsable et pas encore visités cette année ──
+function rdvAFaire(L, parEtu) {
+  const g = {};
+  L.filter(e => e.alternant).forEach(e => {
+    const vs = parEtu[e.id] || [];
+    if (vs.some(v => v.statut === 'Honoré')) return;   // déjà visité cette année
+    const k = e.referent || '— Sans responsable —';
+    const o = g[k] = g[k] || { total: 0, pris: 0, sans: 0 };
+    o.total++; if (vs.some(rdvAttente)) o.pris++; else o.sans++;
+  });
+  const l = Object.entries(g).sort((a, b) => a[0].startsWith('—') - b[0].startsWith('—') || b[1].total - a[1].total);
+  if (!l.length) return `<div class="rdv-qui rdv-afaire"><b class="t">Visites à faire</b><span style="color:#15803d;font-weight:800">✅ Tous les alternants affichés ont été visités cette année</span></div>`;
+  const tot = l.reduce((s, [, o]) => s + o.total, 0);
+  return `<div class="rdv-qui rdv-afaire"><b class="t">Visites à faire · ${tot}</b>${l.map(([k, o]) => `<button type="button" onclick="${k.startsWith('—') ? "VX.rdvVue('sansresp')" : `VX.rdvResp('${jsq(k)}')`}" title="${o.total} alternant(s) pas encore visité(s) cette année : ${o.pris} avec un RDV pris, ${o.sans} sans RDV">
+    <span class="n" style="${k.startsWith('—') ? 'color:#c62828' : ''}">${esc(k)}</span><span class="c"><b style="color:#0e1a2b">${o.total}</b> à faire${o.pris ? ` · <em>${o.pris} RDV pris</em>` : ''}${o.sans ? ` · <span style="color:#c62828;font-weight:800">${o.sans} sans RDV</span>` : ''}</span></button>`).join('')}</div>`;
+}
 // ── Résumé « qui a combien de visites » (périmètre = filtres actuels) ──
 function rdvParVisiteur(L, parEtu) {
   const g = {};
@@ -1809,7 +1826,7 @@ async function rdvAnalyse() {
   }
   const { L, parEtu, vAnnee } = rdvFiltre(false);
   const ids = new Set(L.map(e => e.id));
-  $('rdvQui').innerHTML = rdvParVisiteur(L, parEtu);
+  $('rdvQui').innerHTML = rdvAFaire(L, parEtu) + rdvParVisiteur(L, parEtu);
   const hon = v => v.statut === 'Honoré';
   const visites = vAnnee.filter(v => ids.has(v.etuId) && hon(v)).length;
   const alts = L.filter(e => e.alternant), visites1 = alts.filter(e => (parEtu[e.id] || []).some(hon));
@@ -2272,7 +2289,7 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
-  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
+  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
