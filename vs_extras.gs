@@ -564,13 +564,15 @@ function handleUploadMemoireDoc(p, ss) {
     const orig = String(p.fileName || "document");
     const ext = orig.indexOf(".") !== -1 ? orig.slice(orig.lastIndexOf(".")) : "";
     const etu = String(mem[2] || "Étudiant");
-    const nomFichier = etu + " — Mémoire " + version + " — " + date + ext;
+    // Plusieurs fichiers pour une même version (ex. V1 = mémoire + annexes) : suffixe (2), (3)…
+    const memeVersion = existants.filter(function(d) { return String(d.version).toUpperCase() === version; }).length;
+    const nomFichier = etu + " — Mémoire " + version + " — " + date + (memeVersion ? " (" + (memeVersion + 1) + ")" : "") + ext;
     const blob = Utilities.newBlob(Utilities.base64Decode(String(p.data)), String(p.mimeType || "application/octet-stream"), nomFichier);
     const file = _memDocsFolder_(etu).createFile(blob);
     const id = "MDOC" + Date.now();
     ws.appendRow([id, String(p.memoireId), String(mem[1] || ""), version, "", nomFichier, file.getId(), file.getUrl(), String(p.commentaire || ""), String(p.nomAuteur || p.emailAuteur || ""), new Date(), ""]);
     ws.getRange(ws.getLastRow(), 5).setNumberFormat("@").setValue(date);
-    logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", "Création", "Vie scolaire", String(p.memoireId), "Document mémoire " + version + " déposé pour " + etu);
+    logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", "Création", "Vie scolaire — Mémoires", String(p.memoireId), "Document mémoire " + version + (memeVersion ? " (fichier " + (memeVersion + 1) + ")" : "") + " déposé pour " + etu + " : " + orig);
     return createJsonResponse({ success: true, doc: { id: id, version: version, date: date, nom: nomFichier, url: file.getUrl(), commentaire: String(p.commentaire || "") } });
   } catch (e) { return createJsonResponse({ success: false, message: "Dépôt impossible : " + e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }

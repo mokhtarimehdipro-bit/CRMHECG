@@ -348,6 +348,17 @@ function injectCss() {
   .fr-rem label:has(input:checked){background:linear-gradient(180deg,#2d64a8,#1A4E8A);box-shadow:0 8px 16px -10px rgba(26,78,138,.8)}
   .vx-dot{width:26px;height:26px}
   #toast{z-index:20000 !important}
+  .vx-vgrp{border:1px solid #e3eaf3;border-radius:16px;padding:10px;background:#fbfcfe;display:flex;flex-direction:column;gap:6px}
+  .vx-vgrp .vh{display:flex;align-items:center;gap:10px;padding:2px 4px 4px}
+  .vx-vgrp .vh .ver{min-width:46px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,#3f7cc4,#1A4E8A)}
+  .vx-vgrp .vh b{color:var(--ink);font-size:13px}.vx-vgrp .vh small{color:var(--mu);font-size:12px}
+  .vx-vgrp .vx-doc{padding:9px 12px;box-shadow:none}
+  .vx-vgrp .vx-doc > svg{color:#1A4E8A;flex:none}
+  .vx-fsel{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed #dfe6ef}
+  .vx-fsel b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vx-verpick{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--mu);font-weight:600}
+  .vx-verpick button{font:700 12px 'Plus Jakarta Sans',Inter,sans-serif;padding:4px 11px;border-radius:999px;border:1px solid #dfe6f0;background:#fff;color:#1A4E8A;cursor:pointer}
+  .vx-verpick button.on{background:#1A4E8A;color:#fff;border-color:#1A4E8A}
   .vx-ent{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#0f766e;background:#e6f6f3;border:1px solid #c7ebe4;padding:3px 10px;border-radius:999px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:flex-start}
   /* regroupement par diplôme + carnet d'échanges */
   .vx-dip{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:30px 0 4px;padding:12px 18px;border-radius:16px;background:linear-gradient(90deg,#1A4E8A,#2d64a8);color:#fff;box-shadow:0 14px 26px -20px rgba(26,78,138,.9)}
@@ -502,7 +513,7 @@ function memCard(m) {
     ${m.entreprise ? `<div class="vx-ent">${svg('building', 13)} ${esc(m.entreprise)}</div>` : ''}
     <div class="sujet ${m.sujet ? '' : 'empty'}">${esc(m.sujet || 'Sujet à définir')}</div>
     ${m.motsCles.length ? `<div class="kws">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}" onclick="event.stopPropagation();VX.memKw('${jsq(k)}')">${esc(k)}</span>`).join('')}</div>` : ''}
-    ${m.docs.length ? `<div class="vx-docchip">${svg('file', 13)} ${m.docs.length} document${m.docs.length > 1 ? 's' : ''} · dernière version <b>${esc(m.docs[m.docs.length - 1].version)}</b> du ${fmtD(m.docs[m.docs.length - 1].date)}</div>` : ''}
+    ${m.docs.length ? `<div class="vx-docchip">${svg('file', 13)} ${m.docs.length} document${m.docs.length > 1 ? 's' : ''} · dernière version <b>${esc(m.docs[m.docs.length - 1].version)}</b>${(n => n > 1 ? ' (' + n + ' fichiers)' : '')(m.docs.filter(d => String(d.version).toUpperCase() === String(m.docs[m.docs.length - 1].version).toUpperCase()).length)} du ${fmtD(m.docs[m.docs.length - 1].date)}</div>` : ''}
     ${m.echanges.length ? `<div class="vx-docchip vx-echchip">${svg('chat', 13)} ${m.echanges.length} échange${m.echanges.length > 1 ? 's' : ''} · dernier le <b>${fmtD(m.echanges[0].date)}</b><span class="tx">${esc(m.echanges[0].texte.slice(0, 70))}${m.echanges[0].texte.length > 70 ? '…' : ''}</span></div>` : ''}
     <div class="ft">${m.formateur ? avatar(m.formateur, 24) + `<span>Référent <b>${esc(m.formateur)}</b></span>` : `<span style="color:#c2410c;font-weight:600">${svg('user', 13)} Sans formateur référent</span>`}</div>
   </div>`;
@@ -557,10 +568,11 @@ function memEdit(id, etuPre, focusEch) {
       : `<div class="vx-note">${svg('chat', 14)} Enregistrez d'abord le mémoire : vous pourrez ensuite tenir son carnet d'échanges.</div>`}
     <label class="fl">Documents & versions</label>
     ${m ? `<div class="vx-docs" id="meDocs"></div>
-      <div class="vx-drop" id="meDrop"><input type="file" id="meFile" hidden>
-        <div class="dz" id="meDz">${svg('upload', 22)}<div><b>Déposer un document</b><span>Glissez un fichier ici ou cliquez — PDF, Word, etc. (20 Mo max)</span></div></div>
+      <div class="vx-drop" id="meDrop"><input type="file" id="meFile" multiple hidden>
+        <div class="dz" id="meDz">${svg('upload', 22)}<div><b>Déposer un ou plusieurs documents</b><span>Glissez les fichiers ici ou cliquez — PDF, Word, etc. (20 Mo max chacun)</span></div></div>
         <div class="vx-upl" id="meUpl" style="display:none">
           <div class="fn" id="meFn"></div>
+          <div class="vx-verpick" id="meVerPick"></div>
           <div class="g3"><div><label class="fl" style="margin-top:8px">Version</label><input class="in" id="meVer"></div><div><label class="fl" style="margin-top:8px">Date</label><input type="date" class="in" id="meDate"></div><div><label class="fl" style="margin-top:8px">Commentaire</label><input class="in" id="meCom" placeholder="Facultatif"></div></div>
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="vx-btn sm" id="meUplCancel">Annuler</button><button class="vx-btn pri sm" id="meUplGo">${svg('upload', 14)} Déposer</button></div>
         </div></div>` : `<div class="vx-note">${svg('file', 14)} Enregistrez d'abord le mémoire : vous pourrez ensuite y déposer les versions (V1, V2…) datées.</div>`}
@@ -673,41 +685,70 @@ function memEdit(id, etuPre, focusEch) {
   $('meANom').addEventListener('input', syncAutre);
   // documents
   if (m) {
+    // Documents regroupés par version (une version peut contenir plusieurs fichiers)
+    const versions = () => { const g = {}; m.docs.forEach(d => { const v = String(d.version || '—').toUpperCase(); (g[v] = g[v] || []).push(d); });
+      return Object.keys(g).sort((a, b) => (parseInt(b.replace(/\D/g, ''), 10) || 0) - (parseInt(a.replace(/\D/g, ''), 10) || 0)).map(v => [v, g[v]]); };
     const drawDocs = () => {
-      $('meDocs').innerHTML = m.docs.length ? m.docs.slice().reverse().map(d => `<div class="vx-doc">
-        <span class="ver">${esc(d.version)}</span>
+      $('meDocs').innerHTML = m.docs.length ? versions().map(([v, l]) => `<div class="vx-vgrp"><div class="vh"><span class="ver">${esc(v)}</span><b>${l.length} fichier${l.length > 1 ? 's' : ''}</b><small>${fmtLong(l[l.length - 1].date)}</small></div>
+        ${l.map(d => `<div class="vx-doc">${svg('file', 16)}
         <div class="in2"><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.nom)} ${svg('ext', 12)}</a><small>${fmtLong(d.date)}${d.par ? ' · déposé par ' + esc(d.par) : ''}${d.commentaire ? ' · ' + esc(d.commentaire) : ''}</small></div>
-        <button class="vx-btn ico sm danger" data-docdel="${esc(d.id)}" title="Retirer de la liste (le fichier reste dans Drive)">${svg('trash', 13)}</button></div>`).join('')
+        <button class="vx-btn ico sm danger" data-docdel="${esc(d.id)}" title="Retirer de la liste (le fichier reste dans Drive)">${svg('trash', 13)}</button></div>`).join('')}</div>`).join('')
         : `<div class="vx-note">${svg('file', 14)} Aucun document pour l'instant.</div>`;
     };
     drawDocs();
-    let fileSel = null;
+    let files = [];
     const nextVer = () => 'V' + (m.docs.reduce((mx, d) => Math.max(mx, parseInt(String(d.version).replace(/\D/g, ''), 10) || 0), 0) + 1);
-    const choose = file => {
-      if (!file) return;
-      if (file.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (20 Mo max)', false); return; }
-      fileSel = file; $('meFn').innerHTML = `${svg('file', 15)} <b>${esc(file.name)}</b> <span>${(file.size / 1024 / 1024).toFixed(2)} Mo</span>`;
-      $('meVer').value = nextVer(); $('meDate').value = todayISO(); $('meCom').value = '';
+    const drawFiles = () => {
+      $('meFn').innerHTML = files.map((f, i) => `<div class="vx-fsel">${svg('file', 15)} <b>${esc(f.name)}</b> <span>${(f.size / 1024 / 1024).toFixed(2)} Mo</span><button type="button" class="vx-btn ico sm" data-frm="${i}" title="Retirer">${svg('x', 12, 2.6)}</button></div>`).join('')
+        + `<button type="button" class="vx-link" id="meMore">${svg('plus', 13, 2.4)} Ajouter d'autres fichiers à cet envoi</button>`;
+      $('meMore').onclick = () => $('meFile').click();
+      $('meUplGo').innerHTML = svg('upload', 14) + (files.length > 1 ? ' Déposer les ' + files.length + ' fichiers' : ' Déposer');
+    };
+    const drawVerPick = () => {
+      const vs = versions().map(([v]) => v), nv = nextVer(), cur = $('meVer').value.trim().toUpperCase();
+      $('meVerPick').innerHTML = `<span>Ranger dans :</span><button type="button" class="${cur === nv ? 'on' : ''}" data-vp="${nv}">Nouvelle version ${nv}</button>`
+        + vs.map(v => `<button type="button" class="${cur === v ? 'on' : ''}" data-vp="${esc(v)}">Ajouter à ${esc(v)}</button>`).join('');
+    };
+    const choose = list => {
+      const ok = [...(list || [])].filter(f => { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' : trop volumineux (20 Mo max)', false); return false; } return true; });
+      if (!ok.length) return;
+      const premier = !files.length;
+      files = files.concat(ok);
+      if (premier) { $('meVer').value = nextVer(); $('meDate').value = todayISO(); $('meCom').value = ''; }
+      drawFiles(); drawVerPick();
       $('meDz').style.display = 'none'; $('meUpl').style.display = 'block';
     };
+    $('meVerPick').addEventListener('click', ev => { const b = ev.target.closest('[data-vp]'); if (!b) return; $('meVer').value = b.dataset.vp; drawVerPick(); });
+    $('meVer').addEventListener('input', drawVerPick);
+    $('meFn').addEventListener('click', ev => { const b = ev.target.closest('[data-frm]'); if (!b) return; files.splice(+b.dataset.frm, 1); if (!files.length) $('meUplCancel').click(); else drawFiles(); });
     const dz = $('meDz');
     dz.onclick = () => $('meFile').click();
-    $('meFile').onchange = e => choose(e.target.files[0]);
+    $('meFile').onchange = e => { choose(e.target.files); e.target.value = ''; };
     dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
-    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); choose(e.dataTransfer.files[0]); });
-    $('meUplCancel').onclick = () => { fileSel = null; $('meFile').value = ''; $('meUpl').style.display = 'none'; $('meDz').style.display = 'flex'; };
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); choose(e.dataTransfer.files); });
+    $('meUplCancel').onclick = () => { files = []; $('meFile').value = ''; $('meUpl').style.display = 'none'; $('meDz').style.display = 'flex'; };
     $('meUplGo').onclick = async () => {
-      if (!fileSel) return;
-      const btn = $('meUplGo'); btn.disabled = true; btn.innerHTML = 'Envoi…';
-      try {
-        const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.onerror = rej; fr.readAsDataURL(fileSel); });
-        const r = await api('uploadMemoireDoc', { memoireId: m.id, data: b64, fileName: fileSel.name, mimeType: fileSel.type || 'application/octet-stream', version: $('meVer').value.trim(), date: $('meDate').value, commentaire: $('meCom').value.trim() });
-        if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
-        m.docs.push({ ...r.doc, par: user.nom || '' });
-        drawDocs(); $('meUplCancel').click(); toast('Document ' + r.doc.version + ' déposé ✓'); memRender();
-      } catch (e) { toast('Envoi impossible : ' + e, false); }
-      finally { btn.disabled = false; btn.innerHTML = svg('upload', 14) + ' Déposer'; }
+      if (!files.length) return;
+      const btn = $('meUplGo'); btn.disabled = true;
+      const version = $('meVer').value.trim().toUpperCase() || nextVer(), date = $('meDate').value, com = $('meCom').value.trim();
+      const restants = [];
+      let ok = 0;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        btn.innerHTML = `Envoi ${i + 1}/${files.length}…`;
+        try {
+          const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.onerror = rej; fr.readAsDataURL(f); });
+          const r = await api('uploadMemoireDoc', { memoireId: m.id, data: b64, fileName: f.name, mimeType: f.type || 'application/octet-stream', version, date, commentaire: com });
+          if (!r.success) { restants.push(f); toast(f.name + ' : ' + errTxt(r.message), false); continue; }
+          m.docs.push({ ...r.doc, par: user.nom || '' }); ok++;
+        } catch (e) { restants.push(f); toast(f.name + ' : envoi impossible (' + e + ')', false); }
+      }
+      btn.disabled = false;
+      drawDocs(); memRender();
+      if (restants.length) { files = restants; drawFiles(); drawVerPick(); }
+      else $('meUplCancel').click();
+      if (ok) toast(ok + ' fichier' + (ok > 1 ? 's' : '') + ' déposé' + (ok > 1 ? 's' : '') + ' dans ' + version + ' ✓');
     };
     dlg.addEventListener('click', async ev => {
       const del = ev.target.closest('[data-docdel]'); if (!del) return;
