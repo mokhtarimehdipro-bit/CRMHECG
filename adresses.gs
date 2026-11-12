@@ -890,6 +890,7 @@ function auditAdressesTick() {
   try { if (typeof _initSecrets_ === 'function') _initSecrets_(); } catch (eS) {}   // paramètres sensibles posés une fois (fichier hors dépôt)
   try { _rcAuto_(); } catch (eR) { console.error('audit recruteurs : ' + eR); }   // audit espace recruteurs, chaque nuit (recruteurs.gs)
   try { if (typeof _frisesAuto_ === 'function') _frisesAuto_(); } catch (eF) { console.error('rappels frises : ' + eF); }   // rappels d'échéances des frises (vs_extras.gs)
+  try { if (typeof _altAuto_ === 'function') _altAuto_(); } catch (eA) { console.error('relevé alternance : ' + eA); }   // mouvements d'alternance, 1 relevé/jour (vs_suivi.gs)
   try { _relCandAuto_(); } catch (eC) { console.error('relance candidatures : ' + eC); }   // relance quotidienne 9 h, jours ouvrés (relances.gs)
   try { if (typeof _ofAuto_ === 'function') _ofAuto_(t0); } catch (eO) { console.error('offres (lieux / partages) : ' + eO); }   // offres_lieux.gs
   try { if (typeof _maintAuto_ === 'function') _maintAuto_(); } catch (eM) { console.warn('tickets : ' + eM); }   // formulaires.gs — numérotation

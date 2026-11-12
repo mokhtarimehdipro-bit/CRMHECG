@@ -431,6 +431,11 @@ function doPostInner_(e) {
       case 'statutRdv':               return handleStatutRdv(params, ss);
       case 'saveReferentRdv':         return handleSaveReferentRdv(params, ss);
       case 'importerRdvCharlemagne':  return handleImporterRdvCharlemagne(params, ss);
+      case 'getRdvParams':            return handleGetRdvParams(params, ss);
+      case 'saveRdvParams':           return handleSaveRdvParams(params, ss);
+      case 'previewMailsRdv':         return handlePreviewMailsRdv(params, ss);
+      case 'sendMailsRdv':            return handleSendMailsRdv(params, ss);
+      case 'getRdvAnalyse':           return handleGetRdvAnalyse(params, ss);
       case 'getComparatifDirecteurs': return handleGetComparatifDirecteurs(params, ss);
       case 'getExamens':              return handleGetExamens(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);

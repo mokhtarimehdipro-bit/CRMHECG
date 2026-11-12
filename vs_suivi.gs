@@ -88,7 +88,8 @@ function handleGetRdv(p, ss) {
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; }).map(function (x) { return { nom: x.nom, email: x.email, role: x.role }; });
     visites.forEach(function (v) { delete v.row; });
     return createJsonResponse({ success: true, annee: annee, annees: Object.keys(annees).sort().reverse(), etudiants: liste, visites: visites,
-      equipe: equipe, peutSuivre: _vsuAdmin_(p) });
+      equipe: equipe, peutSuivre: _vsuAdmin_(p), envois: _rdvEnvois_(ss, annee),
+      liens: _rdvResponsables_(ss).filter(function (r) { return r.lien; }).map(function (r) { return r.email || r.nom; }) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
@@ -533,5 +534,227 @@ function handleArchiveExamDoc(p, ss) {
       return createJsonResponse({ success: true });
     }
     return createJsonResponse({ success: false, message: "Document introuvable." });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ═══════════════════════════ 1 bis. RDV : PARAMÈTRES, ENVOI DU LIEN DE PRISE DE RDV, ANALYSE ═══════════════════════════
+// RDV_RESPONSABLES : lien de calendrier (prise de RDV) de chaque responsable de visite.
+// Modèle de mail (propriété RDV_MAIL_MODELE) avec variables {{…}}. Envoi : un mail par étudiant au
+// maître d'apprentissage (col. M d'ETUDIANTS = contact tuteur ; sinon contacts « MA = Oui » de
+// l'entreprise ; sinon 1er contact avec mail), ou à tous les contacts de l'entreprise ; le responsable
+// est en copie et en adresse de réponse. Aperçu obligatoire avant envoi (previewMailsRdv).
+var RDV_RESP_HEADERS = ["Email", "Nom", "Lien calendrier", "Mis à jour le", "Par"];
+var RDV_ENVOI_HEADERS = ["Date", "Année scolaire", "ID étudiant", "Étudiant", "Destinataires", "Responsable", "Objet", "Par"];
+var RDV_MODELE_DEFAUT = {
+  objet: "Visite en entreprise — {{etudiant}} — prise de rendez-vous",
+  corps: "Bonjour {{contact}},\n\nDans le cadre du suivi en alternance de notre étudiant(e) {{etudiant}} ({{classe}}), {{responsable}} de l'école HECG souhaite vous rencontrer au sein de {{entreprise}} pour faire le point sur sa formation.\n\nMerci de choisir le créneau qui vous convient en cliquant sur ce lien :\n{{lien_rdv}}\n\nNous vous remercions pour votre accompagnement.\n\nBien cordialement,\n{{responsable}}\nHECG"
+};
+var RDV_VARIABLES = ["contact", "etudiant", "prenom_etudiant", "classe", "entreprise", "responsable", "lien_rdv", "annee"];
+var RDV_SS_ID = "1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ";
+
+function _rdvResponsables_(ss) {
+  var d = _vsxSheet_(ss, "RDV_RESPONSABLES", RDV_RESP_HEADERS).getDataRange().getValues(), out = [];
+  for (var i = 1; i < d.length; i++) if (d[i][0] || d[i][1]) out.push({ email: String(d[i][0] || "").trim().toLowerCase(), nom: String(d[i][1] || "").trim(), lien: String(d[i][2] || "").trim() });
+  return out;
+}
+function _rdvModele_() {
+  try { var m = JSON.parse(PropertiesService.getScriptProperties().getProperty("RDV_MAIL_MODELE") || "null"); if (m && m.objet && m.corps) return m; } catch (e) {}
+  return RDV_MODELE_DEFAUT;
+}
+function _rdvEnvois_(ss, annee) {
+  var ws = ss.getSheetByName("RDV_ENVOIS"), out = {};
+  if (!ws) return out;
+  var d = ws.getDataRange().getValues();
+  for (var i = 1; i < d.length; i++) if (String(d[i][1]) === annee && d[i][2]) {
+    var k = String(d[i][2]); out[k] = out[k] || [];
+    out[k].push({ le: _vsuIso_(d[i][0]), dest: String(d[i][4] || ""), resp: String(d[i][5] || ""), par: String(d[i][7] || "") });
+  }
+  return out;
+}
+
+function handleGetRdvParams(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  try {
+    var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; });
+    var liens = {}; _rdvResponsables_(ss).forEach(function (r) { liens[r.email || _vsuNorm_(r.nom)] = r.lien; });
+    var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (eQ) {}
+    return createJsonResponse({ success: true, modele: _rdvModele_(), modeleDefaut: RDV_MODELE_DEFAUT, variables: RDV_VARIABLES, quota: quota,
+      responsables: equipe.map(function (x) { return { email: x.email, nom: x.nom, role: x.role, lien: liens[x.email] || liens[_vsuNorm_(x.nom)] || "" }; }) });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+function handleSaveRdvParams(p, ss) {
+  if (!_vsuAdmin_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
+  try {
+    var par = String(p.nomAuteur || p.emailAuteur || ""), now = new Date(), modifs = [];
+    if (Array.isArray(p.responsables)) {
+      var ws = _vsxSheet_(ss, "RDV_RESPONSABLES", RDV_RESP_HEADERS);
+      var avant = {}; _rdvResponsables_(ss).forEach(function (r) { avant[r.email] = r.lien; });
+      var rows = p.responsables.filter(function (r) { return r && r.email; }).map(function (r) {
+        var lien = String(r.lien || "").trim();
+        if (lien && !/^https?:\/\//i.test(lien)) lien = "https://" + lien;
+        if ((avant[String(r.email).toLowerCase()] || "") !== lien) modifs.push(r.nom + (lien ? " : lien mis à jour" : " : lien retiré"));
+        return [String(r.email).trim().toLowerCase(), String(r.nom || ""), lien, now, par];
+      });
+      if (ws.getLastRow() > 1) ws.getRange(2, 1, ws.getLastRow() - 1, RDV_RESP_HEADERS.length).clearContent();
+      if (rows.length) ws.getRange(2, 1, rows.length, RDV_RESP_HEADERS.length).setValues(rows);
+    }
+    if (p.modele && p.modele.objet && p.modele.corps) {
+      var avantM = _rdvModele_();
+      if (avantM.objet !== String(p.modele.objet) || avantM.corps !== String(p.modele.corps)) {
+        PropertiesService.getScriptProperties().setProperty("RDV_MAIL_MODELE", JSON.stringify({ objet: String(p.modele.objet), corps: String(p.modele.corps) }));
+        modifs.push("modèle de mail modifié");
+      }
+    }
+    if (modifs.length) logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Suivi des RDV", "RDV_RESPONSABLES", "Paramètres RDV : " + modifs.join(" ; "));
+    return createJsonResponse({ success: true });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// Prépare les mails (aperçu et envoi utilisent exactement le même calcul)
+function _rdvPreparerMails_(ss, annee, etuIds, cible) {
+  var etus = {}; _vsuEtudiants_(ss).forEach(function (e) { etus[e.id] = e; });
+  var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues(), tuteur = {};
+  for (var i = 1; i < dE.length; i++) if (dE[i][0]) tuteur[String(dE[i][0]).trim()] = String(dE[i][12] || "").trim();
+  var dP = getSheetSafe(ss, "PARTENARIAT").getDataRange().getValues(), contacts = {}, parIdContact = {};
+  for (var j = 1; j < dP.length; j++) {
+    var idEnt = String(dP[j][1] || "").trim().toUpperCase(); if (!idEnt) continue;
+    var c = { id: String(dP[j][0] || "").trim(), nom: (String(dP[j][4] || "") + " " + String(dP[j][3] || "")).trim(), email: String(dP[j][6] || "").trim() || String(dP[j][8] || "").trim(),
+      ma: /^oui$/i.test(String(dP[j][14] || "").trim()), entNom: String(dP[j][2] || "").trim() };
+    (contacts[idEnt] = contacts[idEnt] || []).push(c);
+    if (c.id) parIdContact[c.id.toUpperCase()] = c;
+  }
+  var refs = _rdvReferents_(ss, annee), liens = {};
+  _rdvResponsables_(ss).forEach(function (r) { if (r.email) liens[r.email] = r.lien; if (r.nom) liens["n:" + _vsuNorm_(r.nom)] = r.lien; });
+  var M = _rdvModele_(), out = [];
+  var valide = function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); };
+  etuIds.forEach(function (id) {
+    var e = etus[id]; if (!e) return;
+    var it = { etuId: id, etudiant: (e.prenom + " " + e.nom).trim(), classe: e.classe, entreprise: e.nomEnt, destinataires: [], responsable: "", responsableEmail: "", bloquant: "" };
+    var ref = refs[id];
+    if (!ref || !ref.nom) { it.bloquant = "Aucun responsable visite"; out.push(it); return; }
+    it.responsable = ref.nom; it.responsableEmail = ref.email;
+    var lien = (ref.email && liens[String(ref.email).toLowerCase()]) || liens["n:" + _vsuNorm_(ref.nom)] || "";
+    if (!lien) { it.bloquant = "Pas de lien de calendrier pour " + ref.nom; out.push(it); return; }
+    if (!e.idEnt) { it.bloquant = "Aucune entreprise dans le CRM"; out.push(it); return; }
+    var lst = contacts[e.idEnt.toUpperCase()] || [];
+    if (lst[0]) it.entreprise = lst[0].entNom || it.entreprise;
+    var t = tuteur[id] ? parIdContact[tuteur[id].toUpperCase()] : null, dest = [];
+    if (cible === "tous") dest = lst.filter(function (c) { return valide(c.email); });
+    else if (t && valide(t.email)) dest = [t];
+    else { dest = lst.filter(function (c) { return c.ma && valide(c.email); }); if (!dest.length) dest = lst.filter(function (c) { return valide(c.email); }).slice(0, 1); }
+    var vus = {}; dest = dest.filter(function (c) { var k = c.email.toLowerCase(); if (vus[k]) return false; vus[k] = 1; return true; });
+    if (!dest.length) { it.bloquant = "Aucun contact avec e-mail dans l'entreprise"; out.push(it); return; }
+    it.destinataires = dest.map(function (c) { return { nom: c.nom, email: c.email, ma: !!(c.ma || (t && c.id === t.id)) }; });
+    var vars = { contact: dest.length === 1 ? dest[0].nom : "Madame, Monsieur", etudiant: it.etudiant, prenom_etudiant: e.prenom, classe: e.classe, entreprise: it.entreprise,
+      responsable: ref.nom, lien_rdv: lien, annee: annee };
+    var rep = function (s) { return String(s).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (m, k) { return vars[k.toLowerCase()] !== undefined ? vars[k.toLowerCase()] : m; }); };
+    it.objet = rep(M.objet); it.corps = rep(M.corps); it.lien = lien;
+    out.push(it);
+  });
+  return out;
+}
+function _rdvHtml_(txt) {
+  var h = String(txt).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  h = h.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#1A4E8A;font-weight:bold">$1</a>');
+  return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1f2937">' + h.replace(/\n/g, "<br>") + "</div>";
+}
+function handlePreviewMailsRdv(p, ss) {
+  if (!_vsuAdmin_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
+  try {
+    var annee = String(p.annee || _ckAnneeCourante_());
+    var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma"));
+    var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (eQ) {}
+    return createJsonResponse({ success: true, items: items, quota: quota });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+function handleSendMailsRdv(p, ss) {
+  if (!_vsuAdmin_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    var annee = String(p.annee || _ckAnneeCourante_()), par = String(p.nomAuteur || p.emailAuteur || "");
+    var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma")).filter(function (x) { return !x.bloquant; });
+    if (!items.length) return createJsonResponse({ success: false, message: "Aucun mail envoyable dans la sélection." });
+    var quota = MailApp.getRemainingDailyQuota();
+    var nbDest = items.reduce(function (s, x) { return s + x.destinataires.length + (x.responsableEmail ? 1 : 0); }, 0);
+    if (nbDest > quota) return createJsonResponse({ success: false, message: "Quota d'envoi du jour insuffisant (" + quota + " restants pour " + nbDest + " destinataires). Réduisez la sélection." });
+    var ws = _vsxSheet_(ss, "RDV_ENVOIS", RDV_ENVOI_HEADERS), lignes = [], echecs = [], now = new Date();
+    items.forEach(function (x) {
+      try {
+        var opt = { to: x.destinataires.map(function (c) { return c.email; }).join(","), subject: x.objet, body: x.corps, htmlBody: _rdvHtml_(x.corps), name: "HECG — " + x.responsable };
+        if (x.responsableEmail) { opt.cc = x.responsableEmail; opt.replyTo = x.responsableEmail; }
+        MailApp.sendEmail(opt);
+        lignes.push([now, annee, x.etuId, x.etudiant, opt.to, x.responsable, x.objet, par]);
+      } catch (eS) { echecs.push(x.etudiant + " : " + eS.message); }
+    });
+    if (lignes.length) ws.getRange(ws.getLastRow() + 1, 1, lignes.length, RDV_ENVOI_HEADERS.length).setValues(lignes);
+    logAction(par, p.vieScRole || "", "Action", "Vie scolaire — Suivi des RDV", "RDV_ENVOIS",
+      "Envoi du lien de prise de RDV (" + (p.cible === "tous" ? "tous les contacts" : "maîtres d'apprentissage") + ") : " + lignes.length + " mail(s) envoyé(s)" + (echecs.length ? ", " + echecs.length + " échec(s)" : "")
+      + " — " + lignes.slice(0, 30).map(function (l) { return l[3] + " → " + l[4]; }).join(" ; "));
+    return createJsonResponse({ success: true, envoyes: lignes.length, echecs: echecs });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+// ── Mouvements d'alternance : relevé quotidien de l'entreprise de chaque étudiant inscrit ──
+// ALTERNANCE_ETAT = dernier état connu ; ALTERNANCE_MOUVEMENTS = gains / pertes / changements datés.
+// Le 1er relevé reprend aussi les départs déjà tracés dans ANCIENS_ALTERNANTS (changements, pertes).
+var ALT_ETAT_HEADERS = ["ID étudiant", "ID entreprise", "Entreprise", "Relevé le"];
+var ALT_MVT_HEADERS = ["Date", "ID étudiant", "Étudiant", "Classe", "Mouvement", "Ancienne entreprise", "Nouvelle entreprise", "Source"];
+function _altReleve_(ss) {
+  var wsE = _vsxSheet_(ss, "ALTERNANCE_ETAT", ALT_ETAT_HEADERS), wsM = _vsxSheet_(ss, "ALTERNANCE_MOUVEMENTS", ALT_MVT_HEADERS);
+  var etus = _vsuEtudiants_(ss).filter(function (e) { return e.inscrit; }), now = new Date();
+  var dEt = wsE.getDataRange().getValues(), avant = {}, premier = dEt.length < 2;
+  for (var i = 1; i < dEt.length; i++) if (dEt[i][0]) avant[String(dEt[i][0])] = { id: String(dEt[i][1] || ""), nom: String(dEt[i][2] || "") };
+  var mvts = [];
+  if (premier) {
+    var wsA = ss.getSheetByName("ANCIENS_ALTERNANTS");
+    if (wsA && wsA.getLastRow() > 1) {
+      var byId = {}; etus.forEach(function (e) { byId[e.id] = e; });
+      wsA.getDataRange().getValues().slice(1).forEach(function (r) {
+        if (!(r[5] instanceof Date) || String(r[6]) === "Erreur") return;
+        var e = byId[String(r[2]).trim()]; if (!e) return;
+        var type = e.idEnt && e.idEnt.toUpperCase() !== String(r[1]).trim().toUpperCase() ? "Changement" : !e.idEnt ? "Perte" : "";
+        if (type) mvts.push([r[5], e.id, (e.prenom + " " + e.nom).trim(), e.classe, type, String(r[7] || ""), type === "Changement" ? e.nomEnt : "", "ANCIENS_ALTERNANTS"]);
+      });
+    }
+  } else {
+    etus.forEach(function (e) {
+      var a = avant[e.id]; if (!a) return;   // nouvel inscrit : pas de mouvement
+      var x = a.id.toUpperCase(), y = e.idEnt.toUpperCase();
+      if (x === y) return;
+      var type = !x ? "Gain" : !y ? "Perte" : "Changement";
+      mvts.push([now, e.id, (e.prenom + " " + e.nom).trim(), e.classe, type, a.nom, e.nomEnt, "Relevé quotidien"]);
+    });
+  }
+  if (mvts.length) wsM.getRange(wsM.getLastRow() + 1, 1, mvts.length, ALT_MVT_HEADERS.length).setValues(mvts);
+  var rows = etus.map(function (e) { return [e.id, e.idEnt, e.nomEnt, now]; });
+  if (wsE.getLastRow() > 1) wsE.getRange(2, 1, wsE.getLastRow() - 1, ALT_ETAT_HEADERS.length).clearContent();
+  if (rows.length) wsE.getRange(2, 1, rows.length, ALT_ETAT_HEADERS.length).setValues(rows);
+  PropertiesService.getScriptProperties().setProperty("ALT_RELEVE_JOUR", Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd"));
+  if (premier) PropertiesService.getScriptProperties().setProperty("ALT_SUIVI_DEPUIS", Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd"));
+  return mvts.length;
+}
+// Appelé par auditAdressesTick (adresses.gs) : un relevé par jour, à partir de 6 h
+function _altAuto_() {
+  var now = new Date(), jour = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd");
+  if (+Utilities.formatDate(now, "Europe/Paris", "H") < 6) return;
+  if (PropertiesService.getScriptProperties().getProperty("ALT_RELEVE_JOUR") === jour) return;
+  var lock = LockService.getScriptLock(); if (!lock.tryLock(5000)) return;
+  try { _altReleve_(SpreadsheetApp.openById(RDV_SS_ID)); } finally { lock.releaseLock(); }
+}
+
+function handleGetRdvAnalyse(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  try {
+    var annee = String(p.annee || _ckAnneeCourante_());
+    var props = PropertiesService.getScriptProperties();
+    if (!props.getProperty("ALT_SUIVI_DEPUIS")) { var lock = LockService.getScriptLock(); if (lock.tryLock(10000)) try { _altReleve_(ss); } finally { lock.releaseLock(); } }
+    var y0 = +annee.split("-")[0], debut = new Date(y0, 8, 1), fin = new Date(y0 + 1, 7, 31, 23, 59);
+    var mv = [], wsM = ss.getSheetByName("ALTERNANCE_MOUVEMENTS");
+    if (wsM && wsM.getLastRow() > 1) wsM.getDataRange().getValues().slice(1).forEach(function (r) {
+      if (r[0] instanceof Date && r[0] >= debut && r[0] <= fin) mv.push({ date: _vsuIso_(r[0]), etuId: String(r[1]), etudiant: String(r[2]), classe: String(r[3]), type: String(r[4]), avant: String(r[5]), apres: String(r[6]), source: String(r[7]) });
+    });
+    return createJsonResponse({ success: true, annee: annee, mouvements: mv, suiviDepuis: props.getProperty("ALT_SUIVI_DEPUIS") || "", dernierReleve: props.getProperty("ALT_RELEVE_JOUR") || "" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
