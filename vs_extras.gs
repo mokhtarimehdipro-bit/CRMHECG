@@ -81,7 +81,8 @@ function handleGetMemoires(p, ss) {
         m.etuMail = mailEtu[m.etuId] || "";
         m.formateurMail = mailForm[m.formateurRef] || mailFormNom[String(m.formateur).toLowerCase().replace(/\s+/g, " ")] || "";
       });
-      list.forEach(function(m) { m.docs = docs[m.id] || []; });
+      const ech = _memEchangesByMemoire_(ss);
+      list.forEach(function(m) { m.docs = docs[m.id] || []; m.echanges = ech[m.id] || []; });
       return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs, motsClesRef: motsClesRef });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
@@ -567,6 +568,65 @@ function handleArchiveMemoireDoc(p, ss) {
 }
 
 
+// ── Carnet d'échanges par mémoire (feuille MEMOIRES_ECHANGES) ──
+var MEMECH_HEADERS = ["ID", "ID mémoire", "ID étudiant", "Date", "Type", "Message", "Auteur", "Email auteur", "Créé le", "Archivé"];
+var MEMECH_TYPES = ["Échange", "Rendez-vous", "Mail", "Appel", "Relance", "Note"];
+
+function _memEchangesByMemoire_(ss) {
+  const out = {};
+  const ws = ss.getSheetByName("MEMOIRES_ECHANGES");
+  if (!ws) return out;
+  const tz = Session.getScriptTimeZone();
+  const d = ws.getDataRange().getValues();
+  for (let i = 1; i < d.length; i++) {
+    if (!d[i][0] || String(d[i][9]) === "Oui") continue;
+    (out[String(d[i][1])] = out[String(d[i][1])] || []).push({ id: String(d[i][0]),
+      date: d[i][3] instanceof Date ? Utilities.formatDate(d[i][3], tz, "yyyy-MM-dd") : String(d[i][3] || ""),
+      type: String(d[i][4] || "Échange"), texte: String(d[i][5] || ""), auteur: String(d[i][6] || ""), email: String(d[i][7] || ""),
+      creeLe: d[i][8] instanceof Date ? Utilities.formatDate(d[i][8], tz, "yyyy-MM-dd HH:mm") : String(d[i][8] || "") });
+  }
+  // Plus récent en premier
+  Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return (b.date + b.creeLe).localeCompare(a.date + a.creeLe); }); });
+  return out;
+}
+
+/** Ajoute une entrée au carnet d'échanges d'un mémoire, ou la retire (p.retirer = id). */
+function handleSaveEchangeMemoire(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const ws = _vsxSheet_(ss, "MEMOIRES_ECHANGES", MEMECH_HEADERS);
+    const par = String(p.nomAuteur || p.emailAuteur || "");
+    if (p.retirer) {
+      const d = ws.getDataRange().getValues();
+      for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(p.retirer)) {
+        ws.getRange(i + 1, 10).setValue("Oui");
+        logAction(par, p.vieScRole || "", "Suppression", "Vie scolaire — Mémoires", String(d[i][1]), "Carnet d'échanges : entrée du " + (d[i][3] instanceof Date ? Utilities.formatDate(d[i][3], Session.getScriptTimeZone(), "dd/MM/yyyy") : String(d[i][3])) + " retirée");
+        return createJsonResponse({ success: true });
+      }
+      return createJsonResponse({ success: false, message: "Entrée introuvable." });
+    }
+    const e = p.echange || {};
+    const texte = String(e.texte || "").trim();
+    if (!p.memoireId || !texte) return createJsonResponse({ success: false, message: "Message vide." });
+    const md = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS).getDataRange().getValues();
+    let mem = null;
+    for (let i = 1; i < md.length; i++) if (String(md[i][0]) === String(p.memoireId)) { mem = md[i]; break; }
+    if (!mem) return createJsonResponse({ success: false, message: "Mémoire introuvable." });
+    const tz = Session.getScriptTimeZone(), now = new Date();
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(e.date || "")) ? String(e.date) : Utilities.formatDate(now, tz, "yyyy-MM-dd");
+    const type = MEMECH_TYPES.indexOf(String(e.type)) !== -1 ? String(e.type) : "Échange";
+    const id = "MECH" + now.getTime();
+    ws.appendRow([id, String(p.memoireId), String(mem[1] || ""), "", type, texte, par, String(p.emailAuteur || ""), now, ""]);
+    ws.getRange(ws.getLastRow(), 4).setNumberFormat("@").setValue(date);
+    logAction(par, p.vieScRole || "", "Création", "Vie scolaire — Mémoires", String(p.memoireId), "Carnet d'échanges (" + type + ") — " + String(mem[2] || "") + " : " + texte.substring(0, 80));
+    return createJsonResponse({ success: true, echange: { id: id, date: date, type: type, texte: texte, auteur: par, email: String(p.emailAuteur || ""), creeLe: Utilities.formatDate(now, tz, "yyyy-MM-dd HH:mm") } });
+  } catch (err) { return createJsonResponse({ success: false, message: err.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+
 // ── Référentiel des mots-clés de mémoire (feuille MEMOIRES_MOTSCLES) ──
 var MEM_KW_DEFAUT = ["Fiscalité", "CDG", "IA", "Dématérialisation", "Comptabilité", "Audit", "Finance", "Paie", "Droit social", "RH", "Marketing", "RSE", "Gestion de trésorerie", "Consolidation", "Digitalisation"];
 
@@ -665,6 +725,7 @@ function _ckBuild_(ss, annee, ck) {
     garder(memNom, nomKey(md[i][2]), o);
   }
   const docs = _memDocsByMemoire_(ss);
+  const ech = _memEchangesByMemoire_(ss);
   const byId = {}; ref.etudiants.forEach(function(e) { byId[e.id] = e; });
   // Mails des formateurs / personnel (par réf., sinon par nom)
   const mailRef = {}, mailNom = {};
@@ -692,6 +753,7 @@ function _ckBuild_(ss, annee, ck) {
       sujet: m ? m.sujet : "", referent: m ? m.formateur : "", statut: m ? m.statut : "",
       referentMail: m ? (mailRef[m.formateurRef] || mailNom[nomKey(m.formateur)] || "") : "", nbDocs: ds.length,
       dernierDoc: last ? { version: last.version, date: last.date, url: last.url } : null,
+      nbEchanges: m ? (ech[m.id] || []).length : 0, dernierEchange: m && (ech[m.id] || []).length ? ech[m.id][0].date : "",
       cyclade: !!r && String(r[4]) === "Oui", cycladeDate: dc });
   });
   CK_DIPLOMES.forEach(function(d) { out[d].sort(function(a, b) { return (a.classe + a.etudiant).localeCompare(b.classe + b.etudiant); }); });

@@ -25,7 +25,7 @@ const IC = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>',
   tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
-  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
 };
 const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 const PALETTE = ['#1A4E8A', '#F26522', '#16a34a', '#6d28d9', '#0f766e', '#db2777', '#0891b2', '#b45309', '#e5484d', '#475569'];
@@ -347,6 +347,38 @@ function injectCss() {
   .fr-rem label{padding:8px 14px;background:linear-gradient(180deg,#fff,#f5f8fc);border-color:#dfe6f0}
   .fr-rem label:has(input:checked){background:linear-gradient(180deg,#2d64a8,#1A4E8A);box-shadow:0 8px 16px -10px rgba(26,78,138,.8)}
   .vx-dot{width:26px;height:26px}
+  /* regroupement par diplôme + carnet d'échanges */
+  .vx-dip{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:30px 0 4px;padding:12px 18px;border-radius:16px;background:linear-gradient(90deg,#1A4E8A,#2d64a8);color:#fff;box-shadow:0 14px 26px -20px rgba(26,78,138,.9)}
+  .vx-dip:first-child{margin-top:4px}
+  .vx-dip .t{font-size:16px;font-weight:800;letter-spacing:.2px}
+  .vx-dip .n{font-size:12px;font-weight:700;background:rgba(255,255,255,.18);padding:2px 10px;border-radius:999px}
+  .vx-dip .w{font-size:11.5px;font-weight:700;background:#fff4ed;color:#c2410c;padding:2px 10px;border-radius:999px}
+  .vx-dip + .vx-table{margin-top:12px}
+  .vx-echchip{background:linear-gradient(90deg,#f3effd,#f8f6fe);color:#4c1d95;flex-wrap:wrap}
+  .vx-echchip .tx{flex-basis:100%;color:#64748b;font-size:12px;font-style:italic}
+  .vx-echn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:#6d28d9;background:#f3effd;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .vx-ech{border:1px solid var(--li);border-radius:16px;padding:12px;background:#fbfcfe;margin-bottom:6px}
+  .vx-echf .r{display:grid;grid-template-columns:170px 1fr;gap:8px;margin-bottom:8px}
+  .vx-echf textarea{min-height:64px}
+  .vx-echf .a{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+  .vx-echf .a .sub{font-size:11.5px;color:var(--mu);margin:0}
+  .vx-echl{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:340px;overflow:auto;padding-right:2px}
+  .vx-echi{background:#fff;border:1px solid var(--li);border-left:4px solid var(--c);border-radius:12px;padding:9px 12px}
+  .vx-echi .h{display:flex;align-items:center;gap:8px;font-size:12px}
+  .vx-echi .h .ty{font-weight:800;color:var(--c);background:color-mix(in srgb,var(--c) 10%,#fff);padding:1px 8px;border-radius:999px}
+  .vx-echi .h b{color:var(--ink)}
+  .vx-echi .h .by{color:var(--mu);flex:1}
+  .vx-echi .tx{margin-top:5px;font-size:13px;color:var(--tx);line-height:1.5;white-space:normal}
+  .ck-ech{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font:600 11.5px 'Plus Jakarta Sans',Inter,sans-serif;color:#7d8a9c;background:#f1f4f8;border:1px dashed #d5dde8;border-radius:999px;padding:2px 9px;cursor:pointer}
+  .ck-ech.on{color:#6d28d9;background:#f3effd;border:1px solid #e4dafb}
+  .ck-ech:hover{filter:brightness(.97)}
+  .ck-t tr.ck-gr td{background:#f3f7fc;padding:8px 14px;font-size:12.5px;border-top:1px solid #e3eaf3}
+  .ck-t tr.ck-gr td b{color:#1A4E8A;font-weight:800;margin-right:10px}
+  .ck-t tr.ck-gr td span{color:#7d8a9c;font-weight:600;margin-right:10px}
+  .ck-t tr.ck-gr td span.ok{color:#15803d}
+  .ck-dips{grid-template-columns:repeat(5,minmax(0,1fr)) !important}
+  .ck-dip.all .t::before{content:'★ ';color:#F26522}
+  @media(max-width:1100px){.ck-dips{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
   @media(max-width:760px){.vx .g3{grid-template-columns:1fr}}
   `;
   document.head.appendChild(st);
@@ -355,13 +387,25 @@ function injectCss() {
 // ═══════════════════════════ MÉMOIRES ═══════════════════════════
 const MEM_KW = ['Fiscalité', 'CDG', 'IA', 'Dématérialisation', 'Comptabilité', 'Audit', 'Finance', 'Paie', 'Droit social', 'RH', 'Marketing', 'RSE', 'Gestion de trésorerie', 'Consolidation', 'Digitalisation'];
 const MEM_ST = { 'En cours': ['#e8eff8', '#1A4E8A'], 'Sujet validé': ['#fff4ed', '#c2410c'], 'Rendu': ['#ede9fe', '#6d28d9'], 'Soutenu': ['#e8f6ee', '#15803d'] };
-const M = { data: [], etudiants: [], personnel: [], formateurs: [], motsClesRef: [], view: 'cards', sort: 'classe', kw: '', sortCol: 'classe', sortDir: 1 };
+const M = { data: [], etudiants: [], personnel: [], formateurs: [], motsClesRef: [], view: 'cards', sort: 'diplome', kw: '', sortCol: 'classe', sortDir: 1 };
+const DIP_ORDRE = ['BTS CG', 'BTS GPME', 'DCG', 'DSCG'];
+// Même règle que _ckDiplome_ (vs_extras.gs) : BTSCG1A, AIX_BTS1GPME, DCG2A, DSCG1A…
+function dipOf(classe) {
+  const c = String(classe || '').toUpperCase().normalize('NFD').replace(/[^A-Z]/g, '');
+  if (c.includes('DSCG')) return 'DSCG';
+  if (c.includes('DCG')) return 'DCG';
+  if (c.includes('GPME')) return 'BTS GPME';
+  if (c.includes('BTSCG') || (c.includes('BTS') && c.includes('CG'))) return 'BTS CG';
+  return 'Autre';
+}
+const dipRank = d => { const i = DIP_ORDRE.indexOf(d); return i === -1 ? 99 : i; };
+const ECH_TYPES = { 'Échange': '#1A4E8A', 'Rendez-vous': '#6d28d9', 'Mail': '#0891b2', 'Appel': '#0f766e', 'Relance': '#c2410c', 'Note': '#475569' };
 
 async function memLoad(force) {
   const r = await api('getMemoires', {}, force ? { forceRefresh: true } : {});
   if (!r.success) { $('memBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
   M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || []; M.motsClesRef = r.motsClesRef || MEM_KW.slice();
-  M.data.forEach(m => { m.docs = m.docs || []; });
+  M.data.forEach(m => { m.docs = m.docs || []; m.echanges = m.echanges || []; m.diplome = dipOf(m.classe); });
   memRender();
 }
 function memInit() {
@@ -379,11 +423,12 @@ function memInit() {
       <div class="vx-kpis" id="memKpis"></div>
       <div class="vx-bar">
         <div class="vx-search">${svg('search', 15)}<input id="memQ" placeholder="Étudiant, sujet, mot-clé, formateur…" oninput="VX.memRender()"></div>
+        <select class="vx-sel" id="memFDip" onchange="VX.memRender()"></select>
         <select class="vx-sel" id="memFClasse" onchange="VX.memRender()"></select>
         <select class="vx-sel" id="memFCampus" onchange="VX.memRender()"></select>
         <select class="vx-sel" id="memFForm" onchange="VX.memRender()"></select>
         <select class="vx-sel" id="memSort" onchange="VX.memSort(this.value)">
-          <option value="classe">Grouper par classe</option><option value="campus">Grouper par campus</option><option value="formateur">Grouper par formateur</option><option value="statut">Grouper par statut</option><option value="etudiant">Trier par étudiant</option><option value="recent">Plus récents</option></select>
+          <option value="diplome">Grouper par diplôme</option><option value="classe">Grouper par classe</option><option value="campus">Grouper par campus</option><option value="formateur">Grouper par formateur</option><option value="statut">Grouper par statut</option><option value="etudiant">Trier par étudiant</option><option value="recent">Plus récents</option></select>
         <span class="vx-seg"><button id="memVC" class="on" onclick="VX.memView('cards')">${svg('grid', 14)}Cartes</button><button id="memVT" onclick="VX.memView('table')">${svg('list', 14)}Tableau</button></span>
       </div>
       <div id="memKwBar" style="display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 16px"></div>
@@ -393,8 +438,8 @@ function memInit() {
   memLoad();
 }
 function memFiltered() {
-  const q = norm($('memQ').value), fc = $('memFClasse').value, fca = $('memFCampus').value, ff = $('memFForm').value;
-  return M.data.filter(m => (!fc || m.classe === fc) && (!fca || m.campus === fca) && (!ff || m.formateur === ff)
+  const q = norm($('memQ').value), fd = $('memFDip').value, fc = $('memFClasse').value, fca = $('memFCampus').value, ff = $('memFForm').value;
+  return M.data.filter(m => (!fd || m.diplome === fd) && (!fc || m.classe === fc) && (!fca || m.campus === fca) && (!ff || m.formateur === ff)
     && (!M.kw || m.motsCles.some(k => norm(k) === norm(M.kw)))
     && (!q || norm([m.etudiant, m.sujet, m.formateur, m.classe, m.campus, m.motsCles.join(' ')].join(' ')).includes(q)));
 }
@@ -404,6 +449,8 @@ function fillSel(id, label, values) {
   el.value = v;
 }
 function memRender() {
+  { const el = $('memFDip'), v = el.value, dips = [...new Set(M.data.map(m => m.diplome))].sort((a, b) => dipRank(a) - dipRank(b));
+    el.innerHTML = '<option value="">Tous les diplômes</option>' + dips.map(d => `<option>${esc(d)}</option>`).join(''); el.value = v; }
   fillSel('memFClasse', 'Toutes les classes', M.data.map(m => m.classe));
   fillSel('memFCampus', 'Tous les campus', M.data.map(m => m.campus));
   fillSel('memFForm', 'Tous les formateurs', M.data.map(m => m.formateur));
@@ -419,8 +466,24 @@ function memRender() {
   const body = $('memBody');
   if (!M.data.length) { body.innerHTML = `<div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Aucun mémoire suivi</h3><p>Ajoutez un premier étudiant : sujet, mots-clés et formateur référent.</p><button class="vx-btn ora" style="margin-top:14px" onclick="VX.memEdit()">${svg('plus', 15, 2.4)} Ajouter un mémoire</button></div>`; return; }
   if (!list.length) { body.innerHTML = `<div class="vx-empty"><h3>Aucun résultat</h3><p>Modifiez la recherche ou les filtres.</p></div>`; return; }
+  if (M.sort === 'diplome') {
+    // Diplôme → classe : un bloc par diplôme, sous-groupes par classe
+    const parDip = {};
+    list.forEach(m => { (parDip[m.diplome] = parDip[m.diplome] || []).push(m); });
+    body.innerHTML = Object.keys(parDip).sort((a, b) => dipRank(a) - dipRank(b)).map(d => {
+      const l = parDip[d], sansRef = l.filter(m => !m.formateur).length, sansSujet = l.filter(m => !m.sujet).length;
+      const head = `<div class="vx-dip"><span class="t">${esc(d === 'Autre' ? 'Autres formations' : d)}</span><span class="n">${l.length} mémoire${l.length > 1 ? 's' : ''}</span>
+        ${sansSujet ? `<span class="w">${sansSujet} sans sujet</span>` : ''}${sansRef ? `<span class="w">${sansRef} sans référent</span>` : ''}</div>`;
+      if (M.view === 'table') return head + memTable(l);
+      const parCl = {};
+      l.slice().sort((a, b) => (a.etudiant || '').localeCompare(b.etudiant || '', 'fr')).forEach(m => { const c = m.classe || 'Classe non renseignée'; (parCl[c] = parCl[c] || []).push(m); });
+      return head + Object.keys(parCl).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })).map(c =>
+        `<div class="vx-grp">${esc(c)} <span>${parCl[c].length}</span></div><div class="vx-cards">${parCl[c].map(memCard).join('')}</div>`).join('');
+    }).join('');
+    return;
+  }
   if (M.view === 'table') { body.innerHTML = memTable(list); return; }
-  const key = { classe: 'classe', campus: 'campus', formateur: 'formateur', statut: 'statut' }[M.sort];
+  const key ={ classe: 'classe', campus: 'campus', formateur: 'formateur', statut: 'statut' }[M.sort];
   const sorted = list.slice().sort((a, b) => M.sort === 'recent' ? (b.majLe || '').localeCompare(a.majLe || '') : (a.etudiant || '').localeCompare(b.etudiant || '', 'fr'));
   if (!key) { body.innerHTML = `<div class="vx-cards">${sorted.map(memCard).join('')}</div>`; return; }
   const groups = {};
@@ -437,12 +500,13 @@ function memCard(m) {
     <div class="sujet ${m.sujet ? '' : 'empty'}">${esc(m.sujet || 'Sujet à définir')}</div>
     ${m.motsCles.length ? `<div class="kws">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}" onclick="event.stopPropagation();VX.memKw('${jsq(k)}')">${esc(k)}</span>`).join('')}</div>` : ''}
     ${m.docs.length ? `<div class="vx-docchip">${svg('file', 13)} ${m.docs.length} document${m.docs.length > 1 ? 's' : ''} · dernière version <b>${esc(m.docs[m.docs.length - 1].version)}</b> du ${fmtD(m.docs[m.docs.length - 1].date)}</div>` : ''}
+    ${m.echanges.length ? `<div class="vx-docchip vx-echchip">${svg('chat', 13)} ${m.echanges.length} échange${m.echanges.length > 1 ? 's' : ''} · dernier le <b>${fmtD(m.echanges[0].date)}</b><span class="tx">${esc(m.echanges[0].texte.slice(0, 70))}${m.echanges[0].texte.length > 70 ? '…' : ''}</span></div>` : ''}
     <div class="ft">${m.formateur ? avatar(m.formateur, 24) + `<span>Référent <b>${esc(m.formateur)}</b></span>` : `<span style="color:#c2410c;font-weight:600">${svg('user', 13)} Sans formateur référent</span>`}</div>
   </div>`;
 }
 function memTable(list) {
-  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['formateur', 'Formateur référent'], ['statut', 'Statut'], ['dernierDoc', 'Dernier document']];
-  list.forEach(m => { const d = m.docs[m.docs.length - 1]; m.dernierDoc = d ? d.date + ' ' + d.version : ''; });
+  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['formateur', 'Formateur référent'], ['statut', 'Statut'], ['dernierDoc', 'Dernier document'], ['dernierEch', 'Carnet']];
+  list.forEach(m => { const d = m.docs[m.docs.length - 1]; m.dernierDoc = d ? d.date + ' ' + d.version : ''; m.dernierEch = m.echanges.length ? m.echanges[0].date : ''; });
   const sorted = list.slice().sort((a, b) => M.sortDir * String(Array.isArray(a[M.sortCol]) ? a[M.sortCol].join(',') : a[M.sortCol] || '').localeCompare(String(Array.isArray(b[M.sortCol]) ? b[M.sortCol].join(',') : b[M.sortCol] || ''), 'fr', { numeric: true }));
   return `<table class="vx-table"><thead><tr>${cols.map(([k, l]) => `<th onclick="VX.memSortCol('${k}')">${l}${M.sortCol === k ? (M.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
     ${sorted.map(m => { const st = MEM_ST[m.statut] || MEM_ST['En cours']; return `<tr onclick="VX.memEdit('${jsq(m.id)}')">
@@ -451,10 +515,11 @@ function memTable(list) {
       <td style="max-width:340px">${esc(m.sujet)}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}">${esc(k)}</span>`).join('')}</div></td>
       <td>${esc(m.formateur)}${m.formateurMail ? `<div style="font-size:11.5px;color:var(--mu)">${esc(m.formateurMail)}</div>` : ''}</td><td><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></td>
-      <td>${(d => d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(d.nom)}"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : '<span style="color:#c3ccd8">—</span>')(m.docs[m.docs.length - 1])}</td></tr>`; }).join('')}
+      <td>${(d => d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(d.nom)}"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : '<span style="color:#c3ccd8">—</span>')(m.docs[m.docs.length - 1])}</td>
+      <td>${m.echanges.length ? `<span class="vx-echn" title="${esc(m.echanges[0].texte)}">${svg('chat', 12)} ${m.echanges.length} · ${fmtD(m.echanges[0].date)}</span>` : '<span style="color:#c3ccd8">—</span>'}</td></tr>`; }).join('')}
   </tbody></table>`;
 }
-function memEdit(id, etuPre) {
+function memEdit(id, etuPre, focusEch) {
   const m = id ? M.data.find(x => x.id === id) : null;
   const pre = !m && etuPre ? M.etudiants.find(x => x.id === etuPre) : null;
   const E = { id: m ? m.id : '', etuId: m ? m.etuId : (pre ? pre.id : ''), motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '' };
@@ -475,6 +540,15 @@ function memEdit(id, etuPre) {
       <div><label class="fl">Statut</label><select class="in" id="meSt">${Object.keys(MEM_ST).map(s => `<option ${m && m.statut === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     </div>
     <label class="fl">Notes</label><textarea class="in" id="meNotes" style="min-height:60px" placeholder="Facultatif">${esc(m ? m.notes : '')}</textarea>
+    <label class="fl" id="meEchLbl">${svg('chat', 13)} Carnet d'échanges${m && m.echanges.length ? ` <span class="vx-echn">${m.echanges.length}</span>` : ''}</label>
+    ${m ? `<div class="vx-ech">
+        <div class="vx-echf">
+          <div class="r"><input type="date" class="in" id="meEchDate" value="${todayISO()}"><select class="in" id="meEchType">${Object.keys(ECH_TYPES).map(t => `<option>${t}</option>`).join('')}</select></div>
+          <textarea class="in" id="meEchTxt" placeholder="Ce qui a été dit, décidé ou demandé (avec l'étudiant, le référent, le jury…)"></textarea>
+          <div class="a"><span class="sub">Ctrl + Entrée pour ajouter</span><button class="vx-btn pri sm" id="meEchAdd">${svg('plus', 13, 2.4)} Ajouter au carnet</button></div>
+        </div>
+        <div class="vx-echl" id="meEchL"></div></div>`
+      : `<div class="vx-note">${svg('chat', 14)} Enregistrez d'abord le mémoire : vous pourrez ensuite tenir son carnet d'échanges.</div>`}
     <label class="fl">Documents & versions</label>
     ${m ? `<div class="vx-docs" id="meDocs"></div>
       <div class="vx-drop" id="meDrop"><input type="file" id="meFile" hidden>
@@ -637,6 +711,44 @@ function memEdit(id, etuPre) {
       m.docs = m.docs.filter(d => d.id !== del.dataset.docdel); drawDocs(); memRender();
     });
   }
+  // carnet d'échanges
+  if (m) {
+    const drawEch = () => {
+      $('meEchL').innerHTML = m.echanges.length ? m.echanges.map(x => `<div class="vx-echi" style="--c:${ECH_TYPES[x.type] || '#1A4E8A'}">
+        <div class="h"><span class="ty">${esc(x.type)}</span><b>${fmtLong(x.date)}</b><span class="by">${esc(x.auteur)}</span>
+          <button class="vx-btn ico sm danger" data-echdel="${esc(x.id)}" title="Retirer cette entrée">${svg('trash', 12)}</button></div>
+        <div class="tx">${esc(x.texte).replace(/\n/g, '<br>')}</div></div>`).join('')
+        : `<div class="vx-note">${svg('chat', 14)} Aucun échange noté pour l'instant.</div>`;
+      const lb = $('meEchLbl'); if (lb) lb.innerHTML = `${svg('chat', 13)} Carnet d'échanges${m.echanges.length ? ` <span class="vx-echn">${m.echanges.length}</span>` : ''}`;
+    };
+    drawEch();
+    const syncCk = () => {
+      memRender();
+      if (C.data) Object.values(C.data.diplomes).flat().forEach(e => { if (e.memoireId === m.id) { e.nbEchanges = m.echanges.length; e.dernierEchange = m.echanges[0] ? m.echanges[0].date : ''; } });
+      if (C.open && C.data) ckRender();
+    };
+    const addEch = async () => {
+      const txt = $('meEchTxt').value.trim(); if (!txt) { $('meEchTxt').focus(); return; }
+      const btn = $('meEchAdd'); btn.disabled = true;
+      try {
+        const r = await api('saveEchangeMemoire', { memoireId: m.id, echange: { date: $('meEchDate').value, type: $('meEchType').value, texte: txt } });
+        if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+        m.echanges.unshift(r.echange);
+        m.echanges.sort((a, b) => (b.date + b.creeLe).localeCompare(a.date + a.creeLe));
+        $('meEchTxt').value = ''; drawEch(); syncCk(); toast('Ajouté au carnet ✓');
+      } finally { btn.disabled = false; }
+    };
+    $('meEchAdd').onclick = addEch;
+    $('meEchTxt').addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addEch(); } });
+    dlg.addEventListener('click', async ev => {
+      const del = ev.target.closest('[data-echdel]'); if (!del) return;
+      if (!confirm('Retirer cette entrée du carnet ? (elle reste archivée dans la feuille MEMOIRES_ECHANGES)')) return;
+      const r = await api('saveEchangeMemoire', { retirer: del.dataset.echdel });
+      if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+      m.echanges = m.echanges.filter(x => x.id !== del.dataset.echdel); drawEch(); syncCk();
+    });
+    if (focusEch) setTimeout(() => { $('meEchLbl').scrollIntoView({ behavior: 'smooth', block: 'start' }); $('meEchTxt').focus({ preventScroll: true }); }, 60);
+  }
   const save = async next => {
     const k = $('meKwIn').value.trim(); if (k) addKw(k);
     if (!E.etuId) { toast(M.etudiants.length ? 'Choisissez un étudiant dans la liste' : "Liste des étudiants indisponible : " + errTxt('Action inconnue'), false); inp.focus(); return; }
@@ -660,7 +772,7 @@ function memEdit(id, etuPre) {
 }
 // ═══════════════════════════ CHECKLIST PAR DIPLÔME ═══════════════════════════
 const CK_DIP = ['BTS CG', 'BTS GPME', 'DCG', 'DSCG'];
-const C = { open: false, annee: '', data: null, dip: 'BTS CG', loading: false, sel: new Set(), q: '', cls: '' };
+const C = { open: false, annee: '', data: null, dip: 'ALL', loading: false, sel: new Set(), q: '', cls: '' };
 // Mail affiché : mail HECG en priorité, sinon mail perso (grisé, signalé)
 const ckMailEtu = e => e.mailHecg ? `<a class="ck-mail" href="mailto:${esc(e.mailHecg)}" onclick="event.stopPropagation()">${esc(e.mailHecg)}</a>`
   : (e.mailPerso ? `<a class="ck-mail perso" href="mailto:${esc(e.mailPerso)}" title="Pas de mail HECG — mail personnel" onclick="event.stopPropagation()">${esc(e.mailPerso)} (perso)</a>` : '');
@@ -680,10 +792,13 @@ async function ckLoad(annee) {
   ckRender();
 }
 const ckScore = e => [!!e.sujet.trim(), e.nbDocs > 0, !!e.referent.trim(), e.cyclade];
+// Regroupe une liste d'étudiants par classe (ordre naturel : BTSCG1A < BTSCG2A…)
+const ckParClasse = l => { const g = {}; l.forEach(e => { const c = e.classe || 'Classe non renseignée'; (g[c] = g[c] || []).push(e); }); return Object.keys(g).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })).map(c => [c, g[c].sort((a, b) => a.etudiant.localeCompare(b.etudiant, 'fr'))]); };
 function ckRender() {
   const r = C.data, ro = r.archivee;
   const stats = d => { const l = (r.diplomes[d] || []).filter(e => e.concerne); return { n: l.length, ok: l.filter(e => ckScore(e).every(Boolean)).length, pts: l.reduce((s, e) => s + ckScore(e).filter(Boolean).length, 0) }; };
-  const list = (r.diplomes[C.dip] || []);
+  const all = C.dip === 'ALL';
+  const list = all ? [] : (r.diplomes[C.dip] || []);
   const concernes = list.filter(e => e.concerne), autres = list.filter(e => !e.concerne && !e.sorti);
   const yes = (ok, txt, title) => `<span class="ck-ok ${ok ? 'y' : 'n'}" title="${esc(title || '')}">${ok ? svg('check', 13, 3) : svg('x', 12, 3)}${txt ? `<span>${txt}</span>` : ''}</span>`;
   const row = e => {
@@ -691,7 +806,7 @@ function ckRender() {
     const d = e.dernierDoc;
     return `<tr class="${n === 4 ? 'full' : ''}">
       <td style="width:44px">${ro ? '' : `<label class="ck-box"><input type="checkbox" checked onchange="VX.ckConcerne(['${jsq(e.etuId)}'],false)"><span>${svg('check', 12, 3)}</span></label>`}</td>
-      <td><div class="ck-etu" ${e.memoireId || !ro ? `onclick="VX.memEdit(${e.memoireId ? `'${jsq(e.memoireId)}'` : `null,'${jsq(e.etuId)}'`})"` : ''}>${avatar(e.etudiant, 32)}<div><b>${esc(e.etudiant)}${e.rapprochement === 'nom' ? '<span class="ck-rap" title="Mémoire retrouvé par le nom de l\'étudiant (ID différent) — vérifiez la fiche">rapproché par le nom</span>' : ''}</b><small>${esc(e.classe)} · ${esc(e.campus)}${e.sorti ? ' · <span style="color:#c62828">sorti</span>' : ''}</small>${ckMailEtu(e)}</div></div></td>
+      <td><div class="ck-etu" ${e.memoireId || !ro ? `onclick="VX.memEdit(${e.memoireId ? `'${jsq(e.memoireId)}'` : `null,'${jsq(e.etuId)}'`})"` : ''}>${avatar(e.etudiant, 32)}<div><b>${esc(e.etudiant)}${e.rapprochement === 'nom' ? '<span class="ck-rap" title="Mémoire retrouvé par le nom de l\'étudiant (ID différent) — vérifiez la fiche">rapproché par le nom</span>' : ''}</b><small>${esc(e.classe)} · ${esc(e.campus)}${e.sorti ? ' · <span style="color:#c62828">sorti</span>' : ''}</small>${ckMailEtu(e)}${e.memoireId && !ro ? `<button class="ck-ech ${e.nbEchanges ? 'on' : ''}" onclick="event.stopPropagation();VX.memEdit('${jsq(e.memoireId)}',null,true)" title="Ouvrir le carnet d'échanges">${svg('chat', 12)} ${e.nbEchanges ? e.nbEchanges + ' échange' + (e.nbEchanges > 1 ? 's' : '') + ' · ' + fmtD(e.dernierEchange) : 'Carnet vide'}</button>` : (e.nbEchanges ? `<span class="ck-ech on">${svg('chat', 12)} ${e.nbEchanges} échange${e.nbEchanges > 1 ? 's' : ''}</span>` : '')}</div></div></td>
       <td>${yes(sc[0], '', e.sujet || 'Sujet non renseigné')}${e.sujet ? `<span class="ck-sub" title="${esc(e.sujet)}">${esc(e.sujet.slice(0, 60))}${e.sujet.length > 60 ? '…' : ''}</span>` : `<span class="ck-sub" style="color:#c62828">${e.memoireId ? 'Sujet à saisir' : 'Aucun mémoire saisi'}</span>`}</td>
       <td>${yes(sc[1], '')}${d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : ''}</td>
       <td>${yes(sc[2], '')}${e.referent ? `<span class="ck-sub">${esc(e.referent)}</span>${e.referentMail ? `<a class="ck-mail" href="mailto:${esc(e.referentMail)}">${esc(e.referentMail)}</a>` : ''}` : ''}</td>
@@ -705,16 +820,20 @@ function ckRender() {
       <span style="flex:1"></span>
       <button class="vx-btn" onclick="VX.ckExport()">${svg('down', 15)} Exporter Excel</button>
     </div>
-    <div class="ck-dips">${CK_DIP.map(d => { const s2 = stats(d); const pct = s2.n ? Math.round(s2.pts / (s2.n * 4) * 100) : 0; return `<button class="ck-dip ${C.dip === d ? 'on' : ''}" onclick="VX.ckDip('${d}')">
-      <span class="t">${d}</span><span class="v"><b>${s2.ok}</b>/${s2.n} complet${s2.ok > 1 ? 's' : ''}</span>
-      <span class="bar"><i style="width:${pct}%"></i></span><span class="p">${pct} % des contrôles validés · ${(r.diplomes[d] || []).filter(e => !e.concerne && !e.sorti).length} autre(s) inscrit(s)</span></button>`; }).join('')}</div>
-    <div class="ck-card">
-      <div class="ck-h"><h3>${C.dip} · étudiants qui passent le mémoire en ${esc(r.annee)} <span>${concernes.length}</span></h3>
-        <div class="ck-legend"><span>Sujet</span><span>Mémoire inséré</span><span>Prof référent</span><span>Dépôt Cyclade</span></div></div>
-      ${concernes.length ? `<table class="ck-t"><thead><tr><th></th><th>Étudiant</th><th>Sujet</th><th>Mémoire inséré</th><th>Prof référent</th><th>Dépôt Cyclade</th><th>Avancement</th></tr></thead><tbody>${concernes.map(row).join('')}</tbody></table>`
+    <div class="ck-dips">${[{ d: 'ALL', l: 'Tous les diplômes' }].concat(CK_DIP.map(d => ({ d, l: d }))).map(({ d, l }) => { const s2 = d === 'ALL' ? CK_DIP.map(stats).reduce((a, b) => ({ n: a.n + b.n, ok: a.ok + b.ok, pts: a.pts + b.pts }), { n: 0, ok: 0, pts: 0 }) : stats(d); const pct = s2.n ? Math.round(s2.pts / (s2.n * 4) * 100) : 0;
+      const nAutres = (d === 'ALL' ? CK_DIP.flatMap(x => r.diplomes[x] || []) : (r.diplomes[d] || [])).filter(e => !e.concerne && !e.sorti).length;
+      return `<button class="ck-dip ${d === 'ALL' ? 'all ' : ''}${C.dip === d ? 'on' : ''}" onclick="VX.ckDip('${d}')">
+      <span class="t">${l}</span><span class="v"><b>${s2.ok}</b>/${s2.n} complet${s2.ok > 1 ? 's' : ''}</span>
+      <span class="bar"><i style="width:${pct}%"></i></span><span class="p">${pct} % des contrôles validés${d === 'ALL' ? '' : ' · ' + nAutres + ' autre(s) inscrit(s)'}</span></button>`; }).join('')}</div>
+    ${(all ? CK_DIP : [C.dip]).map(dip => { const cc = (r.diplomes[dip] || []).filter(e => e.concerne); if (all && !cc.length) return '';
+      return `<div class="ck-card">
+      <div class="ck-h"><h3>${dip} · étudiants qui passent le mémoire en ${esc(r.annee)} <span>${cc.length}</span></h3>
+        ${all ? `<button class="vx-btn sm" onclick="VX.ckDip('${dip}')">Ouvrir ${dip}</button>` : '<div class="ck-legend"><span>Sujet</span><span>Mémoire inséré</span><span>Prof référent</span><span>Dépôt Cyclade</span></div>'}</div>
+      ${cc.length ? `<table class="ck-t"><thead><tr><th></th><th>Étudiant</th><th>Sujet</th><th>Mémoire inséré</th><th>Prof référent</th><th>Dépôt Cyclade</th><th>Avancement</th></tr></thead><tbody>${ckParClasse(cc).map(([cl, l]) => { const ok = l.filter(e => ckScore(e).every(Boolean)).length;
+          return `<tr class="ck-gr"><td colspan="7"><b>${esc(cl)}</b><span>${l.length} étudiant${l.length > 1 ? 's' : ''}</span><span class="${ok === l.length ? 'ok' : ''}">${ok}/${l.length} complet${ok > 1 ? 's' : ''}</span></td></tr>` + l.map(row).join(''); }).join('')}</tbody></table>`
         : `<div class="vx-note" style="margin:6px 0">${svg('check', 14, 2.4)} ${ro ? 'Aucun étudiant archivé pour ce diplôme.' : 'Cochez ci-dessous les étudiants qui passent le mémoire cette année.'}</div>`}
-    </div>
-    ${ro ? '' : ckOthersHtml(autres)}`;
+    </div>`; }).join('') || `<div class="ck-card"><div class="vx-note" style="margin:6px 0">${svg('check', 14, 2.4)} ${ro ? 'Aucun étudiant archivé pour cette année.' : 'Aucun étudiant dans la checklist : ouvrez un diplôme pour cocher ceux qui passent le mémoire.'}</div></div>`}
+    ${ro ? '' : (all ? `<div class="vx-note" style="margin-top:4px">${svg('plus', 14, 2.4)} Pour ajouter des étudiants à la checklist, ouvrez un diplôme ci-dessus.</div>` : ckOthersHtml(autres))}`;
 }
 // Sélection des étudiants qui passent le mémoire : on coche (recherche + filtre classe), puis
 // « Ajouter la sélection » — le rapprochement avec les mémoires déjà saisis est fait par le serveur.

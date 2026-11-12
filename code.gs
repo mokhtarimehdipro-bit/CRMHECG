@@ -421,6 +421,7 @@ function doPostInner_(e) {
       case 'saveMemoire':        return handleSaveMemoire(params, ss);
       case 'uploadMemoireDoc':   return handleUploadMemoireDoc(params, ss);
       case 'archiveMemoireDoc':  return handleArchiveMemoireDoc(params, ss);
+      case 'saveEchangeMemoire': return handleSaveEchangeMemoire(params, ss);
       case 'saveMotsClesMemoire': return handleSaveMotsClesMemoire(params, ss);
       case 'getMemoiresChecklist':  return handleGetMemoiresChecklist(params, ss);
       case 'saveMemoiresChecklist': return handleSaveMemoiresChecklist(params, ss);
