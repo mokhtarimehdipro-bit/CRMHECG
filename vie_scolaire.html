@@ -811,8 +811,10 @@
       <div id="charlResume" class="mb-4"></div>
       <div id="charlOnglets" class="hidden flex gap-2 mb-4">
         <button id="charlOngComp" onclick="charlVue('comp')" class="px-4 py-2 rounded-xl font-black text-sm bg-[#1A4E8A] text-white">👥 Comparatif par étudiant</button>
+        <button id="charlOngClasse" onclick="charlVue('classe')" class="px-4 py-2 rounded-xl font-black text-sm bg-gray-100 text-gray-600">🏫 Audit par classe</button>
         <button id="charlOngAnom" onclick="charlVue('anom')" class="px-4 py-2 rounded-xl font-black text-sm bg-gray-100 text-gray-600">⚠️ Anomalies détaillées</button>
       </div>
+      <div id="charlVueClasse" class="hidden"></div>
       <div id="charlVueComp" class="hidden">
         <div id="charlVerdicts" class="flex flex-wrap gap-2 mb-3"></div>
         <div class="flex flex-wrap gap-2 mb-3">
@@ -912,8 +914,28 @@ function charlAfficher(){
         <div><div class="text-[11px] font-black uppercase text-gray-500">CRM — inscrits + préinscrits</div><div class="text-3xl font-black text-gray-800">${S.inscritsCrm}</div><div class="text-[11px] text-gray-500">dont ${S.preinscritsCrm || 0} préinscrit(s)</div></div>
         <div class="text-3xl font-black ${effOk ? 'text-green-600' : 'text-red-600'}">${effOk ? '=' : '≠'}</div>
         <div><div class="text-[11px] font-black uppercase text-gray-500">Charlemagne — étudiants actifs</div><div class="text-3xl font-black text-gray-800">${S.actifsCharl}</div><div class="text-[11px] text-gray-500">${S.sortisCharl || 0} sorti(s) ignoré(s)</div></div>
-        <div class="flex-1 min-w-[260px] text-sm ${effOk ? 'text-green-800' : 'text-red-800'} font-bold">${effOk ? '✅ Les effectifs sont identiques.' : `❌ Écart de ${S.ecartEffectif > 0 ? '+' : ''}${S.ecartEffectif} : ${S.absentsCrm || 0} absent(s) du CRM · ${S.nonInscritsCrm || 0} non inscrit(s) dans le CRM · ${S.absentsCharl || 0} absent(s) de Charlemagne · ${S.sortisCharlInscritsCrm || 0} sorti(s) dans Charlemagne mais inscrit(s) au CRM`}</div>
-      </div>`;
+        <div class="flex-1 min-w-[260px] text-sm ${effOk ? 'text-green-800' : 'text-red-800'} font-bold">${effOk ? '✅ Les effectifs sont identiques.' : `❌ Écart de ${S.ecartEffectif > 0 ? '+' : ''}${S.ecartEffectif}, qui s'explique ainsi :`}
+          ${effOk ? '' : `<ul class="mt-1 font-semibold text-[13px] space-y-0.5">
+            ${charlLigneEcart('+', S.absentsCrm, 'actif(s) dans Charlemagne introuvable(s) dans le CRM', 'Absent du CRM')}
+            ${charlLigneEcart('+', S.nonInscritsCrm, 'actif(s) dans Charlemagne mais « Sortie » / « Prospect » dans le CRM', 'Non inscrit dans le CRM')}
+            ${charlLigneEcart('−', S.absentsCharl, 'inscrit(s) au CRM absent(s) de l\'export Charlemagne', 'Absent de Charlemagne')}
+            ${charlLigneEcart('−', S.sortisCharlInscritsCrm, 'sorti(s) dans Charlemagne mais encore inscrit(s) au CRM', 'Sorti dans Charlemagne')}</ul>`}
+          ${S.doublonsCharl != null ? `<div class="mt-1 text-[12px] font-semibold text-violet-700">Doublons écartés du décompte : ${S.doublonsCharl} dans Charlemagne · ${S.doublonsCrm} fiche(s) CRM en double (${S.inscritsCrmBrut} fiches inscrites = ${S.inscritsCrm} personnes)</div>` : ''}</div>
+      </div>
+      ${S.altCharl != null ? (() => { const A = S.alt || {}, ok = S.altCharl === S.altCrm; return `<div class="mb-3 p-4 rounded-2xl border-2 ${ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} flex flex-wrap items-center gap-x-8 gap-y-2">
+        <div><div class="text-[11px] font-black uppercase text-gray-500">CRM — alternants inscrits</div><div class="text-3xl font-black text-gray-800">${S.altCrm}</div><div class="text-[11px] text-gray-500">statut alternance ou entreprise liée</div></div>
+        <div class="text-3xl font-black ${ok ? 'text-green-600' : 'text-red-600'}">${ok ? '=' : '≠'}</div>
+        <div><div class="text-[11px] font-black uppercase text-gray-500">Charlemagne — alternants actifs</div><div class="text-3xl font-black text-gray-800">${S.altCharl}</div><div class="text-[11px] text-gray-500">Société Resp renseignée</div></div>
+        <div class="flex-1 min-w-[260px] text-sm ${ok ? 'text-green-800' : 'text-red-800'} font-bold">${ok ? '✅ Même nombre d\'alternants.' : `❌ Écart de ${S.ecartAlt > 0 ? '+' : ''}${S.ecartAlt}, qui s'explique ainsi :`}
+          <div class="text-[12px] font-semibold text-gray-600 mt-1">${A.deux} alternant(s) des deux côtés</div>
+          ${ok && !A.charlSeul && !A.crmSeul ? '' : `<ul class="mt-1 font-semibold text-[13px] space-y-0.5">
+            ${charlLigneEcart('+', A.charlSeul, 'en alternance dans Charlemagne, sans alternance dans le CRM', 'Charlemagne seulement')}
+            ${charlLigneEcart('+', A.charlAbsentCrm, 'alternant(s) Charlemagne introuvable(s) dans le CRM', 'Absent du CRM')}
+            ${charlLigneEcart('+', A.charlNonInscrit, 'alternant(s) Charlemagne non inscrit(s) dans le CRM', 'Non inscrit dans le CRM')}
+            ${charlLigneEcart('−', A.crmSeul, 'en alternance dans le CRM, « SANS ENTREPRISE » dans Charlemagne', 'CRM seulement')}
+            ${charlLigneEcart('−', A.crmAbsentCharl, 'alternant(s) CRM absent(s) de Charlemagne', 'Absent de Charlemagne')}
+            ${charlLigneEcart('−', A.crmSortiCharl, 'alternant(s) CRM sorti(s) dans Charlemagne', 'Sorti dans Charlemagne')}</ul>`}</div>
+      </div>`; })() : ''}`;
   document.getElementById('charlResume').innerHTML = bandeau +
     `<p class="text-xs text-gray-500 mb-2">Dernier contrôle : <b>${charlEsc(R.date)}</b> — fichier « ${charlEsc(R.fichier)} » — par ${charlEsc(R.importePar)}</p>
      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -935,20 +957,57 @@ function charlAfficher(){
   document.getElementById('charlOnglets').classList.remove('hidden');
   charlVue((R.comparatif || []).length ? charlVueCourante : 'anom');
 }
+// Ligne d'explication d'un écart (cliquable : ouvre le comparatif filtré sur ce verdict)
+function charlLigneEcart(signe, n, texte, verdict){
+  if (!n) return '';
+  return `<li><button type="button" class="hover:underline text-left" onclick="charlFiltreVerdict='${verdict}';charlVue('comp')"><b>${signe}${n}</b> ${texte} →</button></li>`;
+}
 // ── Comparatif « une ligne par étudiant » : entreprise côté Charlemagne / côté CRM ──
 let charlVueCourante = 'comp', charlFiltreVerdict = '';
 const CHARL_VERDICT_COUL = {
   'Différente': 'bg-red-100 text-red-700', 'Charlemagne seulement': 'bg-red-100 text-red-700', 'CRM seulement': 'bg-red-100 text-red-700',
   'Absent du CRM': 'bg-red-100 text-red-700', 'Absent de Charlemagne': 'bg-red-100 text-red-700', 'Sorti dans Charlemagne': 'bg-red-100 text-red-700',
-  'Non inscrit dans le CRM': 'bg-amber-100 text-amber-700', 'Approchant': 'bg-amber-100 text-amber-700',
+  'Non inscrit dans le CRM': 'bg-amber-100 text-amber-700', 'Doublon Charlemagne': 'bg-violet-100 text-violet-700', 'Doublon CRM': 'bg-violet-100 text-violet-700', 'Approchant': 'bg-amber-100 text-amber-700',
   'Identique': 'bg-green-100 text-green-700', 'Aucune des deux': 'bg-gray-100 text-gray-600' };
 function charlVue(v){
   charlVueCourante = v;
   document.getElementById('charlVueComp').classList.toggle('hidden', v !== 'comp');
   document.getElementById('charlVueAnom').classList.toggle('hidden', v !== 'anom');
-  document.getElementById('charlOngComp').className = 'px-4 py-2 rounded-xl font-black text-sm ' + (v === 'comp' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-600');
-  document.getElementById('charlOngAnom').className = 'px-4 py-2 rounded-xl font-black text-sm ' + (v === 'anom' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-600');
+  document.getElementById('charlVueClasse').classList.toggle('hidden', v !== 'classe');
+  ['comp', 'anom', 'classe'].forEach(k => { document.getElementById('charlOng' + { comp: 'Comp', anom: 'Anom', classe: 'Classe' }[k]).className = 'px-4 py-2 rounded-xl font-black text-sm ' + (v === k ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-600'); });
   if (v === 'comp') charlRendreComp();
+  if (v === 'classe') charlRendreClasses();
+}
+// ── Audit classe par classe (à partir du comparatif) : inscrits et alternants de chaque côté, écarts expliqués ──
+// Classe de rattachement : classe CRM, sinon classe CRM correspondant à la classe Charlemagne (correspondance apprise), sinon classe Charlemagne.
+const CHARL_HORS_CHARL = ['Absent de Charlemagne', 'Sorti dans Charlemagne', 'Doublon Charlemagne', 'Doublon CRM'];
+const CHARL_HORS_CRM = ['Absent du CRM', 'Non inscrit dans le CRM', 'Doublon CRM', 'Doublon Charlemagne'];
+function charlRendreClasses(){
+  const R = charlRapport, rows = R?.comparatif || [];
+  const corr = {}; (R.classes || []).forEach(c => { if (c.part >= 60 && c.crm && c.crm !== '(vide)') corr[c.charlemagne] = c.crm; });
+  const G = {};
+  rows.forEach(x => {
+    const k = x.classeCrm || corr[x.classeCharl] || x.classeCharl || 'Classe non renseignée';
+    const o = G[k] = G[k] || { classe: k, charl: 0, crm: 0, altCharl: 0, altCrm: 0, libCharl: {}, verdicts: {} };
+    const inCharl = !CHARL_HORS_CHARL.includes(x.verdict), inCrm = !CHARL_HORS_CRM.includes(x.verdict);
+    if (inCharl) { o.charl++; if (x.entCharl) o.altCharl++; if (x.classeCharl) o.libCharl[x.classeCharl] = 1; }
+    if (inCrm) { o.crm++; if (x.entCrm) o.altCrm++; }
+    if (!['Identique', 'Approchant', 'Aucune des deux'].includes(x.verdict)) (o.verdicts[x.verdict] = o.verdicts[x.verdict] || []).push(x.nom);
+  });
+  const L = Object.values(G).sort((a, b) => (Math.abs(b.charl - b.crm) + Math.abs(b.altCharl - b.altCrm) > 0) - (Math.abs(a.charl - a.crm) + Math.abs(a.altCharl - a.altCrm) > 0) || a.classe.localeCompare(b.classe, 'fr', { numeric: true }));
+  const ecart = (a, b) => a === b ? '<span class="text-green-600 font-black">=</span>' : `<span class="text-red-600 font-black">${a - b > 0 ? '+' : ''}${a - b}</span>`;
+  const nbKo = L.filter(o => o.charl !== o.crm || o.altCharl !== o.altCrm).length;
+  document.getElementById('charlVueClasse').innerHTML = `
+    <p class="text-sm text-gray-500 mb-3"><b class="${nbKo ? 'text-red-600' : 'text-green-700'}">${nbKo ? nbKo + ' classe(s) en écart' : '✅ Toutes les classes concordent'}</b> sur ${L.length}. Inscrits = actifs Charlemagne / inscrits + préinscrits CRM (doublons écartés) ; alternants = Société Resp renseignée / entreprise liée dans le CRM. Cliquez sur un constat pour ouvrir le comparatif filtré.</p>
+    <div class="overflow-x-auto bg-white rounded-2xl border border-gray-100"><table class="w-full text-sm"><thead class="bg-gray-50 text-[11px] uppercase text-gray-500"><tr>
+      <th class="text-left p-3">Classe</th><th class="text-center p-3">Inscrits Charlemagne</th><th class="text-center p-3">Inscrits CRM</th><th class="text-center p-3">Écart</th>
+      <th class="text-center p-3">Alternants Charlemagne</th><th class="text-center p-3">Alternants CRM</th><th class="text-center p-3">Écart</th><th class="text-left p-3">D'où viennent les écarts</th></tr></thead><tbody>
+    ${L.map(o => { const ko = o.charl !== o.crm || o.altCharl !== o.altCrm; return `<tr class="border-t align-top ${ko ? 'bg-red-50/40' : ''}">
+      <td class="p-3"><b>${charlEsc(o.classe)}</b>${Object.keys(o.libCharl).length ? `<div class="text-[10px] text-gray-400">Charlemagne : ${Object.keys(o.libCharl).map(charlEsc).join(', ')}</div>` : ''}</td>
+      <td class="p-3 text-center font-bold">${o.charl}</td><td class="p-3 text-center font-bold">${o.crm}</td><td class="p-3 text-center">${ecart(o.charl, o.crm)}</td>
+      <td class="p-3 text-center font-bold">${o.altCharl}</td><td class="p-3 text-center font-bold">${o.altCrm}</td><td class="p-3 text-center">${ecart(o.altCharl, o.altCrm)}</td>
+      <td class="p-3">${Object.entries(o.verdicts).map(([v, noms]) => `<button type="button" onclick="charlFiltreVerdict='${v}';document.getElementById('charlCTexte').value='';charlVue('comp')" class="block text-left mb-1 hover:underline" title="${charlEsc(noms.join(', '))}"><span class="px-2 py-0.5 rounded-lg text-[11px] font-black ${CHARL_VERDICT_COUL[v] || ''}">${charlEsc(v)} · ${noms.length}</span> <span class="text-[11px] text-gray-500">${charlEsc(noms.slice(0, 4).join(', '))}${noms.length > 4 ? '…' : ''}</span></button>`).join('') || '<span class="text-xs text-gray-400">—</span>'}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
 }
 function charlVerdict(v){ charlFiltreVerdict = charlFiltreVerdict === v ? '' : v; charlRendreComp(); }
 function charlCompFiltre(){

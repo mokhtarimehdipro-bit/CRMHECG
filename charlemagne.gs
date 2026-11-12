@@ -24,7 +24,7 @@ var CHARL_IMPORT = "CHARLEMAGNE_IMPORT";
 var CHARL_COMPARATIF = "CHARLEMAGNE_COMPARATIF";
 var CHARL_COMP_COLS = ["verdict", "idEtu", "idEleve", "nom", "typo", "classeCrm", "classeCharl", "entCharl", "entCrm", "statutCrm", "ressemblance"];
 var CHARL_COMP_TITRES = ["Concordance entreprise", "ID CRM", "Identifiant Charlemagne", "Étudiant", "Typologie CRM", "Classe CRM", "Classe Charlemagne", "Entreprise Charlemagne", "Entreprise CRM", "Statut CRM", "Ressemblance %"];
-var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "Absent du CRM", "Absent de Charlemagne", "Sorti dans Charlemagne", "Non inscrit dans le CRM", "Approchant", "Identique", "Aucune des deux"];
+var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "Absent du CRM", "Absent de Charlemagne", "Sorti dans Charlemagne", "Non inscrit dans le CRM", "Doublon Charlemagne", "Doublon CRM", "Approchant", "Identique", "Aucune des deux"];
 function _charlInscrit_(typo) { var t = _charlNorm_(typo); return t === "inscrit" || t === "preinscrit" || t === "pre inscrit"; }
 var CHARL_CHAMPS = ["idEleve", "nom", "prenom", "naissance", "email", "mailPerso", "classe", "codeClasse", "niveau",
   "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp",
@@ -170,6 +170,25 @@ function _charlControler_(ss, lignes) {
     inscritsCrm: 0, preinscritsCrm: 0, actifsCharl: 0, sortisCharl: 0, absentsCrm: 0, absentsCharl: 0, nonInscritsCrm: 0 };
   crm.forEach(function (e) { if (e.inscrit) { stats.inscritsCrm++; if (_charlNorm_(e.typo) !== "inscrit") stats.preinscritsCrm++; } });
   var auj = new Date();
+  var altR = function (e) { return /altern|contrat|apprenti/i.test(e.statut) || !!e.idEnt; };
+  stats.alt = { deux: 0, charlSeul: 0, crmSeul: 0, charlAbsentCrm: 0, charlNonInscrit: 0, crmAbsentCharl: 0, crmSortiCharl: 0 };
+  // Doublons CRM : plusieurs fiches inscrites / préinscrites pour la même personne (même Identifiant Elève ou même nom)
+  var grp = {}, cleGrp = {}, nGrp = 0;
+  crm.forEach(function (e) {
+    if (!e.inscrit) return;
+    var cles = ["n:" + _charlNorm_(e.nom + " " + e.prenom)].concat(e.idEleve ? ["i:" + e.idEleve] : []);
+    var g = null; cles.forEach(function (k) { if (!g && cleGrp[k]) g = cleGrp[k]; });
+    if (!g) { g = "G" + (nGrp++); grp[g] = []; }
+    cles.forEach(function (k) { cleGrp[k] = cleGrp[k] || g; });
+    grp[g].push(e); e.grp = g;
+  });
+  stats.doublonsCrm = 0;
+  Object.keys(grp).forEach(function (g) { if (grp[g].length > 1) stats.doublonsCrm += grp[g].length - 1; });
+  stats.inscritsCrmBrut = stats.inscritsCrm;
+  stats.inscritsCrm = stats.inscritsCrmBrut - stats.doublonsCrm;   // personnes distinctes
+  stats.altCrm = Object.keys(grp).filter(function (g) { return grp[g].some(altR); }).length;
+  stats.doublonsCharl = 0;
+  var vusCharl = {};
   // Une ligne par étudiant : entreprise de chaque côté
   function ligneComp(verdict, c, e, sim) {
     C.push({ verdict: verdict, idEtu: e ? e.id : "", idEleve: c ? c.idEleve : (e ? e.idEleve : ""),
@@ -200,12 +219,26 @@ function _charlControler_(ss, lignes) {
     }
     var cSortie = _charlDate_(c.sortie);
     var actifC = !cSortie || cSortie > auj;
+    var cleC = c.idEleve ? "i:" + c.idEleve : "n:" + _charlNorm_(c.nom + " " + c.prenom) + "|" + String(c.naissance || "");
+    var dejaC = vusCharl[cleC] || (e && e.vuPar);
+    if (dejaC) {   // même élève deux fois dans l'export, ou deux élèves Charlemagne sur la même fiche CRM
+      if (actifC) stats.doublonsCharl++;
+      anomalie("À vérifier", "Doublon Charlemagne", c, e, (c.classe || c.codeClasse) + (c.idEleve ? " · n° " + c.idEleve : ""), e ? e.id : "—",
+        vusCharl[cleC] ? "Élève présent plusieurs fois dans l'export Charlemagne (" + (c.idEleve ? "même identifiant" : "même nom et date de naissance") + ") : compté une seule fois"
+          : "Deux élèves Charlemagne sont rapprochés de la même fiche CRM (déjà rapprochée de « " + e.vuPar + " ») : compté une seule fois",
+        "Supprimer le doublon dans Charlemagne, ou corriger l'Identifiant Elève de la fiche CRM");
+      if (actifC) ligneComp("Doublon Charlemagne", c, e, null);
+      return;
+    }
+    vusCharl[cleC] = 1;
+    if (e) e.vuPar = (c.nom + " " + c.prenom).trim() + (c.idEleve ? " n° " + c.idEleve : "");
     if (actifC) stats.actifsCharl++; else stats.sortisCharl++;
     if (e && !e.inscrit) {
       // Fiche CRM trouvée mais ni inscrite ni préinscrite : hors périmètre de comparaison
       e.vu = true;
       if (actifC) {
         stats.nonInscritsCrm++;
+        if (!_charlSansEntreprise_(c.societe)) stats.alt.charlNonInscrit++;
         anomalie("Erreur", "Typologie", c, e, (c.classe || c.codeClasse) + " (actif)", e.typo || "(vide)",
           "Actif dans Charlemagne mais « " + (e.typo || "sans typologie") + " » dans le CRM : il n'est pas compté parmi les inscrits", "Passer la fiche en Inscrit / Préinscrit, ou saisir la sortie dans Charlemagne");
         ligneComp("Non inscrit dans le CRM", c, e, null);
@@ -214,7 +247,7 @@ function _charlControler_(ss, lignes) {
     }
     if (!e) {
       var prospectC = /prosp|prei/i.test(c.etatPreinscription);
-      if (actifC) { stats.absentsCrm++; ligneComp("Absent du CRM", c, null, null); }
+      if (actifC) { stats.absentsCrm++; ligneComp("Absent du CRM", c, null, null); if (!_charlSansEntreprise_(c.societe)) stats.alt.charlAbsentCrm++; }
       if (actifC)
         anomalie(prospectC ? "À vérifier" : "Erreur", "Absent du CRM", c, null, (c.classe || c.codeClasse) + (c.societe && !_charlSansEntreprise_(c.societe) ? " · " + c.societe : ""), "—",
           "Étudiant présent dans Charlemagne (n° " + (c.idEleve || "?") + ") introuvable dans le CRM" + (prospectC ? " (prospect / préinscrit dans Charlemagne)" : ""), "Créer la fiche ou renseigner l'Identifiant Elève (col. X) sur la bonne fiche");
@@ -271,6 +304,8 @@ function _charlControler_(ss, lignes) {
           anomalie("À vérifier", "Statut", c, e, "Alternant (" + c.societe + ")", e.statut || "vide", "Alternant dans Charlemagne mais statut CRM non « En Alternance »", "Passer le statut à « En Alternance »");
       }
     }
+    if (actifC) { if (!sansC && altR(e)) stats.alt.deux++; else if (!sansC) stats.alt.charlSeul++; else if (altR(e)) stats.alt.crmSeul++; }
+    else if (altR(e)) stats.alt.crmSortiCharl++;
     if (!actifC) { stats.sortisCharlInscritsCrm = (stats.sortisCharlInscritsCrm || 0) + 1; ligneComp("Sorti dans Charlemagne", c, e, null); }
     else if (sansC) ligneComp(e.entreprise ? "CRM seulement" : "Aucune des deux", c, e, null);
     else if (!e.entreprise) ligneComp("Charlemagne seulement", c, e, null);
@@ -309,17 +344,33 @@ function _charlControler_(ss, lignes) {
   // 5. Étudiants actifs du CRM absents de l'export
   crm.forEach(function (e) {
     if (e.vu || !e.inscrit) return;
+    var g = grp[e.grp] || [e];
+    if (g.length > 1 && (g.some(function (x) { return x.vu; }) || g[0] !== e)) {   // fiche en double : la personne est déjà comptée
+      var autre = g.filter(function (x) { return x !== e; })[0];
+      anomalie("À vérifier", "Doublon CRM", null, e, "—", e.id + " = " + autre.id,
+        "Fiche CRM en double pour la même personne (" + (e.idEleve && e.idEleve === autre.idEleve ? "même Identifiant Elève" : "même nom") + ") : comptée une seule fois", "Fusionner ou supprimer la fiche en trop");
+      ligneComp("Doublon CRM", null, e, null);
+      return;
+    }
     stats.absentsCharl++;
+    if (altR(e)) stats.alt.crmAbsentCharl++;
     ligneComp("Absent de Charlemagne", null, e, null);
     anomalie("Erreur", "Absent de Charlemagne", null, e, "—", (e.typo || "") + " · " + (e.classe || "sans classe") + (e.entreprise ? " · " + e.entreprise : ""),
       "Inscrit / préinscrit dans le CRM mais absent de l'export Charlemagne", "Vérifier son inscription dans Charlemagne, ou passer la fiche CRM en « Sortie »");
   });
 
-  // 6. Effectif : inscrits + préinscrits du CRM = étudiants actifs de Charlemagne
+  // 6. Effectif : inscrits + préinscrits du CRM (personnes distinctes) = étudiants actifs de Charlemagne (doublons écartés)
   stats.ecartEffectif = stats.actifsCharl - stats.inscritsCrm;
+  stats.altCharl = stats.alt.deux + stats.alt.charlSeul + stats.alt.charlAbsentCrm + stats.alt.charlNonInscrit;
+  stats.ecartAlt = stats.altCharl - stats.altCrm;
+  if (stats.ecartAlt !== 0)
+    anomalie("Erreur", "Effectif", null, { id: "", idEleve: "", nom: "ALTERNANTS", prenom: "", classe: "" }, stats.altCharl + " alternants", stats.altCrm + " alternants",
+      "Nombre d'alternants différent (écart " + (stats.ecartAlt > 0 ? "+" : "") + stats.ecartAlt + ") : " + stats.alt.charlSeul + " en alternance dans Charlemagne seulement, " + stats.alt.crmSeul + " dans le CRM seulement, "
+        + (stats.alt.charlAbsentCrm + stats.alt.charlNonInscrit) + " alternant(s) Charlemagne absents ou non inscrits au CRM, " + (stats.alt.crmAbsentCharl + stats.alt.crmSortiCharl) + " alternant(s) CRM absents ou sortis de Charlemagne",
+      "Voir le comparatif : verdicts « Charlemagne seulement » et « CRM seulement »");
   if (stats.ecartEffectif !== 0)
     anomalie("Erreur", "Effectif", null, { id: "", idEleve: "", nom: "EFFECTIF TOTAL", prenom: "", classe: "" }, stats.actifsCharl + " actifs", stats.inscritsCrm + " inscrits / préinscrits",
-      "Les effectifs ne correspondent pas (écart " + (stats.ecartEffectif > 0 ? "+" : "") + stats.ecartEffectif + ") : " + stats.absentsCrm + " absent(s) du CRM, " + stats.nonInscritsCrm + " non inscrit(s) dans le CRM, " + stats.absentsCharl + " absent(s) de Charlemagne, " + (stats.sortisCharlInscritsCrm || 0) + " sorti(s) dans Charlemagne mais encore inscrit(s) dans le CRM",
+      "Les effectifs ne correspondent pas (écart " + (stats.ecartEffectif > 0 ? "+" : "") + stats.ecartEffectif + ", doublons écartés : " + stats.doublonsCharl + " Charlemagne, " + stats.doublonsCrm + " CRM) : " + stats.absentsCrm + " absent(s) du CRM, " + stats.nonInscritsCrm + " non inscrit(s) dans le CRM, " + stats.absentsCharl + " absent(s) de Charlemagne, " + (stats.sortisCharlInscritsCrm || 0) + " sorti(s) dans Charlemagne mais encore inscrit(s) dans le CRM",
       "Traiter les lignes « Absent du CRM », « Typologie », « Absent de Charlemagne » et « Date de sortie »");
   var ordreV = {}; CHARL_VERDICTS.forEach(function (v, i) { ordreV[v] = i; });
   C.sort(function (a, b) { return (ordreV[a.verdict] - ordreV[b.verdict]) || a.nom.localeCompare(b.nom); });
