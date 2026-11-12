@@ -1503,6 +1503,11 @@ function injectCss2() {
   .rmp-body a{color:#1A4E8A;font-weight:700}
   .rmp-nav{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #e3eaf3;font-size:12px;color:#64748b}
   @media(max-width:820px){.rmp{grid-template-columns:1fr;height:auto}.rmp-ls{max-height:30vh}}
+  #rdvKpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .rdv-k{text-align:left;cursor:pointer;font:inherit;transition:transform .15s,box-shadow .15s}.rdv-k:hover{transform:translateY(-2px);box-shadow:0 14px 26px -18px rgba(26,78,138,.7)}
+  .rdv-nomi{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;background:linear-gradient(90deg,#1A4E8A,#2d64a8);color:#fff;border-radius:16px;padding:12px 18px;margin-bottom:12px}
+  .rdv-nomi span{display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;opacity:.75}.rdv-nomi b{font-size:18px}.rdv-nomi small{display:block;font-size:11px;opacity:.8}
+  .rdv-nomi p{flex:1;margin:0;font-size:13px}.rdv-nomi p b{font-size:15px;color:#fff !important}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1537,7 +1542,7 @@ async function rdvInit() {
         <button class="vx-btn" id="rdvHarmBtn" style="display:none" onclick="VX.rdvHarmoniser()">${svg('user', 15)} Harmoniser les noms</button>
         <button class="vx-btn" onclick="VX.rdvExport()">${svg('down', 15)} Exporter Excel</button>
         <button class="vx-btn" id="rdvImpBtn" style="display:none" onclick="VX.rdvImport()" title="Réimporter un export retravaillé dans Excel (aperçu avant enregistrement)">${svg('upload', 15)} Importer Excel</button></div></div>
-      <div class="vx-tabs" style="margin-bottom:14px"><button id="rdvTabS" class="on" onclick="VX.rdvOnglet('suivi')">${svg('list', 15)} Suivi des RDV</button><button id="rdvTabA" onclick="VX.rdvOnglet('analyse')">${svg('grid', 15)} Analyse des visites</button></div>
+      <div class="vx-tabs" style="margin-bottom:14px;display:none"><button id="rdvTabS" class="on" onclick="VX.rdvOnglet('suivi')">${svg('list', 15)} Suivi des RDV</button><button id="rdvTabA" onclick="VX.rdvOnglet('analyse')">${svg('grid', 15)} Analyse des visites</button></div>
       <div class="vx-kpis" id="rdvKpis"></div>
       <div class="vx-bar">
         <select class="vx-sel" id="rdvAnnee" onchange="VX.rdvLoad(this.value)"></select>
@@ -1632,29 +1637,7 @@ function rdvRender() {
   const { L, parEtu, vAnnee } = rdvFiltre(true);
   R.visibles = L.map(e => e.id);
   const histo = {}; D.visites.forEach(v => { histo[v.etuId] = (histo[v.etuId] || 0) + 1; });
-  const alts = D.etudiants.filter(e => e.alternant);
-  const honores = vAnnee.filter(v => v.statut === 'Honoré').length, venir = vAnnee.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()).length;
-  const retard = vAnnee.filter(rdvAsuivre).length;
-  const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(rdvPrio).length, sansResp = alts.filter(e => !e.referent).length;
-  $('rdvQui').innerHTML = rdvAFaire(L, parEtu) + rdvParVisiteur(L, parEtu);
-  // Compteur dynamique (suit tous les filtres : visiteur, classes, diplôme, dates, vue, recherche)
-  //  • total = nombre de lignes affichées où un visiteur apparaît ;
-  //  • à réaliser = visites dont le RDV est pris mais pas encore honoré.
-  { const tot = L.filter(e => e.referent || (parEtu[e.id] || []).some(v => v.visiteur)).length;
-    const aReal = L.reduce((n, e) => n + (parEtu[e.id] || []).filter(rdvAttente).length, 0);
-    const hon = L.reduce((n, e) => n + (parEtu[e.id] || []).filter(v => v.statut === 'Honoré').length, 0);
-    const resp = $('rdvResp').value, cls = R.classes.size;
-    $('rdvCompteur').innerHTML = `<div class="rdv-compteur">
-      <div><span>Visites à réaliser</span><b style="color:#c2410c">${aReal}</b><small>RDV pris, pas encore honorés</small></div>
-      <div><span>Visites totales</span><b>${tot}</b><small>lignes où un visiteur apparaît</small></div>
-      <div><span>Honorées</span><b style="color:#15803d">${hon}</b><small>sur la sélection</small></div>
-      <p>${L.length} ligne(s) affichée(s)${resp ? ' · visiteur : <b>' + esc(resp === '__aucun' ? 'sans responsable' : resp) + '</b>' : ''}${cls ? ' · ' + cls + ' classe(s)' : ''}${$('rdvDip').value ? ' · ' + esc($('rdvDip').value) : ''}</p></div>`; }
-  $('rdvKpis').innerHTML = `
-    <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:${sansResp ? '#fca5a5' : '#e3eaf3'}" onclick="VX.rdvVue('sansresp')"><span>⚠ Sans responsable visite</span><b style="color:${sansResp ? '#c62828' : '#15803d'}">${sansResp}</b><small>alternant(s) sans visiteur désigné</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Drapeaux rouges</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>visiteur historique, visite jamais honorée</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
-    <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>`;
+  rdvCompteurs();
   rdvSelBar();
   rdvAuditBandeau();
   if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
@@ -1840,6 +1823,111 @@ function rdvAFaire(L, parEtu) {
   return `<div class="rdv-qui rdv-afaire"><b class="t">Visites à faire · ${tot}</b>${l.map(([k, o]) => `<button type="button" onclick="${k.startsWith('—') ? "VX.rdvVue('sansresp')" : `VX.rdvResp('${jsq(k)}')`}" title="${o.total} alternant(s) pas encore visité(s) cette année : ${o.pris} avec un RDV pris, ${o.sans} sans RDV">
     <span class="n" style="${k.startsWith('—') ? 'color:#c62828' : ''}">${esc(k)}</span><span class="c"><b style="color:#0e1a2b">${o.total}</b> à faire${o.pris ? ` · <em>${o.pris} RDV pris</em>` : ''}${o.sans ? ` · <span style="color:#c62828;font-weight:800">${o.sans} sans RDV</span>` : ''}</span></button>`).join('')}</div>`;
 }
+// ── 8 compteurs épurés, dynamiques (diplôme, classes, responsable, dates, recherche), cliquables et exportables ──
+// Périmètre : les étudiants correspondant aux filtres (la « vue » du tableau ne change pas les compteurs).
+function rdvStats() {
+  const { L, parEtu, vAnnee } = rdvFiltre(false);
+  const ids = new Set(L.map(e => e.id));
+  const vis = vAnnee.filter(v => ids.has(v.etuId));
+  const alts = L.filter(e => e.alternant);
+  const auj = rdvAuj();
+  const visitesEtu = id => (parEtu[id] || []);
+  const ents = {}; alts.forEach(e => { if (!e.entreprise && !e.entId) return; const k = e.entId ? 'id:' + e.entId.toUpperCase() : 'n:' + norm(e.entreprise).replace(/[^a-z0-9]/g, ''); (ents[k] = ents[k] || { entreprise: e.entreprise, cp: e.cp, lieu: e.lieu, etudiants: [] }).etudiants.push(e); });
+  const visites = alts.filter(e => visitesEtu(e.id).some(v => v.statut === 'Honoré'));
+  return {
+    L, parEtu,
+    alternants: alts,
+    sansResp: alts.filter(e => !e.referent),
+    rouges: L.filter(e => e.drapeau === 'Rouge'),
+    aVenir: vis.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date >= auj),
+    honores: vis.filter(v => v.statut === 'Honoré'),
+    visitesEtu: visites,
+    toutes: vis,
+    entreprises: Object.values(ents)
+  };
+}
+const RDV_COMPTEURS = [
+  ['alternants', 'Étudiants en alternance', '#1A4E8A'],
+  ['sansResp', 'Sans responsable visite', '#c62828'],
+  ['rouges', 'Drapeaux rouges', '#c62828'],
+  ['aVenir', 'RDV pris à venir', '#c2410c'],
+  ['honores', 'RDV honorés', '#15803d'],
+  ['ratio', 'Taux de visite', '#15803d'],
+  ['toutes', 'Visites (total)', '#0e1a2b'],
+  ['entreprises', 'Entreprises différentes', '#0e1a2b']
+];
+function rdvCompteurs() {
+  const S = rdvStats(), n = S.alternants.length, pct = n ? Math.round(S.visitesEtu.length / n * 100) : 0;
+  const val = { alternants: n, sansResp: S.sansResp.length, rouges: S.rouges.length, aVenir: S.aVenir.length, honores: S.honores.length,
+    ratio: pct + ' %', toutes: S.toutes.length, entreprises: S.entreprises.length };
+  const sous = { alternants: R.data.annee, sansResp: 'aucun visiteur désigné', rouges: 'visite jamais honorée', aVenir: 'planifiés ou reportés',
+    honores: "dans l'année", ratio: S.visitesEtu.length + ' / ' + n + ' alternants visités', toutes: 'RDV de l\'année, tous statuts', entreprises: 'lieux de visite' };
+  $('rdvKpis').innerHTML = RDV_COMPTEURS.map(([k, lib, c]) => `<button type="button" class="vx-kpi rdv-k" onclick="VX.rdvDetail('${k}')" title="Voir le détail et exporter">
+      <span>${lib}</span><b style="color:${(k === 'sansResp' || k === 'rouges') && !val[k] ? '#15803d' : c}">${val[k]}</b><small>${esc(sous[k])}</small></button>`).join('');
+  // Suivi nominatif quand on filtre sur un responsable
+  const resp = $('rdvResp').value;
+  if (resp && resp !== '__aucun') {
+    const mes = S.alternants, att = R.data.etudiants.find(e => e.referent === resp && e.referentDepuis);
+    const aFaire = mes.filter(e => !S.parEtu[e.id] || !S.parEtu[e.id].some(v => v.statut === 'Honoré'));
+    const sansRdv = aFaire.filter(e => !(S.parEtu[e.id] || []).some(v => ['Planifié', 'Reporté'].includes(v.statut)));
+    $('rdvCompteur').innerHTML = `<div class="rdv-nomi"><div><span>Suivi nominatif</span><b>${esc(resp)}</b>${att ? `<small>responsable depuis le ${fmtD(att.referentDepuis)}</small>` : ''}</div>
+      <p><b>${mes.length}</b> alternant(s) attribué(s) · <b style="color:#15803d">${S.visitesEtu.length}</b> visité(s) · <b style="color:#c2410c">${S.aVenir.length}</b> RDV à venir · <b style="color:#c62828">${sansRdv.length}</b> sans RDV · ${S.entreprises.length} entreprise(s)</p>
+      <button class="vx-btn sm" onclick="VX.rdvExportNominatif()">${svg('down', 13)} Exporter son suivi</button></div>`;
+  } else $('rdvCompteur').innerHTML = '';
+  $('rdvQui').innerHTML = '';
+}
+// Détail d'un compteur : liste + export Excel
+function rdvDetailLignes(k) {
+  const S = rdvStats(), D = R.data;
+  const etuCols = ['Étudiant', 'Classe', 'Entreprise', 'Code postal', 'Responsable visite', 'Drapeau', 'RDV de l\'année'];
+  const etuRow = e => [e.nom, e.classe, e.entreprise || '', e.cp || '', e.referent || '', e.drapeau || '', (S.parEtu[e.id] || []).map(v => fmtD(v.date || v.datePris) + ' ' + v.statut).join(' · ')];
+  const visCols = ['Étudiant', 'Classe', 'Date RDV pris', 'Date RDV', 'Visiteur', 'Entreprise', 'Lieu', 'Statut'];
+  const visRow = v => [v.etudiant, v.classe, fmtD(v.datePris), fmtD(v.date), v.visiteur || '', v.entreprise || '', v.lieu || '', v.statut];
+  const tri = (a, b) => String(a[0]).localeCompare(String(b[0]), 'fr');
+  if (k === 'alternants') return { cols: etuCols, rows: S.alternants.map(etuRow).sort(tri) };
+  if (k === 'sansResp') return { cols: etuCols, rows: S.sansResp.map(etuRow).sort(tri) };
+  if (k === 'rouges') return { cols: etuCols.concat(['Commentaire du drapeau', 'Posé le']), rows: S.rouges.map(e => etuRow(e).concat([e.drapeauCom || '', fmtD(e.drapeauLe)])).sort(tri) };
+  if (k === 'aVenir') return { cols: visCols, rows: S.aVenir.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(visRow) };
+  if (k === 'honores') return { cols: visCols, rows: S.honores.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(visRow) };
+  if (k === 'toutes') return { cols: visCols, rows: S.toutes.slice().sort((a, b) => (b.date || b.datePris || '').localeCompare(a.date || a.datePris || '')).map(visRow) };
+  if (k === 'ratio') return { cols: ['Étudiant', 'Classe', 'Entreprise', 'Responsable visite', 'Visité ?', 'Dernière visite honorée'],
+    rows: S.alternants.map(e => { const h = (S.parEtu[e.id] || []).filter(v => v.statut === 'Honoré').sort((a, b) => (b.date || '').localeCompare(a.date || '')); return [e.nom, e.classe, e.entreprise || '', e.referent || '', h.length ? 'Oui' : 'Non', h[0] ? fmtD(h[0].date) : '']; }).sort((a, b) => a[4].localeCompare(b[4]) || tri(a, b)) };
+  if (k === 'entreprises') return { cols: ['Entreprise', 'Code postal', 'Lieu', 'Alternants', 'Responsable(s) visite', 'Étudiants'],
+    rows: S.entreprises.map(x => [x.entreprise || '', x.cp || '', x.lieu || '', x.etudiants.length, [...new Set(x.etudiants.map(e => e.referent).filter(Boolean))].join(', '), x.etudiants.map(e => e.nom).join(', ')]).sort(tri) };
+  return { cols: [], rows: [] };
+}
+function rdvDetail(k) {
+  const lib = (RDV_COMPTEURS.find(c => c[0] === k) || [k, k])[1], T = rdvDetailLignes(k);
+  const filtres = [$('rdvDip').value, R.classes.size ? R.classes.size + ' classe(s)' : '', $('rdvResp').value && $('rdvResp').value !== '__aucun' ? $('rdvResp').value : ($('rdvResp').value ? 'sans responsable' : ''), $('rdvDu').value || $('rdvAu').value ? 'RDV pris ' + fmtD($('rdvDu').value) + ' → ' + fmtD($('rdvAu').value) : ''].filter(Boolean).join(' · ');
+  const dlg = modal(`<h2>${esc(lib)} · ${T.rows.length}</h2><p class="sub">${esc(R.data.annee)}${filtres ? ' · filtres : ' + esc(filtres) : ' · tous les étudiants'}</p>
+    <div class="vx-bar" style="margin:8px 0"><div class="vx-search">${svg('search', 15)}<input id="rdQ" placeholder="Rechercher dans la liste…"></div><button class="vx-btn sm pri" id="rdX">${svg('down', 13)} Exporter Excel</button></div>
+    <div style="max-height:60vh;overflow:auto"><table class="vs2-t"><thead><tr>${T.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody id="rdB"></tbody></table></div>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 1100);
+  const draw = () => { const q = norm($('rdQ').value); const l = T.rows.filter(r => !q || norm(r.join(' ')).includes(q));
+    $('rdB').innerHTML = l.map(r => `<tr>${r.map((c, i) => `<td>${i ? esc(c) : '<b>' + esc(c) + '</b>'}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${T.cols.length}" style="text-align:center;color:#94a3b8;padding:24px">Aucune ligne</td></tr>`; };
+  $('rdQ').oninput = draw; draw();
+  $('rdX').onclick = () => rdvExportTable(lib, T, filtres);
+}
+async function rdvExportTable(titre, T, filtres) {
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const wb = new X.Workbook(), ws = wb.addWorksheet(titre.slice(0, 30), { views: [{ state: 'frozen', ySplit: 4 }] });
+  ws.columns = T.cols.map(c => ({ width: Math.min(45, Math.max(12, c.length + 6)) }));
+  xlTitle(ws, titre + ' — ' + R.data.annee, 'Export du ' + fmtLong(todayISO()) + (filtres ? ' · ' + filtres : ''), T.cols.length); xlHeader(ws, 4, T.cols);
+  T.rows.forEach((r, i) => { ws.getRow(5 + i).values = r; });
+  if (T.rows.length) xlBand(ws, 5, 4 + T.rows.length, T.cols.length);
+  await xlDownload(wb, ('RDV_' + titre).replace(/[^\wÀ-ÿ]+/g, '_') + '_' + todayISO() + '.xlsx');
+}
+async function rdvExportNominatif() {
+  const resp = $('rdvResp').value, S = rdvStats();
+  const T = { cols: ['Étudiant', 'Classe', 'Entreprise', 'Code postal', 'Lieu', 'Drapeau', 'Date RDV pris', 'Date RDV', 'Statut', 'Visité ?'], rows: [] };
+  S.alternants.slice().sort((a, b) => (a.classe + a.nom).localeCompare(b.classe + b.nom, 'fr', { numeric: true })).forEach(e => {
+    const vs = S.parEtu[e.id] || [], vu = vs.some(v => v.statut === 'Honoré') ? 'Oui' : 'Non';
+    if (!vs.length) T.rows.push([e.nom, e.classe, e.entreprise || '', e.cp || '', e.lieu || '', e.drapeau || '', '', '', 'Aucun RDV', vu]);
+    vs.forEach(v => T.rows.push([e.nom, e.classe, v.entreprise || e.entreprise || '', e.cp || '', v.lieu || e.lieu || '', e.drapeau || '', fmtD(v.datePris), fmtD(v.date), v.statut, vu]));
+  });
+  rdvExportTable('Suivi nominatif ' + resp, T, '');
+}
+
 // ── Résumé « qui a combien de visites » (périmètre = filtres actuels) ──
 function rdvParVisiteur(L, parEtu) {
   const g = {};
@@ -2491,7 +2579,7 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
-  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit,
+  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvDetail, rdvExportNominatif,
   rdvReset: () => { $('rdvQ').value = ''; $('rdvDip').value = ''; $('rdvResp').value = ''; $('rdvDu').value = ''; $('rdvAu').value = ''; $('rdvVue').value = 'alt'; $('rdvTri').value = 'classe';
     R.classes.clear(); R.sel.clear(); $('rdvClsBtn').innerHTML = svg('user', 13) + ' Classes : toutes ▾'; $('rdvClsPanel').style.display = 'none'; rdvRender(); toast('Filtres réinitialisés'); }, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
