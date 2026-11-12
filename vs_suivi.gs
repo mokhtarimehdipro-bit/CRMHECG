@@ -49,7 +49,7 @@ function _vsuEntreprises_(ss) {
 // « Date RDV pris » = date initiale ; « Date RDV » = date en vigueur (après report).
 var RDV_HEADERS = ["ID", "Année scolaire", "ID étudiant", "Étudiant", "Classe", "ID entreprise", "Entreprise", "Lieu", "Visiteur", "Email visiteur",
   "Date RDV pris", "Date RDV", "Statut", "Historique", "Commentaire", "Source", "Créé le", "Créé par", "Mis à jour le", "Archivé", "Précision"];
-var RDV_REF_HEADERS = ["Année scolaire", "ID étudiant", "Responsable visite", "Email", "Source", "Mis à jour le", "Par", "Précision"];
+var RDV_REF_HEADERS = ["Année scolaire", "ID étudiant", "Responsable visite", "Email", "Source", "Mis à jour le", "Par", "Précision", "Attribué le"];
 var RDV_STATUTS = ["À planifier", "Planifié", "Honoré", "Reporté", "Annulé", "Autre"];
 
 function _rdvSheet_(ss) { return _vsuEntete_(_vsxSheet_(ss, "RDV_VISITES", RDV_HEADERS), RDV_HEADERS); }
@@ -66,7 +66,7 @@ function _rdvLire_(ss) {
 }
 function _rdvReferents_(ss, annee) {
   var d = _vsuEntete_(_vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS), RDV_REF_HEADERS).getDataRange().getValues(), out = {};
-  for (var i = 1; i < d.length; i++) if (String(d[i][0]) === annee && d[i][1]) out[String(d[i][1])] = { nom: String(d[i][2] || ""), email: String(d[i][3] || ""), source: String(d[i][4] || ""), precision: String(d[i][7] || ""), row: i + 1 };
+  for (var i = 1; i < d.length; i++) if (String(d[i][0]) === annee && d[i][1]) out[String(d[i][1])] = { nom: String(d[i][2] || ""), email: String(d[i][3] || ""), source: String(d[i][4] || ""), precision: String(d[i][7] || ""), attribueLe: _vsuIso_(d[i][8] || d[i][5]), row: i + 1 };
   return out;
 }
 
@@ -83,8 +83,11 @@ function handleGetRdv(p, ss) {
       liste.push({ id: e.id, nom: (e.prenom + " " + e.nom).trim(), classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, typo: e.typo,
         alternant: _vsuAlternant_(e), statut: e.statut, entId: ent ? ent.id : "", entreprise: ent ? ent.nom : e.nomEnt, lieu: ent ? ent.lieu : "", cp: ent ? ent.cp : "", ville: ent ? ent.ville : "",
         referent: refs[e.id] ? refs[e.id].nom : "", referentEmail: refs[e.id] ? refs[e.id].email : "", referentSource: refs[e.id] ? refs[e.id].source : "",
-        referentPrecision: refs[e.id] ? refs[e.id].precision : "" });
+        referentPrecision: refs[e.id] ? refs[e.id].precision : "", referentDepuis: refs[e.id] && refs[e.id].nom ? refs[e.id].attribueLe : "" });
     });
+    var drap = _rdvDrapeaux_(ss, annee);
+    try { _rdvAutoDrapeaux_(ss, annee, liste, visites, drap); } catch (eD) { console.error("drapeaux auto : " + eD); }
+    liste.forEach(function (x) { var dr = drap[x.id]; x.drapeau = dr && dr.niveau ? dr.niveau : ""; x.drapeauCom = dr ? dr.commentaire : ""; x.drapeauLe = dr ? dr.poseLe : ""; x.drapeauPar = dr ? dr.par : ""; x.drapeauLeve = dr && dr.leveLe ? dr.leveLe + " par " + dr.levePar : ""; });
     var annees = {}; annees[_ckAnneeCourante_()] = 1; visites.forEach(function (v) { if (v.annee) annees[v.annee] = 1; });
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; }).map(function (x) { return { nom: x.nom, email: x.email, role: x.role }; });
     visites.forEach(function (v) { delete v.row; });
@@ -196,8 +199,9 @@ function _rdvEcrireReferents_(ss, annee, items, source, par) {
     var r = refs[it.etuId];
     if (r) {
       if (source === "Charlemagne" && r.source === "Saisie") return;   // une saisie manuelle n'est jamais écrasée par l'import
-      ws.getRange(r.row, 3, 1, 6).setValues([[it.nom, it.email, source, now, par, it.precision !== undefined ? it.precision : r.precision]]); n++;
-    } else if (it.nom) { ajout.push([annee, it.etuId, it.nom, it.email, source, now, par, it.precision || ""]); n++; }
+      var nouveau = _vsuNorm_(it.nom) !== _vsuNorm_(r.nom);   // date d'attribution = changement de responsable
+      ws.getRange(r.row, 3, 1, 7).setValues([[it.nom, it.email, source, now, par, it.precision !== undefined ? it.precision : r.precision, nouveau || !r.attribueLe ? (it.nom ? now : "") : new Date(r.attribueLe + "T12:00:00")]]); n++;
+    } else if (it.nom) { ajout.push([annee, it.etuId, it.nom, it.email, source, now, par, it.precision || "", now]); n++; }
   });
   if (ajout.length) ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_REF_HEADERS.length).setValues(ajout);
   return n;
@@ -682,6 +686,13 @@ function handleSendMailsRdv(p, ss) {
     var annee = String(p.annee || _ckAnneeCourante_()), par = String(p.nomAuteur || p.emailAuteur || "");
     var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma")).filter(function (x) { return !x.bloquant; });
     if (!items.length) return createJsonResponse({ success: false, message: "Aucun mail envoyable dans la sélection." });
+    if (p.test) {   // mail de test : le 1er mail de la sélection, envoyé uniquement au pôle pédagogique
+      var t = items[0], dest = "polepedagogique@hecg.fr";
+      var avert = "[MAIL DE TEST — destinataire(s) réel(s) : " + t.destinataires.map(function (c) { return c.nom + " <" + c.email + ">"; }).join(", ") + (t.responsableEmail ? " ; copie : " + t.responsableEmail : "") + "]\n\n";
+      MailApp.sendEmail({ to: dest, subject: "[TEST] " + t.objet, body: avert + t.corps, htmlBody: _rdvHtml_(avert + t.corps), name: "HECG — " + t.responsable });
+      logAction(par, p.vieScRole || "", "Action", "Vie scolaire — Suivi des RDV", "RDV_ENVOIS", "Mail de test du lien de RDV envoyé à " + dest + " (exemple : " + t.etudiant + ", responsable " + t.responsable + ")");
+      return createJsonResponse({ success: true, test: true, a: dest, exemple: t.etudiant });
+    }
     var quota = MailApp.getRemainingDailyQuota();
     var nbDest = items.reduce(function (s, x) { return s + x.destinataires.length + (x.responsableEmail ? 1 : 0); }, 0);
     if (nbDest > quota) return createJsonResponse({ success: false, message: "Quota d'envoi du jour insuffisant (" + quota + " restants pour " + nbDest + " destinataires). Réduisez la sélection." });
@@ -947,6 +958,58 @@ function handleImporterRdvExcel(p, ss) {
       "Import Excel « " + String(p.fichier || "").slice(0, 80) + " » : " + modifs.length + " RDV modifié(s), " + creations.length + " créé(s), " + refModifs.length + " responsable(s) mis à jour"
       + (erreurs.length ? ", " + erreurs.length + " ligne(s) ignorée(s)" : "") + " — " + modifs.slice(0, 20).map(function (m) { return m.etudiant + " (" + m.changements.map(function (c) { return c.champ + " → " + c.apres; }).join(", ") + ")"; }).join(" ; "));
     return createJsonResponse({ success: true, modifies: modifs.length, crees: creations.length, responsables: refModifs.length, erreurs: erreurs });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+// ── Drapeaux de priorité (RDV_DRAPEAUX) : persistants, levés uniquement à la main ──
+// Un drapeau ROUGE est posé automatiquement (une seule fois par année) dès qu'un étudiant a un responsable
+// visite mais aucun historique de RDV ; il reste ensuite affiché même après la prise de RDV, jusqu'à ce
+// qu'on le lève. Niveaux : Rouge (urgent), Orange, Jaune ; commentaire libre.
+var RDV_DRAP_HEADERS = ["Année scolaire", "ID étudiant", "Niveau", "Commentaire", "Posé le", "Posé par", "Levé le", "Levé par", "Mis à jour le"];
+var RDV_NIVEAUX = ["Rouge", "Orange", "Jaune"];
+function _rdvDrapeaux_(ss, annee) {
+  var d = _vsxSheet_(ss, "RDV_DRAPEAUX", RDV_DRAP_HEADERS).getDataRange().getValues(), out = {};
+  for (var i = 1; i < d.length; i++) if (String(d[i][0]) === annee && d[i][1]) out[String(d[i][1])] = {
+    niveau: d[i][6] ? "" : String(d[i][2] || ""), commentaire: String(d[i][3] || ""), poseLe: _vsuIso_(d[i][4]), par: String(d[i][5] || ""),
+    leveLe: _vsuIso_(d[i][6]), levePar: String(d[i][7] || ""), row: i + 1 };
+  return out;
+}
+function _rdvAutoDrapeaux_(ss, annee, liste, visites, drap) {
+  var avec = {}; visites.forEach(function (v) { avec[v.etuId] = 1; });
+  var now = new Date(), ajout = [];
+  liste.forEach(function (e) {
+    if (!e.referent || avec[e.id] || drap[e.id]) return;   // déjà un drapeau (même levé) : on ne le repose pas
+    ajout.push([annee, e.id, "Rouge", "Responsable attribué, aucun RDV ni historique", now, "Automatique", "", "", now]);
+    drap[e.id] = { niveau: "Rouge", commentaire: "Responsable attribué, aucun RDV ni historique", poseLe: _vsuIso_(now), par: "Automatique", leveLe: "", levePar: "" };
+  });
+  if (ajout.length) { var ws = _vsxSheet_(ss, "RDV_DRAPEAUX", RDV_DRAP_HEADERS); ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_DRAP_HEADERS.length).setValues(ajout); }
+}
+/** Pose / modifie / lève un drapeau (un ou plusieurs étudiants) ; niveau vide = lever ; commentaire seul possible. */
+function handleSaveDrapeauRdv(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    var annee = String(p.annee || _ckAnneeCourante_()), ids = (Array.isArray(p.etuIds) ? p.etuIds : [p.etuId]).map(String).filter(Boolean);
+    var niveau = String(p.niveau || ""), lever = niveau === "" || niveau === "lever";
+    if (!lever && RDV_NIVEAUX.indexOf(niveau) === -1) return createJsonResponse({ success: false, message: "Niveau inconnu." });
+    var ws = _vsxSheet_(ss, "RDV_DRAPEAUX", RDV_DRAP_HEADERS), drap = _rdvDrapeaux_(ss, annee), now = new Date(), par = String(p.nomAuteur || p.emailAuteur || ""), ajout = [];
+    var com = p.commentaire !== undefined ? String(p.commentaire || "").trim() : null;
+    ids.forEach(function (id) {
+      var x = drap[id];
+      if (x) {
+        var r = ws.getRange(x.row, 3, 1, 7).getValues()[0];
+        if (lever) { r[4] = now; r[5] = par; } else { r[0] = niveau; r[4] = ""; r[5] = ""; if (x.leveLe || !r[2]) { r[2] = now; r[3] = par; } }
+        if (com !== null) r[1] = com;
+        r[6] = now;
+        ws.getRange(x.row, 3, 1, 7).setValues([r]);
+      } else if (!lever) ajout.push([annee, id, niveau, com || "", now, par, "", "", now]);
+    });
+    if (ajout.length) ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_DRAP_HEADERS.length).setValues(ajout);
+    logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Suivi des RDV", ids.length === 1 ? ids[0] : "RDV_DRAPEAUX",
+      (lever ? "Drapeau levé" : "Drapeau " + niveau.toLowerCase()) + " pour " + ids.length + " étudiant(s)" + (com ? " — " + com : ""));
+    return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
 }

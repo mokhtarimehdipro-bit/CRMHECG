@@ -1452,6 +1452,20 @@ function injectCss2() {
   .rdv-qui i.h{background:#16a34a}.rdv-qui i.a{background:#fb923c}
   .rdv-qui .c b{color:#15803d}.rdv-qui .c em{color:#c2410c;font-style:normal;font-weight:800}
   .rdv-qui .lg{font-size:11px;color:#7d8a9c;margin-left:auto;display:flex;gap:5px;align-items:center}.rdv-qui .lg i{display:inline-block;width:10px;height:7px;border-radius:3px}
+  .rdv-dt{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#64748b;background:#f7f9fc;border:1px solid #e3eaf3;border-radius:10px;padding:3px 8px}
+  .rdv-dt input{border:1px solid #e3eaf3;border-radius:7px;padding:3px 5px;font:600 12px 'Plus Jakarta Sans',Inter,sans-serif}
+  .rdv-dt button{border:0;background:none;color:#94a3b8;cursor:pointer}
+  .rdv-selbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#1A4E8A;color:#fff;border-radius:14px;padding:10px 14px;margin-bottom:12px;box-shadow:0 12px 26px -16px rgba(26,78,138,.9)}
+  .rdv-selbar b{margin-right:auto}
+  .vs2-t tr.sel td{box-shadow:inset 0 0 0 9999px rgba(26,78,138,.07)}
+  .rdv-flag{flex:none;font:800 11px 'Plus Jakarta Sans',Inter,sans-serif;border:1px dashed #cbd5e1;background:#fff;color:#94a3b8;border-radius:8px;padding:2px 6px;cursor:pointer;white-space:nowrap}
+  .rdv-flag.on{border-style:solid}
+  .rdv-niv{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+  .rdv-niv label{display:flex;flex-direction:column;gap:2px;border:2px solid var(--b);background:var(--b);color:var(--c);font-weight:800;border-radius:12px;padding:9px 12px;cursor:pointer}
+  .rdv-niv label:has(input:checked){border-color:var(--c)}.rdv-niv input{display:none}.rdv-niv small{font-weight:600;color:#64748b}
+  .rdv-mois{position:relative;height:16px;background:#f1f4f8;border-radius:6px;overflow:hidden}.rdv-mois i{position:absolute;left:0;height:8px;border-radius:4px}
+  .rdv-mois i.p{top:0;background:#fb923c}.rdv-mois i.h{bottom:0;background:#16a34a}
+  .rdv-lg{display:inline-block;width:10px;height:7px;border-radius:3px;margin:0 3px 0 8px}.rdv-lg.p{background:#fb923c}.rdv-lg.h{background:#16a34a}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1472,7 +1486,7 @@ function parDipClasse(l, dipF = x => x.diplome, clF = x => x.classe) {
 }
 
 // ═══════════════════════════ SUIVI DES RDV EN ENTREPRISE ═══════════════════════════
-const R = { data: null, annee: '', onglet: 'suivi', classes: new Set(), analyse: null };
+const R = { data: null, annee: '', onglet: 'suivi', classes: new Set(), analyse: null, sel: new Set(), visibles: [] };
 async function rdvInit() {
   injectCss(); injectCss2();
   const sec = $('section-rdv');
@@ -1494,9 +1508,11 @@ async function rdvInit() {
         <select class="vx-sel" id="rdvDip" onchange="VX.rdvRender()"></select>
         <div style="position:relative"><button class="vx-btn sm" id="rdvClsBtn" onclick="VX.rdvClsPanel()">${svg('user', 13)} Classes : toutes ▾</button><div id="rdvClsPanel" class="rdv-cls" style="display:none"></div></div>
         <select class="vx-sel" id="rdvResp" onchange="VX.rdvRender()"></select>
-        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option><option value="nonenvoye">Lien de RDV non envoyé</option><option value="attente">⏳ RDV pris, non honorés</option><option value="prio">🚩 Prioritaires (responsable attribué, aucun historique)</option></select>
+        <span class="rdv-dt">${svg('clock', 13)} RDV pris du <input type="date" id="rdvDu" onchange="VX.rdvRender()"> au <input type="date" id="rdvAu" onchange="VX.rdvRender()"><button type="button" title="Effacer les dates" onclick="VX.rdvDates()">✕</button></span>
+        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sansresp">⚠ Alternants sans responsable visite</option><option value="prio">🚩 Drapeaux rouges (prioritaires)</option><option value="drap">⚑ Tous les drapeaux</option><option value="attente">⏳ RDV pris, non honorés</option><option value="venir">RDV à venir</option><option value="suivre">À suivre (date passée)</option><option value="sans">Sans aucun RDV</option><option value="nonenvoye">Lien de RDV non envoyé</option></select>
         <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="cp">Trier par code postal du lieu</option><option value="nom">Trier par étudiant</option></select>
       </div>
+      <div id="rdvSelBar"></div>
       <div id="rdvQui"></div>
       <div id="rdvBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
     document.addEventListener('mousedown', ev => { const p = $('rdvClsPanel'); if (p && p.style.display !== 'none' && !ev.target.closest('#rdvClsPanel,#rdvClsBtn')) p.style.display = 'none'; });
@@ -1521,8 +1537,11 @@ async function rdvLoad(annee) {
 const rdvAuj = () => todayISO();
 const rdvAsuivre = v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date < rdvAuj();
 const rdvAttente = v => ['Planifié', 'Reporté'].includes(v.statut) && !!(v.datePris || v.date);   // RDV pris, pas encore honoré
-// Prioritaire = un responsable visite est attribué, mais l'étudiant n'a encore AUCUN historique (aucun RDV, toutes années et tous statuts)
-const rdvPrio = e => !!e.referent && !(R.data.visites || []).some(v => v.etuId === e.id);
+// Drapeaux persistants (RDV_DRAPEAUX) : rouge posé automatiquement quand un responsable est attribué sans
+// aucun historique ; il ne disparaît plus tout seul, on le lève à la main.
+const DRAP = { Rouge: ['#dc2626', '#fef2f2'], Orange: ['#ea580c', '#fff7ed'], Jaune: ['#ca8a04', '#fefce8'] };
+const rdvPrio = e => e.drapeau === 'Rouge';
+const joursDepuis = iso => iso ? Math.round((new Date(todayISO() + 'T12:00:00') - new Date(iso + 'T12:00:00')) / 86400000) : null;
 function rdvClsPanel() {
   const p = $('rdvClsPanel');
   if (p.style.display !== 'none') { p.style.display = 'none'; return; }
@@ -1543,44 +1562,48 @@ function rdvOnglet(o) {
   $('rdvVue').style.display = $('rdvTri').style.display = o === 'suivi' ? '' : 'none';
   rdvRender();
 }
-// Étudiants correspondant aux filtres (diplôme, classes, responsable, recherche) — commun au suivi, à l'analyse et à l'envoi
+// Étudiants correspondant aux filtres (diplôme, classes, responsable, dates de RDV pris, recherche) — commun au suivi, à l'analyse
 function rdvFiltre(avecVue = true) {
   const D = R.data;
-  const q = norm($('rdvQ').value), dip = $('rdvDip').value, resp = $('rdvResp').value, vue = $('rdvVue').value;
+  const q = norm($('rdvQ').value), dip = $('rdvDip').value, resp = $('rdvResp').value, vue = $('rdvVue').value, du = $('rdvDu').value, au = $('rdvAu').value;
   const vAnnee = D.visites.filter(v => v.annee === D.annee);
   const parEtu = {}; vAnnee.forEach(v => (parEtu[v.etuId] = parEtu[v.etuId] || []).push(v));
   Object.values(parEtu).forEach(l => l.sort((a, b) => (a.datePris || a.creeLe || '').localeCompare(b.datePris || b.creeLe || '')));
   let L = D.etudiants.filter(e => (!dip || e.diplome === dip) && (!R.classes.size || R.classes.has(e.classe || 'Classe non renseignée'))
     && (!resp || (resp === '__aucun' ? !e.referent : e.referent === resp))
-    && (!q || norm([e.nom, e.classe, e.entreprise, e.referent, ...(parEtu[e.id] || []).map(v => v.visiteur + ' ' + v.entreprise)].join(' ')).includes(q)));
+    && (!q || norm([e.nom, e.classe, e.entreprise, e.referent, e.drapeauCom, ...(parEtu[e.id] || []).map(v => v.visiteur + ' ' + v.entreprise)].join(' ')).includes(q)));
+  if (du || au) L = L.filter(e => (parEtu[e.id] || []).some(v => v.datePris && (!du || v.datePris >= du) && (!au || v.datePris <= au)));
   if (avecVue) {
     if (vue === 'alt') L = L.filter(e => e.alternant || parEtu[e.id]);
+    if (vue === 'sansresp') L = L.filter(e => e.alternant && !e.referent);
+    if (vue === 'prio') L = L.filter(rdvPrio);
+    if (vue === 'drap') L = L.filter(e => e.drapeau);
     if (vue === 'sans') L = L.filter(e => e.alternant && !(parEtu[e.id] || []).some(v => v.statut !== 'Annulé'));
     if (vue === 'suivre') L = L.filter(e => (parEtu[e.id] || []).some(rdvAsuivre));
     if (vue === 'venir') L = L.filter(e => (parEtu[e.id] || []).some(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()));
     if (vue === 'nonenvoye') L = L.filter(e => e.alternant && !D.envois[e.id]);
     if (vue === 'attente') L = L.filter(e => (parEtu[e.id] || []).some(rdvAttente));
-    if (vue === 'prio') L = L.filter(e => rdvPrio(e, parEtu));
   }
   return { L, parEtu, vAnnee };
 }
 function rdvRender() {
   const D = R.data; if (!D) return;
-  if (R.onglet === 'analyse') { rdvAnalyse(); return; }
+  if (R.onglet === 'analyse') { $('rdvSelBar').innerHTML = ''; rdvAnalyse(); return; }
   const { L, parEtu, vAnnee } = rdvFiltre(true);
+  R.visibles = L.map(e => e.id);
   const histo = {}; D.visites.forEach(v => { histo[v.etuId] = (histo[v.etuId] || 0) + 1; });
   const alts = D.etudiants.filter(e => e.alternant);
   const honores = vAnnee.filter(v => v.statut === 'Honoré').length, venir = vAnnee.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()).length;
-  const retard = vAnnee.filter(rdvAsuivre).length, sans = alts.filter(e => !(parEtu[e.id] || []).some(v => v.statut !== 'Annulé')).length;
-  const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(e => rdvPrio(e, parEtu)).length;
+  const retard = vAnnee.filter(rdvAsuivre).length;
+  const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(rdvPrio).length, sansResp = alts.filter(e => !e.referent).length;
   $('rdvQui').innerHTML = rdvParVisiteur(L, parEtu);
   $('rdvKpis').innerHTML = `
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
-    <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:${sansResp ? '#fca5a5' : '#e3eaf3'}" onclick="VX.rdvVue('sansresp')"><span>⚠ Sans responsable visite</span><b style="color:${sansResp ? '#c62828' : '#15803d'}">${sansResp}</b><small>alternant(s) sans visiteur désigné</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Drapeaux rouges</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>à lever à la main</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Prioritaires</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>responsable attribué, aucun historique ni RDV</small></div>
-    <div class="vx-kpi"><span>À suivre</span><b style="color:${retard ? '#c62828' : 'inherit'}">${retard}</b><small>date passée sans statut</small></div>
-    <div class="vx-kpi"><span>Alternants sans RDV</span><b style="color:${sans ? '#c2410c' : 'inherit'}">${sans}</b><small>aucun RDV cette année</small></div>`;
+    <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>`;
+  rdvSelBar();
   if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
   const maxR = Math.max(1, ...L.map(e => (parEtu[e.id] || []).length));
   const cell = v => {
@@ -1600,17 +1623,24 @@ function rdvRender() {
         <button class="o" onclick="VX.rdvStatut('${jsq(v.id)}','Autre')" title="Autre (préciser)">… Autre</button></div>` : ''}
     </div>`;
   };
+  const drap = e => {
+    const c = DRAP[e.drapeau];
+    const tip = e.drapeau ? `Drapeau ${e.drapeau.toLowerCase()} posé le ${fmtD(e.drapeauLe)} par ${e.drapeauPar}${e.drapeauCom ? ' — ' + e.drapeauCom : ''} (cliquer pour modifier ou lever)` : (e.drapeauLeve ? 'Drapeau levé le ' + e.drapeauLeve + ' — cliquer pour en poser un' : 'Poser un drapeau de priorité / un commentaire');
+    return `<button type="button" class="rdv-flag ${e.drapeau ? 'on' : ''}" style="${c ? `color:${c[0]};background:${c[1]};border-color:${c[0]}` : ''}" title="${esc(tip)}" onclick="VX.rdvDrapeau(['${jsq(e.id)}'])">${e.drapeau ? '🚩 ' + esc(e.drapeau) : '⚑'}</button>`;
+  };
   const ligne = e => {
-    const vs = parEtu[e.id] || [], env = D.envois[e.id];
-    const pr = rdvPrio(e, parEtu);
-    return `<tr class="${pr ? 'prio' : ''}"><td class="vs2-n"><b>${pr ? '<span class="rdv-prio" title="Prioritaire : un responsable est attribué mais l\'étudiant n\'a encore aucun historique ni RDV pris">🚩 Prioritaire</span> ' : ''}${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
+    const vs = parEtu[e.id] || [], env = D.envois[e.id], c = DRAP[e.drapeau], j = joursDepuis(e.referentDepuis);
+    return `<tr class="${R.sel.has(e.id) ? 'sel' : ''}" style="${c ? `background:${c[1]}` : ''}"><td style="width:30px"><input type="checkbox" ${R.sel.has(e.id) ? 'checked' : ''} onchange="VX.rdvSel('${jsq(e.id)}',this.checked)"></td>
+      <td class="vs2-n"><div style="display:flex;gap:6px;align-items:flex-start">${drap(e)}<div><b>${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small></div></div>${e.drapeauCom ? `<div class="pr" style="color:#991b1b">💬 ${esc(e.drapeauCom)}</div>` : ''}${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
       <td class="vs2-n">${e.entreprise ? `<b>${esc(e.entreprise)}</b><small>${e.cp ? `<span class="rdv-cp">${esc(e.cp)}</span> ` : ''}${esc(e.lieu || 'adresse non renseignée')}</small>` : '<small style="color:#c2410c;font-weight:700">Aucune entreprise dans le CRM</small>'}</td>
-      <td class="vs2-n"><button class="vx-link" style="margin-top:0" onclick="VX.rdvReferent('${jsq(e.id)}')">${e.referent ? esc(e.referent) : '<i>à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}${e.referentPrecision ? `<div class="pr">${esc(e.referentPrecision)}</div>` : ''}
+      <td class="vs2-n"><button class="vx-link" style="margin-top:0" onclick="VX.rdvAffecter(['${jsq(e.id)}'])">${e.referent ? esc(e.referent) : '<i style="color:#c62828">⚠ à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}${e.referentPrecision ? `<div class="pr">${esc(e.referentPrecision)}</div>` : ''}
+        ${e.referentDepuis ? `<small style="display:block" title="Date d'attribution du responsable">attribué le ${fmtD(e.referentDepuis)}${j !== null ? ` · <b style="color:${j > 30 ? '#c62828' : j > 14 ? '#c2410c' : '#64748b'}">il y a ${j} j</b>` : ''}</small>` : ''}
         ${env ? `<small style="display:block;color:#0f766e;font-weight:700" title="${esc(env.map(x => fmtD(x.le) + ' → ' + x.dest).join('\n'))}">${svg('mail', 11)} lien envoyé le ${fmtD(env[env.length - 1].le)}${env.length > 1 ? ' (' + env.length + '×)' : ''}</small>` : ''}</td>
       ${Array.from({ length: maxR }, (_, i) => `<td>${vs[i] ? cell(vs[i]) : ''}</td>`).join('')}
       <td><button class="vx-btn sm" onclick="VX.rdvNew('${jsq(e.id)}')">${svg('plus', 13, 2.4)} RDV</button></td></tr>`;
   };
-  const head = `<tr><th>Étudiant</th><th>Entreprise (lieu du RDV)</th><th>Responsable visite</th>${Array.from({ length: maxR }, (_, i) => `<th>Date RDV pris ${i + 1}</th>`).join('')}<th></th></tr>`;
+  const tousSel = L.length && L.every(e => R.sel.has(e.id));
+  const head = `<tr><th><input type="checkbox" title="Tout sélectionner (liste affichée)" ${tousSel ? 'checked' : ''} onchange="VX.rdvSelTout(this.checked)"></th><th>Étudiant</th><th>Entreprise (lieu du RDV)</th><th>Responsable visite</th>${Array.from({ length: maxR }, (_, i) => `<th>Date RDV pris ${i + 1}</th>`).join('')}<th></th></tr>`;
   const tri = $('rdvTri').value;
   if (tri === 'resp') {
     const g = {}; L.forEach(e => (g[e.referent || '— Sans responsable —'] = g[e.referent || '— Sans responsable —'] || []).push(e));
@@ -1631,10 +1661,57 @@ function rdvRender() {
     $('rdvBody').innerHTML = `<div style="overflow-x:auto"><table class="vs2-t"><thead>${head}</thead><tbody>${L.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map(ligne).join('')}</tbody></table></div>`;
   } else {
     $('rdvBody').innerHTML = parDipClasse(L).map(([d, classes]) => `<div class="vx-dip"><span class="t">${esc(d === 'Autre' ? 'Autres formations' : d)}</span><span class="n">${classes.reduce((s, c) => s + c[1].length, 0)} étudiant(s)</span></div>
-      <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${classes.map(([c, l]) => `<tr class="gr"><td colspan="${maxR + 4}"><b>${esc(c)}</b><span>${l.length} étudiant(s)</span></td></tr>` + l.map(ligne).join('')).join('')}</tbody></table></div>`).join('');
+      <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${classes.map(([c, l]) => `<tr class="gr"><td colspan="${maxR + 5}"><b>${esc(c)}</b><span>${l.length} étudiant(s)</span><span>${l.filter(e => !e.referent && e.alternant).length ? `<b style="color:#c62828">${l.filter(e => !e.referent && e.alternant).length} sans responsable</b>` : ''}</span></td></tr>` + l.map(ligne).join('')).join('')}</tbody></table></div>`).join('');
   }
 }
-
+// ── Sélection multiple : affectation en masse d'un responsable, drapeaux ──
+function rdvSelBar() {
+  const n = R.sel.size;
+  $('rdvSelBar').innerHTML = n ? `<div class="rdv-selbar"><b>${n} étudiant(s) sélectionné(s)</b>
+    <button class="vx-btn sm pri" onclick="VX.rdvAffecter()">${svg('user', 13)} Affecter un responsable visite</button>
+    <button class="vx-btn sm" onclick="VX.rdvDrapeau()">⚑ Drapeau / commentaire</button>
+    <button class="vx-btn sm" onclick="VX.rdvSelTout(false, true)">Vider la sélection</button></div>` : '';
+}
+function rdvSel(id, on) { if (on) R.sel.add(id); else R.sel.delete(id); rdvSelBar(); const tr = event && event.target && event.target.closest('tr'); if (tr) tr.classList.toggle('sel', on); }
+function rdvSelTout(on, tout) { if (tout) R.sel.clear(); else (R.visibles || []).forEach(id => on ? R.sel.add(id) : R.sel.delete(id)); rdvRender(); }
+function rdvAffecter(ids) {
+  ids = ids || [...R.sel];
+  const L = R.data.etudiants.filter(e => ids.includes(e.id)); if (!L.length) return;
+  const e = L.length === 1 ? L[0] : null;
+  const dejaR = L.filter(x => x.referent).length;
+  const dlg = modal(`<h2>Responsable des visites${e ? ' — ' + esc(e.nom) : ` — ${L.length} étudiants`}</h2>
+    <p class="sub">Membre de l'équipe chargé des RDV en ${esc(R.annee)}. La date d'attribution est enregistrée.${!e && dejaR ? ` <b style="color:#c2410c">${dejaR} étudiant(s) ont déjà un responsable : il sera remplacé.</b>` : ''}</p>
+    ${!e ? `<div class="vx-note" style="display:block;max-height:120px;overflow:auto;margin-bottom:8px">${L.map(x => esc(x.nom) + (x.referent ? ` <i>(${esc(x.referent)})</i>` : '')).join(', ')}</div>` : ''}
+    <select class="in" id="rfVis">${rdvEquipeOptions(e ? (e.referentEmail || e.referent) : '')}</select>
+    <input class="in" id="rfLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px">
+    <label class="fl">Précision (zone libre)</label><input class="in" id="rfPrec" placeholder="Ex : à sa demande" value="${esc(e ? e.referentPrecision || '' : '')}">
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rfOk">Affecter${e ? '' : ' aux ' + L.length + ' étudiants'}</button></div>`, 520);
+  $('rfVis').onchange = () => { $('rfLibre').style.display = $('rfVis').value === '__autre' ? '' : 'none'; };
+  $('rfOk').onclick = async () => {
+    const who = rdvVisiteurChoisi('rfVis', 'rfLibre');
+    if (!who.visiteur && !confirm('Aucun responsable choisi : retirer le responsable ?')) return;
+    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: L.map(x => x.id), nom: who.visiteur, email: who.visiteurEmail, precision: $('rfPrec').value.trim() });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    dlg.remove(); R.sel.clear(); toast('Responsable affecté à ' + L.length + ' étudiant(s) ✓'); rdvLoad();
+  };
+}
+function rdvDrapeau(ids) {
+  ids = ids || [...R.sel];
+  const L = R.data.etudiants.filter(e => ids.includes(e.id)); if (!L.length) return;
+  const e = L.length === 1 ? L[0] : null;
+  const dlg = modal(`<h2>Drapeau de priorité${e ? ' — ' + esc(e.nom) : ` — ${L.length} étudiants`}</h2>
+    <p class="sub">Les drapeaux restent affichés jusqu'à ce que vous les leviez. ${e && e.drapeau ? `Actuel : <b>${esc(e.drapeau)}</b>, posé le ${fmtD(e.drapeauLe)} par ${esc(e.drapeauPar)}.` : e && e.drapeauLeve ? `Dernier drapeau levé le ${esc(e.drapeauLeve)}.` : ''}</p>
+    <div class="rdv-niv">${['Rouge', 'Orange', 'Jaune'].map(n => `<label style="--c:${DRAP[n][0]};--b:${DRAP[n][1]}"><input type="radio" name="dgN" value="${n}" ${(e && e.drapeau === n) || (!e && n === 'Rouge') || (e && !e.drapeau && n === 'Rouge') ? 'checked' : ''}> 🚩 ${n}<small>${n === 'Rouge' ? 'urgent' : n === 'Orange' ? 'important' : 'à surveiller'}</small></label>`).join('')}
+      <label style="--c:#15803d;--b:#f0fdf4"><input type="radio" name="dgN" value="lever"> ✓ Lever le drapeau<small>plus besoin</small></label></div>
+    <label class="fl">Commentaire</label><textarea class="in" id="dgCom" style="min-height:70px" placeholder="Pourquoi cette priorité, ce qui reste à faire…">${esc(e ? e.drapeauCom || '' : '')}</textarea>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="dgOk">Enregistrer</button></div>`, 560);
+  $('dgOk').onclick = async () => {
+    const n = dlg.querySelector('[name="dgN"]:checked').value;
+    const r = await api('saveDrapeauRdv', { annee: R.annee, etuIds: L.map(x => x.id), niveau: n === 'lever' ? '' : n, commentaire: $('dgCom').value.trim() });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    dlg.remove(); toast(n === 'lever' ? 'Drapeau levé ✓' : 'Drapeau ' + n.toLowerCase() + ' enregistré ✓'); rdvLoad();
+  };
+}
 
 // ── Résumé « qui a combien de visites » (périmètre = filtres actuels) ──
 function rdvParVisiteur(L, parEtu) {
@@ -1750,11 +1827,21 @@ async function rdvAnalyse() {
   L.forEach(e => { const c = e.classe || 'Classe non renseignée'; const o = parCl[c] = parCl[c] || { diplome: e.diplome, ins: 0, alt: 0, vis: 0, visites: 0, venir: 0 };
     o.ins++; if (e.alternant) { o.alt++; if ((parEtu[e.id] || []).some(hon)) o.vis++; }
     (parEtu[e.id] || []).forEach(v => { if (hon(v)) o.visites++; if (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()) o.venir++; }); });
-  const parResp = {};
-  L.forEach(e => { const r = e.referent || '— Sans responsable —'; const o = parResp[r] = parResp[r] || { suivis: 0, alt: 0, vis: 0, visites: 0, venir: 0 };
+  // Par responsable : étudiants attribués + TOUTES leurs visites (historique toutes années) honorées et prises non honorées
+  const parResp = {}, refDe = {};
+  L.forEach(e => { const r = e.referent || '— Sans responsable —'; refDe[e.id] = r; const o = parResp[r] = parResp[r] || { suivis: 0, alt: 0, vis: 0, honAn: 0, honHist: 0, attente: 0 };
     o.suivis++; if (e.alternant) { o.alt++; if ((parEtu[e.id] || []).some(hon)) o.vis++; } });
-  vAnnee.filter(v => ids.has(v.etuId)).forEach(v => { const e = L.find(x => x.id === v.etuId); const r = (e && e.referent) || '— Sans responsable —'; if (!parResp[r]) return;
-    if (hon(v)) parResp[r].visites++; if (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()) parResp[r].venir++; });
+  D.visites.filter(v => ids.has(v.etuId)).forEach(v => { const o = parResp[refDe[v.etuId]]; if (!o) return;
+    if (hon(v)) { o.honHist++; if (v.annee === D.annee) o.honAn++; } else if (rdvAttente(v)) o.attente++; });
+  // RDV par mois (septembre → août) : pris (date de prise), honorés, pris non honorés
+  const y0 = +String(D.annee).split('-')[0], mois = Array.from({ length: 12 }, (_, i) => { const m = (8 + i) % 12, y = y0 + (i >= 4 ? 1 : 0); return { cle: y + '-' + String(m + 1).padStart(2, '0'), lib: MOIS[m] + ' ' + y, pris: 0, hon: 0, att: 0 }; });
+  const parMois = {}; mois.forEach(m => parMois[m.cle] = m);
+  vAnnee.filter(v => ids.has(v.etuId)).forEach(v => {
+    const kp = (v.datePris || '').slice(0, 7), kd = (v.date || v.datePris || '').slice(0, 7);
+    if (parMois[kp]) { parMois[kp].pris++; if (rdvAttente(v)) parMois[kp].att++; }
+    if (hon(v) && parMois[kd]) parMois[kd].hon++;
+  });
+  const maxM = Math.max(1, ...mois.map(m => Math.max(m.pris, m.hon)));
   const barre = p => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:70px;height:8px;border-radius:9px;background:#eef2f7;overflow:hidden"><i style="display:block;height:100%;width:${p}%;background:${p >= 80 ? '#16a34a' : p >= 50 ? '#F26522' : '#e5484d'}"></i></div><b>${p} %</b></div>`;
   const lstMv = t => { const l = mv.filter(m => m.type === t).sort((a, b) => b.date.localeCompare(a.date));
     return `<details class="vs2-mv" ${l.length ? '' : ''}><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${l.length}</summary>
@@ -1764,9 +1851,15 @@ async function rdvAnalyse() {
     <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Classe</th><th>Inscrits</th><th>En alternance</th><th>Visites effectuées</th><th>Alternants visités</th><th>Non visités</th><th>Taux de visite</th><th>RDV à venir</th></tr></thead><tbody>
     ${Object.keys(parCl).sort((a, b) => dipOrdreTri(parCl[a].diplome) - dipOrdreTri(parCl[b].diplome) || a.localeCompare(b, 'fr', { numeric: true })).map(c => { const o = parCl[c]; return `<tr><td><b>${esc(c)}</b> <small style="color:#94a3b8">${esc(o.diplome)}</small></td><td>${o.ins}</td><td>${o.alt}</td><td>${o.visites}</td><td>${o.vis}</td><td style="color:${o.alt - o.vis ? '#c2410c' : 'inherit'};font-weight:800">${o.alt - o.vis}</td><td style="min-width:150px">${barre(pct(o.vis, o.alt))}</td><td>${o.venir}</td></tr>`; }).join('')}
     </tbody></table></div>
-    <div class="vx-dip"><span class="t">Par responsable visite</span></div>
-    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Responsable</th><th>Étudiants suivis</th><th>Alternants</th><th>Visites effectuées</th><th>Alternants visités</th><th>Non visités</th><th>Taux</th><th>RDV à venir</th></tr></thead><tbody>
-    ${Object.keys(parResp).sort((a, b) => a.startsWith('—') - b.startsWith('—') || a.localeCompare(b, 'fr')).map(r => { const o = parResp[r]; return `<tr><td><b>${esc(r)}</b></td><td>${o.suivis}</td><td>${o.alt}</td><td>${o.visites}</td><td>${o.vis}</td><td style="color:${o.alt - o.vis ? '#c2410c' : 'inherit'};font-weight:800">${o.alt - o.vis}</td><td style="min-width:150px">${barre(pct(o.vis, o.alt))}</td><td>${o.venir}</td></tr>`; }).join('')}
+    <div class="vx-dip"><span class="t">RDV par mois</span></div>
+    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Mois</th><th>RDV pris</th><th>RDV honorés</th><th>Pris, non honorés</th><th style="width:45%"></th></tr></thead><tbody>
+    ${mois.map(m => `<tr><td><b>${esc(m.lib)}</b></td><td>${m.pris}</td><td style="color:#15803d;font-weight:800">${m.hon}</td><td style="color:${m.att ? '#c2410c' : 'inherit'};font-weight:800">${m.att}</td>
+      <td><div class="rdv-mois"><i class="p" style="width:${m.pris / maxM * 100}%"></i><i class="h" style="width:${m.hon / maxM * 100}%"></i></div></td></tr>`).join('')}
+    <tr class="gr"><td><b>Total</b></td><td><b>${mois.reduce((s, m) => s + m.pris, 0)}</b></td><td><b>${mois.reduce((s, m) => s + m.hon, 0)}</b></td><td><b>${mois.reduce((s, m) => s + m.att, 0)}</b></td><td><span style="font-size:11px;color:#7d8a9c"><i class="rdv-lg p"></i> pris <i class="rdv-lg h"></i> honorés</span></td></tr>
+    </tbody></table></div>
+    <div class="vx-dip"><span class="t">Par responsable visite</span><span class="n">historique toutes années inclus</span></div>
+    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Responsable</th><th>Étudiants suivis</th><th>Alternants</th><th>Honorés ${esc(D.annee)}</th><th>Honorés (historique)</th><th>Pris, non honorés</th><th>Alternants visités</th><th>Non visités</th><th>Taux</th></tr></thead><tbody>
+    ${Object.keys(parResp).sort((a, b) => a.startsWith('—') - b.startsWith('—') || a.localeCompare(b, 'fr')).map(r => { const o = parResp[r]; return `<tr><td><b>${esc(r)}</b></td><td>${o.suivis}</td><td>${o.alt}</td><td style="color:#15803d;font-weight:800">${o.honAn}</td><td>${o.honHist}</td><td style="color:${o.attente ? '#c2410c' : 'inherit'};font-weight:800">${o.attente}</td><td>${o.vis}</td><td style="color:${o.alt - o.vis ? '#c2410c' : 'inherit'};font-weight:800">${o.alt - o.vis}</td><td style="min-width:150px">${barre(pct(o.vis, o.alt))}</td></tr>`; }).join('')}
     </tbody></table></div>
     <div class="vx-dip"><span class="t">Mouvements d'alternance en ${esc(D.annee)}</span></div>
     <div class="vx-note" style="margin:12px 0">${svg('clock', 14)} Relevé quotidien des entreprises des étudiants inscrits${R.analyse.suiviDepuis ? ' depuis le ' + fmtD(R.analyse.suiviDepuis) : ''}. Avant cette date, seuls les départs enregistrés dans le CRM (changement d'entreprise, entreprise retirée) sont connus : les alternances gagnées ne sont comptées qu'à partir du premier relevé.</div>
@@ -1810,10 +1903,14 @@ async function rdvParams() {
 
 // ── Envoi du lien de prise de RDV : sélection → aperçu → envoi ──
 function rdvMails() {
-  const { L, parEtu } = rdvFiltre(true);
-  const base = L.filter(e => e.alternant);
+  const D = R.data, vAn = D.visites.filter(v => v.annee === D.annee);
+  const resps = [...new Set(D.etudiants.filter(e => e.referent).map(e => e.referent))].sort((a, b) => a.localeCompare(b, 'fr'));
+  if (!resps.length) { toast("Aucun responsable visite n'est encore attribué", false); return; }
+  const pre = $('rdvResp').value && $('rdvResp').value !== '__aucun' ? $('rdvResp').value : resps[0];
   const dlg = modal(`<h2>Envoyer le lien de prise de RDV</h2>
-    <p class="sub">Un mail par étudiant, avec le lien de calendrier de son responsable visite (en copie et en adresse de réponse). Sélection = les <b>${base.length}</b> alternants affichés avec les filtres actuels.</p>
+    <p class="sub">On choisit UN responsable visite : son lien de calendrier part à l'entreprise de chacun des étudiants qu'il doit visiter (un mail par étudiant, le responsable en copie et en adresse de réponse).</p>
+    <label class="fl">Responsable visite</label><select class="in" id="rmResp">${resps.map(r => `<option ${r === pre ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>
+    <div id="rmCompte" class="vx-note" style="margin-top:8px"></div>
     <label class="fl">Destinataires</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="radio" name="rmC" value="ma" checked> Le maître d'apprentissage (sinon un contact de l'entreprise)</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="radio" name="rmC" value="tous"> Tous les contacts de l'entreprise</label>
@@ -1821,28 +1918,43 @@ function rdvMails() {
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="checkbox" id="rmEx1" checked> les étudiants déjà visités ou ayant un RDV à venir</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="checkbox" id="rmEx2" checked> ceux à qui le lien a déjà été envoyé cette année</label>
     <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rmGo">${svg('search', 14)} Voir l'aperçu des mails</button></div>`, 620);
+  const cibles = () => {
+    const resp = $('rmResp').value;
+    return D.etudiants.filter(e => e.referent === resp && e.alternant)
+      .filter(e => !($('rmEx1').checked && vAn.some(v => v.etuId === e.id && (v.statut === 'Honoré' || (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj())))))
+      .filter(e => !($('rmEx2').checked && D.envois[e.id]));
+  };
+  const compte = () => { const t = D.etudiants.filter(e => e.referent === $('rmResp').value && e.alternant).length, c = cibles().length;
+    $('rmCompte').innerHTML = `${svg('user', 14)} <span><b>${t}</b> alternant(s) attribué(s) à ${esc($('rmResp').value)} · <b>${c}</b> à contacter avec ces critères</span>`; };
+  ['rmResp', 'rmEx1', 'rmEx2'].forEach(id => $(id).onchange = compte); compte();
   $('rmGo').onclick = async () => {
-    const cible = dlg.querySelector('[name="rmC"]:checked').value;
-    const ids = base.filter(e => !($('rmEx1').checked && (parEtu[e.id] || []).some(v => v.statut === 'Honoré' || (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj())))
-      && !($('rmEx2').checked && R.data.envois[e.id])).map(e => e.id);
+    const cible = dlg.querySelector('[name="rmC"]:checked').value, ids = cibles().map(e => e.id);
     if (!ids.length) { toast('Aucun étudiant à contacter avec ces critères', false); return; }
     $('rmGo').disabled = true; $('rmGo').innerHTML = 'Préparation…';
     const r = await api('previewMailsRdv', { annee: R.annee, etuIds: ids, cible });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); $('rmGo').disabled = false; $('rmGo').innerHTML = "Voir l'aperçu des mails"; return; }
-    dlg.remove(); rdvApercu(r, cible);
+    const rp = $('rmResp').value; dlg.remove(); rdvApercu(r, cible, rp);
   };
 }
-function rdvApercu(r, cible) {
+function rdvApercu(r, cible, resp) {
   const ok = r.items.filter(x => !x.bloquant), ko = r.items.filter(x => x.bloquant);
   const raisons = {}; ko.forEach(x => (raisons[x.bloquant] = raisons[x.bloquant] || []).push(x.etudiant));
   const sel = new Set(ok.map(x => x.etuId));
-  const dlg = modal(`<h2>Aperçu avant envoi</h2>
+  const dlg = modal(`<h2>Aperçu avant envoi${resp ? ' — ' + esc(resp) : ''}</h2>
     <p class="sub"><b>${ok.length}</b> mail(s) prêt(s)${ko.length ? ` · <b style="color:#c2410c">${ko.length}</b> impossible(s)` : ''}${r.quota != null ? ` · quota d'envoi restant aujourd'hui : ${r.quota}` : ''}. Cliquez sur un mail pour le lire tel qu'il partira.</p>
     ${ko.length ? `<details class="vx-note" style="display:block;margin-bottom:10px"><summary><b>Non envoyables (${ko.length})</b> — à corriger avant</summary>${Object.keys(raisons).map(k => `<div style="margin-top:6px"><b>${esc(k)}</b> : ${raisons[k].map(esc).join(', ')}</div>`).join('')}</details>` : ''}
     <div style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:6px">${ok.map((x, i) => `<div class="rdv-ml">
       <label class="h"><input type="checkbox" data-ml="${esc(x.etuId)}" checked><span><b>${esc(x.etudiant)}</b> <small>${esc(x.classe)} · ${esc(x.entreprise)}</small><small style="display:block">À : ${x.destinataires.map(c => esc(c.nom || c.email) + ' &lt;' + esc(c.email) + '&gt;' + (c.ma ? ' (MA)' : '')).join(', ')} · Cc : ${esc(x.responsable)}${x.responsableEmail ? ' &lt;' + esc(x.responsableEmail) + '&gt;' : ''}</small></span><button type="button" class="vx-btn sm" data-voir="${i}">Lire</button></label>
       <div class="b" data-corps="${i}" style="display:none"><div><b>Objet :</b> ${esc(x.objet)}</div><div style="white-space:pre-wrap;margin-top:8px">${esc(x.corps).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')}</div></div></div>`).join('') || '<div class="vx-note">Aucun mail envoyable.</div>'}</div>
-    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn ora" id="rmSend" ${ok.length ? '' : 'disabled'}>${svg('mail', 14)} Envoyer ${ok.length} mail(s)</button></div>`, 900);
+    <div class="mft"><button class="vx-btn" style="margin-right:auto" id="rmTest" ${ok.length ? '' : 'disabled'} title="Envoie le premier mail coché, uniquement à polepedagogique@hecg.fr">${svg('mail', 14)} Mail de test à polepedagogique@hecg.fr</button><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn ora" id="rmSend" ${ok.length ? '' : 'disabled'}>${svg('mail', 14)} Envoyer ${ok.length} mail(s)</button></div>`, 900);
+  $('rmTest').onclick = async () => {
+    const id = ok.map(x => x.etuId).find(x => sel.has(x)); if (!id) { toast('Cochez au moins un mail', false); return; }
+    $('rmTest').disabled = true;
+    const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [id], cible, test: true });
+    $('rmTest').disabled = false;
+    if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); return; }
+    toast('Mail de test envoyé à ' + o.a + ' (exemple : ' + o.exemple + ') ✓');
+  };
   const maj = () => { $('rmSend').innerHTML = svg('mail', 14) + ' Envoyer ' + sel.size + ' mail(s)'; $('rmSend').disabled = !sel.size; };
   dlg.querySelectorAll('[data-ml]').forEach(c => c.onchange = () => { if (c.checked) sel.add(c.dataset.ml); else sel.delete(c.dataset.ml); maj(); });
   dlg.querySelectorAll('[data-voir]').forEach(b => b.onclick = ev => { ev.preventDefault(); const d = dlg.querySelector(`[data-corps="${b.dataset.voir}"]`); d.style.display = d.style.display === 'none' ? 'block' : 'none'; });
@@ -1914,24 +2026,7 @@ async function rdvStatut(id, statut) {
     if (await go(extra)) dlg.remove();
   };
 }
-function rdvReferent(etuId) {
-  const e = R.data.etudiants.find(x => x.id === etuId); if (!e) return;
-  const memeClasse = R.data.etudiants.filter(x => x.classe === e.classe && x.alternant);
-  const dlg = modal(`<h2>Responsable des visites — ${esc(e.nom)}</h2><p class="sub">Membre de l'équipe chargé des RDV de cet étudiant en ${esc(R.annee)}.</p>
-    <select class="in" id="rfVis">${rdvEquipeOptions(e.referentEmail || e.referent)}</select>
-    <input class="in" id="rfLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px">
-    <label class="fl">Précision (zone libre)</label><input class="in" id="rfPrec" placeholder="Ex : à sa demande" value="${esc(e.referentPrecision || '')}">
-    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="rfClasse"> Appliquer aux ${memeClasse.length} alternants de ${esc(e.classe)}</label>
-    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rfOk">Enregistrer</button></div>`, 480);
-  $('rfVis').onchange = () => { $('rfLibre').style.display = $('rfVis').value === '__autre' ? '' : 'none'; };
-  $('rfOk').onclick = async () => {
-    const who = rdvVisiteurChoisi('rfVis', 'rfLibre');
-    const ids = $('rfClasse').checked ? memeClasse.map(x => x.id) : [e.id];
-    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: ids, nom: who.visiteur, email: who.visiteurEmail, precision: $('rfPrec').value.trim() });
-    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
-    dlg.remove(); toast('Responsable enregistré ✓'); rdvLoad();
-  };
-}
+function rdvReferent(etuId) { rdvAffecter([etuId]); }
 function rdvHisto(etuId) {
   const e = R.data.etudiants.find(x => x.id === etuId) || {};
   const l = R.data.visites.filter(v => v.etuId === etuId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -2177,6 +2272,7 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
+  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
