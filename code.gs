@@ -436,6 +436,8 @@ function doPostInner_(e) {
       case 'previewMailsRdv':         return handlePreviewMailsRdv(params, ss);
       case 'sendMailsRdv':            return handleSendMailsRdv(params, ss);
       case 'getRdvAnalyse':           return handleGetRdvAnalyse(params, ss);
+      case 'harmoniserVisiteurs':     return handleHarmoniserVisiteurs(params, ss);
+      case 'importerRdvExcel':        return handleImporterRdvExcel(params, ss);
       case 'getComparatifDirecteurs': return handleGetComparatifDirecteurs(params, ss);
       case 'getExamens':              return handleGetExamens(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);

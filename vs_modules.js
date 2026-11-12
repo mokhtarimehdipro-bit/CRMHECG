@@ -1439,6 +1439,19 @@ function injectCss2() {
   .ex-ep{display:flex;flex-wrap:wrap;gap:4px}.ex-ep span{font-size:11px;font-weight:700;background:#eef3fa;color:#1A4E8A;padding:2px 7px;border-radius:999px}
   .ex-doc{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:3px}.ex-doc a{color:#1A4E8A;font-weight:700;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ex-doc button{border:0;background:none;color:#cbd5e1;cursor:pointer}.ex-doc button:hover{color:#c62828}
+  .rdv-c.attente{border:2px solid #fb923c;background:#fff7ed}.rdv-c.fait{background:#f0fdf4;border-color:#bbf7d0}
+  .rdv-c .pa{font-size:11px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px}
+  .vs2-n .pr,.rdv-c .pr{font-size:11.5px;font-style:italic;color:#7c3aed}
+  .vs2-t tr.prio td{background:#fef2f2}.rdv-prio{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;background:#dc2626;border-radius:6px;padding:1px 6px;vertical-align:1px}
+  .rdv-cp{display:inline-block;font-weight:800;color:#1A4E8A;background:#eef3fa;border-radius:6px;padding:0 5px}
+  .rdv-qui{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid #e3eaf3;border-radius:16px;padding:10px 12px;margin-bottom:14px}
+  .rdv-qui .t{font-size:11px;text-transform:uppercase;color:#7d8a9c;margin-right:4px}
+  .rdv-qui button{display:flex;align-items:center;gap:8px;border:1px solid #e3eaf3;background:#fbfcfe;border-radius:10px;padding:5px 9px;cursor:pointer;font:600 12.5px 'Plus Jakarta Sans',Inter,sans-serif}
+  .rdv-qui button:hover{border-color:#1A4E8A}
+  .rdv-qui .bar{display:flex;width:70px;height:7px;border-radius:9px;background:#eef2f7;overflow:hidden}.rdv-qui .bar i{display:block;height:100%}
+  .rdv-qui i.h{background:#16a34a}.rdv-qui i.a{background:#fb923c}
+  .rdv-qui .c b{color:#15803d}.rdv-qui .c em{color:#c2410c;font-style:normal;font-weight:800}
+  .rdv-qui .lg{font-size:11px;color:#7d8a9c;margin-left:auto;display:flex;gap:5px;align-items:center}.rdv-qui .lg i{display:inline-block;width:10px;height:7px;border-radius:3px}
   .rdv-cls{position:absolute;z-index:50;top:42px;left:0;min-width:220px;max-height:340px;overflow:auto;background:#fff;border:1px solid #e3eaf3;border-radius:14px;padding:10px;box-shadow:0 20px 40px -20px rgba(14,26,43,.45)}
   .rdv-cls label{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border-radius:8px;cursor:pointer}.rdv-cls label:hover{background:#f3f7fc}
   .rdv-ml{border:1px solid #e3eaf3;border-radius:12px;background:#fbfcfe}
@@ -1470,7 +1483,9 @@ async function rdvInit() {
         <button class="vx-btn" id="rdvParamBtn" style="display:none" onclick="VX.rdvParams()">${svg('edit', 15)} Paramètres</button>
         <button class="vx-btn ora" id="rdvMailBtn" style="display:none" onclick="VX.rdvMails()">${svg('mail', 15)} Envoyer le lien de RDV</button>
         <button class="vx-btn" id="rdvCharlBtn" style="display:none" onclick="VX.rdvCharl()">${svg('down', 15)} Reprendre depuis Charlemagne</button>
-        <button class="vx-btn" onclick="VX.rdvExport()">${svg('down', 15)} Exporter Excel</button></div></div>
+        <button class="vx-btn" id="rdvHarmBtn" style="display:none" onclick="VX.rdvHarmoniser()">${svg('user', 15)} Harmoniser les noms</button>
+        <button class="vx-btn" onclick="VX.rdvExport()">${svg('down', 15)} Exporter Excel</button>
+        <button class="vx-btn" id="rdvImpBtn" style="display:none" onclick="VX.rdvImport()" title="Réimporter un export retravaillé dans Excel (aperçu avant enregistrement)">${svg('upload', 15)} Importer Excel</button></div></div>
       <div class="vx-tabs" style="margin-bottom:14px"><button id="rdvTabS" class="on" onclick="VX.rdvOnglet('suivi')">${svg('list', 15)} Suivi des RDV</button><button id="rdvTabA" onclick="VX.rdvOnglet('analyse')">${svg('grid', 15)} Analyse des visites</button></div>
       <div class="vx-kpis" id="rdvKpis"></div>
       <div class="vx-bar">
@@ -1479,9 +1494,10 @@ async function rdvInit() {
         <select class="vx-sel" id="rdvDip" onchange="VX.rdvRender()"></select>
         <div style="position:relative"><button class="vx-btn sm" id="rdvClsBtn" onclick="VX.rdvClsPanel()">${svg('user', 13)} Classes : toutes ▾</button><div id="rdvClsPanel" class="rdv-cls" style="display:none"></div></div>
         <select class="vx-sel" id="rdvResp" onchange="VX.rdvRender()"></select>
-        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option><option value="nonenvoye">Lien de RDV non envoyé</option></select>
-        <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="nom">Trier par étudiant</option></select>
+        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option><option value="nonenvoye">Lien de RDV non envoyé</option><option value="attente">⏳ RDV pris, non honorés</option><option value="prio">🚩 Prioritaires (responsable, aucun RDV pris)</option></select>
+        <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="cp">Trier par code postal du lieu</option><option value="nom">Trier par étudiant</option></select>
       </div>
+      <div id="rdvQui"></div>
       <div id="rdvBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
     document.addEventListener('mousedown', ev => { const p = $('rdvClsPanel'); if (p && p.style.display !== 'none' && !ev.target.closest('#rdvClsPanel,#rdvClsBtn')) p.style.display = 'none'; });
   }
@@ -1492,7 +1508,7 @@ async function rdvLoad(annee) {
   const r = await api('getRdv', R.annee ? { annee: R.annee } : {}, { forceRefresh: true });
   if (!r.success) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
   R.data = r; R.annee = r.annee; r.envois = r.envois || {};
-  ['rdvCharlBtn', 'rdvParamBtn', 'rdvMailBtn'].forEach(id => $(id).style.display = r.peutSuivre ? '' : 'none');
+  ['rdvCharlBtn', 'rdvParamBtn', 'rdvMailBtn', 'rdvHarmBtn', 'rdvImpBtn'].forEach(id => $(id).style.display = r.peutSuivre ? '' : 'none');
   $('rdvAnnee').innerHTML = r.annees.map(a => `<option ${a === r.annee ? 'selected' : ''}>${a}</option>`).join('');
   const dips = [...new Set(r.etudiants.map(e => e.diplome))].sort((a, b) => dipOrdreTri(a) - dipOrdreTri(b));
   let v = $('rdvDip').value;
@@ -1504,6 +1520,8 @@ async function rdvLoad(annee) {
 }
 const rdvAuj = () => todayISO();
 const rdvAsuivre = v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date < rdvAuj();
+const rdvAttente = v => ['Planifié', 'Reporté'].includes(v.statut) && !!(v.datePris || v.date);   // RDV pris, pas encore honoré
+const rdvPrio = (e, parEtu) => e.alternant && !!e.referent && !(parEtu[e.id] || []).some(v => v.datePris || v.date);   // responsable désigné, aucun RDV jamais pris
 function rdvClsPanel() {
   const p = $('rdvClsPanel');
   if (p.style.display !== 'none') { p.style.display = 'none'; return; }
@@ -1540,6 +1558,8 @@ function rdvFiltre(avecVue = true) {
     if (vue === 'suivre') L = L.filter(e => (parEtu[e.id] || []).some(rdvAsuivre));
     if (vue === 'venir') L = L.filter(e => (parEtu[e.id] || []).some(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()));
     if (vue === 'nonenvoye') L = L.filter(e => e.alternant && !D.envois[e.id]);
+    if (vue === 'attente') L = L.filter(e => (parEtu[e.id] || []).some(rdvAttente));
+    if (vue === 'prio') L = L.filter(e => rdvPrio(e, parEtu));
   }
   return { L, parEtu, vAnnee };
 }
@@ -1551,20 +1571,26 @@ function rdvRender() {
   const alts = D.etudiants.filter(e => e.alternant);
   const honores = vAnnee.filter(v => v.statut === 'Honoré').length, venir = vAnnee.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()).length;
   const retard = vAnnee.filter(rdvAsuivre).length, sans = alts.filter(e => !(parEtu[e.id] || []).some(v => v.statut !== 'Annulé')).length;
+  const attente = vAnnee.filter(rdvAttente).length, prio = D.etudiants.filter(e => rdvPrio(e, parEtu)).length;
+  $('rdvQui').innerHTML = rdvParVisiteur(L, parEtu);
   $('rdvKpis').innerHTML = `
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
     <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>
-    <div class="vx-kpi"><span>RDV à venir</span><b>${venir}</b><small>planifiés ou reportés</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Prioritaires</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>responsable désigné, aucun RDV pris</small></div>
     <div class="vx-kpi"><span>À suivre</span><b style="color:${retard ? '#c62828' : 'inherit'}">${retard}</b><small>date passée sans statut</small></div>
     <div class="vx-kpi"><span>Alternants sans RDV</span><b style="color:${sans ? '#c2410c' : 'inherit'}">${sans}</b><small>aucun RDV cette année</small></div>`;
   if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
   const maxR = Math.max(1, ...L.map(e => (parEtu[e.id] || []).length));
   const cell = v => {
     const st = v.statut, ret = rdvAsuivre(v);
-    return `<div class="rdv-c" onclick="VX.rdvEdit('${jsq(v.id)}')">
+    const att = rdvAttente(v);
+    return `<div class="rdv-c ${att ? 'attente' : ''} ${st === 'Honoré' ? 'fait' : ''}" onclick="VX.rdvEdit('${jsq(v.id)}')">
+      ${att ? `<div class="pa">⏳ RDV pris — ${ret ? 'date passée, à confirmer' : 'à venir'}</div>` : ''}
       <div class="d">${v.datePris ? 'Pris le ' + fmtD(v.datePris) : 'Date à fixer'}</div>
       ${v.date && v.date !== v.datePris ? `<div class="rp">→ reporté au ${fmtD(v.date)}</div>` : ''}
       <div class="s">${v.visiteur ? esc(v.visiteur) : '<i>visiteur ?</i>'}${v.entreprise ? ' · ' + esc(v.entreprise) : ''}</div>
+      ${v.precision ? `<div class="pr">${esc(v.precision)}</div>` : ''}
       <span class="st-b st-${st.replace(/\s/g, '')} ${ret ? 'st-retard' : ''}" title="${ret ? 'Date passée : indiquez si le RDV a été honoré' : ''}">${esc(st)}${ret ? ' · à suivre' : ''}</span>
       ${D.peutSuivre && !['Honoré', 'Annulé'].includes(st) && v.date ? `<div class="rdv-b" onclick="event.stopPropagation()">
         <button class="h" onclick="VX.rdvStatut('${jsq(v.id)}','Honoré')" title="RDV honoré">✓ Honoré</button>
@@ -1575,9 +1601,10 @@ function rdvRender() {
   };
   const ligne = e => {
     const vs = parEtu[e.id] || [], env = D.envois[e.id];
-    return `<tr><td class="vs2-n"><b>${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
-      <td class="vs2-n">${e.entreprise ? `<b>${esc(e.entreprise)}</b><small>${esc(e.lieu || 'adresse non renseignée')}</small>` : '<small style="color:#c2410c;font-weight:700">Aucune entreprise dans le CRM</small>'}</td>
-      <td class="vs2-n"><button class="vx-link" style="margin-top:0" onclick="VX.rdvReferent('${jsq(e.id)}')">${e.referent ? esc(e.referent) : '<i>à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}
+    const pr = rdvPrio(e, parEtu);
+    return `<tr class="${pr ? 'prio' : ''}"><td class="vs2-n"><b>${pr ? '<span class="rdv-prio" title="Prioritaire : un responsable est désigné mais aucun RDV n\'a encore été pris">🚩 Prioritaire</span> ' : ''}${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
+      <td class="vs2-n">${e.entreprise ? `<b>${esc(e.entreprise)}</b><small>${e.cp ? `<span class="rdv-cp">${esc(e.cp)}</span> ` : ''}${esc(e.lieu || 'adresse non renseignée')}</small>` : '<small style="color:#c2410c;font-weight:700">Aucune entreprise dans le CRM</small>'}</td>
+      <td class="vs2-n"><button class="vx-link" style="margin-top:0" onclick="VX.rdvReferent('${jsq(e.id)}')">${e.referent ? esc(e.referent) : '<i>à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}${e.referentPrecision ? `<div class="pr">${esc(e.referentPrecision)}</div>` : ''}
         ${env ? `<small style="display:block;color:#0f766e;font-weight:700" title="${esc(env.map(x => fmtD(x.le) + ' → ' + x.dest).join('\n'))}">${svg('mail', 11)} lien envoyé le ${fmtD(env[env.length - 1].le)}${env.length > 1 ? ' (' + env.length + '×)' : ''}</small>` : ''}</td>
       ${Array.from({ length: maxR }, (_, i) => `<td>${vs[i] ? cell(vs[i]) : ''}</td>`).join('')}
       <td><button class="vx-btn sm" onclick="VX.rdvNew('${jsq(e.id)}')">${svg('plus', 13, 2.4)} RDV</button></td></tr>`;
@@ -1592,12 +1619,104 @@ function rdvRender() {
       return `<div class="vx-dip"><span class="t">${esc(r)}</span><span class="n">${l.length} étudiant(s)</span><span class="n">${hon} visité(s)</span></div>
         <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${l.map(ligne).join('')}</tbody></table></div>`;
     }).join('');
+  } else if (tri === 'cp') {
+    const g = {}; L.forEach(e => { const k = e.cp ? e.cp.slice(0, 2) : '—'; (g[k] = g[k] || []).push(e); });
+    $('rdvBody').innerHTML = Object.keys(g).sort((a, b) => (a === '—') - (b === '—') || a.localeCompare(b)).map(dep => {
+      const l = g[dep].sort((a, b) => (a.cp || '99999').localeCompare(b.cp || '99999') || (a.ville || '').localeCompare(b.ville || '', 'fr') || a.nom.localeCompare(b.nom, 'fr'));
+      return `<div class="vx-dip"><span class="t">${dep === '—' ? 'Lieu sans code postal' : 'Département ' + esc(dep)}</span><span class="n">${l.length} étudiant(s)</span></div>
+        <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${l.map(ligne).join('')}</tbody></table></div>`;
+    }).join('');
   } else if (tri === 'nom') {
     $('rdvBody').innerHTML = `<div style="overflow-x:auto"><table class="vs2-t"><thead>${head}</thead><tbody>${L.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map(ligne).join('')}</tbody></table></div>`;
   } else {
     $('rdvBody').innerHTML = parDipClasse(L).map(([d, classes]) => `<div class="vx-dip"><span class="t">${esc(d === 'Autre' ? 'Autres formations' : d)}</span><span class="n">${classes.reduce((s, c) => s + c[1].length, 0)} étudiant(s)</span></div>
       <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${classes.map(([c, l]) => `<tr class="gr"><td colspan="${maxR + 4}"><b>${esc(c)}</b><span>${l.length} étudiant(s)</span></td></tr>` + l.map(ligne).join('')).join('')}</tbody></table></div>`).join('');
   }
+}
+
+
+// ── Résumé « qui a combien de visites » (périmètre = filtres actuels) ──
+function rdvParVisiteur(L, parEtu) {
+  const g = {};
+  L.forEach(e => (parEtu[e.id] || []).forEach(v => {
+    const k = v.visiteur || '— visiteur non renseigné —';
+    const o = g[k] = g[k] || { hon: 0, att: 0, autres: 0 };
+    if (v.statut === 'Honoré') o.hon++; else if (['Planifié', 'Reporté'].includes(v.statut)) o.att++; else o.autres++;
+  }));
+  const l = Object.entries(g).sort((a, b) => (b[1].hon + b[1].att) - (a[1].hon + a[1].att));
+  if (!l.length) return '';
+  const max = Math.max(...l.map(([, o]) => o.hon + o.att), 1);
+  return `<div class="rdv-qui"><b class="t">Qui a combien de visites</b>${l.map(([k, o]) => `<button type="button" onclick="VX.rdvQ('${jsq(k.startsWith('—') ? '' : k)}')" title="${o.hon} honorée(s), ${o.att} prise(s) non honorée(s)${o.autres ? ', ' + o.autres + ' annulée(s)/autre' : ''}">
+    <span class="n">${esc(k)}</span><span class="bar"><i class="h" style="width:${o.hon / max * 100}%"></i><i class="a" style="width:${o.att / max * 100}%"></i></span><span class="c"><b>${o.hon}</b>${o.att ? ` + <em>${o.att}</em>` : ''}</span></button>`).join('')}
+    <span class="lg"><i class="h"></i> honorées <i class="a"></i> prises, non honorées</span></div>`;
+}
+// ── Harmonisation des noms de visiteurs ──
+async function rdvHarmoniser() {
+  const r = await api('harmoniserVisiteurs', {});
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+  const G = r.groupes, diff = G.filter(g => g.brut !== g.nom || g.precision);
+  const dlg = modal(`<h2>Harmoniser les noms des visiteurs</h2>
+    <p class="sub">${G.length} écriture(s) différente(s) trouvée(s) dans les RDV et les responsables. Le texte libre (« à sa demande », parenthèses…) est rangé dans la zone <b>Précision</b>. Pour un nom non reconnu, choisissez le membre de l'équipe correspondant : il sera retenu pour les prochains imports.</p>
+    <div style="max-height:56vh;overflow:auto"><table class="vs2-t"><thead><tr><th>Écrit</th><th>Devient</th><th>Précision</th><th>Fois</th><th>Membre de l'équipe</th></tr></thead><tbody>
+    ${G.map((g, i) => `<tr><td>${esc(g.brut)}</td><td><b>${esc(g.nom)}</b>${g.reconnu ? ' <span class="st-b c-ok">équipe</span>' : g.ambigu ? ' <span class="st-b c-wa">plusieurs possibles</span>' : ' <span class="st-b c-ne">non reconnu</span>'}</td><td><i>${esc(g.precision || '')}</i></td><td>${g.n}</td>
+      <td>${g.reconnu ? '' : `<select class="in" style="margin:0;min-width:180px" data-alias="${i}"><option value="">— garder « ${esc(g.nom)} » —</option>${r.equipe.map(q => `<option value="${esc(q.email)}">${esc(q.nom)}</option>`).join('')}</select>`}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="hvOk">Harmoniser (${diff.length} écriture(s) à corriger)</button></div>`, 960);
+  $('hvOk').onclick = async () => {
+    const alias = {}; dlg.querySelectorAll('[data-alias]').forEach(s => { if (s.value) alias[_rdvNomSeul(G[+s.dataset.alias].brut)] = s.value; });
+    const o = await api('harmoniserVisiteurs', { appliquer: true, alias });
+    if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); return; }
+    dlg.remove(); toast(`Noms harmonisés : ${o.modifies.rdv} RDV, ${o.modifies.responsables} responsable(s) ✓`); rdvLoad();
+  };
+}
+const _rdvNomSeul = s => String(s).replace(/\(([^)]*)\)/g, ' ').replace(/\s*(?:[-–:,;]\s*)?(?:^|\s)(?:à|a)\s+(?:sa|la|leur|ma|notre|votre)\s+demande\b.*$/i, '').replace(/\s+[-–:]\s+.*$/, '').replace(/\s+/g, ' ').trim();
+
+// ── Import d'un fichier Excel retravaillé (export « Suivi des RDV ») ──
+const RDV_COLS_IMPORT = { idRdv: ['id rdv'], etuId: ['id etudiant'], responsable: ['responsable visite'], precisionResp: ['precision responsable'],
+  datePris: ['date rdv pris'], date: ['date rdv apres report', 'date rdv'], visiteur: ['visiteur'], precision: ['precision'], statut: ['statut'], commentaire: ['commentaire'] };
+function rdvImport() {
+  let inp = $('rdvImpFile');
+  if (!inp) { inp = document.createElement('input'); inp.type = 'file'; inp.id = 'rdvImpFile'; inp.accept = '.xlsx,.xls,.csv'; inp.hidden = true; document.body.appendChild(inp); inp.onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) rdvImportLire(f); }; }
+  inp.click();
+}
+async function rdvImportLire(f) {
+  if (typeof XLSX === 'undefined') { toast('Lecteur Excel indisponible, rechargez la page', false); return; }
+  try {
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+    const iso = v => { if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0'); return String(v ?? '').trim(); };
+    let lignes = null;
+    for (const nf of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nf], { header: 1, raw: true, defval: '' });
+      const ih = rows.findIndex(r => r.map(x => norm(x).replace(/[^a-z ]/g, '').trim()).includes('id rdv'));
+      if (ih < 0) continue;
+      const h = rows[ih].map(x => norm(x).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim()), idx = {};
+      Object.entries(RDV_COLS_IMPORT).forEach(([k, cands]) => { for (const c of cands) { const i = h.indexOf(c); if (i >= 0 && !Object.values(idx).includes(i)) { idx[k] = i; break; } } });
+      lignes = rows.slice(ih + 1).filter(r => r.some(x => String(x).trim())).map(r => { const o = {}; Object.entries(idx).forEach(([k, i]) => { o[k] = ['datePris', 'date'].includes(k) ? iso(r[i]) : String(r[i] ?? '').trim(); }); return o; });
+      break;
+    }
+    if (!lignes) throw new Error("colonne « ID RDV » introuvable : partez d'un export « Exporter Excel » de cette page");
+    const r = await api('importerRdvExcel', { lignes: JSON.stringify(lignes), annee: R.annee, fichier: f.name });
+    if (!r.success) throw new Error(errTxt(r.message));
+    rdvImportApercu(r, lignes, f.name);
+  } catch (e) { toast('Import impossible : ' + e.message, false); }
+}
+function rdvImportApercu(r, lignes, fichier) {
+  const n = r.modifs.length + r.creations.length + r.refModifs.length;
+  const dlg = modal(`<h2>Import « ${esc(fichier)} » — aperçu</h2>
+    <p class="sub"><b>${r.modifs.length}</b> RDV modifié(s) · <b>${r.creations.length}</b> nouveau(x) RDV · <b>${r.refModifs.length}</b> responsable(s) mis à jour${r.erreurs.length ? ` · <b style="color:#c62828">${r.erreurs.length}</b> ligne(s) ignorée(s)` : ''}. Rien n'est encore enregistré.</p>
+    <div style="max-height:56vh;overflow:auto">
+    ${r.erreurs.length ? `<details class="vx-note" style="display:block;margin-bottom:10px" open><summary><b>Lignes ignorées</b></summary>${r.erreurs.map(x => `<div>${esc(x)}</div>`).join('')}</details>` : ''}
+    ${r.modifs.length ? `<table class="vs2-t" style="margin-bottom:12px"><thead><tr><th>Étudiant</th><th>Modification</th></tr></thead><tbody>${r.modifs.map(m => `<tr><td><b>${esc(m.etudiant)}</b></td><td>${m.changements.map(c => `<div><b>${esc(c.champ)}</b> : <span style="color:#94a3b8;text-decoration:line-through">${esc(c.avant || '—')}</span> → <b style="color:#15803d">${esc(c.apres || '—')}</b></div>`).join('')}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${r.creations.length ? `<table class="vs2-t" style="margin-bottom:12px"><thead><tr><th>Nouveau RDV</th><th>Pris le</th><th>Date</th><th>Visiteur</th><th>Statut</th></tr></thead><tbody>${r.creations.map(c => `<tr><td><b>${esc(c.etudiant)}</b></td><td>${fmtD(c.datePris)}</td><td>${fmtD(c.date)}</td><td>${esc(c.visiteur || '—')}${c.precision ? ` <i>(${esc(c.precision)})</i>` : ''}</td><td>${esc(c.statut)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${r.refModifs.length ? `<table class="vs2-t"><thead><tr><th>Responsable visite</th><th>Avant</th><th>Après</th></tr></thead><tbody>${r.refModifs.map(c => `<tr><td><b>${esc(c.etudiant)}</b></td><td style="color:#94a3b8">${esc(c.avant)}</td><td><b style="color:#15803d">${esc(c.apres)}</b></td></tr>`).join('')}</tbody></table>` : ''}
+    ${!n ? '<div class="vx-note">Aucun changement par rapport au CRM.</div>' : ''}</div>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="riOk" ${n ? '' : 'disabled'}>Appliquer ${n} changement(s)</button></div>`, 900);
+  $('riOk').onclick = async () => {
+    $('riOk').disabled = true; $('riOk').innerHTML = 'Enregistrement…';
+    const o = await api('importerRdvExcel', { lignes: JSON.stringify(lignes), annee: R.annee, fichier, appliquer: true });
+    if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); $('riOk').disabled = false; return; }
+    dlg.remove(); toast(`Import appliqué : ${o.modifies} modifié(s), ${o.crees} créé(s), ${o.responsables} responsable(s) ✓`); rdvLoad();
+  };
 }
 
 // ── Analyse des visites (respecte les filtres diplôme / classes / responsable / recherche) ──
@@ -1612,6 +1731,7 @@ async function rdvAnalyse() {
   }
   const { L, parEtu, vAnnee } = rdvFiltre(false);
   const ids = new Set(L.map(e => e.id));
+  $('rdvQui').innerHTML = rdvParVisiteur(L, parEtu);
   const hon = v => v.statut === 'Honoré';
   const visites = vAnnee.filter(v => ids.has(v.etuId) && hon(v)).length;
   const alts = L.filter(e => e.alternant), visites1 = alts.filter(e => (parEtu[e.id] || []).some(hon));
@@ -1751,6 +1871,7 @@ function rdvForm(e, v) {
     <label class="fl">Membre de l'équipe qui se déplace</label>
     <select class="in" id="rvVis">${rdvEquipeOptions(ref)}</select>
     <input class="in" id="rvLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px" value="${esc(v && !v.visiteurEmail ? v.visiteur : '')}">
+    <label class="fl">Précision (zone libre)</label><input class="in" id="rvPrec" placeholder="Ex : à sa demande, remplace un collègue…" value="${esc(v ? v.precision || '' : '')}">
     <label class="fl">${v ? 'Date du RDV' : 'Date RDV pris'}</label><input type="date" class="in" id="rvDate" value="${v ? (v.date || '') : ''}" ${v && v.statut === 'Honoré' ? 'disabled' : ''}>
     <label class="fl">Commentaire</label><textarea class="in" id="rvCom" style="min-height:60px">${esc(v ? v.commentaire : '')}</textarea>
     ${v && v.historique && v.historique.length ? `<label class="fl">Historique du RDV</label><div class="vx-note" style="display:block">${v.historique.map(h => `<div><b>${esc(h.le)}</b> — ${esc(h.statut)}${h.dateReport ? ' au ' + fmtD(h.dateReport) : h.date ? ' (' + fmtD(h.date) + ')' : ''}${h.commentaire ? ' — ' + esc(h.commentaire) : ''} <span style="color:#94a3b8">${esc(h.par || '')}</span></div>`).join('')}</div>` : ''}
@@ -1759,7 +1880,7 @@ function rdvForm(e, v) {
   $('rvVis').onchange = () => { $('rvLibre').style.display = $('rvVis').value === '__autre' ? '' : 'none'; };
   $('rvOk').onclick = async () => {
     const who = rdvVisiteurChoisi('rvVis', 'rvLibre');
-    const payload = Object.assign({ date: $('rvDate').value, commentaire: $('rvCom').value.trim() }, who, v ? { id: v.id } : { etuId: e.id, annee: R.annee });
+    const payload = Object.assign({ date: $('rvDate').value, commentaire: $('rvCom').value.trim(), precision: $('rvPrec').value.trim() }, who, v ? { id: v.id } : { etuId: e.id, annee: R.annee });
     const r = await api('saveRdv', { rdv: payload });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     dlg.remove(); toast(v ? 'RDV mis à jour ✓' : 'RDV enregistré ✓'); rdvLoad();
@@ -1798,13 +1919,14 @@ function rdvReferent(etuId) {
   const dlg = modal(`<h2>Responsable des visites — ${esc(e.nom)}</h2><p class="sub">Membre de l'équipe chargé des RDV de cet étudiant en ${esc(R.annee)}.</p>
     <select class="in" id="rfVis">${rdvEquipeOptions(e.referentEmail || e.referent)}</select>
     <input class="in" id="rfLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px">
+    <label class="fl">Précision (zone libre)</label><input class="in" id="rfPrec" placeholder="Ex : à sa demande" value="${esc(e.referentPrecision || '')}">
     <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="rfClasse"> Appliquer aux ${memeClasse.length} alternants de ${esc(e.classe)}</label>
     <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rfOk">Enregistrer</button></div>`, 480);
   $('rfVis').onchange = () => { $('rfLibre').style.display = $('rfVis').value === '__autre' ? '' : 'none'; };
   $('rfOk').onclick = async () => {
     const who = rdvVisiteurChoisi('rfVis', 'rfLibre');
     const ids = $('rfClasse').checked ? memeClasse.map(x => x.id) : [e.id];
-    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: ids, nom: who.visiteur, email: who.visiteurEmail });
+    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: ids, nom: who.visiteur, email: who.visiteurEmail, precision: $('rfPrec').value.trim() });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     dlg.remove(); toast('Responsable enregistré ✓'); rdvLoad();
   };
@@ -1830,18 +1952,19 @@ async function rdvExport() {
   const D = R.data; if (!D) return;
   let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
   const wb = new X.Workbook(), ws = wb.addWorksheet('RDV ' + D.annee, { views: [{ state: 'frozen', ySplit: 4 }] });
-  const H = ['Diplôme', 'Classe', 'Étudiant', 'Responsable visite', 'N° RDV', 'Date RDV pris', 'Date RDV (après report)', 'Visiteur', 'Entreprise', 'Lieu', 'Statut', 'Commentaire'];
-  ws.columns = [12, 14, 26, 22, 8, 14, 16, 22, 28, 36, 12, 40].map(w => ({ width: w }));
-  xlTitle(ws, 'Suivi des RDV en entreprise — ' + D.annee, 'Export du ' + fmtLong(todayISO()), H.length); xlHeader(ws, 4, H);
+  const H = ['ID RDV', 'ID étudiant', 'Diplôme', 'Classe', 'Étudiant', 'Responsable visite', 'Précision responsable', 'N° RDV', 'Date RDV pris', 'Date RDV (après report)', 'Visiteur', 'Précision', 'Entreprise', 'Code postal', 'Lieu', 'Statut', 'Commentaire'];
+  ws.columns = [16, 12, 12, 14, 26, 22, 20, 8, 14, 16, 22, 20, 28, 11, 36, 12, 40].map(w => ({ width: w }));
+  xlTitle(ws, 'Suivi des RDV en entreprise — ' + D.annee, 'Export du ' + fmtLong(todayISO()) + ' — modifiable puis réimportable (« Importer Excel ») : ne pas toucher aux colonnes ID ; ajouter une ligne avec l\'ID étudiant et une date pour créer un RDV', H.length); xlHeader(ws, 4, H);
   const SC = { 'Honoré': ['E8F6EE', '15803D'], 'Planifié': ['E8EFF8', '1A4E8A'], 'Reporté': ['FFF4ED', 'C2410C'], 'Annulé': ['FDE8E8', 'C62828'], 'Autre': ['EEF2F7', '475569'], 'À planifier': ['F1F4F8', '7D8A9C'] };
   let r = 5;
   parDipClasse(D.etudiants.filter(e => e.alternant || D.visites.some(v => v.etuId === e.id && v.annee === D.annee))).forEach(([d, cls]) => cls.forEach(([c, l]) => l.forEach(e => {
     const vs = D.visites.filter(v => v.etuId === e.id && v.annee === D.annee).sort((a, b) => (a.datePris || '').localeCompare(b.datePris || ''));
     (vs.length ? vs : [null]).forEach((v, i) => {
-      ws.getRow(r).values = [d, c, e.nom, e.referent || '', v ? i + 1 : '', v && v.datePris ? new Date(v.datePris + 'T12:00:00') : '', v && v.date ? new Date(v.date + 'T12:00:00') : '', v ? v.visiteur : '', v ? v.entreprise : e.entreprise, v ? v.lieu : e.lieu, v ? v.statut : 'Aucun RDV', v ? v.commentaire : ''];
-      [6, 7].forEach(k => ws.getCell(r, k).numFmt = 'dd/mm/yyyy');
+      ws.getRow(r).values = [v ? v.id : '', e.id, d, c, e.nom, e.referent || '', e.referentPrecision || '', v ? i + 1 : '', v && v.datePris ? new Date(v.datePris + 'T12:00:00') : '', v && v.date ? new Date(v.date + 'T12:00:00') : '', v ? v.visiteur : '', v ? v.precision || '' : '', v ? v.entreprise : e.entreprise, e.cp || '', v ? v.lieu : e.lieu, v ? v.statut : 'Aucun RDV', v ? v.commentaire : ''];
+      [9, 10].forEach(k => ws.getCell(r, k).numFmt = 'dd/mm/yyyy');
+      [1, 2].forEach(k => ws.getCell(r, k).font = { color: { argb: 'FF94A3B8' }, size: 9 });
       const sc = v ? SC[v.statut] : ['FDE8E8', 'C62828'];
-      if (sc) { const cl = ws.getCell(r, 11); cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sc[0] } }; cl.font = { bold: true, color: { argb: 'FF' + sc[1] } }; }
+      if (sc) { const cl = ws.getCell(r, 16); cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sc[0] } }; cl.font = { bold: true, color: { argb: 'FF' + sc[1] } }; }
       r++;
     });
   })));
@@ -2052,7 +2175,9 @@ window.VX = {
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
-  rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
+  rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
+  rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
+  rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
   dirQ: v => { DR.q = v; dirRender(); const i = $('dirQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } },
   exInit, exLoad: s => exLoad(s), exRender, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport

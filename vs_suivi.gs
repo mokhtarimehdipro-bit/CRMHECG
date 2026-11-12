@@ -38,7 +38,7 @@ function _vsuEntreprises_(ss) {
     g[id].lignes.push(_adrDeLigne_(d[i], C));
   }
   var out = {};
-  Object.keys(g).forEach(function (k) { var a = _adrReference_(g[k].lignes); out[k] = { id: g[k].id, nom: g[k].nom, lieu: [a.adresse, a.complement, a.cp, a.ville].filter(Boolean).join(" ") }; });
+  Object.keys(g).forEach(function (k) { var a = _adrReference_(g[k].lignes); out[k] = { id: g[k].id, nom: g[k].nom, lieu: [a.adresse, a.complement, a.cp, a.ville].filter(Boolean).join(" "), cp: String(a.cp || ""), ville: String(a.ville || "") }; });
   return out;
 }
 
@@ -48,11 +48,11 @@ function _vsuEntreprises_(ss) {
 // étudiant dans telle structure », même si l'étudiant change d'entreprise ensuite.
 // « Date RDV pris » = date initiale ; « Date RDV » = date en vigueur (après report).
 var RDV_HEADERS = ["ID", "Année scolaire", "ID étudiant", "Étudiant", "Classe", "ID entreprise", "Entreprise", "Lieu", "Visiteur", "Email visiteur",
-  "Date RDV pris", "Date RDV", "Statut", "Historique", "Commentaire", "Source", "Créé le", "Créé par", "Mis à jour le", "Archivé"];
-var RDV_REF_HEADERS = ["Année scolaire", "ID étudiant", "Responsable visite", "Email", "Source", "Mis à jour le", "Par"];
+  "Date RDV pris", "Date RDV", "Statut", "Historique", "Commentaire", "Source", "Créé le", "Créé par", "Mis à jour le", "Archivé", "Précision"];
+var RDV_REF_HEADERS = ["Année scolaire", "ID étudiant", "Responsable visite", "Email", "Source", "Mis à jour le", "Par", "Précision"];
 var RDV_STATUTS = ["À planifier", "Planifié", "Honoré", "Reporté", "Annulé", "Autre"];
 
-function _rdvSheet_(ss) { var ws = _vsxSheet_(ss, "RDV_VISITES", RDV_HEADERS); return ws; }
+function _rdvSheet_(ss) { return _vsuEntete_(_vsxSheet_(ss, "RDV_VISITES", RDV_HEADERS), RDV_HEADERS); }
 function _rdvLire_(ss) {
   var d = _rdvSheet_(ss).getDataRange().getValues(), out = [];
   for (var i = 1; i < d.length; i++) {
@@ -60,13 +60,13 @@ function _rdvLire_(ss) {
     var h = []; try { h = JSON.parse(String(r[13] || "[]")); } catch (e) { h = []; }
     out.push({ id: String(r[0]), annee: String(r[1]), etuId: String(r[2]), etudiant: String(r[3]), classe: String(r[4]), entId: String(r[5]), entreprise: String(r[6]),
       lieu: String(r[7]), visiteur: String(r[8]), visiteurEmail: String(r[9]), datePris: _vsuIso_(r[10]), date: _vsuIso_(r[11]), statut: String(r[12] || "Planifié"),
-      historique: h, commentaire: String(r[14] || ""), source: String(r[15] || ""), creeLe: _vsuIso_(r[16]), creePar: String(r[17] || ""), row: i + 1 });
+      historique: h, commentaire: String(r[14] || ""), source: String(r[15] || ""), creeLe: _vsuIso_(r[16]), creePar: String(r[17] || ""), precision: String(r[20] || ""), row: i + 1 });
   }
   return out;
 }
 function _rdvReferents_(ss, annee) {
-  var d = _vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS).getDataRange().getValues(), out = {};
-  for (var i = 1; i < d.length; i++) if (String(d[i][0]) === annee && d[i][1]) out[String(d[i][1])] = { nom: String(d[i][2] || ""), email: String(d[i][3] || ""), source: String(d[i][4] || ""), row: i + 1 };
+  var d = _vsuEntete_(_vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS), RDV_REF_HEADERS).getDataRange().getValues(), out = {};
+  for (var i = 1; i < d.length; i++) if (String(d[i][0]) === annee && d[i][1]) out[String(d[i][1])] = { nom: String(d[i][2] || ""), email: String(d[i][3] || ""), source: String(d[i][4] || ""), precision: String(d[i][7] || ""), row: i + 1 };
   return out;
 }
 
@@ -81,8 +81,9 @@ function handleGetRdv(p, ss) {
       if (!e.inscrit && !(avecVisite[e.id] && visites.some(function (v) { return v.etuId === e.id && v.annee === annee; }))) return;
       var ent = e.idEnt ? ents[e.idEnt.toUpperCase()] : null;
       liste.push({ id: e.id, nom: (e.prenom + " " + e.nom).trim(), classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, typo: e.typo,
-        alternant: _vsuAlternant_(e), statut: e.statut, entId: ent ? ent.id : "", entreprise: ent ? ent.nom : e.nomEnt, lieu: ent ? ent.lieu : "",
-        referent: refs[e.id] ? refs[e.id].nom : "", referentEmail: refs[e.id] ? refs[e.id].email : "", referentSource: refs[e.id] ? refs[e.id].source : "" });
+        alternant: _vsuAlternant_(e), statut: e.statut, entId: ent ? ent.id : "", entreprise: ent ? ent.nom : e.nomEnt, lieu: ent ? ent.lieu : "", cp: ent ? ent.cp : "", ville: ent ? ent.ville : "",
+        referent: refs[e.id] ? refs[e.id].nom : "", referentEmail: refs[e.id] ? refs[e.id].email : "", referentSource: refs[e.id] ? refs[e.id].source : "",
+        referentPrecision: refs[e.id] ? refs[e.id].precision : "" });
     });
     var annees = {}; annees[_ckAnneeCourante_()] = 1; visites.forEach(function (v) { if (v.annee) annees[v.annee] = 1; });
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; }).map(function (x) { return { nom: x.nom, email: x.email, role: x.role }; });
@@ -110,7 +111,9 @@ function handleSaveRdv(p, ss) {
           return createJsonResponse({ success: true });
         }
         var row = d[i].slice(0, RDV_HEADERS.length);
-        if (v.visiteur !== undefined) { row[8] = String(v.visiteur || "").trim(); row[9] = String(v.visiteurEmail || "").trim(); }
+        while (row.length < RDV_HEADERS.length) row.push("");
+        if (v.visiteur !== undefined) { var cvv = _rdvCanon_(v.visiteur, _rdvCtx_(ss)); row[8] = cvv.nom; row[9] = String(v.visiteurEmail || "").trim() || cvv.email; if (v.precision === undefined && cvv.precision) row[20] = _rdvJoindre_(row[20], cvv.precision); }
+        if (v.precision !== undefined) row[20] = String(v.precision || "").trim();
         if (v.commentaire !== undefined) row[14] = String(v.commentaire || "");
         if (date && String(row[12]) !== "Honoré") {
           if (!row[10]) row[10] = date;
@@ -133,8 +136,10 @@ function handleSaveRdv(p, ss) {
     var id = "RDV" + now.getTime();
     var annee = String(v.annee || (date ? _vsuAnneeDe_(date) : _ckAnneeCourante_()));
     var hist = [{ le: Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd HH:mm"), statut: date ? "Planifié" : "À planifier", date: date, par: par }];
+    var cv = _rdvCanon_(v.visiteur || "", _rdvCtx_(ss));
     ws.appendRow([id, annee, e.id, (e.prenom + " " + e.nom).trim(), e.classe, ent ? ent.id : "", ent ? ent.nom : (String(v.entreprise || "") || e.nomEnt), ent ? ent.lieu : String(v.lieu || ""),
-      String(v.visiteur || "").trim(), String(v.visiteurEmail || "").trim(), "", "", date ? "Planifié" : "À planifier", JSON.stringify(hist), String(v.commentaire || ""), "Saisie", now, par, now, ""]);
+      cv.nom, String(v.visiteurEmail || "").trim() || cv.email, "", "", date ? "Planifié" : "À planifier", JSON.stringify(hist), String(v.commentaire || ""), "Saisie", now, par, now, "",
+      v.precision !== undefined ? String(v.precision || "").trim() : cv.precision]);
     ws.getRange(ws.getLastRow(), 11, 1, 2).setNumberFormat("@").setValues([[date, date]]);
     logAction(par, p.vieScRole || "", "Création", "Vie scolaire — Suivi des RDV", id, "RDV " + (date ? "pris le " + date : "à planifier") + " : " + (e.prenom + " " + e.nom).trim() + " chez " + (ent ? ent.nom : "?") + " — visiteur " + (v.visiteur || "?"));
     return createJsonResponse({ success: true, id: id });
@@ -177,21 +182,22 @@ function handleSaveReferentRdv(p, ss) {
   if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
   try {
     var annee = String(p.annee || _ckAnneeCourante_()), ids = Array.isArray(p.etuIds) ? p.etuIds.map(String) : [String(p.etuId || "")];
-    var n = _rdvEcrireReferents_(ss, annee, ids.map(function (id) { return { etuId: id, nom: String(p.nom || "").trim(), email: String(p.email || "").trim() }; }), "Saisie", String(p.nomAuteur || p.emailAuteur || ""));
+    var c = _rdvCanon_(p.nom || "", _rdvCtx_(ss)), prec = p.precision !== undefined ? String(p.precision || "").trim() : c.precision;
+    var n = _rdvEcrireReferents_(ss, annee, ids.map(function (id) { return { etuId: id, nom: c.nom, email: String(p.email || "").trim() || c.email, precision: prec }; }), "Saisie", String(p.nomAuteur || p.emailAuteur || ""));
     logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Modification", "Vie scolaire — Suivi des RDV", ids.length === 1 ? ids[0] : "RDV_REFERENTS",
       "Responsable visite " + annee + " : " + (p.nom || "(retiré)") + " pour " + ids.length + " étudiant(s)");
     return createJsonResponse({ success: true, n: n });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 function _rdvEcrireReferents_(ss, annee, items, source, par) {
-  var ws = _vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS), refs = _rdvReferents_(ss, annee), now = new Date(), n = 0, ajout = [];
+  var refs = _rdvReferents_(ss, annee), ws = _vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS), now = new Date(), n = 0, ajout = [];
   items.forEach(function (it) {
     if (!it.etuId) return;
     var r = refs[it.etuId];
     if (r) {
       if (source === "Charlemagne" && r.source === "Saisie") return;   // une saisie manuelle n'est jamais écrasée par l'import
-      ws.getRange(r.row, 3, 1, 5).setValues([[it.nom, it.email, source, now, par]]); n++;
-    } else if (it.nom) { ajout.push([annee, it.etuId, it.nom, it.email, source, now, par]); n++; }
+      ws.getRange(r.row, 3, 1, 6).setValues([[it.nom, it.email, source, now, par, it.precision !== undefined ? it.precision : r.precision]]); n++;
+    } else if (it.nom) { ajout.push([annee, it.etuId, it.nom, it.email, source, now, par, it.precision || ""]); n++; }
   });
   if (ajout.length) ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_REF_HEADERS.length).setValues(ajout);
   return n;
@@ -214,6 +220,7 @@ function _rdvImporterCharl_(ss, lignes, par) {
     var x = equipe.filter(function (q) { var qn = _vsuNorm_(q.nom); return t.every(function (w) { return w.length < 2 || qn.indexOf(w) !== -1; }); })[0];
     return x ? x.email : "";
   };
+  var ctxN = _rdvCtx_(ss);
   var existants = {}; _rdvLire_(ss).forEach(function (v) { existants[v.etuId + "|" + v.date] = 1; });
   var annee = _ckAnneeCourante_(), refs = [], nouvelles = [], now = new Date(), auj = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd");
   var stats = { lignesAvecVisite: 0, responsables: 0, visites: 0, nonRapproches: 0 };
@@ -233,16 +240,16 @@ function _rdvImporterCharl_(ss, lignes, par) {
       var reste = v.replace(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g, " ").replace(/\b(le|du|au|visite|rdv)\b/gi, " ").replace(/\s+/g, " ").trim();
       if (h.indexOf("date") === -1 && reste && /[a-z]{2}/i.test(reste)) noms.push(reste);
     });
-    var nom = noms[0] || "";
-    if (nom) { refs.push({ etuId: e.id, nom: nom, email: mailDe(nom) }); stats.responsables++; }
+    var cn = _rdvCanon_(noms[0] || "", ctxN), nom = cn.nom;
+    if (nom) { refs.push({ etuId: e.id, nom: nom, email: cn.email || mailDe(nom), precision: cn.precision }); stats.responsables++; }
     var ent = e.idEnt ? ents[e.idEnt.toUpperCase()] : null;
     dates.filter(function (x, i, a) { return a.indexOf(x) === i; }).forEach(function (dt) {
       if (existants[e.id + "|" + dt]) return;
       existants[e.id + "|" + dt] = 1;
       var st = dt <= auj ? "Honoré" : "Planifié";
       nouvelles.push(["RDV" + now.getTime() + "C" + nouvelles.length, _vsuAnneeDe_(dt), e.id, (e.prenom + " " + e.nom).trim(), e.classe, ent ? ent.id : "", ent ? ent.nom : e.nomEnt, ent ? ent.lieu : "",
-        nom, mailDe(nom), dt, dt, st, JSON.stringify([{ le: Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd HH:mm"), statut: st, date: dt, par: "Import Charlemagne", commentaire: vis.map(function (x) { return x.h + " : " + x.v; }).join(" | ") }]),
-        "Repris de Charlemagne : " + vis.map(function (x) { return x.h + " = " + x.v; }).join(" ; "), "Charlemagne", now, par, now, ""]);
+        nom, cn.email || mailDe(nom), dt, dt, st, JSON.stringify([{ le: Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd HH:mm"), statut: st, date: dt, par: "Import Charlemagne", commentaire: vis.map(function (x) { return x.h + " : " + x.v; }).join(" | ") }]),
+        "Repris de Charlemagne : " + vis.map(function (x) { return x.h + " = " + x.v; }).join(" ; "), "Charlemagne", now, par, now, "", cn.precision]);
     });
   });
   if (refs.length) _rdvEcrireReferents_(ss, annee, refs, "Charlemagne", par);
@@ -757,4 +764,189 @@ function handleGetRdvAnalyse(p, ss) {
     });
     return createJsonResponse({ success: true, annee: annee, mouvements: mv, suiviDepuis: props.getProperty("ALT_SUIVI_DEPUIS") || "", dernierReleve: props.getProperty("ALT_RELEVE_JOUR") || "" });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+// ── Harmonisation des noms de visiteurs (« nico », « Nico », « Nico à sa demande » → un seul nom) ──
+// Le texte libre (« à sa demande », parenthèses, « - … ») part dans la colonne « Précision ».
+// Reconnaissance : alias mémorisés (propriété RDV_ALIAS : nom normalisé → e-mail), puis membre de
+// l'équipe dont chaque mot du nom saisi commence un mot du nom (« nico » → « Nicolas DURAND »), sinon
+// le nom est simplement mis en forme (« nico » → « Nico ») pour regrouper les variantes.
+function _vsuEntete_(ws, headers) {
+  var n = headers.length;
+  if (ws.getLastColumn() < n || String(ws.getRange(1, n).getValue()) !== headers[n - 1]) {
+    if (ws.getMaxColumns() < n) ws.insertColumnsAfter(ws.getMaxColumns(), n - ws.getMaxColumns());
+    ws.getRange(1, 1, 1, n).setValues([headers]).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  }
+  return ws;
+}
+function _rdvCtx_(ss) {
+  var alias = {}; try { alias = JSON.parse(PropertiesService.getScriptProperties().getProperty("RDV_ALIAS") || "{}"); } catch (e) { alias = {}; }
+  return { equipe: _vsxRef_(ss).personnel.filter(function (x) { return x.email; }), alias: alias };
+}
+function _rdvSplit_(raw) {
+  var s = String(raw == null ? "" : raw).replace(/\s+/g, " ").trim(), prec = [];
+  s = s.replace(/\(([^)]*)\)/g, function (m, x) { if (x.trim()) prec.push(x.trim()); return " "; });
+  var m = s.match(/\s*(?:[-–:,;]\s*)?(?:^|\s)(?:à|a)\s+(?:sa|la|leur|ma|notre|votre)\s+demande\b.*$/i);
+  if (m) { prec.unshift(m[0].replace(/^[\s\-–:,;]+/, "").trim()); s = s.slice(0, m.index); }
+  var m2 = s.match(/\s+[-–:]\s+(.*)$/);
+  if (m2) { prec.push(m2[1].trim()); s = s.slice(0, m2.index); }
+  return { nom: s.replace(/\s+/g, " ").trim(), precision: prec.filter(Boolean).join(" ; ") };
+}
+function _rdvCasse_(s) {
+  return String(s).toLowerCase().split(" ").map(function (w) { return w.split("-").map(function (x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : x; }).join("-"); }).join(" ");
+}
+function _rdvCanon_(raw, ctx) {
+  var sp = _rdvSplit_(raw);
+  if (!sp.nom) return { nom: "", email: "", precision: sp.precision, reconnu: false };
+  var k = _vsuNorm_(sp.nom);
+  var parMail = function (m) { m = String(m || "").toLowerCase(); return ctx.equipe.filter(function (q) { return q.email.toLowerCase() === m; })[0]; };
+  var a = ctx.alias[k] && parMail(ctx.alias[k]);
+  if (a) return { nom: a.nom, email: a.email, precision: sp.precision, reconnu: true };
+  if (sp.nom.indexOf("@") > 0) { var pm = parMail(sp.nom); if (pm) return { nom: pm.nom, email: pm.email, precision: sp.precision, reconnu: true }; }
+  var toks = k.split(" ").filter(function (w) { return w.length >= 2; });
+  var c = toks.length ? ctx.equipe.filter(function (q) {
+    var qt = _vsuNorm_(q.nom).split(" ");
+    return toks.every(function (w) { return qt.some(function (x) { return x.indexOf(w) === 0; }); });
+  }) : [];
+  if (c.length === 1) return { nom: c[0].nom, email: c[0].email, precision: sp.precision, reconnu: true };
+  return { nom: _rdvCasse_(sp.nom), email: "", precision: sp.precision, reconnu: false, ambigu: c.length > 1 };
+}
+function _rdvJoindre_(a, b) { a = String(a || "").trim(); b = String(b || "").trim(); if (!a) return b; if (!b || a.toLowerCase().indexOf(b.toLowerCase()) !== -1) return a; return a + " ; " + b; }
+
+/** Aperçu (appliquer absent) ou application de l'harmonisation des noms de visiteurs / responsables. */
+function handleHarmoniserVisiteurs(p, ss) {
+  if (!_vsuAdmin_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    var props = PropertiesService.getScriptProperties();
+    if (p.appliquer && p.alias && typeof p.alias === "object") {
+      var al = {}; try { al = JSON.parse(props.getProperty("RDV_ALIAS") || "{}"); } catch (e) { al = {}; }
+      Object.keys(p.alias).forEach(function (k) { if (p.alias[k]) al[_vsuNorm_(k)] = String(p.alias[k]).toLowerCase(); });
+      props.setProperty("RDV_ALIAS", JSON.stringify(al));
+    }
+    var ctx = _rdvCtx_(ss), groupes = {};
+    var wsV = _vsuEntete_(_rdvSheet_(ss), RDV_HEADERS), dV = wsV.getDataRange().getValues();
+    var wsR = _vsuEntete_(_vsxSheet_(ss, "RDV_REFERENTS", RDV_REF_HEADERS), RDV_REF_HEADERS), dR = wsR.getDataRange().getValues();
+    var noter = function (brut) {
+      var b = String(brut || "").trim(); if (!b) return null;
+      var c = _rdvCanon_(b, ctx); groupes[b] = groupes[b] || { brut: b, nom: c.nom, email: c.email, precision: c.precision, reconnu: c.reconnu, ambigu: !!c.ambigu, n: 0 };
+      groupes[b].n++; return c;
+    };
+    var modV = 0, modR = 0;
+    for (var i = 1; i < dV.length; i++) {
+      if (!dV[i][0]) continue;
+      var c = noter(dV[i][8]); if (!c) continue;
+      var prec = _rdvJoindre_(dV[i][20], c.precision);
+      if (p.appliquer && (String(dV[i][8]) !== c.nom || String(dV[i][9] || "") !== (c.email || String(dV[i][9] || "")) || String(dV[i][20] || "") !== prec)) {
+        wsV.getRange(i + 1, 9, 1, 2).setValues([[c.nom, c.email || String(dV[i][9] || "")]]); wsV.getRange(i + 1, 21).setValue(prec); modV++;
+      }
+    }
+    for (var j = 1; j < dR.length; j++) {
+      if (!dR[j][1]) continue;
+      var c2 = noter(dR[j][2]); if (!c2) continue;
+      var prec2 = _rdvJoindre_(dR[j][7], c2.precision);
+      if (p.appliquer && (String(dR[j][2]) !== c2.nom || String(dR[j][3] || "") !== (c2.email || String(dR[j][3] || "")) || String(dR[j][7] || "") !== prec2)) {
+        wsR.getRange(j + 1, 3, 1, 2).setValues([[c2.nom, c2.email || String(dR[j][3] || "")]]); wsR.getRange(j + 1, 8).setValue(prec2); modR++;
+      }
+    }
+    var liste = Object.keys(groupes).map(function (k) { return groupes[k]; }).sort(function (a, b) { return a.nom.localeCompare(b.nom) || a.brut.localeCompare(b.brut); });
+    if (p.appliquer) logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Modification", "Vie scolaire — Suivi des RDV", "RDV_VISITES",
+      "Harmonisation des noms de visiteurs : " + modV + " RDV et " + modR + " responsable(s) mis à jour — " + liste.filter(function (g) { return g.brut !== g.nom; }).slice(0, 40).map(function (g) { return "« " + g.brut + " » → " + g.nom + (g.precision ? " [" + g.precision + "]" : ""); }).join(" ; "));
+    return createJsonResponse({ success: true, groupes: liste, equipe: ctx.equipe.map(function (q) { return { nom: q.nom, email: q.email }; }), modifies: { rdv: modV, responsables: modR } });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+// ── Import d'un fichier Excel (export retravaillé) : aperçu puis application ──
+// Colonnes reconnues (export « Suivi des RDV ») : ID RDV, ID étudiant, Responsable visite, Précision
+// responsable, Date RDV pris, Date RDV (après report), Visiteur, Précision, Statut, Commentaire.
+// Ligne avec ID RDV = mise à jour de ce RDV ; sans ID RDV mais avec une date = nouveau RDV.
+function _rdvIsoImport_(v) {
+  var s = String(v == null ? "" : v).trim(); if (!s) return "";
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0];
+  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (m) { var y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; return y + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2); }
+  return "?";
+}
+function handleImporterRdvExcel(p, ss) {
+  if (!_vsuAdmin_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(25000);
+    var lignes = []; try { lignes = typeof p.lignes === "string" ? JSON.parse(p.lignes) : (p.lignes || []); } catch (e) { lignes = []; }
+    if (!lignes.length) return createJsonResponse({ success: false, message: "Le fichier ne contient aucune ligne exploitable." });
+    var annee = String(p.annee || _ckAnneeCourante_()), ctx = _rdvCtx_(ss), par = String(p.nomAuteur || p.emailAuteur || ""), now = new Date();
+    var ws = _vsuEntete_(_rdvSheet_(ss), RDV_HEADERS), d = ws.getDataRange().getValues(), parId = {};
+    for (var i = 1; i < d.length; i++) if (d[i][0] && String(d[i][19]) !== "Oui") parId[String(d[i][0])] = { row: i + 1, v: d[i] };
+    var etus = {}; _vsuEtudiants_(ss).forEach(function (e) { etus[e.id] = e; });
+    var refs = _rdvReferents_(ss, annee), dejaDate = {};
+    Object.keys(parId).forEach(function (k) { var v = parId[k].v; dejaDate[String(v[2]) + "|" + _vsuIso_(v[10])] = 1; dejaDate[String(v[2]) + "|" + _vsuIso_(v[11])] = 1; });
+    var STATUTS = ["À planifier", "Planifié", "Honoré", "Reporté", "Annulé", "Autre"];
+    var statutOk = function (s) { s = String(s || "").trim(); if (!s) return ""; var x = STATUTS.filter(function (t) { return _vsuNorm_(t) === _vsuNorm_(s); })[0]; return x || "?"; };
+    var modifs = [], creations = [], refModifs = [], erreurs = [], refVus = {};
+    lignes.forEach(function (l, n) {
+      var ligne = n + 2, idR = String(l.idRdv || "").trim(), etuId = String(l.etuId || "").trim();
+      // Responsable visite de l'étudiant (une fois par étudiant)
+      if (etuId && etus[etuId] && String(l.responsable || "").trim() && !refVus[etuId]) {
+        refVus[etuId] = 1;
+        var c = _rdvCanon_(l.responsable, ctx), prec = l.precisionResp !== undefined ? String(l.precisionResp || "").trim() : c.precision;
+        var r = refs[etuId];
+        if (!r || r.nom !== c.nom || (r.precision || "") !== prec) refModifs.push({ etuId: etuId, etudiant: (etus[etuId].prenom + " " + etus[etuId].nom).trim(), avant: r ? r.nom + (r.precision ? " (" + r.precision + ")" : "") : "—", apres: c.nom + (prec ? " (" + prec + ")" : ""), nom: c.nom, email: c.email, precision: prec });
+      }
+      var dp = _rdvIsoImport_(l.datePris), dr = _rdvIsoImport_(l.date), st = statutOk(l.statut);
+      if (dp === "?" || dr === "?") { erreurs.push("Ligne " + ligne + " : date illisible (format attendu jj/mm/aaaa)"); return; }
+      if (st === "?") { erreurs.push("Ligne " + ligne + " : statut « " + l.statut + " » inconnu (" + STATUTS.join(", ") + ")"); return; }
+      if (idR) {
+        var x = parId[idR]; if (!x) { erreurs.push("Ligne " + ligne + " : RDV " + idR + " introuvable (supprimé ?)"); return; }
+        var v = x.v, ch = [], nv = v.slice(0, RDV_HEADERS.length);
+        while (nv.length < RDV_HEADERS.length) nv.push("");
+        var vis = String(l.visiteur || "").trim();
+        if (vis) { var cv = _rdvCanon_(vis, ctx); if (cv.nom !== String(v[8])) { ch.push(["Visiteur", v[8], cv.nom]); nv[8] = cv.nom; nv[9] = cv.email || ""; }
+          var pv = l.precision !== undefined ? String(l.precision || "").trim() : _rdvJoindre_(v[20], cv.precision); if (pv !== String(v[20] || "")) { ch.push(["Précision", v[20], pv]); nv[20] = pv; } }
+        else if (l.precision !== undefined && String(l.precision || "").trim() !== String(v[20] || "")) { ch.push(["Précision", v[20], l.precision]); nv[20] = String(l.precision || "").trim(); }
+        if (dp && dp !== _vsuIso_(v[10])) { ch.push(["Date RDV pris", _vsuIso_(v[10]), dp]); nv[10] = dp; }
+        if (dr && dr !== _vsuIso_(v[11])) { ch.push(["Date RDV", _vsuIso_(v[11]), dr]); nv[11] = dr; }
+        if (st && st !== String(v[12])) { ch.push(["Statut", v[12], st]); nv[12] = st; }
+        if (l.commentaire !== undefined && String(l.commentaire || "").trim() !== String(v[14] || "").trim()) { ch.push(["Commentaire", v[14], l.commentaire]); nv[14] = String(l.commentaire || "").trim(); }
+        if (ch.length) modifs.push({ id: idR, row: x.row, etudiant: String(v[3]), changements: ch.map(function (c) { return { champ: c[0], avant: String(c[1] || ""), apres: String(c[2] || "") }; }), nv: nv, statutChange: st && st !== String(v[12]) });
+        return;
+      }
+      if (!dp && !dr) return;   // ligne « Aucun RDV » ou étudiant sans date : rien à créer
+      if (!etuId || !etus[etuId]) { erreurs.push("Ligne " + ligne + " : nouvel RDV sans ID étudiant valide"); return; }
+      var dd = dp || dr;
+      if (dejaDate[etuId + "|" + dd]) return;
+      dejaDate[etuId + "|" + dd] = 1;
+      var cn = _rdvCanon_(l.visiteur || "", ctx);
+      creations.push({ etuId: etuId, etudiant: (etus[etuId].prenom + " " + etus[etuId].nom).trim(), datePris: dp || dr, date: dr || dp, statut: st || (dd <= Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd") ? "Planifié" : "Planifié"),
+        visiteur: cn.nom, email: cn.email, precision: l.precision !== undefined ? String(l.precision || "").trim() : cn.precision, commentaire: String(l.commentaire || "").trim() });
+    });
+    if (!p.appliquer) {
+      return createJsonResponse({ success: true, apercu: true, modifs: modifs.map(function (m) { return { id: m.id, etudiant: m.etudiant, changements: m.changements }; }), creations: creations, refModifs: refModifs, erreurs: erreurs });
+    }
+    var horo = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd HH:mm");
+    modifs.forEach(function (m) {
+      var h = []; try { h = JSON.parse(String(m.nv[13] || "[]")); } catch (e) { h = []; }
+      h.push({ le: horo, statut: m.nv[12], date: _vsuIso_(m.nv[11]), par: par + " (import Excel)", commentaire: m.changements.map(function (c) { return c.champ + " : " + (c.avant || "—") + " → " + (c.apres || "—"); }).join(" | ") });
+      m.nv[13] = JSON.stringify(h); m.nv[18] = now;
+      ws.getRange(m.row, 1, 1, RDV_HEADERS.length).setValues([m.nv]);
+      ws.getRange(m.row, 11, 1, 2).setNumberFormat("@").setValues([[_vsuIso_(m.nv[10]), _vsuIso_(m.nv[11])]]);
+    });
+    if (creations.length) {
+      var ents = _vsuEntreprises_(ss), rows = creations.map(function (c, k) {
+        var e = etus[c.etuId], ent = e.idEnt ? ents[e.idEnt.toUpperCase()] : null;
+        return ["RDV" + now.getTime() + "X" + k, _vsuAnneeDe_(c.datePris), e.id, c.etudiant, e.classe, ent ? ent.id : "", ent ? ent.nom : e.nomEnt, ent ? ent.lieu : "",
+          c.visiteur, c.email, c.datePris, c.date, c.statut, JSON.stringify([{ le: horo, statut: c.statut, date: c.date, par: par + " (import Excel)" }]), c.commentaire, "Import Excel", now, par, now, "", c.precision];
+      });
+      var r0 = ws.getLastRow() + 1;
+      ws.getRange(r0, 11, rows.length, 2).setNumberFormat("@");
+      ws.getRange(r0, 1, rows.length, RDV_HEADERS.length).setValues(rows);
+    }
+    if (refModifs.length) _rdvEcrireReferents_(ss, annee, refModifs, "Saisie", par + " (import Excel)");
+    logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Suivi des RDV", "RDV_VISITES",
+      "Import Excel « " + String(p.fichier || "").slice(0, 80) + " » : " + modifs.length + " RDV modifié(s), " + creations.length + " créé(s), " + refModifs.length + " responsable(s) mis à jour"
+      + (erreurs.length ? ", " + erreurs.length + " ligne(s) ignorée(s)" : "") + " — " + modifs.slice(0, 20).map(function (m) { return m.etudiant + " (" + m.changements.map(function (c) { return c.champ + " → " + c.apres; }).join(", ") + ")"; }).join(" ; "));
+    return createJsonResponse({ success: true, modifies: modifs.length, crees: creations.length, responsables: refModifs.length, erreurs: erreurs });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
 }
