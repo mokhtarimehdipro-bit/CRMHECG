@@ -1494,7 +1494,7 @@ async function rdvInit() {
         <select class="vx-sel" id="rdvDip" onchange="VX.rdvRender()"></select>
         <div style="position:relative"><button class="vx-btn sm" id="rdvClsBtn" onclick="VX.rdvClsPanel()">${svg('user', 13)} Classes : toutes ▾</button><div id="rdvClsPanel" class="rdv-cls" style="display:none"></div></div>
         <select class="vx-sel" id="rdvResp" onchange="VX.rdvRender()"></select>
-        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option><option value="nonenvoye">Lien de RDV non envoyé</option><option value="attente">⏳ RDV pris, non honorés</option><option value="prio">🚩 Prioritaires (responsable, aucun RDV pris)</option></select>
+        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option><option value="nonenvoye">Lien de RDV non envoyé</option><option value="attente">⏳ RDV pris, non honorés</option><option value="prio">🚩 Prioritaires (responsable attribué, aucun historique)</option></select>
         <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="cp">Trier par code postal du lieu</option><option value="nom">Trier par étudiant</option></select>
       </div>
       <div id="rdvQui"></div>
@@ -1521,7 +1521,8 @@ async function rdvLoad(annee) {
 const rdvAuj = () => todayISO();
 const rdvAsuivre = v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date < rdvAuj();
 const rdvAttente = v => ['Planifié', 'Reporté'].includes(v.statut) && !!(v.datePris || v.date);   // RDV pris, pas encore honoré
-const rdvPrio = (e, parEtu) => e.alternant && !!e.referent && !(parEtu[e.id] || []).some(v => v.datePris || v.date);   // responsable désigné, aucun RDV jamais pris
+// Prioritaire = un responsable visite est attribué, mais l'étudiant n'a encore AUCUN historique (aucun RDV, toutes années et tous statuts)
+const rdvPrio = e => !!e.referent && !(R.data.visites || []).some(v => v.etuId === e.id);
 function rdvClsPanel() {
   const p = $('rdvClsPanel');
   if (p.style.display !== 'none') { p.style.display = 'none'; return; }
@@ -1577,7 +1578,7 @@ function rdvRender() {
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
     <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Prioritaires</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>responsable désigné, aucun RDV pris</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Prioritaires</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>responsable attribué, aucun historique ni RDV</small></div>
     <div class="vx-kpi"><span>À suivre</span><b style="color:${retard ? '#c62828' : 'inherit'}">${retard}</b><small>date passée sans statut</small></div>
     <div class="vx-kpi"><span>Alternants sans RDV</span><b style="color:${sans ? '#c2410c' : 'inherit'}">${sans}</b><small>aucun RDV cette année</small></div>`;
   if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
@@ -1602,7 +1603,7 @@ function rdvRender() {
   const ligne = e => {
     const vs = parEtu[e.id] || [], env = D.envois[e.id];
     const pr = rdvPrio(e, parEtu);
-    return `<tr class="${pr ? 'prio' : ''}"><td class="vs2-n"><b>${pr ? '<span class="rdv-prio" title="Prioritaire : un responsable est désigné mais aucun RDV n\'a encore été pris">🚩 Prioritaire</span> ' : ''}${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
+    return `<tr class="${pr ? 'prio' : ''}"><td class="vs2-n"><b>${pr ? '<span class="rdv-prio" title="Prioritaire : un responsable est attribué mais l\'étudiant n\'a encore aucun historique ni RDV pris">🚩 Prioritaire</span> ' : ''}${esc(e.nom)}</b><small>${esc(e.classe)} · ${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
       <td class="vs2-n">${e.entreprise ? `<b>${esc(e.entreprise)}</b><small>${e.cp ? `<span class="rdv-cp">${esc(e.cp)}</span> ` : ''}${esc(e.lieu || 'adresse non renseignée')}</small>` : '<small style="color:#c2410c;font-weight:700">Aucune entreprise dans le CRM</small>'}</td>
       <td class="vs2-n"><button class="vx-link" style="margin-top:0" onclick="VX.rdvReferent('${jsq(e.id)}')">${e.referent ? esc(e.referent) : '<i>à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}${e.referentPrecision ? `<div class="pr">${esc(e.referentPrecision)}</div>` : ''}
         ${env ? `<small style="display:block;color:#0f766e;font-weight:700" title="${esc(env.map(x => fmtD(x.le) + ' → ' + x.dest).join('\n'))}">${svg('mail', 11)} lien envoyé le ${fmtD(env[env.length - 1].le)}${env.length > 1 ? ' (' + env.length + '×)' : ''}</small>` : ''}</td>
