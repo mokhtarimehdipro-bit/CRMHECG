@@ -1526,6 +1526,7 @@ async function rdvInit() {
         <span class="rdv-dt">${svg('clock', 13)} RDV pris du <input type="date" id="rdvDu" onchange="VX.rdvRender()"> au <input type="date" id="rdvAu" onchange="VX.rdvRender()"><button type="button" title="Effacer les dates" onclick="VX.rdvDates()">✕</button></span>
         <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sansresp">⚠ Alternants sans responsable visite</option><option value="prio">🚩 Drapeaux rouges (prioritaires)</option><option value="drap">⚑ Tous les drapeaux</option><option value="attente">⏳ RDV pris, non honorés</option><option value="venir">RDV à venir</option><option value="suivre">À suivre (date passée)</option><option value="sans">Sans aucun RDV</option><option value="nonenvoye">Lien de RDV non envoyé</option></select>
         <select class="vx-sel" id="rdvTri" onchange="VX.rdvRender()"><option value="classe">Grouper par diplôme et classe</option><option value="resp">Grouper par responsable visite</option><option value="cp">Trier par code postal du lieu</option><option value="nom">Trier par étudiant</option></select>
+        <button class="vx-btn sm" onclick="VX.rdvReset()" title="Remettre tous les filtres à zéro">↺ Réinitialiser les filtres</button>
       </div>
       <div id="rdvAuditEnt"></div>
       <div id="rdvSelBar"></div>
@@ -2408,7 +2409,9 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
-  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
+  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit,
+  rdvReset: () => { $('rdvQ').value = ''; $('rdvDip').value = ''; $('rdvResp').value = ''; $('rdvDu').value = ''; $('rdvAu').value = ''; $('rdvVue').value = 'alt'; $('rdvTri').value = 'classe';
+    R.classes.clear(); R.sel.clear(); $('rdvClsBtn').innerHTML = svg('user', 13) + ' Classes : toutes ▾'; $('rdvClsPanel').style.display = 'none'; rdvRender(); toast('Filtres réinitialisés'); }, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
