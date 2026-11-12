@@ -85,6 +85,38 @@ function _charlSansEntreprise_(s) {
   return !n || n === "sans entreprise" || n === "aucune" || n === "aucun" || n === "neant" || n === "x";
 }
 
+// ── Regroupement par Identifiant Elève ──────────────────────────────────────
+// L'export Charlemagne répète un même élève sur plusieurs lignes (même Identifiant Elève : une ligne par
+// responsable, par exemple). On raisonne par identifiant : les lignes sont fusionnées (1re valeur non vide
+// de chaque champ ; pour la société, la 1re qui n'est pas « SANS ENTREPRISE » ; colonnes « visite » cumulées).
+// Une ligne sans identifiant reste une entrée à part.
+function _charlFusionner_(lignes) {
+  var parId = {}, out = [];
+  lignes.forEach(function (l) {
+    var id = String(l.idEleve || "").trim();
+    if (!id) { out.push(l); return; }
+    var m = parId[id];
+    if (!m) { m = parId[id] = {}; CHARL_CHAMPS.forEach(function (c) { m[c] = l[c] || ""; }); m._n = 1; out.push(m); return; }
+    m._n++;
+    CHARL_CHAMPS.forEach(function (c) {
+      if (c === "visites" || c === "societe") return;
+      if (!m[c] && l[c]) m[c] = l[c];
+    });
+    if ((!m.societe || _charlSansEntreprise_(m.societe)) && l.societe && !_charlSansEntreprise_(l.societe)) m.societe = l.societe;
+    else if (!m.societe && l.societe) m.societe = l.societe;
+    if (l.visites) {
+      var a = [], b = [];
+      try { a = JSON.parse(m.visites || "[]"); } catch (e) {}
+      try { b = JSON.parse(l.visites || "[]"); } catch (e) {}
+      var vus = {}; a.forEach(function (x) { vus[x.h + "|" + x.v] = 1; });
+      b.forEach(function (x) { if (!vus[x.h + "|" + x.v]) { vus[x.h + "|" + x.v] = 1; a.push(x); } });
+      m.visites = a.length ? JSON.stringify(a) : "";
+    }
+  });
+  out.forEach(function (m) { delete m._n; });
+  return out;
+}
+
 // ── Point d'entrée : import + contrôle ──────────────────────────────────────
 function handleControleCharlemagne(p, ss) {
   if (!_charlAutorise_(p)) return createJsonResponse({ success: false, message: "Réservé aux profils Super-admin et Administratif." });
@@ -94,8 +126,12 @@ function handleControleCharlemagne(p, ss) {
     var o = {}; CHARL_CHAMPS.forEach(function (c) { o[c] = l[c] == null ? "" : String(l[c]).trim(); }); return o;   // liste blanche des champs
   });
   if (!lignes.length) return createJsonResponse({ success: false, message: "Le fichier ne contient aucun étudiant exploitable." });
+  var nbLignes = lignes.length;
+  lignes = _charlFusionner_(lignes);   // une entrée par Identifiant Elève (l'export répète l'élève sur plusieurs lignes)
   try {
     var R = _charlControler_(ss, lignes);
+    R.stats.lignesFichier = nbLignes; R.stats.lignesFusionnees = nbLignes - lignes.length;
+    R.resume = R.resume.replace(/^/, nbLignes + " lignes dans le fichier = " + lignes.length + " identifiants élève — ");
     R.fichier = String(p.fichier || "").slice(0, 120);
     R.importePar = p.nomAuteur || p.emailAuteur || "";
     R.date = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm");
@@ -219,12 +255,12 @@ function _charlControler_(ss, lignes) {
     }
     var cSortie = _charlDate_(c.sortie);
     var actifC = !cSortie || cSortie > auj;
-    var cleC = c.idEleve ? "i:" + c.idEleve : "n:" + _charlNorm_(c.nom + " " + c.prenom) + "|" + String(c.naissance || "");
+    var cleC = c.idEleve ? "i:" + c.idEleve : "n:" + _charlNorm_(c.nom + " " + c.prenom) + "|" + String(c.naissance || "");   // après fusion, un identifiant n'apparaît qu'une fois
     var dejaC = vusCharl[cleC] || (e && e.vuPar);
     if (dejaC) {   // même élève deux fois dans l'export, ou deux élèves Charlemagne sur la même fiche CRM
       if (actifC) stats.doublonsCharl++;
       anomalie("À vérifier", "Doublon Charlemagne", c, e, (c.classe || c.codeClasse) + (c.idEleve ? " · n° " + c.idEleve : ""), e ? e.id : "—",
-        vusCharl[cleC] ? "Élève présent plusieurs fois dans l'export Charlemagne (" + (c.idEleve ? "même identifiant" : "même nom et date de naissance") + ") : compté une seule fois"
+        vusCharl[cleC] ? "Élève présent deux fois dans l'export Charlemagne sans Identifiant Elève (même nom et date de naissance) : compté une seule fois"
           : "Deux élèves Charlemagne sont rapprochés de la même fiche CRM (déjà rapprochée de « " + e.vuPar + " ») : compté une seule fois",
         "Supprimer le doublon dans Charlemagne, ou corriger l'Identifiant Elève de la fiche CRM");
       if (actifC) ligneComp("Doublon Charlemagne", c, e, null);
@@ -385,7 +421,7 @@ function _charlControler_(ss, lignes) {
   return {
     stats: stats, parType: parType, classes: table, anomalies: A, comparatif: C, parVerdict: parVerdict,
     resume: "Effectif : " + stats.inscritsCrm + " inscrits/préinscrits CRM vs " + stats.actifsCharl + " actifs Charlemagne" + (stats.ecartEffectif ? " (écart " + stats.ecartEffectif + ")" : " ✓") + " — "
-      + stats.charlemagne + " lignes Charlemagne, " + stats.rapproches + " rapprochés (" + stats.parId + " par identifiant, " + stats.parMail + " par e-mail, "
+      + stats.charlemagne + " étudiants Charlemagne (identifiants distincts), " + stats.rapproches + " rapprochés (" + stats.parId + " par identifiant, " + stats.parMail + " par e-mail, "
       + stats.parNom + " par nom) — " + stats.alternantsCharl + " alternants (" + stats.entOk + " entreprise identique, " + stats.entApprochant + " nom approchant accepté), "
       + stats.sansEntCharl + " sans entreprise — " + n["Erreur"] + " erreur(s), " + n["À vérifier"] + " à vérifier, " + n["Info"] + " info(s)"
   };

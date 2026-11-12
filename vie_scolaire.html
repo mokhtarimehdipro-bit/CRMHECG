@@ -896,7 +896,8 @@ async function charlImporter(){
       break;
     }
     if (!lignes || !lignes.length) throw new Error('aucun tableau avec les colonnes « Nom » et « Prénom » dans ce fichier');
-    if (!confirm(lignes.length + ' étudiant(s) lus dans « ' + f.name + ' ».\n\nLancer le contrôle avec le CRM ? (aucune donnée du CRM n\'est modifiée)')) return;
+    const nbIds = new Set(lignes.map(l => l.idEleve || ('?' + l.nom + ' ' + l.prenom))).size;
+    if (!confirm(lignes.length + ' ligne(s) lues dans « ' + f.name + ' » = ' + nbIds + ' étudiant(s) distincts (regroupés par Identifiant Elève).\n\nLancer le contrôle avec le CRM ? (aucune donnée du CRM n\'est modifiée)')) return;
     btn.textContent = '⏳ Contrôle en cours…';
     const r = await api('controleCharlemagne', { lignes: JSON.stringify(lignes), fichier: f.name });
     if (!r.success) throw new Error(r.message || 'erreur serveur');
@@ -939,7 +940,7 @@ function charlAfficher(){
   document.getElementById('charlResume').innerHTML = bandeau +
     `<p class="text-xs text-gray-500 mb-2">Dernier contrôle : <b>${charlEsc(R.date)}</b> — fichier « ${charlEsc(R.fichier)} » — par ${charlEsc(R.importePar)}</p>
      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-       ${carte('Étudiants Charlemagne', S.charlemagne, 'bg-white border-gray-100 text-gray-700')}
+       ${carte('Étudiants Charlemagne' + (S.lignesFichier ? ' (' + S.lignesFichier + ' lignes)' : ''), S.charlemagne, 'bg-white border-gray-100 text-gray-700')}
        ${carte('Rapprochés du CRM', S.rapproches, 'bg-white border-gray-100 text-gray-700')}
        ${carte('Alternants (entreprise OK)', (S.entOk||0) + (S.entApprochant||0) + ' / ' + (S.alternantsCharl||0), 'bg-white border-gray-100 text-gray-700')}
        ${carte('Erreurs', S.erreurs, 'bg-red-50 border-red-100 text-red-700')}
