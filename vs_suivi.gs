@@ -562,6 +562,7 @@ var RDV_MODELE_DEFAUT = {
 };
 var RDV_VARIABLES = ["contact", "etudiant", "prenom_etudiant", "classe", "entreprise", "responsable", "lien_rdv", "annee"];
 var RDV_SS_ID = "1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ";
+var RDV_CC_POLE = "polepedagogique@hecg.fr";   // en copie de TOUS les envois du lien de RDV (demande direction 12/11/2026)
 
 function _rdvResponsables_(ss) {
   var d = _vsxSheet_(ss, "RDV_RESPONSABLES", RDV_RESP_HEADERS).getDataRange().getValues(), out = [];
@@ -660,6 +661,7 @@ function _rdvPreparerMails_(ss, annee, etuIds, cible) {
       responsable: ref.nom, lien_rdv: lien, annee: annee };
     var rep = function (s) { return String(s).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (m, k) { return vars[k.toLowerCase()] !== undefined ? vars[k.toLowerCase()] : m; }); };
     it.objet = rep(M.objet); it.corps = rep(M.corps); it.lien = lien;
+    it.cc = [ref.email, RDV_CC_POLE].filter(function (m, k, a) { return m && a.indexOf(m) === k && !dest.some(function (c) { return c.email.toLowerCase() === String(m).toLowerCase(); }); });
     out.push(it);
   });
   return out;
@@ -694,15 +696,16 @@ function handleSendMailsRdv(p, ss) {
       return createJsonResponse({ success: true, test: true, a: dest, exemple: t.etudiant });
     }
     var quota = MailApp.getRemainingDailyQuota();
-    var nbDest = items.reduce(function (s, x) { return s + x.destinataires.length + (x.responsableEmail ? 1 : 0); }, 0);
+    var nbDest = items.reduce(function (s, x) { return s + x.destinataires.length + (x.cc || []).length; }, 0);
     if (nbDest > quota) return createJsonResponse({ success: false, message: "Quota d'envoi du jour insuffisant (" + quota + " restants pour " + nbDest + " destinataires). Réduisez la sélection." });
     var ws = _vsxSheet_(ss, "RDV_ENVOIS", RDV_ENVOI_HEADERS), lignes = [], echecs = [], now = new Date();
     items.forEach(function (x) {
       try {
         var opt = { to: x.destinataires.map(function (c) { return c.email; }).join(","), subject: x.objet, body: x.corps, htmlBody: _rdvHtml_(x.corps), name: "HECG — " + x.responsable };
-        if (x.responsableEmail) { opt.cc = x.responsableEmail; opt.replyTo = x.responsableEmail; }
+        if ((x.cc || []).length) opt.cc = x.cc.join(",");
+        if (x.responsableEmail) opt.replyTo = x.responsableEmail;
         MailApp.sendEmail(opt);
-        lignes.push([now, annee, x.etuId, x.etudiant, opt.to, x.responsable, x.objet, par]);
+        lignes.push([now, annee, x.etuId, x.etudiant, opt.to + (opt.cc ? " (cc " + opt.cc + ")" : ""), x.responsable, x.objet, par]);
       } catch (eS) { echecs.push(x.etudiant + " : " + eS.message); }
     });
     if (lignes.length) ws.getRange(ws.getLastRow() + 1, 1, lignes.length, RDV_ENVOI_HEADERS.length).setValues(lignes);
