@@ -27,7 +27,7 @@ function _vsxRef_(ss) {
     etudiants.push({ id: id, nom: String(dE[i][2] || ""), prenom: String(dE[i][3] || ""), classe: String(dE[i][14] || ""),
                      campus: _vsxCampusLib_(dE[i][22]), sortie: typo === "sortie", typo: typo,
                      mail: String(dE[i][26] || "").trim() || String(dE[i][4] || "").trim(),
-                     mailHecg: String(dE[i][26] || "").trim(), mailPerso: String(dE[i][4] || "").trim() });
+                     mailHecg: String(dE[i][26] || "").trim(), mailPerso: String(dE[i][4] || "").trim(), entId: String(dE[i][11] || "").trim() });
   }
   const dP = getPersonnelDataCached_(ss);
   const personnel = [];
@@ -52,7 +52,25 @@ function _vsxRef_(ss) {
 }
 
 // ═══════════════════════════ MÉMOIRES ═══════════════════════════
-var MEM_HEADERS = ["ID", "ID étudiant", "Étudiant", "Classe", "Campus", "Sujet", "Mots-clés", "Réf. formateur", "Formateur référent", "Statut", "Notes", "Créé le", "Créé par", "Mis à jour le", "Archivé"];
+var MEM_HEADERS = ["ID", "ID étudiant", "Étudiant", "Classe", "Campus", "Sujet", "Mots-clés", "Réf. formateur", "Formateur référent", "Statut", "Notes", "Créé le", "Créé par", "Mis à jour le", "Archivé", "ID entreprise", "Entreprise"];
+// Colonnes P/Q ajoutées le 12/11/2026 : on complète l'en-tête des feuilles existantes
+function _memSheet_(ss) {
+  const ws = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS);
+  if (ws.getLastColumn() < MEM_HEADERS.length || String(ws.getRange(1, MEM_HEADERS.length).getValue()) !== MEM_HEADERS[MEM_HEADERS.length - 1])
+    ws.getRange(1, 16, 1, 2).setValues([MEM_HEADERS.slice(15)]).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  return ws;
+}
+// Référentiel entreprises (feuille Partenariat : col. B = ID entreprise, col. C = nom)
+function _memEntreprises_(ss) {
+  const d = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
+  const vu = {}, out = [];
+  for (let i = 1; i < d.length; i++) {
+    const id = String(d[i][1] || "").trim(), nom = String(d[i][2] || "").trim();
+    if (!id || !nom || vu[id.toUpperCase()]) continue;
+    vu[id.toUpperCase()] = true; out.push({ id: id, nom: nom });
+  }
+  return out.sort(function(a, b) { return a.nom.localeCompare(b.nom); });
+}
 
 function handleGetMemoires(p, ss) {
   if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
@@ -60,7 +78,7 @@ function handleGetMemoires(p, ss) {
     try {
       const ref = _vsxRef_(ss);
       const byId = {}; ref.etudiants.forEach(function(e) { byId[e.id] = e; });
-      const d = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS).getDataRange().getValues();
+      const d = _memSheet_(ss).getDataRange().getValues();
       const list = [];
       for (let i = 1; i < d.length; i++) {
         if (!d[i][0] || String(d[i][14]) === "Oui") continue;
@@ -70,7 +88,8 @@ function handleGetMemoires(p, ss) {
           motsCles: String(d[i][6] || "").split(",").map(function(s) { return s.trim(); }).filter(Boolean),
           formateurRef: String(d[i][7] || ""), formateur: String(d[i][8] || ""), statut: String(d[i][9] || "En cours"), notes: String(d[i][10] || ""),
           creeLe: d[i][11] instanceof Date ? Utilities.formatDate(d[i][11], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][11] || ""),
-          majLe: d[i][13] instanceof Date ? Utilities.formatDate(d[i][13], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][13] || "") });
+          majLe: d[i][13] instanceof Date ? Utilities.formatDate(d[i][13], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d[i][13] || ""),
+          entrepriseId: String(d[i][15] || ""), entreprise: String(d[i][16] || "") });
       }
       const docs = _memDocsByMemoire_(ss);
       const motsClesRef = _memMotsCles_(ss);
@@ -83,7 +102,8 @@ function handleGetMemoires(p, ss) {
       });
       const ech = _memEchangesByMemoire_(ss);
       list.forEach(function(m) { m.docs = docs[m.id] || []; m.echanges = ech[m.id] || []; });
-      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs, motsClesRef: motsClesRef });
+      let entreprises = []; try { entreprises = _memEntreprises_(ss); } catch (eE) { Logger.log("Entreprises mémoires : " + eE); }
+      return createJsonResponse({ success: true, data: list, etudiants: ref.etudiants.filter(function(e) { return !e.sortie; }), personnel: ref.personnel, formateurs: ref.formateurs, motsClesRef: motsClesRef, entreprises: entreprises });
     } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   });
 }
@@ -91,7 +111,7 @@ function handleGetMemoires(p, ss) {
 function handleSaveMemoire(p, ss) {
   if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
   try {
-    const ws = _vsxSheet_(ss, "MEMOIRES", MEM_HEADERS);
+    const ws = _memSheet_(ss);
     const m = p.memoire || {};
     if (!m.etuId) return createJsonResponse({ success: false, message: "Choisissez un étudiant." });
     const ref = _vsxRef_(ss);
@@ -101,12 +121,12 @@ function handleSaveMemoire(p, ss) {
     const now = new Date();
     const rowVals = [m.id || ("MEM" + now.getTime()), String(m.etuId), ((e.prenom || "") + " " + (e.nom || "")).trim(), e.classe || "", e.campus || "",
       String(m.sujet || ""), mots, f.nom ? String(m.formateurRef || "") : "", f.nom || String(m.formateur || "").trim(), String(m.statut || "En cours"), String(m.notes || ""), now,
-      String(p.nomAuteur || p.emailAuteur || ""), now, ""];
+      String(p.nomAuteur || p.emailAuteur || ""), now, "", String(m.entrepriseId || "").trim(), String(m.entreprise || "").trim()];
     if (m.id) {
       const d = ws.getDataRange().getValues();
       for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(m.id)) {
         rowVals[11] = d[i][11]; rowVals[12] = d[i][12];
-        if (m.archiver) rowVals[14] = "Oui";
+        if (m.archiver) { rowVals[14] = "Oui"; rowVals[15] = d[i][15] || ""; rowVals[16] = d[i][16] || ""; }
         ws.getRange(i + 1, 1, 1, MEM_HEADERS.length).setValues([rowVals]);
         logAction(p.nomAuteur || p.emailAuteur, p.vieScRole || "", m.archiver ? "Suppression" : "Modification", "Vie scolaire", m.id, (m.archiver ? "Mémoire retiré : " : "Mémoire modifié : ") + rowVals[2]);
         return createJsonResponse({ success: true, id: m.id });

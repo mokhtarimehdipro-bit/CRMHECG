@@ -25,7 +25,7 @@ const IC = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4.5L17 13H4"/>',
   tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
-  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>', ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', building: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01M10 21v-3h4v3"/>', chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'
 };
 const svg = (k, s = 16, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 const PALETTE = ['#1A4E8A', '#F26522', '#16a34a', '#6d28d9', '#0f766e', '#db2777', '#0891b2', '#b45309', '#e5484d', '#475569'];
@@ -347,6 +347,8 @@ function injectCss() {
   .fr-rem label{padding:8px 14px;background:linear-gradient(180deg,#fff,#f5f8fc);border-color:#dfe6f0}
   .fr-rem label:has(input:checked){background:linear-gradient(180deg,#2d64a8,#1A4E8A);box-shadow:0 8px 16px -10px rgba(26,78,138,.8)}
   .vx-dot{width:26px;height:26px}
+  #toast{z-index:20000 !important}
+  .vx-ent{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#0f766e;background:#e6f6f3;border:1px solid #c7ebe4;padding:3px 10px;border-radius:999px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:flex-start}
   /* regroupement par diplôme + carnet d'échanges */
   .vx-dip{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:30px 0 4px;padding:12px 18px;border-radius:16px;background:linear-gradient(90deg,#1A4E8A,#2d64a8);color:#fff;box-shadow:0 14px 26px -20px rgba(26,78,138,.9)}
   .vx-dip:first-child{margin-top:4px}
@@ -404,7 +406,7 @@ const ECH_TYPES = { 'Échange': '#1A4E8A', 'Rendez-vous': '#6d28d9', 'Mail': '#0
 async function memLoad(force) {
   const r = await api('getMemoires', {}, force ? { forceRefresh: true } : {});
   if (!r.success) { $('memBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('book', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
-  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || []; M.motsClesRef = r.motsClesRef || MEM_KW.slice();
+  M.data = r.data || []; M.etudiants = r.etudiants || []; M.personnel = r.personnel || []; M.formateurs = r.formateurs || []; M.motsClesRef = r.motsClesRef || MEM_KW.slice(); M.entreprises = r.entreprises || [];
   M.data.forEach(m => { m.docs = m.docs || []; m.echanges = m.echanges || []; m.diplome = dipOf(m.classe); });
   memRender();
 }
@@ -441,7 +443,7 @@ function memFiltered() {
   const q = norm($('memQ').value), fd = $('memFDip').value, fc = $('memFClasse').value, fca = $('memFCampus').value, ff = $('memFForm').value;
   return M.data.filter(m => (!fd || m.diplome === fd) && (!fc || m.classe === fc) && (!fca || m.campus === fca) && (!ff || m.formateur === ff)
     && (!M.kw || m.motsCles.some(k => norm(k) === norm(M.kw)))
-    && (!q || norm([m.etudiant, m.sujet, m.formateur, m.classe, m.campus, m.motsCles.join(' ')].join(' ')).includes(q)));
+    && (!q || norm([m.etudiant, m.sujet, m.formateur, m.classe, m.campus, m.entreprise, m.motsCles.join(' ')].join(' ')).includes(q)));
 }
 function fillSel(id, label, values) {
   const el = $(id), v = el.value;
@@ -497,6 +499,7 @@ function memCard(m) {
     <div class="acts"><button class="vx-btn ico sm" title="Modifier">${svg('edit', 14)}</button></div>
     <div class="top">${avatar(m.etudiant, 42)}<div style="min-width:0"><div class="nm">${esc(m.etudiant)}</div>
       <div class="meta"><span class="vx-chip b">${esc(m.classe || '—')}</span><span class="vx-chip">${svg('pin', 11)} ${esc(m.campus || '—')}</span><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></div></div></div>
+    ${m.entreprise ? `<div class="vx-ent">${svg('building', 13)} ${esc(m.entreprise)}</div>` : ''}
     <div class="sujet ${m.sujet ? '' : 'empty'}">${esc(m.sujet || 'Sujet à définir')}</div>
     ${m.motsCles.length ? `<div class="kws">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}" onclick="event.stopPropagation();VX.memKw('${jsq(k)}')">${esc(k)}</span>`).join('')}</div>` : ''}
     ${m.docs.length ? `<div class="vx-docchip">${svg('file', 13)} ${m.docs.length} document${m.docs.length > 1 ? 's' : ''} · dernière version <b>${esc(m.docs[m.docs.length - 1].version)}</b> du ${fmtD(m.docs[m.docs.length - 1].date)}</div>` : ''}
@@ -505,7 +508,7 @@ function memCard(m) {
   </div>`;
 }
 function memTable(list) {
-  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['formateur', 'Formateur référent'], ['statut', 'Statut'], ['dernierDoc', 'Dernier document'], ['dernierEch', 'Carnet']];
+  const cols = [['etudiant', 'Étudiant'], ['classe', 'Classe'], ['campus', 'Campus'], ['sujet', 'Sujet'], ['motsCles', 'Mots-clés'], ['entreprise', 'Entreprise'], ['formateur', 'Formateur référent'], ['statut', 'Statut'], ['dernierDoc', 'Dernier document'], ['dernierEch', 'Carnet']];
   list.forEach(m => { const d = m.docs[m.docs.length - 1]; m.dernierDoc = d ? d.date + ' ' + d.version : ''; m.dernierEch = m.echanges.length ? m.echanges[0].date : ''; });
   const sorted = list.slice().sort((a, b) => M.sortDir * String(Array.isArray(a[M.sortCol]) ? a[M.sortCol].join(',') : a[M.sortCol] || '').localeCompare(String(Array.isArray(b[M.sortCol]) ? b[M.sortCol].join(',') : b[M.sortCol] || ''), 'fr', { numeric: true }));
   return `<table class="vx-table"><thead><tr>${cols.map(([k, l]) => `<th onclick="VX.memSortCol('${k}')">${l}${M.sortCol === k ? (M.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
@@ -514,6 +517,7 @@ function memTable(list) {
       <td><span class="vx-chip b">${esc(m.classe)}</span></td><td>${esc(m.campus)}</td>
       <td style="max-width:340px">${esc(m.sujet)}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${m.motsCles.map(k => `<span class="vx-kw" style="${kwColor(k)}">${esc(k)}</span>`).join('')}</div></td>
+      <td>${m.entreprise ? `<span class="vx-ent">${svg('building', 12)} ${esc(m.entreprise)}</span>` : '<span style="color:#c3ccd8">—</span>'}</td>
       <td>${esc(m.formateur)}${m.formateurMail ? `<div style="font-size:11.5px;color:var(--mu)">${esc(m.formateurMail)}</div>` : ''}</td><td><span class="vx-st" style="background:${st[0]};color:${st[1]}">${esc(m.statut)}</span></td>
       <td>${(d => d ? `<a class="vx-lastdoc" href="${esc(d.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(d.nom)}"><span class="ver">${esc(d.version)}</span><span>${fmtD(d.date)}</span>${svg('ext', 12)}</a>` : '<span style="color:#c3ccd8">—</span>')(m.docs[m.docs.length - 1])}</td>
       <td>${m.echanges.length ? `<span class="vx-echn" title="${esc(m.echanges[0].texte)}">${svg('chat', 12)} ${m.echanges.length} · ${fmtD(m.echanges[0].date)}</span>` : '<span style="color:#c3ccd8">—</span>'}</td></tr>`; }).join('')}
@@ -522,7 +526,7 @@ function memTable(list) {
 function memEdit(id, etuPre, focusEch) {
   const m = id ? M.data.find(x => x.id === id) : null;
   const pre = !m && etuPre ? M.etudiants.find(x => x.id === etuPre) : null;
-  const E = { id: m ? m.id : '', etuId: m ? m.etuId : (pre ? pre.id : ''), motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '' };
+  const E = { id: m ? m.id : '', etuId: m ? m.etuId : (pre ? pre.id : ''), motsCles: m ? m.motsCles.slice() : [], formateurRef: m ? m.formateurRef : '', formateurNom: m ? m.formateur : '', entId: m ? m.entrepriseId : '', entNom: m ? m.entreprise : '' };
   const etuLabel = e => e ? `${e.prenom} ${e.nom}` : '';
   const dlg = modal(`
     <h2>${m ? 'Modifier le mémoire' : 'Nouveau mémoire'}</h2><p class="sub">La classe et le campus sont repris automatiquement de la fiche étudiant.</p>
@@ -539,6 +543,8 @@ function memEdit(id, etuPre, focusEch) {
         <div class="vx-autre" id="meAutre" style="display:none"><input class="in" id="meAPrenom" placeholder="Prénom"><input class="in" id="meANom" placeholder="Nom"></div></div>
       <div><label class="fl">Statut</label><select class="in" id="meSt">${Object.keys(MEM_ST).map(s => `<option ${m && m.statut === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     </div>
+    <label class="fl">Entreprise <span style="font-weight:500;color:var(--mu)">(facultatif — reprise de la fiche étudiant si elle est renseignée)</span></label>
+    <div class="vx-ac"><input class="in" id="meEnt" autocomplete="off" placeholder="Rechercher une entreprise du CRM ou saisir un nom…" value="${esc(m ? m.entreprise : '')}"><div class="vx-acl" id="meEntL" style="display:none"></div></div>
     <label class="fl">Notes</label><textarea class="in" id="meNotes" style="min-height:60px" placeholder="Facultatif">${esc(m ? m.notes : '')}</textarea>
     <label class="fl" id="meEchLbl">${svg('chat', 13)} Carnet d'échanges${m && m.echanges.length ? ` <span class="vx-echn">${m.echanges.length}</span>` : ''}</label>
     ${m ? `<div class="vx-ech">
@@ -578,7 +584,7 @@ function memEdit(id, etuPre, focusEch) {
     L.innerHTML = items.length ? items.map((e, i) => `<div class="it ${i === act ? 'act' : ''}" data-i="${i}">${avatar(etuLabel(e), 24)}${esc(etuLabel(e))}<small>${esc(e.classe)} · ${esc(e.campus)}</small></div>`).join('') : `<div class="it" style="color:var(--mu)">${M.etudiants.length ? 'Aucun étudiant trouvé' : 'Liste des étudiants indisponible (serveur pas à jour)'}</div>`;
     L.style.display = 'block';
   };
-  const pick = e => { if (!e) return; E.etuId = e.id; inp.value = etuLabel(e); L.style.display = 'none'; fix(); $('meSujet').focus(); };
+  const pick = e => { if (!e) return; E.etuId = e.id; inp.value = etuLabel(e); L.style.display = 'none'; fix(); entDeEtu(e); $('meSujet').focus(); };
   inp.addEventListener('input', () => { E.etuId = ''; fix(); draw(); });
   inp.addEventListener('keydown', ev => {
     if (L.style.display === 'none') return;
@@ -711,6 +717,32 @@ function memEdit(id, etuPre, focusEch) {
       m.docs = m.docs.filter(d => d.id !== del.dataset.docdel); drawDocs(); memRender();
     });
   }
+  // entreprise : auto-complétion sur les entreprises du CRM, saisie libre acceptée
+  const entIn = $('meEnt'), entL = $('meEntL'); let eItems = [], eAct = 0;
+  const entDraw = () => {
+    const q = norm(entIn.value).trim();
+    if (q.length < 2) { entL.style.display = 'none'; return; }
+    const w = q.split(/\s+/);
+    eItems = (M.entreprises || []).filter(x => w.every(t => norm(x.nom).includes(t))).slice(0, 12); eAct = 0;
+    entL.innerHTML = (eItems.length ? eItems.map((x, i) => `<div class="it ${i === eAct ? 'act' : ''}" data-ei="${i}">${svg('building', 14)} ${esc(x.nom)}<small>${esc(x.id)}</small></div>`).join('') : '')
+      + `<div class="it" data-elibre="1" style="color:var(--mu)">${svg('plus', 13, 2.4)} Utiliser « ${esc(entIn.value.trim())} » (hors base entreprises)</div>`;
+    entL.style.display = 'block';
+  };
+  const entPick = x => { if (x) { E.entId = x.id; E.entNom = x.nom; entIn.value = x.nom; } else { E.entId = ''; E.entNom = entIn.value.trim(); } entL.style.display = 'none'; };
+  const entDeEtu = e => {
+    if (!e || entIn.value.trim() || !e.entId) return;
+    const x = (M.entreprises || []).find(k => k.id.toUpperCase() === String(e.entId).toUpperCase());
+    if (x) { entPick(x); toast('Entreprise reprise de la fiche étudiant : ' + x.nom); }
+  };
+  if (!m && pre) entDeEtu(pre);
+  entIn.addEventListener('input', () => { E.entId = ''; E.entNom = entIn.value.trim(); entDraw(); });
+  entIn.addEventListener('keydown', ev => {
+    if (entL.style.display === 'none') return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); eAct = Math.max(0, Math.min(eItems.length - 1, eAct + (ev.key === 'ArrowDown' ? 1 : -1))); entL.querySelectorAll('[data-ei]').forEach((el, i) => el.classList.toggle('act', i === eAct)); }
+    if (ev.key === 'Enter') { ev.preventDefault(); entPick(eItems[eAct]); }
+  });
+  entL.addEventListener('mousedown', ev => { const it = ev.target.closest('[data-ei],[data-elibre]'); if (!it) return; ev.preventDefault(); entPick(it.dataset.ei !== undefined ? eItems[+it.dataset.ei] : null); });
+  entIn.addEventListener('blur', () => setTimeout(() => entL.style.display = 'none', 150));
   // carnet d'échanges
   if (m) {
     const drawEch = () => {
@@ -753,7 +785,7 @@ function memEdit(id, etuPre, focusEch) {
     const k = $('meKwIn').value.trim(); if (k) addKw(k);
     if (!E.etuId) { toast(M.etudiants.length ? 'Choisissez un étudiant dans la liste' : "Liste des étudiants indisponible : " + errTxt('Action inconnue'), false); inp.focus(); return; }
     const fNom = $('meForm').value.trim();
-    const payload = { id: E.id, etuId: E.etuId, sujet: $('meSujet').value.trim(), motsCles: E.motsCles, formateurRef: fNom && fNom === E.formateurNom ? E.formateurRef : '', formateur: fNom, statut: $('meSt').value, notes: $('meNotes').value.trim() };
+    const payload = { id: E.id, etuId: E.etuId, sujet: $('meSujet').value.trim(), motsCles: E.motsCles, formateurRef: fNom && fNom === E.formateurNom ? E.formateurRef : '', formateur: fNom, statut: $('meSt').value, notes: $('meNotes').value.trim(), entreprise: $('meEnt').value.trim(), entrepriseId: $('meEnt').value.trim() && $('meEnt').value.trim() === E.entNom ? E.entId : '' };
     const r = await api('saveMemoire', { memoire: payload });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     toast(m ? 'Mémoire mis à jour ✓' : 'Mémoire ajouté ✓');
@@ -1054,14 +1086,14 @@ async function memExport() {
   let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
   const wb = new X.Workbook(); wb.creator = 'CRM HECG'; wb.created = new Date();
   const ws = wb.addWorksheet('Mémoires', { views: [{ state: 'frozen', ySplit: 4 }], properties: { tabColor: { argb: 'FF' + XB.blue } } });
-  const H = ['Étudiant', 'Mail étudiant', 'Classe', 'Campus', 'Sujet du mémoire', 'Mots-clés', 'Formateur référent', 'Mail formateur', 'Statut', 'Dernier document', 'Date dernier doc.', 'Nb doc.', 'Notes'];
-  ws.columns = [26, 30, 13, 16, 46, 34, 24, 30, 14, 22, 15, 9, 34].map(w => ({ width: w }));
+  const H = ['Étudiant', 'Mail étudiant', 'Classe', 'Campus', 'Sujet du mémoire', 'Mots-clés', 'Formateur référent', 'Mail formateur', 'Statut', 'Dernier document', 'Date dernier doc.', 'Nb doc.', 'Notes', 'Entreprise'];
+  ws.columns = [26, 30, 13, 16, 46, 34, 24, 30, 14, 22, 15, 9, 34, 28].map(w => ({ width: w }));
   xlTitle(ws, 'Suivi des mémoires — HECG', `Export du ${fmtLong(todayISO())} · ${list.length} mémoire(s)` + (list.length !== M.data.length ? ' (filtrés)' : ''), H.length);
   xlHeader(ws, 4, H);
   list.forEach((m, i) => {
     const d = m.docs[m.docs.length - 1];
     const r = ws.getRow(5 + i);
-    r.values = [m.etudiant, m.etuMail || '', m.classe, m.campus, m.sujet, '', m.formateur, m.formateurMail || '', m.statut, d ? d.version + ' — ' + d.nom : '', d ? new Date(d.date + 'T12:00:00') : '', m.docs.length || '', m.notes || ''];
+    r.values = [m.etudiant, m.etuMail || '', m.classe, m.campus, m.sujet, '', m.formateur, m.formateurMail || '', m.statut, d ? d.version + ' — ' + d.nom : '', d ? new Date(d.date + 'T12:00:00') : '', m.docs.length || '', m.notes || '', m.entreprise || ''];
     r.height = Math.max(24, Math.min(80, 15 * Math.ceil((m.sujet || '').length / 55)));
     r.getCell(1).font = { bold: true, color: { argb: 'FF' + XB.ink } };
     if (m.etuMail) { r.getCell(2).value = { text: m.etuMail, hyperlink: 'mailto:' + m.etuMail }; r.getCell(2).font = { color: { argb: 'FF1D4ED8' }, underline: true }; }
