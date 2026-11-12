@@ -1668,6 +1668,7 @@ function rdvRender() {
       ${v.date && v.date !== v.datePris ? `<div class="rp">→ reporté au ${fmtD(v.date)}</div>` : ''}
       <div class="s">${v.visiteur ? esc(v.visiteur) : '<i>visiteur ?</i>'}${v.entreprise ? ' · ' + esc(v.entreprise) : ''}</div>
       ${v.precision ? `<div class="pr">${esc(v.precision)}</div>` : ''}
+      ${(v.historique || []).some(h => h.statut === 'Rappel J-3' && h.date === v.date) ? `<div class="s" style="color:#0f766e;font-weight:700">🔔 rappel J-3 envoyé à l'étudiant</div>` : ''}
       <span class="st-b st-${st.replace(/\s/g, '')} ${ret ? 'st-retard' : ''}" title="${ret ? 'Date passée : indiquez si le RDV a été honoré' : ''}">${esc(st)}${ret ? ' · à suivre' : ''}</span>
       ${D.peutSuivre && !['Honoré', 'Annulé'].includes(st) && v.date ? `<div class="rdv-b" onclick="event.stopPropagation()">
         <button class="h" onclick="VX.rdvStatut('${jsq(v.id)}','Honoré')" title="RDV honoré">✓ Honoré</button>
@@ -2003,7 +2004,8 @@ async function rdvParams() {
     <div style="max-height:260px;overflow:auto;border:1px solid #e3eaf3;border-radius:14px"><table class="vs2-t" style="border:0"><thead><tr><th>Membre de l'équipe</th><th>Lien de prise de RDV</th></tr></thead><tbody>
       ${r.responsables.map((x, i) => `<tr><td class="vs2-n"><b>${esc(x.nom)}</b><small>${esc(x.role || '')} · ${esc(x.email)}</small></td><td><div style="display:flex;gap:6px"><input class="in" data-lien="${i}" value="${esc(x.lien)}" placeholder="https://…" style="margin:0">${x.lien ? `<a class="vx-btn ico sm" href="${esc(x.lien)}" target="_blank" rel="noopener" title="Tester le lien">${svg('ext', 13)}</a>` : ''}</div></td></tr>`).join('')}
     </tbody></table></div>
-    <label class="fl">Objet du mail</label><input class="in" id="rpObj" value="${esc(r.modele.objet)}">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px"><input type="checkbox" id="rpRappel" ${r.rappelActif !== false ? 'checked' : ''}> <span><b>Rappel automatique à l'étudiant 3 jours avant un RDV confirmé</b> — vouvoiement, la personne qui fait la visite en copie ; il l'invite à lui faire remonter ses éléments avant la visite.</span></label>
+    <label class="fl">Objet du mail de prise de RDV (entreprises)</label><input class="in" id="rpObj" value="${esc(r.modele.objet)}">
     <label class="fl">Corps du mail</label><textarea class="in" id="rpCorps" style="min-height:220px;font-family:inherit">${esc(r.modele.corps)}</textarea>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center"><span class="sub" style="margin:0">Insérer :</span>${r.variables.map(v => `<button type="button" class="vx-chip" style="cursor:pointer;border:1px solid #dfe6f0" data-var="${v}">{{${v}}}</button>`).join('')}
       <button type="button" class="vx-link" style="margin:0 0 0 auto" id="rpDefaut">Rétablir le modèle par défaut</button></div>
@@ -2021,7 +2023,7 @@ async function rdvParams() {
   $('rpDefaut').onclick = () => { $('rpObj').value = r.modeleDefaut.objet; $('rpCorps').value = r.modeleDefaut.corps; apercu(); };
   $('rpOk').onclick = async () => {
     const responsables = r.responsables.map((x, i) => ({ email: x.email, nom: x.nom, lien: dlg.querySelector(`[data-lien="${i}"]`).value.trim() }));
-    const o = await api('saveRdvParams', { responsables, modele: { objet: $('rpObj').value.trim(), corps: $('rpCorps').value } });
+    const o = await api('saveRdvParams', { responsables, modele: { objet: $('rpObj').value.trim(), corps: $('rpCorps').value }, rappelActif: $('rpRappel').checked });
     if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); return; }
     dlg.remove(); toast('Paramètres enregistrés ✓');
   };

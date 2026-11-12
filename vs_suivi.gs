@@ -612,7 +612,7 @@ function handleGetRdvParams(p, ss) {
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; });
     var liens = {}; _rdvResponsables_(ss).forEach(function (r) { liens[r.email || _vsuNorm_(r.nom)] = r.lien; });
     var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (eQ) {}
-    return createJsonResponse({ success: true, modele: _rdvModele_(), modeleDefaut: RDV_MODELE_DEFAUT, variables: RDV_VARIABLES, quota: quota,
+    return createJsonResponse({ success: true, modele: _rdvModele_(), modeleDefaut: RDV_MODELE_DEFAUT, variables: RDV_VARIABLES, quota: quota, rappelActif: _rdvRappelActif_(),
       responsables: equipe.map(function (x) { return { email: x.email, nom: x.nom, role: x.role, lien: liens[x.email] || liens[_vsuNorm_(x.nom)] || "" }; }) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -631,6 +631,10 @@ function handleSaveRdvParams(p, ss) {
       });
       if (ws.getLastRow() > 1) ws.getRange(2, 1, ws.getLastRow() - 1, RDV_RESP_HEADERS.length).clearContent();
       if (rows.length) ws.getRange(2, 1, rows.length, RDV_RESP_HEADERS.length).setValues(rows);
+    }
+    if (p.rappelActif !== undefined) {
+      var actif = !!p.rappelActif;
+      if (actif !== _rdvRappelActif_()) { PropertiesService.getScriptProperties().setProperty("RDV_RAPPEL_ACTIF", actif ? "oui" : "non"); modifs.push("rappel J-3 aux étudiants " + (actif ? "activé" : "désactivé")); }
     }
     if (p.modele && p.modele.objet && p.modele.corps) {
       var avantM = _rdvModele_();
@@ -1053,4 +1057,66 @@ function handleSaveDrapeauRdv(p, ss) {
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+// ── Rappel à l'étudiant 3 jours avant un RDV confirmé (demande direction 12/11/2026) ──
+// RDV « Planifié » ou « Reporté » dont la date tombe dans 1 à 3 jours, sans rappel déjà envoyé pour CETTE date :
+// mail bienveillant (vouvoiement) à l'étudiant, la personne qui fera la visite en copie et en adresse de réponse,
+// l'invitant à lui faire remonter ses éléments avant la visite. Trace dans l'historique du RDV (« Rappel J-3 »).
+// Activable / désactivable dans les paramètres (propriété RDV_RAPPEL_ACTIF, actif par défaut).
+var RDV_RAPPEL_JOURS = 3;
+function _rdvRappelActif_() { return PropertiesService.getScriptProperties().getProperty("RDV_RAPPEL_ACTIF") !== "non"; }
+function _rdvDateLongue_(iso) {
+  var J = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"], M = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  var d = new Date(iso + "T12:00:00"); return J[d.getDay()] + " " + d.getDate() + " " + M[d.getMonth()] + " " + d.getFullYear();
+}
+function _rdvEnvoyerRappels_(ss) {
+  if (!_rdvRappelActif_()) return { envoyes: 0, inactif: true };
+  var tz = "Europe/Paris", auj = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  var dans = function (iso) { return Math.round((new Date(iso + "T12:00:00") - new Date(auj + "T12:00:00")) / 86400000); };
+  var visites = _rdvLire_(ss).filter(function (v) {
+    if (["Planifié", "Reporté"].indexOf(v.statut) === -1 || !v.date) return false;
+    var j = dans(v.date); if (j < 1 || j > RDV_RAPPEL_JOURS) return false;
+    return !(v.historique || []).some(function (h) { return h.statut === "Rappel J-3" && h.date === v.date; });
+  });
+  if (!visites.length) return { envoyes: 0 };
+  var etus = {}; _vsuEtudiants_(ss).forEach(function (e) { etus[e.id] = e; });
+  var ctx = _rdvCtx_(ss), ws = _rdvSheet_(ss), now = new Date(), envoyes = 0, sans = [];
+  visites.forEach(function (v) {
+    var e = etus[v.etuId];
+    var mailEtu = e ? (e.mailHecg || e.mailPerso || e.mail) : "";
+    if (!mailEtu || mailEtu.indexOf("@") < 1) { sans.push(v.etudiant + " (pas de mail)"); return; }
+    var vis = v.visiteur || "", visMail = v.visiteurEmail || "";
+    if (!visMail && vis) { var c = _rdvCanon_(vis, ctx); visMail = c.email || ""; }
+    if (!visMail) { var r = _rdvReferents_(ss, v.annee)[v.etuId]; if (r) { visMail = r.email || ""; vis = vis || r.nom; } }
+    var prenom = e && e.prenom ? e.prenom : String(v.etudiant).split(" ")[0];
+    var qui = vis ? vis : "la personne de l'équipe pédagogique qui viendra vous rencontrer";
+    var objet = "Votre visite en entreprise du " + _rdvDateLongue_(v.date) + " — souhaitez-vous nous transmettre des éléments ?";
+    var corps = "Bonjour " + prenom + ",\n\n"
+      + "Nous vous rappelons qu'une visite de suivi de votre alternance est prévue le " + _rdvDateLongue_(v.date)
+      + (v.entreprise ? " au sein de " + v.entreprise : "") + (vis ? ", avec " + vis + " de l'équipe pédagogique HECG" : "") + ".\n\n"
+      + "Cette rencontre est un moment d'échange pour faire le point avec vous et votre tuteur sur votre parcours, vos missions et le bon déroulement de votre formation.\n\n"
+      + "Si vous avez des éléments que vous souhaitez évoquer ou faire remonter avant la visite (questions, difficultés éventuelles, réussites, points à aborder avec votre tuteur…), "
+      + "nous vous invitons à les transmettre dès maintenant à " + qui + (visMail ? ", en copie de ce message : il vous suffit de répondre à ce mail" : "") + ".\n\n"
+      + "Nous restons à votre écoute et vous souhaitons une très bonne visite.\n\n"
+      + "Bien cordialement,\nL'équipe pédagogique HECG";
+    try {
+      var opt = { to: mailEtu, subject: objet, body: corps, htmlBody: _rdvHtml_(corps), name: RDV_EXPEDITEUR };
+      if (visMail) { opt.cc = visMail; opt.replyTo = visMail; }
+      MailApp.sendEmail(opt);
+      v.historique.push({ le: Utilities.formatDate(now, tz, "yyyy-MM-dd HH:mm"), statut: "Rappel J-3", date: v.date, par: "Automatique", commentaire: "Rappel envoyé à " + mailEtu + (visMail ? " (cc " + visMail + ")" : "") });
+      ws.getRange(v.row, 14).setValue(JSON.stringify(v.historique));
+      envoyes++;
+    } catch (eS) { sans.push(v.etudiant + " : " + eS.message); }
+  });
+  if (envoyes || sans.length) logAction("Système", "Auto", "Action", "Vie scolaire — Suivi des RDV", "RDV_VISITES",
+    "Rappels J-3 aux étudiants : " + envoyes + " envoyé(s)" + (sans.length ? " — non envoyés : " + sans.join(" ; ") : ""));
+  return { envoyes: envoyes, nonEnvoyes: sans };
+}
+// Appelé par auditAdressesTick (adresses.gs) : une fois par jour, à partir de 8 h
+function _rdvRappelsAuto_() {
+  var now = new Date(), jour = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd"), props = PropertiesService.getScriptProperties();
+  if (+Utilities.formatDate(now, "Europe/Paris", "H") < 8 || props.getProperty("RDV_RAPPEL_JOUR") === jour) return;
+  props.setProperty("RDV_RAPPEL_JOUR", jour);
+  _rdvEnvoyerRappels_(SpreadsheetApp.openById(RDV_SS_ID));
 }
