@@ -1542,7 +1542,7 @@ async function rdvInit() {
         <button class="vx-btn" id="rdvHarmBtn" style="display:none" onclick="VX.rdvHarmoniser()">${svg('user', 15)} Harmoniser les noms</button>
         <button class="vx-btn" onclick="VX.rdvExport()">${svg('down', 15)} Exporter Excel</button>
         <button class="vx-btn" id="rdvImpBtn" style="display:none" onclick="VX.rdvImport()" title="Réimporter un export retravaillé dans Excel (aperçu avant enregistrement)">${svg('upload', 15)} Importer Excel</button></div></div>
-      <div class="vx-tabs" style="margin-bottom:14px;display:none"><button id="rdvTabS" class="on" onclick="VX.rdvOnglet('suivi')">${svg('list', 15)} Suivi des RDV</button><button id="rdvTabA" onclick="VX.rdvOnglet('analyse')">${svg('grid', 15)} Analyse des visites</button></div>
+      <div class="vx-tabs" style="margin-bottom:14px"><button id="rdvTabS" class="on" onclick="VX.rdvOnglet('suivi')">${svg('list', 15)} Suivi des RDV</button><button id="rdvTabA" onclick="VX.rdvOnglet('analyse')">${svg('grid', 15)} Analyse des visites</button></div>
       <div class="vx-kpis" id="rdvKpis"></div>
       <div class="vx-bar">
         <select class="vx-sel" id="rdvAnnee" onchange="VX.rdvLoad(this.value)"></select>
@@ -2022,62 +2022,39 @@ async function rdvAnalyse() {
     R.analyse = r;
     if (R.onglet !== 'analyse') return;
   }
-  const { L, parEtu, vAnnee } = rdvFiltre(false);
-  const ids = new Set(L.map(e => e.id));
-  $('rdvQui').innerHTML = rdvAFaire(L, parEtu) + rdvParVisiteur(L, parEtu);
-  const hon = v => v.statut === 'Honoré';
-  const visites = vAnnee.filter(v => ids.has(v.etuId) && hon(v)).length;
-  const alts = L.filter(e => e.alternant), visites1 = alts.filter(e => (parEtu[e.id] || []).some(hon));
-  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
-  const mv = R.analyse.mouvements.filter(m => ids.has(m.etuId) || (!R.classes.size && !$('rdvDip').value && !$('rdvResp').value && !$('rdvQ').value));
-  const nb = t => new Set(mv.filter(m => m.type === t).map(m => m.etuId)).size;
-  $('rdvKpis').innerHTML = `
-    <div class="vx-kpi"><span>Visites effectuées</span><b style="color:#15803d">${visites}</b><small>RDV honorés en ${esc(D.annee)}</small></div>
-    <div class="vx-kpi"><span>Alternants visités</span><b>${visites1.length} / ${alts.length}</b><small>${pct(visites1.length, alts.length)} % des alternants</small></div>
-    <div class="vx-kpi"><span>Alternants non visités</span><b style="color:${alts.length - visites1.length ? '#c2410c' : 'inherit'}">${alts.length - visites1.length}</b><small>${pct(alts.length - visites1.length, alts.length)} % des alternants</small></div>
-    <div class="vx-kpi"><span>Changement d'alternance</span><b>${nb('Changement')}</b><small>dans l'année</small></div>
-    <div class="vx-kpi"><span>Alternance perdue</span><b style="color:${nb('Perte') ? '#c62828' : 'inherit'}">${nb('Perte')}</b><small>dans l'année</small></div>
-    <div class="vx-kpi"><span>Alternance gagnée</span><b style="color:#15803d">${nb('Gain')}</b><small>dans l'année</small></div>`;
-  const parCl = {};
-  L.forEach(e => { const c = e.classe || 'Classe non renseignée'; const o = parCl[c] = parCl[c] || { diplome: e.diplome, ins: 0, alt: 0, vis: 0, visites: 0, venir: 0 };
-    o.ins++; if (e.alternant) { o.alt++; if ((parEtu[e.id] || []).some(hon)) o.vis++; }
-    (parEtu[e.id] || []).forEach(v => { if (hon(v)) o.visites++; if (['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()) o.venir++; }); });
-  // Par responsable : étudiants attribués + TOUTES leurs visites (historique toutes années) honorées et prises non honorées
-  const parResp = {}, refDe = {};
-  L.forEach(e => { const r = e.referent || '— Sans responsable —'; refDe[e.id] = r; const o = parResp[r] = parResp[r] || { suivis: 0, alt: 0, vis: 0, honAn: 0, honHist: 0, attente: 0 };
-    o.suivis++; if (e.alternant) { o.alt++; if ((parEtu[e.id] || []).some(hon)) o.vis++; } });
-  D.visites.filter(v => ids.has(v.etuId)).forEach(v => { const o = parResp[refDe[v.etuId]]; if (!o) return;
-    if (hon(v)) { o.honHist++; if (v.annee === D.annee) o.honAn++; } else if (rdvAttente(v)) o.attente++; });
-  // RDV par mois (septembre → août) : pris (date de prise), honorés, pris non honorés
-  const y0 = +String(D.annee).split('-')[0], mois = Array.from({ length: 12 }, (_, i) => { const m = (8 + i) % 12, y = y0 + (i >= 4 ? 1 : 0); return { cle: y + '-' + String(m + 1).padStart(2, '0'), lib: MOIS[m] + ' ' + y, pris: 0, hon: 0, att: 0 }; });
-  const parMois = {}; mois.forEach(m => parMois[m.cle] = m);
-  vAnnee.filter(v => ids.has(v.etuId)).forEach(v => {
-    const kp = (v.datePris || '').slice(0, 7), kd = (v.date || v.datePris || '').slice(0, 7);
-    if (parMois[kp]) { parMois[kp].pris++; if (rdvAttente(v)) parMois[kp].att++; }
-    if (hon(v) && parMois[kd]) parMois[kd].hon++;
-  });
-  const maxM = Math.max(1, ...mois.map(m => Math.max(m.pris, m.hon)));
-  const barre = p => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:70px;height:8px;border-radius:9px;background:#eef2f7;overflow:hidden"><i style="display:block;height:100%;width:${p}%;background:${p >= 80 ? '#16a34a' : p >= 50 ? '#F26522' : '#e5484d'}"></i></div><b>${p} %</b></div>`;
+  // Mêmes définitions que les 8 compteurs du suivi : les totaux des tableaux = les compteurs.
+  rdvCompteurs();
+  const S = rdvStats(), auj = rdvAuj();
+  const visDe = new Map(); S.toutes.forEach(v => { if (!visDe.has(v.etuId)) visDe.set(v.etuId, []); visDe.get(v.etuId).push(v); });
+  const calc = G => {
+    const alts = G.filter(e => e.alternant), ids = new Set(G.map(e => e.id)), vs = S.toutes.filter(v => ids.has(v.etuId));
+    const ents = new Set(alts.filter(e => e.entId || e.entreprise).map(e => e.entId ? 'id:' + e.entId.toUpperCase() : 'n:' + norm(e.entreprise).replace(/[^a-z0-9]/g, '')));
+    const vus = alts.filter(e => (visDe.get(e.id) || []).some(v => v.statut === 'Honoré')).length;
+    return { alt: alts.length, sansResp: alts.filter(e => !e.referent).length, rouges: G.filter(e => e.drapeau === 'Rouge').length,
+      aVenir: vs.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date >= auj).length, hon: vs.filter(v => v.statut === 'Honoré').length,
+      vus, taux: alts.length ? Math.round(vus / alts.length * 100) : 0, total: vs.length, ents: ents.size };
+  };
+  const grouper = (cle, ordre) => { const g = {}; S.L.forEach(e => { const k = cle(e); (g[k] = g[k] || []).push(e); }); return Object.keys(g).sort(ordre).map(k => [k, calc(g[k])]); };
+  const tot = calc(S.L);
+  const barre = p => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:60px;height:8px;border-radius:9px;background:#eef2f7;overflow:hidden"><i style="display:block;height:100%;width:${p}%;background:${p >= 80 ? '#16a34a' : p >= 50 ? '#F26522' : '#e5484d'}"></i></div><b>${p} %</b></div>`;
+  const ligne = (lib, o, gras) => `<tr${gras ? ' class="gr"' : ''}><td>${gras ? '<b>' + lib + '</b>' : lib}</td><td>${o.alt}</td><td style="color:${o.sansResp ? '#c62828' : 'inherit'};font-weight:${o.sansResp ? 800 : 400}">${o.sansResp}</td><td style="color:${o.rouges ? '#c62828' : 'inherit'}">${o.rouges}</td><td style="color:#c2410c">${o.aVenir}</td><td style="color:#15803d;font-weight:800">${o.hon}</td><td>${o.vus}</td><td style="min-width:130px">${barre(o.taux)}</td><td>${o.total}</td><td>${o.ents}</td></tr>`;
+  const tableau = (titre, lignes) => `<div class="vx-dip"><span class="t">${titre}</span><span class="n">${lignes.length}</span></div>
+    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>${titre.replace(/^Par /, '')}</th><th>Alternants</th><th>Sans responsable</th><th>Drapeaux rouges</th><th>RDV pris à venir</th><th>RDV honorés</th><th>Alternants visités</th><th>Taux de visite</th><th>Visites (total)</th><th>Entreprises</th></tr></thead>
+    <tbody>${lignes.map(([k, o]) => ligne(esc(k), o)).join('')}${ligne('Total', tot, true)}</tbody></table></div>`;
+  const campus = grouper(e => e.campus || 'Campus non renseigné', (a, b) => a.localeCompare(b, 'fr'));
+  const parDip = {}; S.L.forEach(e => parDip[e.classe || 'Classe non renseignée'] = e.diplome);
+  const classes = grouper(e => e.classe || 'Classe non renseignée', (a, b) => dipOrdreTri(parDip[a]) - dipOrdreTri(parDip[b]) || a.localeCompare(b, 'fr', { numeric: true }));
+  const referents = grouper(e => e.referent || '— Sans responsable —', (a, b) => a.startsWith('—') - b.startsWith('—') || a.localeCompare(b, 'fr'));
+  const ids = new Set(S.L.map(e => e.id));
+  const filtre = !!(R.classes.size || $('rdvDip').value || $('rdvResp').value || $('rdvQ').value || $('rdvDu').value || $('rdvAu').value);
+  const mv = R.analyse.mouvements.filter(m => !filtre || ids.has(m.etuId));
   const lstMv = t => { const l = mv.filter(m => m.type === t).sort((a, b) => b.date.localeCompare(a.date));
-    return `<details class="vs2-mv" ${l.length ? '' : ''}><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${l.length}</summary>
+    return `<details class="vs2-mv"><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${new Set(l.map(m => m.etuId)).size} étudiant(s)</summary>
       ${l.length ? `<table class="vs2-t" style="margin-top:8px"><thead><tr><th>Date</th><th>Étudiant</th><th>Classe</th><th>Avant</th><th>Après</th></tr></thead><tbody>${l.map(m => `<tr><td>${fmtD(m.date)}</td><td><b>${esc(m.etudiant)}</b></td><td>${esc(m.classe)}</td><td>${esc(m.avant || '—')}</td><td>${esc(m.apres || '—')}</td></tr>`).join('')}</tbody></table>` : '<p class="sub" style="margin:8px 0">Aucun.</p>'}</details>`; };
-  $('rdvBody').innerHTML = `
-    <div class="vx-dip"><span class="t">Par classe</span></div>
-    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Classe</th><th>Inscrits</th><th>En alternance</th><th>Visites effectuées</th><th>Alternants visités</th><th>Non visités</th><th>Taux de visite</th><th>RDV à venir</th></tr></thead><tbody>
-    ${Object.keys(parCl).sort((a, b) => dipOrdreTri(parCl[a].diplome) - dipOrdreTri(parCl[b].diplome) || a.localeCompare(b, 'fr', { numeric: true })).map(c => { const o = parCl[c]; return `<tr><td><b>${esc(c)}</b> <small style="color:#94a3b8">${esc(o.diplome)}</small></td><td>${o.ins}</td><td>${o.alt}</td><td>${o.visites}</td><td>${o.vis}</td><td style="color:${o.alt - o.vis ? '#c2410c' : 'inherit'};font-weight:800">${o.alt - o.vis}</td><td style="min-width:150px">${barre(pct(o.vis, o.alt))}</td><td>${o.venir}</td></tr>`; }).join('')}
-    </tbody></table></div>
-    <div class="vx-dip"><span class="t">RDV par mois</span></div>
-    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Mois</th><th>RDV pris</th><th>RDV honorés</th><th>Pris, non honorés</th><th style="width:45%"></th></tr></thead><tbody>
-    ${mois.map(m => `<tr><td><b>${esc(m.lib)}</b></td><td>${m.pris}</td><td style="color:#15803d;font-weight:800">${m.hon}</td><td style="color:${m.att ? '#c2410c' : 'inherit'};font-weight:800">${m.att}</td>
-      <td><div class="rdv-mois"><i class="p" style="width:${m.pris / maxM * 100}%"></i><i class="h" style="width:${m.hon / maxM * 100}%"></i></div></td></tr>`).join('')}
-    <tr class="gr"><td><b>Total</b></td><td><b>${mois.reduce((s, m) => s + m.pris, 0)}</b></td><td><b>${mois.reduce((s, m) => s + m.hon, 0)}</b></td><td><b>${mois.reduce((s, m) => s + m.att, 0)}</b></td><td><span style="font-size:11px;color:#7d8a9c"><i class="rdv-lg p"></i> pris <i class="rdv-lg h"></i> honorés</span></td></tr>
-    </tbody></table></div>
-    <div class="vx-dip"><span class="t">Par responsable visite</span><span class="n">historique toutes années inclus</span></div>
-    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Responsable</th><th>Étudiants suivis</th><th>Alternants</th><th>Honorés ${esc(D.annee)}</th><th>Honorés (historique)</th><th>Pris, non honorés</th><th>Alternants visités</th><th>Non visités</th><th>Taux</th></tr></thead><tbody>
-    ${Object.keys(parResp).sort((a, b) => a.startsWith('—') - b.startsWith('—') || a.localeCompare(b, 'fr')).map(r => { const o = parResp[r]; return `<tr><td><b>${esc(r)}</b></td><td>${o.suivis}</td><td>${o.alt}</td><td style="color:#15803d;font-weight:800">${o.honAn}</td><td>${o.honHist}</td><td style="color:${o.attente ? '#c2410c' : 'inherit'};font-weight:800">${o.attente}</td><td>${o.vis}</td><td style="color:${o.alt - o.vis ? '#c2410c' : 'inherit'};font-weight:800">${o.alt - o.vis}</td><td style="min-width:150px">${barre(pct(o.vis, o.alt))}</td></tr>`; }).join('')}
-    </tbody></table></div>
+  $('rdvBody').innerHTML = `<p class="sub" style="margin:0 0 6px">Mêmes définitions que les compteurs ci-dessus (année ${esc(D.annee)}, filtres appliqués) : la ligne « Total » de chaque tableau correspond aux compteurs.</p>
+    ${tableau('Par campus', campus)}${tableau('Par classe', classes)}${tableau('Par référent', referents)}
     <div class="vx-dip"><span class="t">Mouvements d'alternance en ${esc(D.annee)}</span></div>
-    <div class="vx-note" style="margin:12px 0">${svg('clock', 14)} Relevé quotidien des entreprises des étudiants inscrits${R.analyse.suiviDepuis ? ' depuis le ' + fmtD(R.analyse.suiviDepuis) : ''}. Avant cette date, seuls les départs enregistrés dans le CRM (changement d'entreprise, entreprise retirée) sont connus : les alternances gagnées ne sont comptées qu'à partir du premier relevé.</div>
+    <div class="vx-note" style="margin:12px 0">${svg('clock', 14)} Relevé quotidien des entreprises des étudiants inscrits${R.analyse.suiviDepuis ? ' depuis le ' + fmtD(R.analyse.suiviDepuis) : ''}. Avant cette date, seuls les départs enregistrés dans le CRM sont connus : les alternances gagnées ne sont comptées qu'à partir du premier relevé.</div>
     ${lstMv('Changement')}${lstMv('Perte')}${lstMv('Gain')}`;
 }
 
