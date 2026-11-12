@@ -2101,7 +2101,7 @@ function rdvApercu(r, cible, resp) {
     dlg.querySelectorAll('.rmp-it').forEach(el => el.classList.toggle('on', +el.dataset.i === cur));
     const it = dlg.querySelector(`.rmp-it[data-i="${cur}"]`); if (it) it.scrollIntoView({ block: 'nearest' });
     $('rmVue').innerHTML = `<div class="rmp-env">
-        <div><span>De</span><b>HECG — ${esc(x.responsable)}</b>${x.responsableEmail ? ` <small>(réponses à ${esc(x.responsableEmail)})</small>` : ''}</div>
+        <div><span>De</span><b>HECG — Équipe pédagogique</b>${x.responsableEmail ? ` <small>(réponses à ${esc(x.responsableEmail)})</small>` : ''}</div>
         <div><span>À</span>${x.destinataires.map(c => `<span class="rmp-c">${esc(c.nom || c.email)} <small>${esc(c.email)}</small>${c.ma ? ' <em>MA</em>' : ''}</span>`).join('')}</div>
         <div><span>Cc</span>${(x.cc || []).map(m => `<span class="rmp-c">${esc(m)}</span>`).join('') || '—'}</div>
         <div><span>Objet</span><b>${esc(x.objet)}</b></div></div>

@@ -556,10 +556,11 @@ function handleArchiveExamDoc(p, ss) {
 // est en copie et en adresse de réponse. Aperçu obligatoire avant envoi (previewMailsRdv).
 var RDV_RESP_HEADERS = ["Email", "Nom", "Lien calendrier", "Mis à jour le", "Par"];
 var RDV_ENVOI_HEADERS = ["Date", "Année scolaire", "ID étudiant", "Étudiant", "Destinataires", "Responsable", "Objet", "Par"];
-var RDV_MODELE_DEFAUT = {
+var RDV_MODELE_DEFAUT = {   // impersonnel (12/11/2026) : « Bonjour », aucun nom de visiteur
   objet: "Visite en entreprise — {{etudiant}} — prise de rendez-vous",
-  corps: "Bonjour {{contact}},\n\nDans le cadre du suivi en alternance de notre étudiant(e) {{etudiant}} ({{classe}}), {{responsable}} de l'école HECG souhaite vous rencontrer au sein de {{entreprise}} pour faire le point sur sa formation.\n\nMerci de choisir le créneau qui vous convient en cliquant sur ce lien :\n{{lien_rdv}}\n\nNous vous remercions pour votre accompagnement.\n\nBien cordialement,\n{{responsable}}\nHECG"
+  corps: "Bonjour,\n\nDans le cadre du suivi de sa formation en alternance, {{etudiant}} ({{classe}}) doit recevoir la visite d'un membre de l'équipe pédagogique de l'école HECG au sein de {{entreprise}}.\n\nMerci de choisir le créneau qui vous convient en cliquant sur ce lien :\n{{lien_rdv}}\n\nNous vous remercions pour votre accompagnement.\n\nBien cordialement,\nL'équipe pédagogique HECG"
 };
+var RDV_EXPEDITEUR = "HECG — Équipe pédagogique";
 var RDV_VARIABLES = ["contact", "etudiant", "prenom_etudiant", "classe", "entreprise", "responsable", "lien_rdv", "annee"];
 var RDV_SS_ID = "1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ";
 var RDV_CC_POLE = "polepedagogique@hecg.fr";   // en copie de TOUS les envois du lien de RDV (demande direction 12/11/2026)
@@ -570,7 +571,12 @@ function _rdvResponsables_(ss) {
   return out;
 }
 function _rdvModele_() {
-  try { var m = JSON.parse(PropertiesService.getScriptProperties().getProperty("RDV_MAIL_MODELE") || "null"); if (m && m.objet && m.corps) return m; } catch (e) {}
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty("RDV_MAIL_IMPERSONNEL")) {   // migration unique : ancien modèle nominatif → modèle impersonnel
+    try { var a = JSON.parse(props.getProperty("RDV_MAIL_MODELE") || "null"); if (a && /\{\{\s*(contact|responsable)\s*\}\}/i.test(a.objet + a.corps)) props.deleteProperty("RDV_MAIL_MODELE"); } catch (e0) {}
+    props.setProperty("RDV_MAIL_IMPERSONNEL", "1");
+  }
+  try { var m = JSON.parse(props.getProperty("RDV_MAIL_MODELE") || "null"); if (m && m.objet && m.corps) return m; } catch (e) {}
   return RDV_MODELE_DEFAUT;
 }
 function _rdvEnvois_(ss, annee) {
@@ -691,7 +697,7 @@ function handleSendMailsRdv(p, ss) {
     if (p.test) {   // mail de test : le 1er mail de la sélection, envoyé uniquement au pôle pédagogique
       var t = items[0], dest = "polepedagogique@hecg.fr";
       var avert = "[MAIL DE TEST — destinataire(s) réel(s) : " + t.destinataires.map(function (c) { return c.nom + " <" + c.email + ">"; }).join(", ") + (t.responsableEmail ? " ; copie : " + t.responsableEmail : "") + "]\n\n";
-      MailApp.sendEmail({ to: dest, subject: "[TEST] " + t.objet, body: avert + t.corps, htmlBody: _rdvHtml_(avert + t.corps), name: "HECG — " + t.responsable });
+      MailApp.sendEmail({ to: dest, subject: "[TEST] " + t.objet, body: avert + t.corps, htmlBody: _rdvHtml_(avert + t.corps), name: RDV_EXPEDITEUR });
       logAction(par, p.vieScRole || "", "Action", "Vie scolaire — Suivi des RDV", "RDV_ENVOIS", "Mail de test du lien de RDV envoyé à " + dest + " (exemple : " + t.etudiant + ", responsable " + t.responsable + ")");
       return createJsonResponse({ success: true, test: true, a: dest, exemple: t.etudiant });
     }
@@ -701,7 +707,7 @@ function handleSendMailsRdv(p, ss) {
     var ws = _vsxSheet_(ss, "RDV_ENVOIS", RDV_ENVOI_HEADERS), lignes = [], echecs = [], now = new Date();
     items.forEach(function (x) {
       try {
-        var opt = { to: x.destinataires.map(function (c) { return c.email; }).join(","), subject: x.objet, body: x.corps, htmlBody: _rdvHtml_(x.corps), name: "HECG — " + x.responsable };
+        var opt = { to: x.destinataires.map(function (c) { return c.email; }).join(","), subject: x.objet, body: x.corps, htmlBody: _rdvHtml_(x.corps), name: RDV_EXPEDITEUR };
         if ((x.cc || []).length) opt.cc = x.cc.join(",");
         if (x.responsableEmail) opt.replyTo = x.responsableEmail;
         MailApp.sendEmail(opt);
