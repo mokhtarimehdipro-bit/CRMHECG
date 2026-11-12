@@ -1546,8 +1546,8 @@ async function rdvLoad(annee) {
 const rdvAuj = () => todayISO();
 const rdvAsuivre = v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date < rdvAuj();
 const rdvAttente = v => ['Planifié', 'Reporté'].includes(v.statut) && !!(v.datePris || v.date);   // RDV pris, pas encore honoré
-// Drapeaux persistants (RDV_DRAPEAUX) : rouge posé automatiquement quand un responsable est attribué sans
-// aucun historique ; il ne disparaît plus tout seul, on le lève à la main.
+// Drapeaux persistants (RDV_DRAPEAUX) : rouge posé automatiquement quand l'étudiant avait historiquement un visiteur
+// (Charlemagne ou attribué au plus tard le 11/11/2026) sans visite jamais honorée ; on le lève à la main.
 const DRAP = { Rouge: ['#dc2626', '#fef2f2'], Orange: ['#ea580c', '#fff7ed'], Jaune: ['#ca8a04', '#fefce8'] };
 const rdvPrio = e => e.drapeau === 'Rouge';
 const joursDepuis = iso => iso ? Math.round((new Date(todayISO() + 'T12:00:00') - new Date(iso + 'T12:00:00')) / 86400000) : null;
@@ -1609,7 +1609,7 @@ function rdvRender() {
   $('rdvKpis').innerHTML = `
     <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:${sansResp ? '#fca5a5' : '#e3eaf3'}" onclick="VX.rdvVue('sansresp')"><span>⚠ Sans responsable visite</span><b style="color:${sansResp ? '#c62828' : '#15803d'}">${sansResp}</b><small>alternant(s) sans visiteur désigné</small></div>
-    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Drapeaux rouges</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>à lever à la main</small></div>
+    <div class="vx-kpi" style="cursor:pointer;border-color:#fca5a5" onclick="VX.rdvVue('prio')"><span>🚩 Drapeaux rouges</span><b style="color:${prio ? '#c62828' : 'inherit'}">${prio}</b><small>visiteur historique, visite jamais honorée</small></div>
     <div class="vx-kpi" style="cursor:pointer;border-color:#fdba74" onclick="VX.rdvVue('attente')"><span>⏳ RDV pris, non honorés</span><b style="color:#c2410c">${attente}</b><small>${venir} à venir · ${retard} date passée</small></div>
     <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>`;
   rdvSelBar();

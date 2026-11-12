@@ -963,9 +963,12 @@ function handleImporterRdvExcel(p, ss) {
 }
 
 // ── Drapeaux de priorité (RDV_DRAPEAUX) : persistants, levés uniquement à la main ──
-// Un drapeau ROUGE est posé automatiquement (une seule fois par année) dès qu'un étudiant a un responsable
-// visite mais aucun historique de RDV ; il reste ensuite affiché même après la prise de RDV, jusqu'à ce
-// qu'on le lève. Niveaux : Rouge (urgent), Orange, Jaune ; commentaire libre.
+// Drapeau ROUGE automatique (règle du 12/11/2026) : l'étudiant avait HISTORIQUEMENT un visiteur — responsable
+// repris de Charlemagne, ou attribué au plus tard le 11/11/2026 — et aucune visite n'a jamais été honorée.
+// Les visiteurs attribués après le 11/11/2026 ne déclenchent pas de drapeau. Une fois posé, le drapeau reste
+// jusqu'à ce qu'on le lève à la main. Niveaux : Rouge (urgent), Orange, Jaune ; commentaire libre.
+var RDV_DRAP_DATE_HISTO = "2026-11-11";
+var RDV_DRAP_AUTO_COM = "Visiteur attribué historiquement, visite jamais honorée";
 var RDV_DRAP_HEADERS = ["Année scolaire", "ID étudiant", "Niveau", "Commentaire", "Posé le", "Posé par", "Levé le", "Levé par", "Mis à jour le"];
 var RDV_NIVEAUX = ["Rouge", "Orange", "Jaune"];
 function _rdvDrapeaux_(ss, annee) {
@@ -976,14 +979,25 @@ function _rdvDrapeaux_(ss, annee) {
   return out;
 }
 function _rdvAutoDrapeaux_(ss, annee, liste, visites, drap) {
-  var avec = {}; visites.forEach(function (v) { avec[v.etuId] = 1; });
-  var now = new Date(), ajout = [];
+  var honore = {}; visites.forEach(function (v) { if (v.statut === "Honoré") honore[v.etuId] = 1; });
+  var regle = function (e) {
+    var histo = e.referentSource === "Charlemagne" || (e.referentDepuis && e.referentDepuis <= RDV_DRAP_DATE_HISTO);
+    return !!e.referent && histo && !honore[e.id];
+  };
+  var ws = _vsxSheet_(ss, "RDV_DRAPEAUX", RDV_DRAP_HEADERS), now = new Date(), ajout = [], aSupprimer = [];
+  // Nettoyage : drapeaux posés automatiquement par l'ancienne règle et qui ne la respectent plus (jamais touchés à la main)
   liste.forEach(function (e) {
-    if (!e.referent || avec[e.id] || drap[e.id]) return;   // déjà un drapeau (même levé) : on ne le repose pas
-    ajout.push([annee, e.id, "Rouge", "Responsable attribué, aucun RDV ni historique", now, "Automatique", "", "", now]);
-    drap[e.id] = { niveau: "Rouge", commentaire: "Responsable attribué, aucun RDV ni historique", poseLe: _vsuIso_(now), par: "Automatique", leveLe: "", levePar: "" };
+    var d = drap[e.id];
+    if (d && d.par === "Automatique" && d.niveau === "Rouge" && !d.leveLe && !regle(e)) { aSupprimer.push(d.row); delete drap[e.id]; }
   });
-  if (ajout.length) { var ws = _vsxSheet_(ss, "RDV_DRAPEAUX", RDV_DRAP_HEADERS); ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_DRAP_HEADERS.length).setValues(ajout); }
+  aSupprimer.sort(function (a, b) { return b - a; }).forEach(function (r) { ws.deleteRow(r); });
+  liste.forEach(function (e) {
+    if (drap[e.id] || !regle(e)) return;   // déjà un drapeau (même levé) : on ne le repose pas
+    ajout.push([annee, e.id, "Rouge", RDV_DRAP_AUTO_COM, now, "Automatique", "", "", now]);
+    drap[e.id] = { niveau: "Rouge", commentaire: RDV_DRAP_AUTO_COM, poseLe: _vsuIso_(now), par: "Automatique", leveLe: "", levePar: "" };
+  });
+  if (ajout.length) ws.getRange(ws.getLastRow() + 1, 1, ajout.length, RDV_DRAP_HEADERS.length).setValues(ajout);
+  if (aSupprimer.length || ajout.length) console.log("Drapeaux auto : " + aSupprimer.length + " retiré(s) (ancienne règle), " + ajout.length + " posé(s)");
 }
 /** Pose / modifie / lève un drapeau (un ou plusieurs étudiants) ; niveau vide = lever ; commentaire seul possible. */
 function handleSaveDrapeauRdv(p, ss) {
