@@ -379,7 +379,7 @@ function handleAddProspectsSalon(p, ss) {
       const dup = (mail && byMail[mail]) || (normTel(tel).length === 9 && byTel[normTel(tel)]);
       if (dup) {
         if (cid) cache.put("salon_cid_" + cid, dup, 21600);
-        if (lib) { (majEvtExistant[dup] = majEvtExistant[dup] || []).push(lib); notes.push([dup, auteur, new Date(), "📍 Rencontré de nouveau lors de l'événement « " + lib + " »", false]); }
+        if (lib) { (majEvtExistant[dup] = majEvtExistant[dup] || []).push(lib); notes.push([dup, auteur, new Date(), "📍 Rencontré de nouveau lors de l'événement « " + lib + " »" + (it.note ? "\n" + String(it.note).slice(0, 1500) : ""), false]); }
         res.push({ cid: cid, statut: "existant", id: dup }); return;
       }
       const id = "ETU" + String(base++).slice(-6);
@@ -389,7 +389,7 @@ function handleAddProspectsSalon(p, ss) {
       while (row.length < colEvt) row.push("");
       row[colEvt - 1] = lib;
       rows.push(row);
-      if (lib) notes.push([id, auteur, new Date(), "📍 Rencontré lors de l'événement « " + lib + " »", false]);
+      if (lib || it.note) notes.push([id, auteur, new Date(), (lib ? "📍 Rencontré lors de l'événement « " + lib + " »" : "📍 Prospect") + (it.note ? "\n" + String(it.note).slice(0, 1500) : ""), false]);
       if (mail) byMail[mail] = id; if (normTel(tel).length === 9) byTel[normTel(tel)] = id;
       if (cid) cache.put("salon_cid_" + cid, id, 21600);
       res.push({ cid: cid, statut: "ajoute", id: id });

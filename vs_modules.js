@@ -2152,7 +2152,7 @@ function dirCsv() {
 }
 
 // ═══════════════════════════ INSCRIPTIONS AUX EXAMENS OFFICIELS ═══════════════════════════
-const EX = { data: null, session: '', q: '', dip: '', filtre: '' };
+const EX = { data: null, session: '', q: '', dip: '', filtre: '', classes: new Set() };
 function exInit() {
   injectCss(); injectCss2();
   const sec = $('section-examens');
@@ -2165,11 +2165,13 @@ function exInit() {
         <select class="vx-sel" id="exSession" onchange="VX.exLoad(this.value)"></select>
         <div class="vx-search">${svg('search', 15)}<input id="exQ" placeholder="Étudiant, classe, n° candidat…" oninput="VX.exRender()"></div>
         <select class="vx-sel" id="exDip" onchange="VX.exRender()"></select>
+        <div style="position:relative"><button class="vx-btn sm" id="exClsBtn" onclick="VX.exClsPanel()">${svg('user', 13)} Classes : toutes ▾</button><div id="exClsPanel" class="rdv-cls" style="display:none"></div></div>
         <select class="vx-sel" id="exFiltre" onchange="VX.exRender()"><option value="">Tous</option><option value="noninscrit">Non inscrits</option><option value="nojustif">Sans justificatif</option><option value="complet">Inscrits + justificatif</option></select>
       </div>
       <input type="file" id="exFile" multiple hidden>
       <div id="exBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
     $('exFile').onchange = ev => { exUpload([...ev.target.files]); ev.target.value = ''; };
+    document.addEventListener('mousedown', ev => { const p = $('exClsPanel'); if (p && p.style.display !== 'none' && !ev.target.closest('#exClsPanel,#exClsBtn')) p.style.display = 'none'; });
   }
   exLoad();
 }
@@ -2185,7 +2187,7 @@ async function exLoad(session) {
 }
 function exFiltrees() {
   const q = norm($('exQ').value), dip = $('exDip').value, f = $('exFiltre').value;
-  return EX.data.etudiants.filter(e => (!dip || e.diplome === dip) && (!q || norm([e.nom, e.classe, e.numCandidat, e.epreuves.join(' ')].join(' ')).includes(q))
+  return EX.data.etudiants.filter(e => (!dip || e.diplome === dip) && (!EX.classes.size || EX.classes.has(e.classe || 'Classe non renseignée')) && (!q || norm([e.nom, e.classe, e.numCandidat, e.epreuves.join(' ')].join(' ')).includes(q))
     && (!f || (f === 'noninscrit' && !e.inscrit) || (f === 'nojustif' && !e.justifOk) || (f === 'complet' && e.inscrit && e.justifOk)));
 }
 function exRender() {
@@ -2211,6 +2213,21 @@ function exRender() {
         <button class="vx-link" onclick="VX.exPick('${jsq(e.id)}')">${svg('upload', 12)} Déposer</button></td>
       <td><span class="ex-ok ${e.justifOk ? 'y' : 'n'}">${e.justifOk ? '✓ Justificatif OK' : 'En attente'}</span></td></tr>`).join('')).join('')}
     </tbody></table></div>`; }).join('');
+}
+// Sélection d'une ou plusieurs classes (liste limitée au diplôme choisi)
+function exClsPanel() {
+  const p = $('exClsPanel');
+  if (p.style.display !== 'none') { p.style.display = 'none'; return; }
+  const cls = [...new Set(EX.data.etudiants.filter(e => !$('exDip').value || e.diplome === $('exDip').value).map(e => e.classe || 'Classe non renseignée'))].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+  p.innerHTML = `<div style="margin-bottom:8px"><button class="vx-btn sm" onclick="VX.exCls('__tout')">Toutes les classes</button></div>`
+    + cls.map(c => `<label><input type="checkbox" ${EX.classes.has(c) ? 'checked' : ''} onchange="VX.exCls('${jsq(c)}',this.checked)"> ${esc(c)}</label>`).join('');
+  p.style.display = 'block';
+}
+function exCls(c, on) {
+  if (c === '__tout') { EX.classes.clear(); $('exClsPanel').style.display = 'none'; }
+  else if (on) EX.classes.add(c); else EX.classes.delete(c);
+  $('exClsBtn').innerHTML = svg('user', 13) + ' Classes : ' + (EX.classes.size ? EX.classes.size + ' sélectionnée' + (EX.classes.size > 1 ? 's' : '') : 'toutes') + ' ▾';
+  exRender();
 }
 async function exSave(ids, champs, msg) {
   const r = await api('saveExamen', { session: EX.session, etuIds: ids, champs });
@@ -2294,6 +2311,6 @@ window.VX = {
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
   dirQ: v => { DR.q = v; dirRender(); const i = $('dirQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } },
-  exInit, exLoad: s => exLoad(s), exRender, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport
+  exInit, exLoad: s => exLoad(s), exRender, exClsPanel, exCls, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport
 };
 })();

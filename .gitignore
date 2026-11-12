@@ -2,3 +2,8 @@
 *.log
 taches.jpg
 _init_secret.gs
+
+# Fichiers de données personnelles (leads, exports) : jamais publiés
+*leads*.xlsx
+*leads*.csv
+HECG_leads_export.xlsx
