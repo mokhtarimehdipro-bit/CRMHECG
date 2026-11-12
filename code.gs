@@ -422,6 +422,20 @@ function doPostInner_(e) {
       case 'uploadMemoireDoc':   return handleUploadMemoireDoc(params, ss);
       case 'archiveMemoireDoc':  return handleArchiveMemoireDoc(params, ss);
       case 'saveEchangeMemoire': return handleSaveEchangeMemoire(params, ss);
+      // --- SIRET des entreprises (siret.gs) ---
+      case 'saveSiretEntreprise': return handleSaveSiretEntreprise(params, ss);
+      case 'completerSirets':     return handleCompleterSirets(params, ss);
+      // --- Vie scolaire : RDV en entreprise, comparatif directeurs, examens officiels (vs_suivi.gs) ---
+      case 'getRdv':                  return handleGetRdv(params, ss);
+      case 'saveRdv':                 return handleSaveRdv(params, ss);
+      case 'statutRdv':               return handleStatutRdv(params, ss);
+      case 'saveReferentRdv':         return handleSaveReferentRdv(params, ss);
+      case 'importerRdvCharlemagne':  return handleImporterRdvCharlemagne(params, ss);
+      case 'getComparatifDirecteurs': return handleGetComparatifDirecteurs(params, ss);
+      case 'getExamens':              return handleGetExamens(params, ss);
+      case 'saveExamen':              return handleSaveExamen(params, ss);
+      case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
+      case 'archiveExamDoc':          return handleArchiveExamDoc(params, ss);
       case 'saveMotsClesMemoire': return handleSaveMotsClesMemoire(params, ss);
       case 'getMemoiresChecklist':  return handleGetMemoiresChecklist(params, ss);
       case 'saveMemoiresChecklist': return handleSaveMemoiresChecklist(params, ss);

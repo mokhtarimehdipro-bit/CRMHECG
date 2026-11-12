@@ -27,7 +27,8 @@ var CHARL_COMP_TITRES = ["Concordance entreprise", "ID CRM", "Identifiant Charle
 var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "Absent du CRM", "Absent de Charlemagne", "Sorti dans Charlemagne", "Non inscrit dans le CRM", "Approchant", "Identique", "Aucune des deux"];
 function _charlInscrit_(typo) { var t = _charlNorm_(typo); return t === "inscrit" || t === "preinscrit" || t === "pre inscrit"; }
 var CHARL_CHAMPS = ["idEleve", "nom", "prenom", "naissance", "email", "mailPerso", "classe", "codeClasse", "niveau",
-  "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp"];
+  "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp",
+  "visites"];   // visites = JSON [{h: en-tête, v: valeur}] des colonnes « … visite … » (suivi des RDV, vs_suivi.gs)
 
 function _charlAutorise_(p) {
   return !!CHARL_ROLES[String(p.vieScRole || "")] || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";
@@ -101,6 +102,7 @@ function handleControleCharlemagne(p, ss) {
     _charlEcrireImport_(ss, lignes, R);
     _charlEcrireRapport_(ss, R);
     _charlEcrireComparatif_(ss, R);
+    try { R.rdv = _rdvImporterCharl_(ss, lignes, R.importePar); } catch (eV) { R.rdv = { erreur: String(eV) }; }
     logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Action", "Vie scolaire — Contrôle Charlemagne", CHARL_FEUILLE,
       "Import « " + R.fichier + " » (" + lignes.length + " étudiants Charlemagne) — " + R.resume);
     return createJsonResponse({ success: true, rapport: R });

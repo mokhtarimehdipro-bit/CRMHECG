@@ -25,6 +25,20 @@
                             <span id="entAdresseBadge"></span>
                             <button onclick="editAdresse()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Modifier l'adresse (Base Adresse Nationale / SIRENE)">✏️</button>
                         </div>
+                        <div id="entSiretBloc" class="flex flex-wrap items-center gap-2 mt-2">
+                            <span class="text-[10px] font-black uppercase text-gray-400">SIRET</span>
+                            <span id="entSiret" class="text-sm font-mono font-bold text-gray-600"></span>
+                            <button onclick="editSiret()" class="text-gray-300 hover:text-[#1A4E8A] text-xs" title="Saisir ou rechercher le SIRET">✏️</button>
+                        </div>
+                        <div id="entSiretEdit" class="hidden mt-2 p-3 rounded-2xl border border-indigo-100 bg-indigo-50/40">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <input id="entSiretInput" type="text" inputmode="numeric" maxlength="17" placeholder="14 chiffres" class="border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono w-48">
+                                <button onclick="rechercherSiret()" class="px-3 py-2 rounded-xl bg-white border border-indigo-200 text-indigo-700 text-xs font-black hover:bg-indigo-50">🔍 Rechercher le SIRET (nom + adresse)</button>
+                                <button onclick="enregistrerSiret()" class="px-3 py-2 rounded-xl bg-[#1A4E8A] text-white text-xs font-black hover:opacity-90">Enregistrer</button>
+                                <button onclick="document.getElementById('entSiretEdit').classList.add('hidden')" class="px-3 py-2 rounded-xl text-gray-500 text-xs font-bold hover:bg-gray-100">Annuler</button>
+                            </div>
+                            <div id="entSiretProps" class="mt-2 space-y-1"></div>
+                        </div>
                         <div id="entAdresseAlerte" class="hidden mt-2 p-3 rounded-xl border text-xs font-bold"></div>
                         <p id="entDateCrea" class="text-xs text-gray-400 font-medium mt-1 hidden"></p>
                     </div>
@@ -342,7 +356,8 @@
                     if (codeEl && partId) { codeEl.dataset.code = partId.toUpperCase(); codeEl.innerHTML = '<span class="code-lbl">Code</span>' + partId.toUpperCase(); }
                     adresseData = { adresse: d.info.adresse || "", complement: d.info.complement || "", cp: d.info.cp || "", ville: d.info.ville || "",
                         lat: d.info.lat || "", lon: d.info.lon || "", statut: d.info.adrStatut || "", siret: d.info.siret || "" };
-                    document.getElementById('entAdresse').innerText = (HecgAdresse.texte(adresseData) || 'Adresse non renseignée') + (adresseData.siret ? '  ·  SIRET ' + adresseData.siret : '');
+                    document.getElementById('entAdresse').innerText = (HecgAdresse.texte(adresseData) || 'Adresse non renseignée');
+                    document.getElementById('entSiret').innerHTML = adresseData.siret ? adresseData.siret.replace(/^(\d{3})(\d{3})(\d{3})(\d{5})$/, '$1 $2 $3 $4') : '<span class="text-gray-300 font-sans font-medium">non renseigné</span>';
                     document.getElementById('entAdresseBadge').innerHTML = HecgAdresse.badge(adresseData);
                     const alEl = document.getElementById('entAdresseAlerte');
                     const msgAl = adresseData.statut === 'Adresses multiples'
@@ -685,6 +700,58 @@
             else alert("Erreur : " + res.message);
         }
 
+        // ── SIRET (siret.gs) : saisie manuelle ou recherche SIRENE par le nom, classée selon l'adresse ──
+        function siretValide(s) {
+            s = String(s || '').replace(/\D/g, ''); if (!/^\d{14}$/.test(s)) return false;
+            let t = 0;
+            if (s.startsWith('356000000')) { for (const c of s) t += +c; return t % 5 === 0; }
+            for (let i = 0; i < 14; i++) { let d = +s[13 - i]; if (i % 2) { d *= 2; if (d > 9) d -= 9; } t += d; }
+            return t % 10 === 0;
+        }
+        function editSiret() {
+            document.getElementById('entSiretEdit').classList.remove('hidden');
+            const inp = document.getElementById('entSiretInput'); inp.value = adresseData.siret || ''; inp.focus();
+            document.getElementById('entSiretProps').innerHTML = '';
+        }
+        async function rechercherSiret() {
+            const box = document.getElementById('entSiretProps');
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            box.innerHTML = '<div class="text-xs text-gray-400">Recherche dans le répertoire SIRENE…</div>';
+            const cp = String(adresseData.cp || ''), dep = /^\d{5}$/.test(cp) && !cp.startsWith('20') ? cp.slice(0, 2) : '';
+            const q = String(nomEntrepriseActuelle || '').replace(/\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+            try {
+                const j = await fetch('https://recherche-entreprises.api.gouv.fr/search?per_page=10&q=' + encodeURIComponent(q) + (dep ? '&departement=' + dep : '')).then(r => r.json());
+                const rue = norm(adresseData.adresse).split(' ').filter(w => w.length >= 4 && !/^\d+$/.test(w));
+                const props = [];
+                (j.results || []).forEach(r => {
+                    const etabs = (r.matching_etablissements || []).concat(r.siege ? [r.siege] : []);
+                    const vus = new Set();
+                    etabs.forEach(e => {
+                        if (!e || !e.siret || vus.has(e.siret) || e.etat_administratif === 'F') return; vus.add(e.siret);
+                        const a = norm(e.adresse);
+                        let score = 0;
+                        if (cp && String(e.code_postal) === cp) score += 2;
+                        if (rue.length && rue.filter(w => a.includes(w)).length / rue.length >= 0.6) score += 3;
+                        if (adresseData.ville && a.includes(norm(adresseData.ville).split(' ')[0])) score += 1;
+                        props.push({ siret: e.siret, nom: r.nom_complet || r.nom_raison_sociale || '', adresse: e.adresse || '', siege: r.siege && r.siege.siret === e.siret, score });
+                    });
+                });
+                props.sort((a, b) => b.score - a.score);
+                box.innerHTML = props.length ? '<div class="text-[10px] font-black uppercase text-gray-400">Établissements trouvés (les mieux placés concordent avec l\'adresse de la fiche) — cliquez pour choisir</div>'
+                    + props.slice(0, 8).map(p => `<button type="button" data-siret="${p.siret}" class="block w-full text-left px-3 py-2 rounded-xl bg-white border ${p.score >= 3 ? 'border-green-300' : 'border-gray-200'} hover:border-[#1A4E8A] text-xs">
+                        <b class="font-mono">${esc(p.siret)}</b> ${p.score >= 3 ? '<span class="text-green-700 font-black">✔ adresse concordante</span>' : ''}${p.siege ? ' <span class="text-gray-400">(siège)</span>' : ''}<div class="font-bold text-gray-700">${esc(p.nom)}</div><div class="text-gray-500">${esc(p.adresse)}</div></button>`).join('')
+                    : '<div class="text-xs text-amber-700 font-bold">Aucun établissement actif trouvé sous ce nom. Saisissez le SIRET à la main.</div>';
+                box.querySelectorAll('[data-siret]').forEach(b => b.onclick = () => { document.getElementById('entSiretInput').value = b.dataset.siret; box.querySelectorAll('[data-siret]').forEach(x => x.classList.remove('ring-2', 'ring-[#1A4E8A]')); b.classList.add('ring-2', 'ring-[#1A4E8A]'); });
+            } catch (e) { box.innerHTML = '<div class="text-xs text-red-600 font-bold">Annuaire SIRENE indisponible : ' + esc(e.message) + '</div>'; }
+        }
+        async function enregistrerSiret() {
+            const v = document.getElementById('entSiretInput').value.replace(/\D/g, '');
+            if (v && !siretValide(v)) { alert("SIRET invalide : 14 chiffres avec une clé de contrôle correcte."); return; }
+            const res = await apiPost({ action: 'saveSiretEntreprise', id_entreprise: partId, siret: v, source: 'fiche partenaire' });
+            if (res.success) { document.getElementById('entSiretEdit').classList.add('hidden'); loadDetails(true); }
+            else alert("Erreur : " + res.message);
+        }
         // Adresse normalisée (Base Adresse Nationale / SIRENE — adresse-fr.js), commune à tous les contacts
         function editAdresse() {
             HecgAdresse.ouvrir({

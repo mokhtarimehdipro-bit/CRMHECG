@@ -1396,11 +1396,463 @@ function frEdit(id) {
   if (!f) $('frT').focus();
 }
 
+// ═══════════════════════════ CSS des modules RDV / Directeurs / Examens ═══════════════════════════
+function injectCss2() {
+  if ($('vxCss2')) return;
+  const st = document.createElement('style'); st.id = 'vxCss2';
+  st.textContent = `
+  .vs2-t{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #e3eaf3;border-radius:16px;overflow:hidden;font-size:13px}
+  .vs2-t th{text-align:left;font-size:11px;font-weight:800;color:#7d8a9c;text-transform:uppercase;padding:10px 12px;background:#f7f9fc;border-bottom:1px solid #e3eaf3;white-space:nowrap}
+  .vs2-t td{padding:10px 12px;border-top:1px solid #eef2f7;vertical-align:top}
+  .vs2-t tr.gr td{background:#f3f7fc;font-size:12.5px;padding:7px 12px}
+  .vs2-t tr.gr td b{color:#1A4E8A;font-weight:800;margin-right:10px}
+  .vs2-t tr.gr td span{color:#7d8a9c;font-weight:600;margin-right:10px}
+  .vs2-n b{display:block;color:#0e1a2b;font-weight:700}.vs2-n small{color:#7d8a9c;font-size:11.5px}
+  .vs2-n a{color:#1A4E8A;font-weight:700;text-decoration:none}.vs2-n a:hover{text-decoration:underline}
+  .rdv-c{min-width:190px;border:1px solid #e3eaf3;border-radius:12px;padding:8px 10px;background:#fbfcfe;cursor:pointer}
+  .rdv-c:hover{border-color:#1A4E8A}
+  .rdv-c .d{font-weight:800;color:#0e1a2b;font-size:13px}.rdv-c .s{font-size:11.5px;color:#64748b}
+  .rdv-c .rp{font-size:11.5px;color:#c2410c;font-weight:700}
+  .rdv-b{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+  .rdv-b button{font:700 11px 'Plus Jakarta Sans',Inter,sans-serif;border:1px solid #dfe6f0;background:#fff;border-radius:8px;padding:3px 7px;cursor:pointer}
+  .rdv-b button.h{color:#15803d}.rdv-b button.r{color:#c2410c}.rdv-b button.a{color:#c62828}.rdv-b button.o{color:#475569}
+  .rdv-b button:hover{filter:brightness(.95);border-color:currentColor}
+  .st-b{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px}
+  .st-Planifié{background:#e8eff8;color:#1A4E8A}.st-Honoré{background:#e8f6ee;color:#15803d}.st-Reporté{background:#fff4ed;color:#c2410c}
+  .st-Annulé{background:#fde8e8;color:#c62828}.st-Autre{background:#eef2f7;color:#475569}.st-Àplanifier{background:#f1f4f8;color:#7d8a9c}
+  .st-retard{box-shadow:0 0 0 2px #fca5a5}
+  .vs2-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+  .vs2-chips button{font:800 12px 'Plus Jakarta Sans',Inter,sans-serif;border-radius:10px;padding:6px 11px;border:1px solid transparent;cursor:pointer}
+  .vs2-chips button.on{box-shadow:0 0 0 2px #1A4E8A}
+  .c-ok{background:#e8f6ee;color:#15803d}.c-ko{background:#fde8e8;color:#c62828}.c-wa{background:#fff4ed;color:#c2410c}.c-ne{background:#eef2f7;color:#475569}
+  .vs2-band{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:16px}
+  .vs2-cmp{border-radius:20px;padding:16px 20px;border:2px solid;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .vs2-cmp.ok{background:#f0fbf4;border-color:#bbf7d0}.vs2-cmp.ko{background:#fef2f2;border-color:#fecaca}
+  .vs2-cmp .k{font-size:11px;font-weight:800;text-transform:uppercase;color:#64748b}.vs2-cmp .v{font-size:30px;font-weight:800;color:#0e1a2b;line-height:1.1}
+  .vs2-cmp .eq{font-size:28px;font-weight:900}.vs2-cmp.ok .eq{color:#16a34a}.vs2-cmp.ko .eq{color:#dc2626}
+  .vs2-cmp .t{flex-basis:100%;font-size:12.5px;font-weight:700}.vs2-cmp.ok .t{color:#166534}.vs2-cmp.ko .t{color:#991b1b}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #cbd5e1;vertical-align:-2px;margin-right:4px}
+  .ex-tg{font:800 12px 'Plus Jakarta Sans',Inter,sans-serif;border-radius:10px;padding:6px 10px;border:1px dashed #cbd5e1;background:#fff;color:#7d8a9c;cursor:pointer;white-space:nowrap}
+  .ex-tg.on{border:1px solid #16a34a;background:#e8f6ee;color:#15803d}
+  .ex-ok{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:5px 10px;border-radius:10px;white-space:nowrap}
+  .ex-ok.y{background:#e8f6ee;color:#15803d}.ex-ok.n{background:#f1f4f8;color:#94a3b8}
+  .ex-ep{display:flex;flex-wrap:wrap;gap:4px}.ex-ep span{font-size:11px;font-weight:700;background:#eef3fa;color:#1A4E8A;padding:2px 7px;border-radius:999px}
+  .ex-doc{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:3px}.ex-doc a{color:#1A4E8A;font-weight:700;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ex-doc button{border:0;background:none;color:#cbd5e1;cursor:pointer}.ex-doc button:hover{color:#c62828}
+  .ex-num{width:120px;border:1px solid #e3eaf3;border-radius:8px;padding:5px 8px;font:600 12px 'Plus Jakarta Sans',Inter,sans-serif}
+  `;
+  document.head.appendChild(st);
+}
+const dl = (name, rows) => csvDownload(name, rows);
+const dipOrdreTri = d => { const i = DIP_ORDRE.indexOf(d); return i === -1 ? 99 : i; };
+// Regroupe une liste par diplôme puis par classe → [[diplome, [[classe, items]]]]
+function parDipClasse(l, dipF = x => x.diplome, clF = x => x.classe) {
+  const g = {};
+  l.forEach(x => { const d = dipF(x) || 'Autre', c = clF(x) || 'Classe non renseignée'; ((g[d] = g[d] || {})[c] = g[d][c] || []).push(x); });
+  return Object.keys(g).sort((a, b) => dipOrdreTri(a) - dipOrdreTri(b) || a.localeCompare(b)).map(d => [d, Object.keys(g[d]).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })).map(c => [c, g[d][c].sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr'))])]);
+}
+
+// ═══════════════════════════ SUIVI DES RDV EN ENTREPRISE ═══════════════════════════
+const R = { data: null, annee: '', q: '', dip: '', vue: 'alt', ok: false };
+async function rdvInit() {
+  injectCss(); injectCss2();
+  const sec = $('section-rdv');
+  if (!sec.dataset.ready) {
+    sec.dataset.ready = '1'; sec.classList.add('vx');
+    sec.innerHTML = `<div class="vx-hd"><div><h1>Suivi des RDV en entreprise</h1><p>Chaque étudiant en alternance reçoit la visite d'un membre de l'équipe sur son lieu de travail — historique complet par étudiant et par entreprise</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" id="rdvCharlBtn" style="display:none" onclick="VX.rdvCharl()">${svg('down', 15)} Reprendre depuis Charlemagne</button><button class="vx-btn" onclick="VX.rdvExport()">${svg('down', 15)} Exporter Excel</button></div></div>
+      <div class="vx-kpis" id="rdvKpis"></div>
+      <div class="vx-bar">
+        <select class="vx-sel" id="rdvAnnee" onchange="VX.rdvLoad(this.value)"></select>
+        <div class="vx-search">${svg('search', 15)}<input id="rdvQ" placeholder="Étudiant, entreprise, visiteur…" oninput="VX.rdvRender()"></div>
+        <select class="vx-sel" id="rdvDip" onchange="VX.rdvRender()"></select>
+        <select class="vx-sel" id="rdvVue" onchange="VX.rdvRender()"><option value="alt">Alternants</option><option value="tous">Tous les inscrits</option><option value="sans">Sans aucun RDV</option><option value="suivre">À suivre (date passée)</option><option value="venir">RDV à venir</option></select>
+      </div>
+      <div id="rdvBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
+  }
+  rdvLoad();
+}
+async function rdvLoad(annee) {
+  if (annee) R.annee = annee;
+  const r = await api('getRdv', R.annee ? { annee: R.annee } : {}, { forceRefresh: true });
+  if (!r.success) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  R.data = r; R.annee = r.annee;
+  $('rdvCharlBtn').style.display = r.peutSuivre ? '' : 'none';
+  $('rdvAnnee').innerHTML = r.annees.map(a => `<option ${a === r.annee ? 'selected' : ''}>${a}</option>`).join('');
+  const dips = [...new Set(r.etudiants.map(e => e.diplome))].sort((a, b) => dipOrdreTri(a) - dipOrdreTri(b));
+  const v = $('rdvDip').value;
+  $('rdvDip').innerHTML = '<option value="">Tous les diplômes</option>' + dips.map(d => `<option>${esc(d)}</option>`).join(''); $('rdvDip').value = v;
+  rdvRender();
+}
+const rdvAuj = () => todayISO();
+const rdvAsuivre = v => ['Planifié', 'Reporté'].includes(v.statut) && v.date && v.date < rdvAuj();
+function rdvRender() {
+  const D = R.data; if (!D) return;
+  const q = norm($('rdvQ').value), dip = $('rdvDip').value, vue = $('rdvVue').value;
+  const vAnnee = D.visites.filter(v => v.annee === D.annee);
+  const parEtu = {}; vAnnee.forEach(v => (parEtu[v.etuId] = parEtu[v.etuId] || []).push(v));
+  Object.values(parEtu).forEach(l => l.sort((a, b) => (a.datePris || a.creeLe || '').localeCompare(b.datePris || b.creeLe || '')));
+  const histo = {}; D.visites.forEach(v => { histo[v.etuId] = (histo[v.etuId] || 0) + 1; });
+  let L = D.etudiants.filter(e => (!dip || e.diplome === dip) && (!q || norm([e.nom, e.classe, e.entreprise, e.referent, ...(parEtu[e.id] || []).map(v => v.visiteur + ' ' + v.entreprise)].join(' ')).includes(q)));
+  if (vue === 'alt') L = L.filter(e => e.alternant || parEtu[e.id]);
+  if (vue === 'sans') L = L.filter(e => e.alternant && !(parEtu[e.id] || []).some(v => v.statut !== 'Annulé'));
+  if (vue === 'suivre') L = L.filter(e => (parEtu[e.id] || []).some(rdvAsuivre));
+  if (vue === 'venir') L = L.filter(e => (parEtu[e.id] || []).some(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()));
+  const alts = D.etudiants.filter(e => e.alternant);
+  const honores = vAnnee.filter(v => v.statut === 'Honoré').length, venir = vAnnee.filter(v => ['Planifié', 'Reporté'].includes(v.statut) && v.date >= rdvAuj()).length;
+  const retard = vAnnee.filter(rdvAsuivre).length, sans = alts.filter(e => !(parEtu[e.id] || []).some(v => v.statut !== 'Annulé')).length;
+  $('rdvKpis').innerHTML = `
+    <div class="vx-kpi"><span>Alternants inscrits</span><b>${alts.length}</b><small>${D.annee}</small></div>
+    <div class="vx-kpi"><span>RDV honorés</span><b style="color:#15803d">${honores}</b><small>${vAnnee.length} RDV dans l'année</small></div>
+    <div class="vx-kpi"><span>RDV à venir</span><b>${venir}</b><small>planifiés ou reportés</small></div>
+    <div class="vx-kpi"><span>À suivre</span><b style="color:${retard ? '#c62828' : 'inherit'}">${retard}</b><small>date passée sans statut</small></div>
+    <div class="vx-kpi"><span>Alternants sans RDV</span><b style="color:${sans ? '#c2410c' : 'inherit'}">${sans}</b><small>aucun RDV cette année</small></div>`;
+  if (!L.length) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
+  const maxR = Math.max(1, ...L.map(e => (parEtu[e.id] || []).length));
+  const cell = v => {
+    const st = v.statut, ret = rdvAsuivre(v);
+    return `<div class="rdv-c" onclick="VX.rdvEdit('${jsq(v.id)}')">
+      <div class="d">${v.datePris ? 'Pris le ' + fmtD(v.datePris) : 'Date à fixer'}</div>
+      ${v.date && v.date !== v.datePris ? `<div class="rp">→ reporté au ${fmtD(v.date)}</div>` : ''}
+      <div class="s">${v.visiteur ? esc(v.visiteur) : '<i>visiteur ?</i>'}${v.entreprise ? ' · ' + esc(v.entreprise) : ''}</div>
+      <span class="st-b st-${st.replace(/\s/g, '')} ${ret ? 'st-retard' : ''}" title="${ret ? 'Date passée : indiquez si le RDV a été honoré' : ''}">${esc(st)}${ret ? ' · à suivre' : ''}</span>
+      ${D.peutSuivre && !['Honoré', 'Annulé'].includes(st) && v.date ? `<div class="rdv-b" onclick="event.stopPropagation()">
+        <button class="h" onclick="VX.rdvStatut('${jsq(v.id)}','Honoré')" title="RDV honoré">✓ Honoré</button>
+        <button class="r" onclick="VX.rdvStatut('${jsq(v.id)}','Reporté')" title="Reporté : nouvelle date">↻ Reporté</button>
+        <button class="a" onclick="VX.rdvStatut('${jsq(v.id)}','Annulé')" title="Annulé">✕ Annulé</button>
+        <button class="o" onclick="VX.rdvStatut('${jsq(v.id)}','Autre')" title="Autre (préciser)">… Autre</button></div>` : ''}
+    </div>`;
+  };
+  const head = `<tr><th>Étudiant</th><th>Entreprise (lieu du RDV)</th><th>Responsable visite</th>${Array.from({ length: maxR }, (_, i) => `<th>Date RDV pris ${i + 1}</th>`).join('')}<th></th></tr>`;
+  $('rdvBody').innerHTML = parDipClasse(L).map(([d, classes]) => `<div class="vx-dip"><span class="t">${esc(d === 'Autre' ? 'Autres formations' : d)}</span><span class="n">${classes.reduce((s, c) => s + c[1].length, 0)} étudiant(s)</span></div>
+    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead>${head}</thead><tbody>${classes.map(([c, l]) => `<tr class="gr"><td colspan="${maxR + 4}"><b>${esc(c)}</b><span>${l.length} étudiant(s)</span></td></tr>` + l.map(e => {
+      const vs = parEtu[e.id] || [];
+      return `<tr><td class="vs2-n"><b>${esc(e.nom)}</b><small>${esc(e.typo)}${e.alternant ? '' : ' · pas en alternance'}</small>${histo[e.id] ? `<div><button class="vx-link" onclick="VX.rdvHisto('${jsq(e.id)}')">${svg('clock', 12)} Historique (${histo[e.id]})</button></div>` : ''}</td>
+        <td class="vs2-n">${e.entreprise ? `<b>${esc(e.entreprise)}</b><small>${esc(e.lieu || 'adresse non renseignée')}</small>` : '<small style="color:#c2410c;font-weight:700">Aucune entreprise dans le CRM</small>'}</td>
+        <td class="vs2-n"><button class="vx-link" onclick="VX.rdvReferent('${jsq(e.id)}')">${e.referent ? esc(e.referent) : '<i>à désigner</i>'}</button>${e.referentSource === 'Charlemagne' ? '<small> (Charlemagne)</small>' : ''}</td>
+        ${Array.from({ length: maxR }, (_, i) => `<td>${vs[i] ? cell(vs[i]) : ''}</td>`).join('')}
+        <td><button class="vx-btn sm" onclick="VX.rdvNew('${jsq(e.id)}')">${svg('plus', 13, 2.4)} RDV</button></td></tr>`; }).join('')).join('')}</tbody></table></div>`).join('');
+}
+function rdvEquipeOptions(sel) {
+  return `<option value="">— choisir —</option>` + (R.data.equipe || []).map(x => `<option value="${esc(x.email)}" ${sel && (sel === x.email || norm(sel) === norm(x.nom)) ? 'selected' : ''}>${esc(x.nom)}${x.role ? ' · ' + esc(x.role) : ''}</option>`).join('') + `<option value="__autre">Autre (saisie libre)…</option>`;
+}
+function rdvVisiteurChoisi(selId, libreId) {
+  const v = $(selId).value;
+  if (v === '__autre') return { visiteur: $(libreId).value.trim(), visiteurEmail: '' };
+  const x = (R.data.equipe || []).find(q => q.email === v);
+  return x ? { visiteur: x.nom, visiteurEmail: x.email } : { visiteur: '', visiteurEmail: '' };
+}
+function rdvForm(e, v) {
+  const D = R.data, ref = v ? v.visiteurEmail || v.visiteur : (e.referentEmail || e.referent);
+  const dlg = modal(`<h2>${v ? 'RDV de ' + esc(v.etudiant) : 'Nouveau RDV — ' + esc(e.nom)}</h2>
+    <p class="sub">${v ? `${esc(v.entreprise || '')}${v.lieu ? ' — ' + esc(v.lieu) : ''} · statut <b>${esc(v.statut)}</b>` : `${esc(e.entreprise || 'Entreprise non renseignée')}${e.lieu ? ' — ' + esc(e.lieu) : ''} (lieu figé dans l'historique)`}</p>
+    <label class="fl">Membre de l'équipe qui se déplace</label>
+    <select class="in" id="rvVis">${rdvEquipeOptions(ref)}</select>
+    <input class="in" id="rvLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px" value="${esc(v && !v.visiteurEmail ? v.visiteur : '')}">
+    <label class="fl">${v ? 'Date du RDV' : 'Date RDV pris'}</label><input type="date" class="in" id="rvDate" value="${v ? (v.date || '') : ''}" ${v && v.statut === 'Honoré' ? 'disabled' : ''}>
+    <label class="fl">Commentaire</label><textarea class="in" id="rvCom" style="min-height:60px">${esc(v ? v.commentaire : '')}</textarea>
+    ${v && v.historique && v.historique.length ? `<label class="fl">Historique du RDV</label><div class="vx-note" style="display:block">${v.historique.map(h => `<div><b>${esc(h.le)}</b> — ${esc(h.statut)}${h.dateReport ? ' au ' + fmtD(h.dateReport) : h.date ? ' (' + fmtD(h.date) + ')' : ''}${h.commentaire ? ' — ' + esc(h.commentaire) : ''} <span style="color:#94a3b8">${esc(h.par || '')}</span></div>`).join('')}</div>` : ''}
+    <div class="mft">${v ? `<button class="vx-btn danger" style="margin-right:auto" id="rvDel">${svg('trash', 14)} Retirer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rvOk">Enregistrer</button></div>`, 560);
+  if (v && !v.visiteurEmail && v.visiteur) { $('rvVis').value = '__autre'; $('rvLibre').style.display = ''; }
+  $('rvVis').onchange = () => { $('rvLibre').style.display = $('rvVis').value === '__autre' ? '' : 'none'; };
+  $('rvOk').onclick = async () => {
+    const who = rdvVisiteurChoisi('rvVis', 'rvLibre');
+    const payload = Object.assign({ date: $('rvDate').value, commentaire: $('rvCom').value.trim() }, who, v ? { id: v.id } : { etuId: e.id, annee: R.annee });
+    const r = await api('saveRdv', { rdv: payload });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    dlg.remove(); toast(v ? 'RDV mis à jour ✓' : 'RDV enregistré ✓'); rdvLoad();
+  };
+  if ($('rvDel')) $('rvDel').onclick = async () => {
+    if (!confirm('Retirer ce RDV du suivi ? (il reste archivé dans la feuille RDV_VISITES)')) return;
+    const r = await api('saveRdv', { rdv: { id: v.id, archiver: true } });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    dlg.remove(); toast('RDV retiré'); rdvLoad();
+  };
+}
+function rdvNew(etuId) { rdvForm(R.data.etudiants.find(e => e.id === etuId), null); }
+function rdvEdit(id) { const v = R.data.visites.find(x => x.id === id); if (v) rdvForm(R.data.etudiants.find(e => e.id === v.etuId) || {}, v); }
+async function rdvStatut(id, statut) {
+  const v = R.data.visites.find(x => x.id === id); if (!v) return;
+  const go = async (extra) => {
+    const r = await api('statutRdv', Object.assign({ id, statut }, extra || {}));
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return false; }
+    toast('RDV ' + statut.toLowerCase() + ' ✓'); rdvLoad(); return true;
+  };
+  if (statut === 'Honoré') { go(); return; }
+  const dlg = modal(`<h2>RDV ${statut === 'Autre' ? '— autre issue' : statut.toLowerCase()}</h2><p class="sub">${esc(v.etudiant)} · ${esc(v.entreprise)} · prévu le ${fmtD(v.date)}</p>
+    ${statut === 'Reporté' ? `<label class="fl">Nouvelle date du RDV</label><input type="date" class="in" id="rsDate">` : ''}
+    <label class="fl">Commentaire${statut === 'Autre' ? ' (obligatoire)' : ''}</label><textarea class="in" id="rsCom" style="min-height:60px" placeholder="${statut === 'Annulé' ? 'Motif de l\'annulation' : statut === 'Reporté' ? 'Raison du report' : 'Que s\'est-il passé ?'}"></textarea>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rsOk">Valider</button></div>`, 480);
+  $('rsOk').onclick = async () => {
+    const extra = { commentaire: $('rsCom').value.trim() };
+    if (statut === 'Reporté') { extra.dateReport = $('rsDate').value; if (!extra.dateReport) { toast('Indiquez la nouvelle date', false); return; } }
+    if (statut === 'Autre' && !extra.commentaire) { toast('Précisez ce qui s\'est passé', false); return; }
+    if (await go(extra)) dlg.remove();
+  };
+}
+function rdvReferent(etuId) {
+  const e = R.data.etudiants.find(x => x.id === etuId); if (!e) return;
+  const memeClasse = R.data.etudiants.filter(x => x.classe === e.classe && x.alternant);
+  const dlg = modal(`<h2>Responsable des visites — ${esc(e.nom)}</h2><p class="sub">Membre de l'équipe chargé des RDV de cet étudiant en ${esc(R.annee)}.</p>
+    <select class="in" id="rfVis">${rdvEquipeOptions(e.referentEmail || e.referent)}</select>
+    <input class="in" id="rfLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="rfClasse"> Appliquer aux ${memeClasse.length} alternants de ${esc(e.classe)}</label>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rfOk">Enregistrer</button></div>`, 480);
+  $('rfVis').onchange = () => { $('rfLibre').style.display = $('rfVis').value === '__autre' ? '' : 'none'; };
+  $('rfOk').onclick = async () => {
+    const who = rdvVisiteurChoisi('rfVis', 'rfLibre');
+    const ids = $('rfClasse').checked ? memeClasse.map(x => x.id) : [e.id];
+    const r = await api('saveReferentRdv', { annee: R.annee, etuIds: ids, nom: who.visiteur, email: who.visiteurEmail });
+    if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+    dlg.remove(); toast('Responsable enregistré ✓'); rdvLoad();
+  };
+}
+function rdvHisto(etuId) {
+  const e = R.data.etudiants.find(x => x.id === etuId) || {};
+  const l = R.data.visites.filter(v => v.etuId === etuId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  modal(`<h2>Historique des visites — ${esc(e.nom || (l[0] || {}).etudiant || '')}</h2><p class="sub">Toutes les années, avec l'entreprise et le lieu au moment du RDV.</p>
+    <table class="vs2-t"><thead><tr><th>Date</th><th>Année</th><th>Visiteur</th><th>Structure (lieu)</th><th>Statut</th></tr></thead><tbody>
+    ${l.map(v => `<tr><td><b>${fmtD(v.date || v.datePris)}</b>${v.datePris && v.date !== v.datePris ? `<div style="font-size:11px;color:#94a3b8">pris le ${fmtD(v.datePris)}</div>` : ''}</td><td>${esc(v.annee)}</td><td>${esc(v.visiteur || '—')}</td>
+      <td class="vs2-n"><b>${esc(v.entreprise || '—')}</b><small>${esc(v.lieu || '')}</small></td><td><span class="st-b st-${v.statut.replace(/\s/g, '')}">${esc(v.statut)}</span>${v.source === 'Charlemagne' ? '<div style="font-size:11px;color:#94a3b8">repris de Charlemagne</div>' : ''}</td></tr>`).join('')}
+    </tbody></table><div class="mft"><button class="vx-btn pri" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 820);
+}
+async function rdvCharl() {
+  if (!confirm("Reprendre les responsables et les dates de visite du dernier import Charlemagne ?\n\n• le responsable de visite devient le responsable de l'année (une saisie manuelle n'est jamais écrasée) ;\n• chaque date de visite trouvée crée un RDV (passée = Honoré), sans doublon.")) return;
+  const r = await api('importerRdvCharlemagne', {});
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+  const S = r.stats;
+  toast(`Charlemagne : ${S.responsables} responsable(s), ${S.visites} visite(s) créée(s)${S.nonRapproches ? ', ' + S.nonRapproches + ' étudiant(s) non retrouvé(s)' : ''}`);
+  rdvLoad();
+}
+async function rdvExport() {
+  const D = R.data; if (!D) return;
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const wb = new X.Workbook(), ws = wb.addWorksheet('RDV ' + D.annee, { views: [{ state: 'frozen', ySplit: 4 }] });
+  const H = ['Diplôme', 'Classe', 'Étudiant', 'Responsable visite', 'N° RDV', 'Date RDV pris', 'Date RDV (après report)', 'Visiteur', 'Entreprise', 'Lieu', 'Statut', 'Commentaire'];
+  ws.columns = [12, 14, 26, 22, 8, 14, 16, 22, 28, 36, 12, 40].map(w => ({ width: w }));
+  xlTitle(ws, 'Suivi des RDV en entreprise — ' + D.annee, 'Export du ' + fmtLong(todayISO()), H.length); xlHeader(ws, 4, H);
+  const SC = { 'Honoré': ['E8F6EE', '15803D'], 'Planifié': ['E8EFF8', '1A4E8A'], 'Reporté': ['FFF4ED', 'C2410C'], 'Annulé': ['FDE8E8', 'C62828'], 'Autre': ['EEF2F7', '475569'], 'À planifier': ['F1F4F8', '7D8A9C'] };
+  let r = 5;
+  parDipClasse(D.etudiants.filter(e => e.alternant || D.visites.some(v => v.etuId === e.id && v.annee === D.annee))).forEach(([d, cls]) => cls.forEach(([c, l]) => l.forEach(e => {
+    const vs = D.visites.filter(v => v.etuId === e.id && v.annee === D.annee).sort((a, b) => (a.datePris || '').localeCompare(b.datePris || ''));
+    (vs.length ? vs : [null]).forEach((v, i) => {
+      ws.getRow(r).values = [d, c, e.nom, e.referent || '', v ? i + 1 : '', v && v.datePris ? new Date(v.datePris + 'T12:00:00') : '', v && v.date ? new Date(v.date + 'T12:00:00') : '', v ? v.visiteur : '', v ? v.entreprise : e.entreprise, v ? v.lieu : e.lieu, v ? v.statut : 'Aucun RDV', v ? v.commentaire : ''];
+      [6, 7].forEach(k => ws.getCell(r, k).numFmt = 'dd/mm/yyyy');
+      const sc = v ? SC[v.statut] : ['FDE8E8', 'C62828'];
+      if (sc) { const cl = ws.getCell(r, 11); cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sc[0] } }; cl.font = { bold: true, color: { argb: 'FF' + sc[1] } }; }
+      r++;
+    });
+  })));
+  xlBand(ws, 5, r - 1, H.length);
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, r - 1), column: H.length } };
+  await xlDownload(wb, 'Suivi_RDV_' + D.annee + '.xlsx');
+}
+
+// ═══════════════════════════ COMPARATIF AVEC LE SUIVI DES DIRECTEURS ═══════════════════════════
+const DR = { data: null, lecture: 1, verdict: '', q: '' };
+const DIR_COUL = {
+  'Absent du CRM': 'c-ko', 'Non inscrit dans le CRM': 'c-ko', 'Absent du fichier directeur': 'c-ko', 'Rouge chez le directeur, inscrit dans le CRM': 'c-ko',
+  'Doublon dans le fichier directeur': 'c-wa', 'Présent, diplôme différent': 'c-wa', 'Présent des deux côtés': 'c-ok', 'Sorti des deux côtés': 'c-ne',
+  'Vert chez le directeur, pas alternant dans le CRM': 'c-ko', 'Alternant dans le CRM, pas vert chez le directeur': 'c-ko', 'Alternance des deux côtés': 'c-ok', 'Sans alternance des deux côtés': 'c-ne' };
+function dirInit() {
+  injectCss(); injectCss2();
+  const sec = $('section-directeurs');
+  if (!sec.dataset.ready) {
+    sec.dataset.ready = '1'; sec.classList.add('vx');
+    sec.innerHTML = `<div class="vx-hd"><div><h1>Comparatif avec le suivi des directeurs</h1><p>Lecture seule du classeur « Suivi inscription étudiants » (fond rouge = plus dans l'établissement, fond vert = en alternance). Rien n'est écrit, ni dans le classeur ni dans le CRM.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="vx-btn" id="dirLien" target="_blank" rel="noopener" style="display:none">${svg('ext', 14)} Ouvrir le classeur</a><button class="vx-btn pri" onclick="VX.dirLoad()">${svg('clock', 15)} Actualiser</button></div></div>
+      <div id="dirOnglets" style="margin-bottom:14px"></div><div id="dirBody"><div class="vx-empty"><h3>Lecture du classeur des directeurs…</h3></div></div>`;
+  }
+  if (!DR.data) dirLoad();
+}
+async function dirLoad() {
+  const choisis = [...document.querySelectorAll('[data-dironglet]:checked')].map(x => x.value);
+  $('dirBody').innerHTML = `<div class="vx-empty"><h3>Lecture du classeur des directeurs…</h3></div>`;
+  const r = await api('getComparatifDirecteurs', choisis.length ? { onglets: choisis } : {}, { forceRefresh: true });
+  if (!r.success) { $('dirBody').innerHTML = `<div class="vx-empty"><h3>Lecture impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  DR.data = r;
+  if (r.url) { $('dirLien').href = r.url; $('dirLien').style.display = ''; }
+  $('dirOnglets').innerHTML = `<div class="vx-bar" style="margin:0"><b style="font-size:12px;color:#7d8a9c;text-transform:uppercase">Onglets comparés</b>${r.onglets.map(o => `<label class="vx-chip" style="cursor:pointer"><input type="checkbox" data-dironglet value="${esc(o)}" ${r.choisis.includes(o) ? 'checked' : ''}> ${esc(o.trim())}</label>`).join('')}<button class="vx-btn sm" onclick="VX.dirLoad()">Comparer</button></div>`;
+  dirRender();
+}
+function dirRender() {
+  const D = DR.data; if (!D || !D.stats) { $('dirBody').innerHTML = `<div class="vx-empty"><h3>${esc((D && D.message) || 'Choisissez les onglets à comparer')}</h3></div>`; return; }
+  const S = D.stats;
+  const carte = (titre, a, la, b, lb, detail) => `<div class="vs2-cmp ${a === b ? 'ok' : 'ko'}"><div><div class="k">${la}</div><div class="v">${a}</div></div><div class="eq">${a === b ? '=' : '≠'}</div><div><div class="k">${lb}</div><div class="v">${b}</div></div><div class="t">${titre} — ${a === b ? '✅ identique' : '❌ écart de ' + Math.abs(a - b)}${detail ? ' · ' + detail : ''}</div></div>`;
+  const L = DR.lecture === 1 ? D.lecture1 : DR.lecture === 2 ? D.lecture2 : null;
+  const autres = Object.entries(D.couleursAutres || {});
+  let corps = '';
+  if (L) {
+    const cpt = {}; L.forEach(x => cpt[x.verdict] = (cpt[x.verdict] || 0) + 1);
+    const ordre = Object.keys(DIR_COUL).filter(v => cpt[v]);
+    const q = norm(DR.q);
+    const F = L.filter(x => (!DR.verdict || x.verdict === DR.verdict) && (!q || norm([x.dir && x.dir.texte, x.dir && x.dir.classe, x.crm && x.crm.nom, x.crm && x.crm.classe].join(' ')).includes(q)))
+      .sort((a, b) => ordre.indexOf(a.verdict) - ordre.indexOf(b.verdict) || String((a.crm || a.dir).nom).localeCompare(String((b.crm || b.dir).nom), 'fr'));
+    corps = `<div class="vs2-chips"><button class="c-ne ${DR.verdict ? '' : 'on'}" onclick="VX.dirVerdict('')">Tous · ${L.length}</button>${ordre.map(v => `<button class="${DIR_COUL[v]} ${DR.verdict === v ? 'on' : ''}" onclick="VX.dirVerdict('${jsq(v)}')">${esc(v)} · ${cpt[v]}</button>`).join('')}</div>
+      <div class="vx-bar"><div class="vx-search">${svg('search', 15)}<input id="dirQ" placeholder="Étudiant, classe…" value="${esc(DR.q)}" oninput="VX.dirQ(this.value)"></div><button class="vx-btn sm" onclick="VX.dirCsv()">${svg('down', 13)} Export CSV</button></div>
+      <div style="overflow-x:auto"><table class="vs2-t"><thead><tr><th>Fichier des directeurs</th><th>CRM</th><th>${DR.lecture === 1 ? 'Inscription' : 'Alternance'}</th></tr></thead><tbody>
+      ${F.slice(0, 1500).map(x => `<tr><td class="vs2-n">${x.dir ? `<b><span class="sw" style="background:${esc(x.dir.couleur)}"></span>${esc(x.dir.nom)}</b><small>${esc(x.dir.classe)} · ${esc(x.dir.campus || x.dir.onglet.trim())} · case ${esc(x.dir.ref)}</small>${x.dir.texte !== x.dir.nom ? `<small style="display:block;color:#94a3b8">${esc(x.dir.texte.slice(0, 140))}</small>` : ''}` : '<small style="color:#c62828;font-weight:700">absent du fichier</small>'}</td>
+        <td class="vs2-n">${x.crm ? `<a href="dossier.html?id=${encodeURIComponent(x.crm.id)}" target="_blank">${esc(x.crm.nom)}</a><small>${esc(x.crm.classe || 'sans classe')} · ${esc(x.crm.typo || '?')} · ${esc(x.crm.statut || '')}</small>${x.crm.entreprise ? `<small style="display:block">${esc(x.crm.entreprise)}</small>` : ''}` : '<small style="color:#c62828;font-weight:700">introuvable dans le CRM</small>'}</td>
+        <td><span class="st-b ${DIR_COUL[x.verdict]}">${esc(x.verdict)}</span></td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:30px">Aucune ligne</td></tr>'}</tbody></table></div>`;
+  } else {
+    corps = `<table class="vs2-t"><thead><tr><th>Classe (fichier directeur)</th><th>Inscrits directeur</th><th>…retrouvés inscrits au CRM</th><th>Verts (alternance) directeur</th><th>…alternants au CRM</th></tr></thead><tbody>
+      ${D.parClasse.map(c => `<tr><td><b>${esc(c.classe)}</b></td><td>${c.dir}</td><td style="color:${c.crm === c.dir ? '#15803d' : '#c62828'};font-weight:800">${c.crm}</td><td>${c.dirVert}</td><td style="color:${c.crmAlt === c.dirVert ? '#15803d' : '#c62828'};font-weight:800">${c.crmAlt}</td></tr>`).join('')}</tbody></table>`;
+  }
+  $('dirBody').innerHTML = `<div class="vs2-band">
+      ${carte('1re lecture : nombre d\'inscrits', S.dirInscrits, 'Directeurs (hors rouge)', S.crmInscrits, 'CRM inscrits + préinscrits', S.dirRouges + ' case(s) rouge(s) ignorée(s)')}
+      ${carte('2e lecture : alternance', S.dirAlternants, 'Directeurs (cases vertes)', S.crmAlternants, 'CRM en alternance', S.altDirSeul + ' vert(s) sans alternance CRM · ' + S.altCrmSeul + ' alternant(s) CRM pas en vert')}
+    </div>
+    ${autres.length ? `<div class="vx-note" style="margin-bottom:12px">Autres couleurs du classeur, comptées comme « inscrit sans alternance » : ${autres.map(([c, n]) => `<span><span class="sw" style="background:${esc(c)}"></span>${n}</span>`).join(' · ')}</div>` : ''}
+    <div class="vx-tabs" style="margin-bottom:14px"><button class="${DR.lecture === 1 ? 'on' : ''}" onclick="VX.dirLecture(1)">1re lecture — inscrits</button><button class="${DR.lecture === 2 ? 'on' : ''}" onclick="VX.dirLecture(2)">2e lecture — alternance</button><button class="${DR.lecture === 3 ? 'on' : ''}" onclick="VX.dirLecture(3)">Par classe</button></div>
+    ${corps}`;
+}
+function dirCsv() {
+  const L = DR.lecture === 1 ? DR.data.lecture1 : DR.data.lecture2;
+  dl('comparatif_directeurs_' + (DR.lecture === 1 ? 'inscrits' : 'alternance') + '.csv', [['Constat', 'Nom (directeur)', 'Classe (directeur)', 'Campus', 'Case', 'Texte de la case', 'Couleur', 'Étudiant CRM', 'ID CRM', 'Classe CRM', 'Typologie', 'Statut', 'Entreprise']]
+    .concat(L.map(x => [x.verdict, x.dir ? x.dir.nom : '', x.dir ? x.dir.classe : '', x.dir ? x.dir.campus : '', x.dir ? x.dir.ref : '', x.dir ? x.dir.texte : '', x.dir ? (x.dir.absent ? 'rouge' : x.dir.vert ? 'vert' : x.dir.couleur) : '',
+      x.crm ? x.crm.nom : '', x.crm ? x.crm.id : '', x.crm ? x.crm.classe : '', x.crm ? x.crm.typo : '', x.crm ? x.crm.statut : '', x.crm ? x.crm.entreprise : ''])));
+}
+
+// ═══════════════════════════ INSCRIPTIONS AUX EXAMENS OFFICIELS ═══════════════════════════
+const EX = { data: null, session: '', q: '', dip: '', filtre: '' };
+function exInit() {
+  injectCss(); injectCss2();
+  const sec = $('section-examens');
+  if (!sec.dataset.ready) {
+    sec.dataset.ready = '1'; sec.classList.add('vx');
+    sec.innerHTML = `<div class="vx-hd"><div><h1>Inscriptions aux examens officiels</h1><p>Par diplôme et par classe : épreuves, inscription (à cocher) et justificatif (« Justificatif OK » dès qu'un document est déposé)</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="vx-btn" onclick="VX.exExport()">${svg('down', 15)} Exporter Excel</button></div></div>
+      <div class="vx-kpis" id="exKpis"></div>
+      <div class="vx-bar">
+        <select class="vx-sel" id="exSession" onchange="VX.exLoad(this.value)"></select>
+        <div class="vx-search">${svg('search', 15)}<input id="exQ" placeholder="Étudiant, classe, n° candidat…" oninput="VX.exRender()"></div>
+        <select class="vx-sel" id="exDip" onchange="VX.exRender()"></select>
+        <select class="vx-sel" id="exFiltre" onchange="VX.exRender()"><option value="">Tous</option><option value="noninscrit">Non inscrits</option><option value="nojustif">Sans justificatif</option><option value="complet">Inscrits + justificatif</option></select>
+      </div>
+      <input type="file" id="exFile" multiple hidden>
+      <div id="exBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
+    $('exFile').onchange = ev => { exUpload([...ev.target.files]); ev.target.value = ''; };
+  }
+  exLoad();
+}
+async function exLoad(session) {
+  if (session) EX.session = session;
+  const r = await api('getExamens', EX.session ? { session: EX.session } : {}, { forceRefresh: true });
+  if (!r.success) { $('exBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  EX.data = r; EX.session = r.session;
+  $('exSession').innerHTML = r.sessions.map(s => `<option ${s === r.session ? 'selected' : ''} value="${s}">Session ${s}</option>`).join('');
+  const dips = [...new Set(r.etudiants.map(e => e.diplome))].sort((a, b) => dipOrdreTri(a) - dipOrdreTri(b));
+  const v = $('exDip').value; $('exDip').innerHTML = '<option value="">Tous les diplômes</option>' + dips.map(d => `<option>${esc(d)}</option>`).join(''); $('exDip').value = v;
+  exRender();
+}
+function exFiltrees() {
+  const q = norm($('exQ').value), dip = $('exDip').value, f = $('exFiltre').value;
+  return EX.data.etudiants.filter(e => (!dip || e.diplome === dip) && (!q || norm([e.nom, e.classe, e.numCandidat, e.epreuves.join(' ')].join(' ')).includes(q))
+    && (!f || (f === 'noninscrit' && !e.inscrit) || (f === 'nojustif' && !e.justifOk) || (f === 'complet' && e.inscrit && e.justifOk)));
+}
+function exRender() {
+  const D = EX.data; if (!D) return;
+  const all = D.etudiants, L = exFiltrees();
+  const ins = all.filter(e => e.inscrit).length, jus = all.filter(e => e.justifOk).length, comp = all.filter(e => e.inscrit && e.justifOk).length;
+  $('exKpis').innerHTML = `<div class="vx-kpi"><span>Étudiants</span><b>${all.length}</b><small>session ${esc(D.session)}</small></div>
+    <div class="vx-kpi"><span>Inscrits</span><b style="color:#15803d">${ins}</b><small>${all.length - ins} non inscrit(s)</small></div>
+    <div class="vx-kpi"><span>Justificatif OK</span><b style="color:#15803d">${jus}</b><small>${all.length - jus} sans justificatif</small></div>
+    <div class="vx-kpi"><span>Dossiers complets</span><b>${comp}</b><small>inscrit + justificatif</small></div>`;
+  if (!L.length) { $('exBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ce filtre</h3></div>`; return; }
+  $('exBody').innerHTML = parDipClasse(L).map(([d, classes]) => {
+    const n = classes.reduce((s, c) => s + c[1].length, 0), ni = classes.reduce((s, c) => s + c[1].filter(e => e.inscrit).length, 0);
+    return `<div class="vx-dip"><span class="t">${esc(d === 'Autre' ? 'Autres formations' : d)}</span><span class="n">${n} étudiant(s)</span><span class="n">${ni} inscrit(s)</span></div>
+    <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>Étudiant</th><th>Épreuves</th><th>N° candidat</th><th>État 1 · Inscrit</th><th>Justificatifs</th><th>État 2 · Justificatif</th></tr></thead><tbody>
+    ${classes.map(([c, l]) => `<tr class="gr"><td colspan="6"><b>${esc(c)}</b><span>${l.length} étudiant(s)</span><span>${l.filter(e => e.inscrit).length} inscrit(s) · ${l.filter(e => e.justifOk).length} justificatif(s)</span>
+      ${l.some(e => !e.inscrit) ? `<button class="vx-btn sm" style="float:right" onclick="VX.exInscrireClasse('${jsq(d)}','${jsq(c)}')">${svg('check', 12, 2.6)} Marquer toute la classe inscrite</button>` : ''}</td></tr>` + l.map(e => `<tr>
+      <td class="vs2-n"><b>${esc(e.nom)}</b><small>${esc(e.typo || '')}${e.sorti ? ' · <span style="color:#c62828">plus inscrit</span>' : ''}</small>${e.mail ? `<small style="display:block">${esc(e.mail)}</small>` : ''}</td>
+      <td><div class="ex-ep">${e.epreuves.map(x => `<span>${esc(x)}</span>`).join('')}</div><button class="vx-link" onclick="VX.exEpreuves('${jsq(e.id)}')">${svg('edit', 12)} ${e.epreuves.length ? 'Modifier' : 'Choisir les épreuves'}</button></td>
+      <td><input class="ex-num" value="${esc(e.numCandidat)}" placeholder="—" onchange="VX.exNum('${jsq(e.id)}',this.value)"></td>
+      <td><button class="ex-tg ${e.inscrit ? 'on' : ''}" onclick="VX.exInscrit('${jsq(e.id)}',${!e.inscrit})" title="${e.inscrit ? 'Inscrit le ' + fmtD(e.inscritLe) + ' par ' + esc(e.inscritPar) + ' — cliquer pour annuler' : 'Cliquer pour marquer inscrit'}">${e.inscrit ? '✓ Inscrit' + (e.inscritLe ? ' le ' + fmtD(e.inscritLe) : '') : '○ Marquer inscrit'}</button></td>
+      <td>${e.docs.map(x => `<div class="ex-doc">${svg('file', 12)}<a href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.nom)}">${esc(x.nom.replace(/^.*— /, ''))}</a><button title="Retirer" onclick="VX.exDocDel('${jsq(e.id)}','${jsq(x.id)}')">✕</button></div>`).join('')}
+        <button class="vx-link" onclick="VX.exPick('${jsq(e.id)}')">${svg('upload', 12)} Déposer</button></td>
+      <td><span class="ex-ok ${e.justifOk ? 'y' : 'n'}">${e.justifOk ? '✓ Justificatif OK' : 'En attente'}</span></td></tr>`).join('')).join('')}
+    </tbody></table></div>`; }).join('');
+}
+async function exSave(ids, champs, msg) {
+  const r = await api('saveExamen', { session: EX.session, etuIds: ids, champs });
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return false; }
+  if (msg) toast(msg); return true;
+}
+async function exInscrit(id, on) {
+  const e = EX.data.etudiants.find(x => x.id === id); if (!e) return;
+  if (!on && !confirm('Annuler l\'inscription de ' + e.nom + ' ?')) return;
+  if (await exSave([id], { inscrit: on }, on ? 'Inscription enregistrée ✓' : 'Inscription annulée')) { e.inscrit = on; e.inscritLe = on ? todayISO() : ''; e.inscritPar = on ? (user.nom || '') : ''; exRender(); }
+}
+async function exInscrireClasse(d, c) {
+  const l = EX.data.etudiants.filter(e => e.diplome === d && (e.classe || 'Classe non renseignée') === c && !e.inscrit);
+  if (!l.length || !confirm('Marquer inscrits les ' + l.length + ' étudiant(s) non inscrits de ' + c + ' ?')) return;
+  if (await exSave(l.map(e => e.id), { inscrit: true }, l.length + ' inscription(s) enregistrée(s) ✓')) { l.forEach(e => { e.inscrit = true; e.inscritLe = todayISO(); e.inscritPar = user.nom || ''; }); exRender(); }
+}
+async function exNum(id, v) { const e = EX.data.etudiants.find(x => x.id === id); if (e && await exSave([id], { numCandidat: v.trim() }, 'N° candidat enregistré ✓')) e.numCandidat = v.trim(); }
+function exEpreuves(id) {
+  const e = EX.data.etudiants.find(x => x.id === id); if (!e) return;
+  const ref = (EX.data.epreuvesRef[e.diplome] || []).slice();
+  e.epreuves.forEach(x => { if (!ref.includes(x)) ref.push(x); });
+  const dlg = modal(`<h2>Épreuves — ${esc(e.nom)}</h2><p class="sub">${esc(e.diplome)} · ${esc(e.classe)} — cochez les épreuves auxquelles l'étudiant est inscrit.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;margin:12px 0">${ref.map((x, i) => `<label class="vx-chip" style="cursor:pointer;justify-content:flex-start;white-space:normal"><input type="checkbox" data-ep value="${esc(x)}" ${e.epreuves.includes(x) ? 'checked' : ''}> ${esc(x)}</label>`).join('') || '<p class="sub">Aucune épreuve dans le référentiel pour ce diplôme : ajoutez-les ci-dessous.</p>'}</div>
+    <label class="fl">Autre épreuve</label><input class="in" id="exEpLibre" placeholder="Ex : UE 4 — Droit fiscal">
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="exEpOk">Enregistrer</button></div>`, 720);
+  $('exEpOk').onclick = async () => {
+    const l = [...dlg.querySelectorAll('[data-ep]:checked')].map(x => x.value); const libre = $('exEpLibre').value.trim(); if (libre) l.push(libre);
+    if (await exSave([id], { epreuves: l }, 'Épreuves enregistrées ✓')) { e.epreuves = l; dlg.remove(); exRender(); }
+  };
+}
+let exCible = null;
+function exPick(id) { exCible = id; $('exFile').click(); }
+async function exUpload(files) {
+  const e = EX.data.etudiants.find(x => x.id === exCible); if (!e || !files.length) return;
+  for (const f of files) {
+    if (f.size > 20 * 1024 * 1024) { toast(f.name + ' : trop volumineux (20 Mo max)', false); continue; }
+    toast('Envoi de ' + f.name + '…');
+    const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.onerror = rej; fr.readAsDataURL(f); });
+    const r = await api('uploadExamDoc', { session: EX.session, etuId: e.id, data: b64, fileName: f.name, mimeType: f.type || 'application/octet-stream' });
+    if (!r.success) { toast(f.name + ' : ' + errTxt(r.message), false); continue; }
+    e.docs.push(r.doc); e.justifOk = true;
+  }
+  exRender(); toast('Justificatif déposé — état « Justificatif OK » ✓');
+}
+async function exDocDel(etuId, docId) {
+  if (!confirm('Retirer ce justificatif ? (le fichier reste dans Drive)')) return;
+  const r = await api('archiveExamDoc', { id: docId });
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
+  const e = EX.data.etudiants.find(x => x.id === etuId); if (e) { e.docs = e.docs.filter(x => x.id !== docId); e.justifOk = e.docs.length > 0; }
+  exRender();
+}
+async function exExport() {
+  const D = EX.data; if (!D) return;
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const wb = new X.Workbook(), ws = wb.addWorksheet('Inscriptions ' + D.session, { views: [{ state: 'frozen', ySplit: 4 }] });
+  const H = ['Diplôme', 'Classe', 'Étudiant', 'Mail', 'Épreuves', 'N° candidat', 'Inscrit', 'Inscrit le', 'Justificatif OK', 'Justificatifs', 'Commentaire'];
+  ws.columns = [12, 14, 26, 30, 44, 14, 10, 12, 14, 40, 30].map(w => ({ width: w }));
+  xlTitle(ws, 'Inscriptions aux examens officiels — session ' + D.session, 'Export du ' + fmtLong(todayISO()), H.length); xlHeader(ws, 4, H);
+  const OK = ['E8F6EE', '15803D'], KO = ['FDE8E8', 'C62828'];
+  let r = 5;
+  parDipClasse(exFiltrees()).forEach(([d, cls]) => cls.forEach(([c, l]) => l.forEach(e => {
+    ws.getRow(r).values = [d, c, e.nom, e.mail, e.epreuves.join(', '), e.numCandidat, e.inscrit ? 'Oui' : 'Non', e.inscritLe ? new Date(e.inscritLe + 'T12:00:00') : '', e.justifOk ? 'Oui' : 'Non', e.docs.map(x => x.url).join('\n'), e.commentaire];
+    ws.getCell(r, 8).numFmt = 'dd/mm/yyyy';
+    [[7, e.inscrit], [9, e.justifOk]].forEach(([k, ok]) => { const cl = ws.getCell(r, k), sc = ok ? OK : KO; cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + sc[0] } }; cl.font = { bold: true, color: { argb: 'FF' + sc[1] } }; cl.alignment = { horizontal: 'center' }; });
+    r++;
+  })));
+  xlBand(ws, 5, r - 1, H.length);
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, r - 1), column: H.length } };
+  await xlDownload(wb, 'Inscriptions_examens_' + D.session + '.xlsx');
+}
+
 window.VX = {
   memInit, memRender, memEdit, memExport, memKwManage, memTab, ckDip, ckYear, ckConcerne, ckCyclade, ckExport,
   ckSel, ckSelAll, ckFilter, ckAddSel,
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
-  frInit, frSel, frToggle, frEdit, frPdf
+  frInit, frSel, frToggle, frEdit, frPdf,
+  rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
+  dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
+  dirQ: v => { DR.q = v; dirRender(); const i = $('dirQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } },
+  exInit, exLoad: s => exLoad(s), exRender, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport
 };
 })();

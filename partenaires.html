@@ -87,6 +87,7 @@
                 <button onclick="toggleFilter('alt')" id="btnFilterAlt" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">👥 Alternants</button>
                 <button onclick="exportFilteredView()" class="px-5 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black hover:bg-slate-700 transition shadow-sm">📥 Export CSV</button>
                 <button onclick="recalerSireneNavigateur()" id="btnSireneAdr" class="hidden px-5 py-3 bg-white border border-emerald-600/30 rounded-2xl text-xs font-black text-emerald-700 hover:bg-emerald-50 transition shadow-sm" title="Administrateurs : retrouve dans le répertoire SIRENE (INSEE) l'adresse officielle des entreprises encore à vérifier">🏛️ Recaler via SIRENE</button>
+                <button onclick="completerSiretsNavigateur()" id="btnSiretLot" class="hidden px-5 py-3 bg-white border border-indigo-600/30 rounded-2xl text-xs font-black text-indigo-700 hover:bg-indigo-50 transition shadow-sm" title="Administrateurs : retrouve le SIRET de toutes les entreprises qui n'en ont pas, à partir de leur nom et de leur adresse (répertoire SIRENE)">🔢 Compléter les SIRET</button>
                 <button onclick="normaliserAdresses()" id="btnNormAdr" class="hidden px-5 py-3 bg-white border border-[#1A4E8A]/30 rounded-2xl text-xs font-black text-[#1A4E8A] hover:bg-blue-50 transition shadow-sm" title="Administrateurs : une seule adresse par entreprise + mise en conformité avec la Base Adresse Nationale">🧭 Normaliser les adresses</button>
                 <button onclick="toggleMap()" id="btnToggleMap" class="px-5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 transition shadow-sm">🗺️ Carte</button>
                 <button onclick="openAddContact()" class="px-6 py-3 bg-[#F26522] text-white rounded-2xl font-black text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-transform">+ Nouveau Contact</button>
@@ -1107,7 +1108,7 @@
             });
         }
         if (['Administrateur'].includes(userRole) || String(_userSession.email || '').toLowerCase() === 'm.mokhtari@hecg.fr') {
-            const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden'); const _b2 = document.getElementById('btnSireneAdr'); if (_b2) _b2.classList.remove('hidden');
+            const _b = document.getElementById('btnNormAdr'); if (_b) _b.classList.remove('hidden'); const _b2 = document.getElementById('btnSireneAdr'); if (_b2) _b2.classList.remove('hidden'); const _b3 = document.getElementById('btnSiretLot'); if (_b3) _b3.classList.remove('hidden');
         }
         // Recalage SIRENE : le navigateur interroge l'annuaire des entreprises (refusé aux serveurs
         // Google), le serveur contrôle les résultats (nom, rue ou commune, département) et met à jour.
@@ -1155,6 +1156,74 @@
                 loadPartners(true);
             } catch (err) { alert("❌ Recalage interrompu : " + err.message); }
             btn.disabled = false; btn.innerText = '🏛️ Recaler via SIRENE';
+        }
+        // SIRET en lot : le navigateur interroge SIRENE (nom + département), le serveur choisit
+        // l'établissement d'après le nom ET l'adresse, et n'écrit que la colonne SIRET (siret.gs).
+        async function completerSiretsNavigateur() {
+            const cibles = (allPartners || []).filter(e => e.nom && !String(e.siret || '').replace(/\D/g, ''));
+            if (!cibles.length) { alert("Toutes les entreprises ont déjà un SIRET."); return; }
+            if (!confirm("Rechercher le SIRET de " + cibles.length + " entreprise(s) qui n'en ont pas ?\n\n• le SIRET n'est importé que si le NOM et l'ADRESSE (rue, ou seul établissement du code postal) correspondent ;\n• les cas douteux sont listés « à vérifier », rien n'est écrit pour eux ;\n• aucun SIRET existant n'est remplacé, l'adresse n'est pas modifiée ;\n• durée : environ " + Math.ceil(cibles.length / 4 / 60 + 0.5) + " minute(s), gardez la page ouverte.")) return;
+            const btn = document.getElementById('btnSiretLot');
+            btn.disabled = true;
+            const garder = r => ({
+                siren: r.siren, nom_complet: r.nom_complet, nom_raison_sociale: r.nom_raison_sociale, sigle: r.sigle,
+                siege: r.siege ? { adresse: r.siege.adresse, code_postal: r.siege.code_postal, libelle_commune: r.siege.libelle_commune, latitude: r.siege.latitude, longitude: r.siege.longitude,
+                    siret: r.siege.siret, etat_administratif: r.siege.etat_administratif, nom_commercial: r.siege.nom_commercial, liste_enseignes: r.siege.liste_enseignes } : null,
+                matching_etablissements: (r.matching_etablissements || []).slice(0, 10).map(e => ({ adresse: e.adresse, code_postal: e.code_postal, libelle_commune: e.libelle_commune,
+                    latitude: e.latitude, longitude: e.longitude, siret: e.siret, etat_administratif: e.etat_administratif, nom_commercial: e.nom_commercial, liste_enseignes: e.liste_enseignes }))
+            });
+            const u = JSON.parse(localStorage.getItem('user') || '{}');
+            const envoyer = async lot => {
+                const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'completerSirets', resultats: lot, idAuteur: u.nom || '', nomAuteur: u.nom || '', roleAuteur: u.role || '', emailAuteur: u.email || '', sessionToken: u.sessionToken || '' }) }).then(x => x.json());
+                if (!r.success) throw new Error(r.message || 'Erreur');
+                return r;
+            };
+            let n = 0, echecs = 0, lot = {}, nLot = 0;
+            const bilan = { ecrits: [], incertains: [] };
+            try {
+                for (const e of cibles) {
+                    n++;
+                    btn.innerText = '⏳ SIRET ' + n + ' / ' + cibles.length;
+                    const dep = /^\d{5}$/.test(String(e.cp || '')) && !String(e.cp).startsWith('20') ? String(e.cp).slice(0, 2) : '';
+                    const q = String(e.nom).replace(/\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+                    const url = 'https://recherche-entreprises.api.gouv.fr/search?per_page=5&q=' + encodeURIComponent(q) + (dep ? '&departement=' + dep : '');
+                    let ok = false;
+                    for (let essai = 0; essai < 3 && !ok; essai++) {
+                        try {
+                            const r = await fetch(url);
+                            if (r.status === 429 || r.status >= 500) { await new Promise(x => setTimeout(x, 1500)); continue; }
+                            const j = await r.json(); lot[e.id] = (j.results || []).map(garder); ok = true;
+                        } catch (err) { await new Promise(x => setTimeout(x, 1000)); }
+                    }
+                    if (!ok) { echecs++; lot[e.id] = []; }
+                    nLot++;
+                    if (nLot >= 80) { const r = await envoyer(lot); bilan.ecrits.push(...r.ecrits); bilan.incertains.push(...r.incertains); lot = {}; nLot = 0; }
+                    await new Promise(x => setTimeout(x, 220));   // ≤ 5 requêtes/s (limite de l'annuaire : 7/s)
+                }
+                if (nLot) { const r = await envoyer(lot); bilan.ecrits.push(...r.ecrits); bilan.incertains.push(...r.incertains); }
+                afficherBilanSiret(bilan, cibles.length, echecs);
+                loadPartners(true);
+            } catch (err) { alert("❌ Complétion interrompue : " + err.message + (bilan.ecrits.length ? "\n(" + bilan.ecrits.length + " SIRET déjà importés)" : "")); }
+            btn.disabled = false; btn.innerText = '🔢 Compléter les SIRET';
+        }
+        function afficherBilanSiret(B, total, echecs) {
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const ov = document.createElement('div');
+            ov.className = 'fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4';
+            ov.innerHTML = `<div class="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-auto p-6 shadow-2xl">
+                <div class="flex justify-between items-start gap-4 mb-4"><div><h2 class="text-xl font-black text-[#1A4E8A]">🔢 Complétion des SIRET</h2>
+                <p class="text-sm text-gray-500">${total} entreprise(s) recherchée(s)${echecs ? ' — ' + echecs + ' sans réponse de l\'annuaire' : ''} · <b class="text-green-700">${B.ecrits.length} SIRET importés</b> · <b class="text-amber-700">${B.incertains.length} à vérifier</b>. Rapport complet dans la feuille SIRET_RAPPORT.</p></div>
+                <button class="text-2xl text-gray-400 hover:text-gray-700" data-x>✕</button></div>
+                ${B.incertains.length ? `<h3 class="font-black text-amber-700 text-sm mb-2">À vérifier (ouvrez la fiche et utilisez « Rechercher le SIRET »)</h3>
+                <table class="w-full text-xs mb-6"><tr class="text-left text-gray-400 uppercase"><th class="p-2">Entreprise</th><th class="p-2">Adresse CRM</th><th class="p-2">Motif</th><th class="p-2">Propositions SIRENE</th></tr>
+                ${B.incertains.map(x => `<tr class="border-t align-top"><td class="p-2 font-bold"><a class="text-[#1A4E8A] hover:underline" target="_blank" href="dossier_partenaire.html?id=${encodeURIComponent(x.id)}">${esc(x.nom)}</a></td><td class="p-2">${esc(x.adresseCrm || '—')}</td><td class="p-2 text-gray-500">${esc(x.raison)}</td>
+                  <td class="p-2">${x.propositions.map(c => `<div><b>${esc(c.siret)}</b> ${esc(c.nom)} — <span class="text-gray-500">${esc(c.adresse)}</span></div>`).join('') || '—'}</td></tr>`).join('')}</table>` : ''}
+                ${B.ecrits.length ? `<h3 class="font-black text-green-700 text-sm mb-2">SIRET importés</h3>
+                <table class="w-full text-xs"><tr class="text-left text-gray-400 uppercase"><th class="p-2">Entreprise</th><th class="p-2">Adresse CRM</th><th class="p-2">SIRET</th><th class="p-2">Établissement SIRENE</th><th class="p-2">Critère</th></tr>
+                ${B.ecrits.map(x => `<tr class="border-t"><td class="p-2 font-bold">${esc(x.nom)}</td><td class="p-2">${esc(x.adresseCrm || '—')}</td><td class="p-2 font-mono">${esc(x.siret)}</td><td class="p-2 text-gray-500">${esc(x.nomSirene)} — ${esc(x.adresseSirene)}</td><td class="p-2 text-gray-500">${esc(x.raison)}</td></tr>`).join('')}</table>` : ''}
+            </div>`;
+            ov.addEventListener('click', ev => { if (ev.target === ov || ev.target.closest('[data-x]')) ov.remove(); });
+            document.body.appendChild(ov);
         }
         async function normaliserAdresses() {
             if (!confirm("Normaliser les adresses de toute la base entreprises ?\n\n• une seule adresse par entreprise, recopiée sur tous ses contacts ;\n• chaque adresse est comparée à la Base Adresse Nationale : orthographe officielle, code postal, coordonnées GPS ;\n• les adresses à vérifier sont recalées automatiquement (SIRENE/INSEE par le nom de l'entreprise, sinon Base Adresse Nationale) ; seules les introuvables restent « à vérifier » (rien n'est supprimé, l'ancienne saisie est conservée dans la colonne « Adresse d'origine »).\n\nDurée : 1 à 2 minutes.")) return;
