@@ -795,7 +795,7 @@
       <div class="flex flex-wrap justify-between items-start gap-3 mb-5">
         <div>
           <h1 class="text-2xl font-black text-[#1A4E8A]">🔎 Contrôle Charlemagne</h1>
-          <p class="text-sm text-gray-500 mt-1 max-w-3xl">Importez l'export Excel de l'édition <b>« Tableau de bord COMPLET MMOK »</b> de Charlemagne : chaque étudiant est rapproché de sa fiche CRM (identifiant élève, e-mail, nom) et les incohérences de classe, de dates d'entrée/sortie et d'entreprise sont listées. <b>Rien n'est modifié</b> dans le CRM. Les colonnes sensibles de l'export (n° Sécu, RQTH, handicap, titres de séjour…) ne quittent jamais votre ordinateur.</p>
+          <p class="text-sm text-gray-500 mt-1 max-w-3xl">Importez l'export Excel de l'édition <b>« Tableau de bord COMPLET MMOK »</b> de Charlemagne : chaque étudiant est rapproché de sa fiche CRM (identifiant élève, e-mail, nom). Seuls les étudiants <b>inscrits ou préinscrits</b> du CRM sont comparés, et leur nombre doit être égal à celui des étudiants actifs de Charlemagne. Le comparatif indique pour chacun s'il a une entreprise dans Charlemagne et dans le CRM ; les incohérences de classe, de dates d'entrée/sortie et d'entreprise sont listées. <b>Rien n'est modifié</b> dans le CRM. Les colonnes sensibles de l'export (n° Sécu, RQTH, handicap, titres de séjour…) ne quittent jamais votre ordinateur.</p>
         </div>
         <div class="flex items-center gap-2">
           <input type="file" id="charlFichier" accept=".xls,.xlsx,.csv,.htm,.html" class="text-sm">
@@ -803,6 +803,24 @@
         </div>
       </div>
       <div id="charlResume" class="mb-4"></div>
+      <div id="charlOnglets" class="hidden flex gap-2 mb-4">
+        <button id="charlOngComp" onclick="charlVue('comp')" class="px-4 py-2 rounded-xl font-black text-sm bg-[#1A4E8A] text-white">👥 Comparatif par étudiant</button>
+        <button id="charlOngAnom" onclick="charlVue('anom')" class="px-4 py-2 rounded-xl font-black text-sm bg-gray-100 text-gray-600">⚠️ Anomalies détaillées</button>
+      </div>
+      <div id="charlVueComp" class="hidden">
+        <div id="charlVerdicts" class="flex flex-wrap gap-2 mb-3"></div>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <input id="charlCTexte" oninput="charlRendreComp()" type="search" placeholder="Étudiant, classe, entreprise…" class="border border-gray-200 rounded-xl px-3 py-2 text-sm flex-1 min-w-[200px]">
+          <button onclick="charlExporterComp()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-xl font-bold text-sm hover:bg-gray-200">⬇️ Export CSV</button>
+        </div>
+        <div class="overflow-x-auto bg-white rounded-2xl border border-gray-100">
+          <table class="w-full text-sm"><thead class="bg-gray-50 text-[11px] uppercase text-gray-500"><tr>
+            <th class="text-left p-3">Étudiant</th><th class="text-left p-3">Classe CRM / Charlemagne</th>
+            <th class="text-left p-3">Entreprise dans Charlemagne</th><th class="text-left p-3">Entreprise dans le CRM</th><th class="text-left p-3">Concordance</th></tr></thead>
+            <tbody id="charlCTbody"></tbody></table>
+        </div>
+      </div>
+      <div id="charlVueAnom" class="hidden">
       <div id="charlFiltres" class="hidden flex flex-wrap gap-2 mb-3">
         <select id="charlFGravite" onchange="charlRendre()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm"><option value="">Toutes gravités</option><option>Erreur</option><option>À vérifier</option><option>Info</option></select>
         <select id="charlFType" onchange="charlRendre()" class="border border-gray-200 rounded-xl px-3 py-2 text-sm"><option value="">Tous les types</option></select>
@@ -819,6 +837,7 @@
         <summary class="font-black text-sm text-gray-700 cursor-pointer">Correspondance des classes Charlemagne → CRM (apprise sur les étudiants rapprochés)</summary>
         <div id="charlClassesTable" class="mt-3"></div>
       </details>
+      </div>
     </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -876,7 +895,15 @@ async function charlImporter(){
 function charlAfficher(){
   const R = charlRapport, S = R.stats || {};
   const carte = (lib, val, cls) => `<div class="rounded-2xl p-4 border ${cls}"><div class="text-2xl font-black">${val ?? 0}</div><div class="text-[11px] font-bold uppercase">${lib}</div></div>`;
-  document.getElementById('charlResume').innerHTML =
+  const effOk = S.inscritsCrm != null && S.inscritsCrm === S.actifsCharl;
+  const bandeau = S.inscritsCrm == null ? '<div class="mb-3 p-3 rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 text-sm font-bold">Contrôle réalisé avec l\'ancienne version : réimportez le fichier pour obtenir le comparatif par étudiant et le contrôle d\'effectif.</div>'
+    : `<div class="mb-3 p-4 rounded-2xl border-2 ${effOk ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} flex flex-wrap items-center gap-x-8 gap-y-2">
+        <div><div class="text-[11px] font-black uppercase text-gray-500">CRM — inscrits + préinscrits</div><div class="text-3xl font-black text-gray-800">${S.inscritsCrm}</div><div class="text-[11px] text-gray-500">dont ${S.preinscritsCrm || 0} préinscrit(s)</div></div>
+        <div class="text-3xl font-black ${effOk ? 'text-green-600' : 'text-red-600'}">${effOk ? '=' : '≠'}</div>
+        <div><div class="text-[11px] font-black uppercase text-gray-500">Charlemagne — étudiants actifs</div><div class="text-3xl font-black text-gray-800">${S.actifsCharl}</div><div class="text-[11px] text-gray-500">${S.sortisCharl || 0} sorti(s) ignoré(s)</div></div>
+        <div class="flex-1 min-w-[260px] text-sm ${effOk ? 'text-green-800' : 'text-red-800'} font-bold">${effOk ? '✅ Les effectifs sont identiques.' : `❌ Écart de ${S.ecartEffectif > 0 ? '+' : ''}${S.ecartEffectif} : ${S.absentsCrm || 0} absent(s) du CRM · ${S.nonInscritsCrm || 0} non inscrit(s) dans le CRM · ${S.absentsCharl || 0} absent(s) de Charlemagne · ${S.sortisCharlInscritsCrm || 0} sorti(s) dans Charlemagne mais inscrit(s) au CRM`}</div>
+      </div>`;
+  document.getElementById('charlResume').innerHTML = bandeau +
     `<p class="text-xs text-gray-500 mb-2">Dernier contrôle : <b>${charlEsc(R.date)}</b> — fichier « ${charlEsc(R.fichier)} » — par ${charlEsc(R.importePar)}</p>
      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
        ${carte('Étudiants Charlemagne', S.charlemagne, 'bg-white border-gray-100 text-gray-700')}
@@ -894,6 +921,62 @@ function charlAfficher(){
   document.getElementById('charlClassesTable').innerHTML = '<table class="text-sm w-full"><tr class="text-[11px] uppercase text-gray-400"><th class="text-left p-1">Charlemagne</th><th class="text-left p-1">CRM</th><th class="text-left p-1">Étudiants</th><th class="text-left p-1">Concordance</th></tr>' +
     cl.map(c => `<tr class="border-t"><td class="p-1 font-bold">${charlEsc(c.charlemagne)}</td><td class="p-1">${charlEsc(c.crm)}</td><td class="p-1">${c.effectif}</td><td class="p-1 ${c.part < 80 ? 'text-amber-600 font-bold' : 'text-gray-500'}">${c.part} %</td></tr>`).join('') + '</table>';
   charlRendre();
+  document.getElementById('charlOnglets').classList.remove('hidden');
+  charlVue((R.comparatif || []).length ? charlVueCourante : 'anom');
+}
+// ── Comparatif « une ligne par étudiant » : entreprise côté Charlemagne / côté CRM ──
+let charlVueCourante = 'comp', charlFiltreVerdict = '';
+const CHARL_VERDICT_COUL = {
+  'Différente': 'bg-red-100 text-red-700', 'Charlemagne seulement': 'bg-red-100 text-red-700', 'CRM seulement': 'bg-red-100 text-red-700',
+  'Absent du CRM': 'bg-red-100 text-red-700', 'Absent de Charlemagne': 'bg-red-100 text-red-700', 'Sorti dans Charlemagne': 'bg-red-100 text-red-700',
+  'Non inscrit dans le CRM': 'bg-amber-100 text-amber-700', 'Approchant': 'bg-amber-100 text-amber-700',
+  'Identique': 'bg-green-100 text-green-700', 'Aucune des deux': 'bg-gray-100 text-gray-600' };
+function charlVue(v){
+  charlVueCourante = v;
+  document.getElementById('charlVueComp').classList.toggle('hidden', v !== 'comp');
+  document.getElementById('charlVueAnom').classList.toggle('hidden', v !== 'anom');
+  document.getElementById('charlOngComp').className = 'px-4 py-2 rounded-xl font-black text-sm ' + (v === 'comp' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-600');
+  document.getElementById('charlOngAnom').className = 'px-4 py-2 rounded-xl font-black text-sm ' + (v === 'anom' ? 'bg-[#1A4E8A] text-white' : 'bg-gray-100 text-gray-600');
+  if (v === 'comp') charlRendreComp();
+}
+function charlVerdict(v){ charlFiltreVerdict = charlFiltreVerdict === v ? '' : v; charlRendreComp(); }
+function charlCompFiltre(){
+  const q = charlNorm(document.getElementById('charlCTexte').value);
+  return (charlRapport?.comparatif || []).filter(x => (!charlFiltreVerdict || x.verdict === charlFiltreVerdict) &&
+    (!q || charlNorm([x.nom, x.classeCrm, x.classeCharl, x.entCharl, x.entCrm, x.idEtu, x.idEleve, x.verdict].join(' ')).includes(q)));
+}
+function charlRendreComp(){
+  const all = charlRapport?.comparatif || [], cpt = {};
+  all.forEach(x => cpt[x.verdict] = (cpt[x.verdict] || 0) + 1);
+  const ordre = Object.keys(CHARL_VERDICT_COUL).filter(v => cpt[v]);
+  document.getElementById('charlVerdicts').innerHTML = `<button onclick="charlVerdict('')" class="px-3 py-1.5 rounded-xl text-xs font-black border ${charlFiltreVerdict ? 'bg-white border-gray-200 text-gray-600' : 'bg-[#1A4E8A] border-[#1A4E8A] text-white'}">Tous · ${all.length}</button>`
+    + ordre.map(v => `<button onclick="charlVerdict('${v}')" class="px-3 py-1.5 rounded-xl text-xs font-black ${CHARL_VERDICT_COUL[v]} ${charlFiltreVerdict === v ? 'ring-2 ring-offset-1 ring-[#1A4E8A]' : ''}">${charlEsc(v)} · ${cpt[v]}</button>`).join('');
+  const L = charlCompFiltre();
+  const ent = (nom, present) => present
+    ? `<span class="inline-flex items-center gap-1 font-bold text-gray-800"><span class="text-green-600">✔</span> Oui</span><div class="text-xs text-gray-600">${charlEsc(nom)}</div>`
+    : '<span class="inline-flex items-center gap-1 font-bold text-gray-400"><span>✖</span> Non</span>';
+  const tiret = '<span class="text-gray-300">—</span>';
+  document.getElementById('charlCTbody').innerHTML = L.length ? L.slice(0, 1500).map(x => {
+    const horsCharl = x.verdict === 'Absent de Charlemagne', horsCrm = x.verdict === 'Absent du CRM';
+    return `<tr class="border-t align-top">
+      <td class="p-3">${x.idEtu ? `<a href="dossier.html?id=${encodeURIComponent(x.idEtu)}" target="_blank" class="font-bold text-[#1A4E8A] hover:underline">${charlEsc(x.nom)}</a>` : `<b>${charlEsc(x.nom)}</b>`}
+        <div class="text-[10px] text-gray-400">${charlEsc(x.idEtu || 'hors CRM')}${x.typo ? ' · ' + charlEsc(x.typo) : ''}${x.idEleve ? ' · Charlemagne n° ' + charlEsc(x.idEleve) : ''}</div></td>
+      <td class="p-3 text-gray-600"><div>${x.classeCrm ? charlEsc(x.classeCrm) : tiret} <span class="text-[10px] text-gray-400">CRM</span></div><div>${x.classeCharl ? charlEsc(x.classeCharl) : tiret} <span class="text-[10px] text-gray-400">Charlemagne</span></div></td>
+      <td class="p-3">${horsCharl ? '<span class="text-xs text-gray-400 italic">absent de Charlemagne</span>' : ent(x.entCharl, !!x.entCharl)}</td>
+      <td class="p-3">${horsCrm ? '<span class="text-xs text-gray-400 italic">absent du CRM</span>' : ent(x.entCrm, !!x.entCrm)}${x.statutCrm ? `<div class="text-[10px] text-gray-400">${charlEsc(x.statutCrm)}</div>` : ''}</td>
+      <td class="p-3"><span class="px-2 py-1 rounded-lg text-[11px] font-black whitespace-nowrap ${CHARL_VERDICT_COUL[x.verdict] || ''}">${charlEsc(x.verdict)}${x.ressemblance && x.verdict !== 'Identique' ? ' · ' + charlEsc(x.ressemblance) + ' %' : ''}</span></td></tr>`; }).join('')
+    + (L.length > 1500 ? '<tr><td colspan="5" class="text-center text-gray-400 p-3">… affinez la recherche pour voir les autres</td></tr>' : '')
+    : '<tr><td colspan="5" class="text-center text-gray-400 py-10">Aucun étudiant pour ce filtre</td></tr>';
+}
+function charlExporterComp(){
+  const L = charlCompFiltre();
+  const csv = '\ufeff' + ['Étudiant;ID CRM;Identifiant Charlemagne;Typologie CRM;Classe CRM;Classe Charlemagne;Entreprise dans Charlemagne;Nom entreprise Charlemagne;Entreprise dans le CRM;Nom entreprise CRM;Statut CRM;Concordance']
+    .concat(L.map(x => [x.nom, x.idEtu, x.idEleve, x.typo, x.classeCrm, x.classeCharl,
+      x.verdict === 'Absent de Charlemagne' ? '' : (x.entCharl ? 'Oui' : 'Non'), x.entCharl,
+      x.verdict === 'Absent du CRM' ? '' : (x.entCrm ? 'Oui' : 'Non'), x.entCrm, x.statutCrm, x.verdict]
+      .map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(';'))).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'comparatif_charlemagne_crm.csv'; a.click();
 }
 function charlFiltrees(){
   const g = document.getElementById('charlFGravite').value, t = document.getElementById('charlFType').value, q = charlNorm(document.getElementById('charlFTexte').value);

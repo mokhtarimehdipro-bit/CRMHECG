@@ -13,11 +13,19 @@
 //   • classes : les deux logiciels n'ont pas les mêmes libellés → la correspondance dominante
 //     (classe Charlemagne → classe CRM) est apprise, seuls les écarts à cette règle sont signalés ;
 //   • date de sortie Charlemagne absente du CRM = ERREUR (l'étudiant garde l'accès à son espace).
+//   • (12/11/2026) seuls les étudiants INSCRITS / PRÉINSCRITS du CRM (typologie, col. U) sont comparés ;
+//     l'effectif doit être identique à celui des étudiants actifs de Charlemagne (sans sortie passée) ;
+//     un comparatif « une ligne par étudiant » indique l'entreprise de chaque côté (feuille CHARLEMAGNE_COMPARATIF).
 // =============================================================================
 
 var CHARL_ROLES = { "Super-admin": 1, "Administratif": 1 };
 var CHARL_FEUILLE = "CONTROLE_CHARLEMAGNE";
 var CHARL_IMPORT = "CHARLEMAGNE_IMPORT";
+var CHARL_COMPARATIF = "CHARLEMAGNE_COMPARATIF";
+var CHARL_COMP_COLS = ["verdict", "idEtu", "idEleve", "nom", "typo", "classeCrm", "classeCharl", "entCharl", "entCrm", "statutCrm", "ressemblance"];
+var CHARL_COMP_TITRES = ["Concordance entreprise", "ID CRM", "Identifiant Charlemagne", "Étudiant", "Typologie CRM", "Classe CRM", "Classe Charlemagne", "Entreprise Charlemagne", "Entreprise CRM", "Statut CRM", "Ressemblance %"];
+var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "Absent du CRM", "Absent de Charlemagne", "Sorti dans Charlemagne", "Non inscrit dans le CRM", "Approchant", "Identique", "Aucune des deux"];
+function _charlInscrit_(typo) { var t = _charlNorm_(typo); return t === "inscrit" || t === "preinscrit" || t === "pre inscrit"; }
 var CHARL_CHAMPS = ["idEleve", "nom", "prenom", "naissance", "email", "mailPerso", "classe", "codeClasse", "niveau",
   "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp"];
 
@@ -92,6 +100,7 @@ function handleControleCharlemagne(p, ss) {
     R.date = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm");
     _charlEcrireImport_(ss, lignes, R);
     _charlEcrireRapport_(ss, R);
+    _charlEcrireComparatif_(ss, R);
     logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Action", "Vie scolaire — Contrôle Charlemagne", CHARL_FEUILLE,
       "Import « " + R.fichier + " » (" + lignes.length + " étudiants Charlemagne) — " + R.resume);
     return createJsonResponse({ success: true, rapport: R });
@@ -115,6 +124,13 @@ function handleGetControleCharlemagne(p, ss) {
       });
     }
     meta.anomalies = anomalies;
+    var wc = ss.getSheetByName(CHARL_COMPARATIF), comp = [];
+    if (wc && wc.getLastRow() > 1) {
+      wc.getRange(2, 1, wc.getLastRow() - 1, CHARL_COMP_COLS.length).getValues().forEach(function (r) {
+        var o = {}; CHARL_COMP_COLS.forEach(function (c, i) { o[c] = String(r[i] == null ? "" : r[i]); }); comp.push(o);
+      });
+    }
+    meta.comparatif = comp;
     return createJsonResponse({ success: true, rapport: meta });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -136,7 +152,8 @@ function _charlControler_(ss, lignes) {
       mail: String(r[4] || "").trim().toLowerCase(), mailHecg: String(r[26] || "").trim().toLowerCase(),
       idEnt: String(r[11] || "").trim().toUpperCase(), statut: String(r[13] || "").trim(), classe: String(r[14] || "").trim(),
       entree: _charlDate_(r[17]), sortie: _charlDate_(r[18]), sortieBrute: String(r[18] || "").trim(),
-      nomEnt: String(r[21] || "").trim(), idEleve: String(r[23] || "").trim(), vu: false };
+      nomEnt: String(r[21] || "").trim(), idEleve: String(r[23] || "").trim(), typo: String(r[20] || "").trim(), vu: false };
+    e.inscrit = _charlInscrit_(e.typo);
     e.entreprise = (e.idEnt && nomsEnt[e.idEnt]) || e.nomEnt;
     crm.push(e);
     if (e.idEleve) parId[e.idEleve] = e;
@@ -147,7 +164,18 @@ function _charlControler_(ss, lignes) {
     if (kn2 && kn2 !== kn) (parNom[kn2] = parNom[kn2] || []).push(e);
   }
 
-  var A = [], paires = [], stats = { charlemagne: lignes.length, rapproches: 0, parId: 0, parMail: 0, parNom: 0, alternantsCharl: 0, sansEntCharl: 0, entOk: 0, entApprochant: 0 };
+  var A = [], paires = [], C = [], stats = { charlemagne: lignes.length, rapproches: 0, parId: 0, parMail: 0, parNom: 0, alternantsCharl: 0, sansEntCharl: 0, entOk: 0, entApprochant: 0,
+    inscritsCrm: 0, preinscritsCrm: 0, actifsCharl: 0, sortisCharl: 0, absentsCrm: 0, absentsCharl: 0, nonInscritsCrm: 0 };
+  crm.forEach(function (e) { if (e.inscrit) { stats.inscritsCrm++; if (_charlNorm_(e.typo) !== "inscrit") stats.preinscritsCrm++; } });
+  var auj = new Date();
+  // Une ligne par étudiant : entreprise de chaque côté
+  function ligneComp(verdict, c, e, sim) {
+    C.push({ verdict: verdict, idEtu: e ? e.id : "", idEleve: c ? c.idEleve : (e ? e.idEleve : ""),
+      nom: e ? (e.nom + " " + e.prenom).trim() : (c.nom + " " + c.prenom).trim(), typo: e ? e.typo : "",
+      classeCrm: e ? e.classe : "", classeCharl: c ? (c.classe || c.codeClasse) : "",
+      entCharl: c && !_charlSansEntreprise_(c.societe) ? c.societe : "", entCrm: e ? (e.entreprise || "") : "",
+      statutCrm: e ? e.statut : "", ressemblance: sim == null ? "" : String(Math.round(sim * 100)) });
+  }
   function anomalie(g, type, c, e, valC, valR, detail, sugg) {
     A.push({ gravite: g, type: type, idEtu: e ? e.id : "", idEleve: c ? c.idEleve : (e ? e.idEleve : ""),
       nom: c ? (c.nom + " " + c.prenom).trim() : (e.nom + " " + e.prenom).trim(), classe: c ? (c.classe || c.codeClasse) : (e ? e.classe : ""),
@@ -163,14 +191,29 @@ function _charlControler_(ss, lignes) {
       var cands = (parNom[_charlNorm_(c.nom + " " + c.prenom)] || []).filter(function (x) { return !x.vu; });
       if (cands.length === 1) { e = cands[0]; via = "nom"; }
       else if (cands.length > 1) {
-        var actifs = cands.filter(function (x) { return !x.sortie; });
+        var inscrits = cands.filter(function (x) { return x.inscrit; });
+        var actifs = inscrits.length ? inscrits : cands.filter(function (x) { return !x.sortie; });
         if (actifs.length === 1) { e = actifs[0]; via = "nom"; }
       }
     }
     var cSortie = _charlDate_(c.sortie);
+    var actifC = !cSortie || cSortie > auj;
+    if (actifC) stats.actifsCharl++; else stats.sortisCharl++;
+    if (e && !e.inscrit) {
+      // Fiche CRM trouvée mais ni inscrite ni préinscrite : hors périmètre de comparaison
+      e.vu = true;
+      if (actifC) {
+        stats.nonInscritsCrm++;
+        anomalie("Erreur", "Typologie", c, e, (c.classe || c.codeClasse) + " (actif)", e.typo || "(vide)",
+          "Actif dans Charlemagne mais « " + (e.typo || "sans typologie") + " » dans le CRM : il n'est pas compté parmi les inscrits", "Passer la fiche en Inscrit / Préinscrit, ou saisir la sortie dans Charlemagne");
+        ligneComp("Non inscrit dans le CRM", c, e, null);
+      }
+      return;
+    }
     if (!e) {
       var prospectC = /prosp|prei/i.test(c.etatPreinscription);
-      if (!cSortie || cSortie > new Date())
+      if (actifC) { stats.absentsCrm++; ligneComp("Absent du CRM", c, null, null); }
+      if (actifC)
         anomalie(prospectC ? "À vérifier" : "Erreur", "Absent du CRM", c, null, (c.classe || c.codeClasse) + (c.societe && !_charlSansEntreprise_(c.societe) ? " · " + c.societe : ""), "—",
           "Étudiant présent dans Charlemagne (n° " + (c.idEleve || "?") + ") introuvable dans le CRM" + (prospectC ? " (prospect / préinscrit dans Charlemagne)" : ""), "Créer la fiche ou renseigner l'Identifiant Elève (col. X) sur la bonne fiche");
       return;
@@ -226,6 +269,13 @@ function _charlControler_(ss, lignes) {
           anomalie("À vérifier", "Statut", c, e, "Alternant (" + c.societe + ")", e.statut || "vide", "Alternant dans Charlemagne mais statut CRM non « En Alternance »", "Passer le statut à « En Alternance »");
       }
     }
+    if (!actifC) { stats.sortisCharlInscritsCrm = (stats.sortisCharlInscritsCrm || 0) + 1; ligneComp("Sorti dans Charlemagne", c, e, null); }
+    else if (sansC) ligneComp(e.entreprise ? "CRM seulement" : "Aucune des deux", c, e, null);
+    else if (!e.entreprise) ligneComp("Charlemagne seulement", c, e, null);
+    else {
+      var simC = Math.max(_charlSimEnt_(c.societe, e.entreprise), e.nomEnt ? _charlSimEnt_(c.societe, e.nomEnt) : 0);
+      ligneComp(simC >= 0.999 ? "Identique" : simC >= CHARL_SEUIL_ENT ? "Approchant" : "Différente", c, e, simC);
+    }
   });
 
   // 4. Classes : correspondance dominante apprise sur les paires rapprochées
@@ -256,10 +306,22 @@ function _charlControler_(ss, lignes) {
 
   // 5. Étudiants actifs du CRM absents de l'export
   crm.forEach(function (e) {
-    if (e.vu || e.sortie || e.sortieBrute || !e.classe) return;
-    anomalie("À vérifier", "Absent de Charlemagne", null, e, "—", e.classe + (e.entreprise ? " · " + e.entreprise : ""),
-      "Étudiant actif dans le CRM (avec une classe, sans date de sortie) absent de l'export Charlemagne", "Vérifier son inscription dans Charlemagne, ou lui mettre une date de sortie dans le CRM");
+    if (e.vu || !e.inscrit) return;
+    stats.absentsCharl++;
+    ligneComp("Absent de Charlemagne", null, e, null);
+    anomalie("Erreur", "Absent de Charlemagne", null, e, "—", (e.typo || "") + " · " + (e.classe || "sans classe") + (e.entreprise ? " · " + e.entreprise : ""),
+      "Inscrit / préinscrit dans le CRM mais absent de l'export Charlemagne", "Vérifier son inscription dans Charlemagne, ou passer la fiche CRM en « Sortie »");
   });
+
+  // 6. Effectif : inscrits + préinscrits du CRM = étudiants actifs de Charlemagne
+  stats.ecartEffectif = stats.actifsCharl - stats.inscritsCrm;
+  if (stats.ecartEffectif !== 0)
+    anomalie("Erreur", "Effectif", null, { id: "", idEleve: "", nom: "EFFECTIF TOTAL", prenom: "", classe: "" }, stats.actifsCharl + " actifs", stats.inscritsCrm + " inscrits / préinscrits",
+      "Les effectifs ne correspondent pas (écart " + (stats.ecartEffectif > 0 ? "+" : "") + stats.ecartEffectif + ") : " + stats.absentsCrm + " absent(s) du CRM, " + stats.nonInscritsCrm + " non inscrit(s) dans le CRM, " + stats.absentsCharl + " absent(s) de Charlemagne, " + (stats.sortisCharlInscritsCrm || 0) + " sorti(s) dans Charlemagne mais encore inscrit(s) dans le CRM",
+      "Traiter les lignes « Absent du CRM », « Typologie », « Absent de Charlemagne » et « Date de sortie »");
+  var ordreV = {}; CHARL_VERDICTS.forEach(function (v, i) { ordreV[v] = i; });
+  C.sort(function (a, b) { return (ordreV[a.verdict] - ordreV[b.verdict]) || a.nom.localeCompare(b.nom); });
+  var parVerdict = {}; C.forEach(function (x) { parVerdict[x.verdict] = (parVerdict[x.verdict] || 0) + 1; });
 
   var ordreG = { "Erreur": 0, "À vérifier": 1, "Info": 2 };
   A.sort(function (a, b) { return (ordreG[a.gravite] - ordreG[b.gravite]) || a.type.localeCompare(b.type) || a.nom.localeCompare(b.nom); });
@@ -268,8 +330,9 @@ function _charlControler_(ss, lignes) {
   stats.erreurs = n["Erreur"]; stats.aVerifier = n["À vérifier"]; stats.infos = n["Info"];
   table.sort(function (a, b) { return b.effectif - a.effectif; });
   return {
-    stats: stats, parType: parType, classes: table, anomalies: A,
-    resume: stats.charlemagne + " étudiants Charlemagne, " + stats.rapproches + " rapprochés (" + stats.parId + " par identifiant, " + stats.parMail + " par e-mail, "
+    stats: stats, parType: parType, classes: table, anomalies: A, comparatif: C, parVerdict: parVerdict,
+    resume: "Effectif : " + stats.inscritsCrm + " inscrits/préinscrits CRM vs " + stats.actifsCharl + " actifs Charlemagne" + (stats.ecartEffectif ? " (écart " + stats.ecartEffectif + ")" : " ✓") + " — "
+      + stats.charlemagne + " lignes Charlemagne, " + stats.rapproches + " rapprochés (" + stats.parId + " par identifiant, " + stats.parMail + " par e-mail, "
       + stats.parNom + " par nom) — " + stats.alternantsCharl + " alternants (" + stats.entOk + " entreprise identique, " + stats.entApprochant + " nom approchant accepté), "
       + stats.sansEntCharl + " sans entreprise — " + n["Erreur"] + " erreur(s), " + n["À vérifier"] + " à vérifier, " + n["Info"] + " info(s)"
   };
@@ -289,6 +352,15 @@ function _charlEcrireImport_(ss, lignes, R) {
   ws.getRange(2, 1, 1, CHARL_CHAMPS.length).setFontWeight("bold");
   ws.setFrozenRows(2);
 }
+function _charlEcrireComparatif_(ss, R) {
+  var ws = ss.getSheetByName(CHARL_COMPARATIF) || ss.insertSheet(CHARL_COMPARATIF);
+  ws.clear();
+  var rows = [CHARL_COMP_TITRES];
+  R.comparatif.forEach(function (x) { rows.push(CHARL_COMP_COLS.map(function (c) { return x[c] == null ? "" : x[c]; })); });
+  ws.getRange(1, 1, rows.length, CHARL_COMP_COLS.length).setNumberFormat("@").setValues(rows);
+  ws.getRange(1, 1, 1, CHARL_COMP_COLS.length).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  ws.setFrozenRows(1);
+}
 function _charlEcrireRapport_(ss, R) {
   var ws = ss.getSheetByName(CHARL_FEUILLE) || ss.insertSheet(CHARL_FEUILLE);
   ws.clear();
@@ -300,7 +372,7 @@ function _charlEcrireRapport_(ss, R) {
   ws.getRange(1, 1).setFontWeight("bold").setFontSize(13);
   ws.getRange(4, 1, 1, 10).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
   ws.setFrozenRows(4);
-  var meta = { date: R.date, fichier: R.fichier, importePar: R.importePar, resume: R.resume, stats: R.stats, parType: R.parType, classes: R.classes.slice(0, 80) };
+  var meta = { date: R.date, fichier: R.fichier, importePar: R.importePar, resume: R.resume, stats: R.stats, parType: R.parType, parVerdict: R.parVerdict, classes: R.classes.slice(0, 80) };
   var json = JSON.stringify(meta);
   while (json.length > 8500 && meta.classes.length) { meta.classes = meta.classes.slice(0, Math.floor(meta.classes.length / 2)); json = JSON.stringify(meta); }   // limite 9 Ko d'une propriété
   PropertiesService.getScriptProperties().setProperty("CHARL_DERNIER", json);
