@@ -2052,7 +2052,7 @@ async function rdvAnalyse() {
   const fl = [R.classes.size ? 'classes : ' + [...R.classes].join(', ') : '', $('rdvDip').value ? 'diplôme : ' + $('rdvDip').value : '', $('rdvResp').value ? 'responsable : ' + $('rdvResp').value : '',
     $('rdvQ').value ? 'recherche « ' + $('rdvQ').value + ' »' : '', $('rdvDu').value || $('rdvAu').value ? 'RDV pris ' + ($('rdvDu').value ? 'du ' + fmtD($('rdvDu').value) + ' ' : '') + ($('rdvAu').value ? 'au ' + fmtD($('rdvAu').value) : '') : ''].filter(Boolean);
   R.pieCtx = { annee: D.annee, sous: 'Année ' + D.annee + (fl.length ? ' · filtres : ' + fl.join(' · ') : ' · tous les étudiants') };
-  R.pie = { 'Par campus': { lignes: campus, tot }, 'Par classe': { lignes: classes, tot }, 'Par référent': { lignes: referents, tot },
+  R.pie = { 'Par campus': { lignes: campus, tot }, 'Par classe': { lignes: classes, tot, parCampus: campus.map(([cp]) => { const g = {}; S.L.filter(e => (e.campus || 'Campus non renseigné') === cp).forEach(e => { const k = e.classe || 'Classe non renseignée'; (g[k] = g[k] || []).push(e); }); return [cp, Object.keys(g).map(k => [k, calc(g[k])])]; }) }, 'Par référent': { lignes: referents, tot },
     "Mouvements d'alternance": { mv: [["Changements d'alternance", nbMv('Changement')], ['Alternances perdues', nbMv('Perte')], ['Alternances gagnées', nbMv('Gain')]] } };
   const lstMv = t => { const l = mv.filter(m => m.type === t).sort((a, b) => b.date.localeCompare(a.date));
     return `<details class="vs2-mv"><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${new Set(l.map(m => m.etuId)).size} étudiant(s)</summary>
@@ -2084,26 +2084,71 @@ function pieParts(lignes) {
 }
 const pieMin = t => /^RDV/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1);
 const pieFmtPct = p => (p >= 10 || p === 0 ? Math.round(p) : p.toFixed(1).replace('.', ',')) + ' %';
-function pieSvg(parts, tot, taille = 300) {
-  const r = taille / 2 - 4, c = taille / 2;
-  if (!tot) return `<svg width="${taille}" height="${taille}"><circle cx="${c}" cy="${c}" r="${r}" fill="#eef2f7"/><text x="${c}" y="${c + 5}" text-anchor="middle" font-size="13" fill="#7d8a9c">Aucune donnée</text></svg>`;
-  let a0 = -Math.PI / 2, h = '';
-  parts.forEach((p, i) => {
-    const a1 = a0 + p.v / tot * Math.PI * 2, tip = `${esc(p.k)} : ${p.v} (${pieFmtPct(p.pct)})`;
-    if (parts.length === 1) h += `<circle class="pie-s" data-i="${i}" cx="${c}" cy="${c}" r="${r}" fill="${p.c}"><title>${tip}</title></circle>`;
-    else { const g = a1 - a0 > Math.PI ? 1 : 0, x0 = c + r * Math.cos(a0), y0 = c + r * Math.sin(a0), x1 = c + r * Math.cos(a1), y1 = c + r * Math.sin(a1);
-      h += `<path class="pie-s" data-i="${i}" d="M${c},${c} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${g} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.c}" stroke="#fff" stroke-width="2" stroke-linejoin="round"><title>${tip}</title></path>`; }
-    if (p.pct >= 6) { const am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .62, x = (c + rl * Math.cos(am)).toFixed(1), y = c + rl * Math.sin(am);
-      h += `<text x="${x}" y="${(y - 1).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff" pointer-events="none">${p.v}</text><text x="${x}" y="${(y + 13).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" fill-opacity=".92" pointer-events="none">${pieFmtPct(p.pct)}</text>`; }
-    a0 = a1;
+// Géométrie partagée écran / PDF : parts + étiquettes extérieures « libellé · valeur » reliées par un trait, sans chevauchement
+const pieCourt = (t, n) => { t = String(t); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+function pieGeo(parts, tot, r, cx, cy, lh) {
+  let a0 = -Math.PI / 2; const sl = [];
+  parts.forEach((p, i) => { const a1 = a0 + p.v / tot * Math.PI * 2; sl.push({ p, i, a0, a1, am: (a0 + a1) / 2 }); a0 = a1; });
+  const labs = sl.map(s => ({ s, droite: Math.cos(s.am) >= 0, ax: cx + r * Math.cos(s.am), ay: cy + r * Math.sin(s.am), y: cy + (r + 12) * Math.sin(s.am) }));
+  [true, false].forEach(cote => {
+    const L = labs.filter(l => l.droite === cote).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < L.length; i++) if (L[i].y - L[i - 1].y < lh) L[i].y = L[i - 1].y + lh;
+    const bas = cy + r + 14;
+    if (L.length && L[L.length - 1].y > bas) { L[L.length - 1].y = bas; for (let i = L.length - 2; i >= 0; i--) if (L[i + 1].y - L[i].y < lh) L[i].y = L[i + 1].y - lh; }
   });
-  return `<svg width="${taille}" height="${taille}" viewBox="0 0 ${taille} ${taille}" role="img" aria-label="Diagramme en camembert">${h}</svg>`;
+  labs.forEach(l => { const s = l.droite ? 1 : -1; l.ex = cx + s * Math.max(Math.abs((r + 10) * Math.cos(l.s.am)), r * .35); l.tx = cx + s * (r + 22); });
+  return { sl, labs };
+}
+const PIE_R = 115, PIE_LW = 150;   // rayon et largeur réservée aux étiquettes (px écran)
+function pieSvg(parts, tot) {
+  const r = PIE_R, W = 2 * (r + PIE_LW), H = 2 * r + 44, cx = W / 2, cy = r + 22;
+  if (!tot) return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;height:auto"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#eef2f7"/><text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="13" fill="#7d8a9c">Aucune donnée</text></svg>`;
+  const G = pieGeo(parts, tot, r, cx, cy, 15); let h = '';
+  G.sl.forEach(({ p, i, a0, a1, am }) => {
+    const tip = `${esc(p.k)} : ${p.v} (${pieFmtPct(p.pct)})`;
+    if (parts.length === 1) h += `<circle class="pie-s" data-i="${i}" cx="${cx}" cy="${cy}" r="${r}" fill="${p.c}"><title>${tip}</title></circle>`;
+    else { const g = a1 - a0 > Math.PI ? 1 : 0;
+      h += `<path class="pie-s" data-i="${i}" d="M${cx},${cy} L${(cx + r * Math.cos(a0)).toFixed(2)},${(cy + r * Math.sin(a0)).toFixed(2)} A${r},${r} 0 ${g} 1 ${(cx + r * Math.cos(a1)).toFixed(2)},${(cy + r * Math.sin(a1)).toFixed(2)} Z" fill="${p.c}" stroke="#fff" stroke-width="2" stroke-linejoin="round"><title>${tip}</title></path>`; }
+    if (p.pct >= 6) { const rl = parts.length === 1 ? 0 : r * .64; h += `<text x="${(cx + rl * Math.cos(am)).toFixed(1)}" y="${(cy + rl * Math.sin(am) + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" fill="#fff" pointer-events="none">${pieFmtPct(p.pct)}</text>`; }
+  });
+  G.labs.forEach(l => {
+    h += `<polyline points="${l.ax.toFixed(1)},${l.ay.toFixed(1)} ${l.ex.toFixed(1)},${l.y.toFixed(1)} ${(l.tx - (l.droite ? 4 : -4)).toFixed(1)},${l.y.toFixed(1)}" fill="none" stroke="#b6c0cd" stroke-width="1"/>`
+      + `<text class="pie-s" data-i="${l.s.i}" x="${l.tx.toFixed(1)}" y="${(l.y + 4).toFixed(1)}" text-anchor="${l.droite ? 'start' : 'end'}" font-size="12" fill="#3b4859"><tspan font-weight="700" fill="#0e1a2b">${esc(pieCourt(l.s.p.k, 20))}</tspan> · ${l.s.p.v}</text>`;
+  });
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;height:auto" role="img" aria-label="Diagramme en camembert">${h}</svg>`;
+}
+// Même dessin en haute définition pour le PDF (canvas → JPEG)
+function pieCanvas(parts, tot) {
+  const k = 3, r = PIE_R * k, W = 2 * (r + PIE_LW * k), H = 2 * r + 44 * k, cx = W / 2, cy = r + 22 * k;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+  if (!tot) { g.fillStyle = '#eef2f7'; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); return { url: cv.toDataURL('image/jpeg', .92), ratio: H / W }; }
+  const G = pieGeo(parts, tot, r, cx, cy, 15 * k);
+  G.sl.forEach(({ p, a0, a1 }) => { g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, r, a0, a1); g.closePath(); g.fillStyle = p.c; g.fill(); if (parts.length > 1) { g.lineWidth = 2 * k; g.strokeStyle = '#fff'; g.lineJoin = 'round'; g.stroke(); } });
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.font = `bold ${12 * k}px Helvetica, Arial, sans-serif`;
+  G.sl.forEach(({ p, am }) => { if (p.pct >= 6) { const rl = parts.length === 1 ? 0 : r * .64; g.fillText(pieFmtPct(p.pct), cx + rl * Math.cos(am), cy + rl * Math.sin(am)); } });
+  g.textBaseline = 'middle';
+  G.labs.forEach(l => {
+    g.strokeStyle = '#b6c0cd'; g.lineWidth = k; g.beginPath(); g.moveTo(l.ax, l.ay); g.lineTo(l.ex, l.y); g.lineTo(l.tx - (l.droite ? 4 : -4) * k, l.y); g.stroke();
+    const nom = pieCourt(l.s.p.k, 20), val = ' · ' + l.s.p.v;
+    g.font = `bold ${12 * k}px Helvetica, Arial, sans-serif`; const wN = g.measureText(nom).width; g.font = `${12 * k}px Helvetica, Arial, sans-serif`; const wV = g.measureText(val).width;
+    const x0 = l.droite ? l.tx : l.tx - wN - wV; g.textAlign = 'left';
+    g.font = `bold ${12 * k}px Helvetica, Arial, sans-serif`; g.fillStyle = '#0e1a2b'; g.fillText(nom, x0, l.y);
+    g.font = `${12 * k}px Helvetica, Arial, sans-serif`; g.fillStyle = '#3b4859'; g.fillText(val, x0 + wN, l.y);
+  });
+  return { url: cv.toDataURL('image/jpeg', .92), ratio: H / W };
 }
 function pieDonnees(cle, mesure) {
   const P = R.pie[cle];
-  if (P.mv) return { titre: "Mouvements d'alternance", mesureLib: 'Étudiants concernés', lignes: P.mv.map(([k, v]) => ({ k, v })) };
+  if (P.mv) return { mesureLib: 'Étudiants concernés', lignes: P.mv.map(([k, v]) => ({ k, v })) };
   const lib = (PIE_MESURES.find(m => m[0] === mesure) || PIE_MESURES[0])[1];
-  return { titre: lib + ' ' + cle.toLowerCase(), mesureLib: lib, lignes: P.lignes.map(([k, o]) => ({ k, v: o[mesure] || 0 })) };
+  return { mesureLib: lib, lignes: P.lignes.map(([k, o]) => ({ k, v: o[mesure] || 0 })) };
+}
+// Un camembert par campus pour les classes (deux petits diagrammes plutôt qu'un seul encombré)
+function pieBlocs(cle, mesure) {
+  const P = R.pie[cle], D = pieDonnees(cle, mesure);
+  const src = P.parCampus && P.parCampus.length > 1 ? P.parCampus.map(([cp, l]) => ({ titre: cp, lignes: l.map(([k, o]) => ({ k, v: o[mesure] || 0 })) })) : [{ titre: '', lignes: D.lignes }];
+  return { mesureLib: D.mesureLib, blocs: src.map(b => Object.assign(b, pieParts(b.lignes))) };
 }
 // Tableau de valeurs : toutes les mesures de la portion (mêmes chiffres que le tableau de l'analyse), ligne Total comprise
 function pieTableau(cle) {
@@ -2113,31 +2158,39 @@ function pieTableau(cle) {
   const ln = (k, o) => [k, o.alt, o.sansResp, o.rouges, o.aVenir, o.hon, o.vus, o.taux + ' %', o.total, o.ents];
   return { titres: [cle.replace(/^Par /, '')].concat(T), lignes: P.lignes.map(([k, o]) => ln(k, o)), total: ln('Total', P.tot) };
 }
+function pieLegende(b, cle, mesureLib) {
+  const rangs = b.toutes.map(x => { const p = b.parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: b.tot ? x.v / b.tot * 100 : 0, autre: !p, i: p ? b.parts.indexOf(p) : b.parts.length - 1 }; });
+  return `<table class="vs2-t"><thead><tr><th></th><th>${esc(cle.replace(/^Par /, ''))}</th><th style="text-align:right">${esc(mesureLib)}</th><th style="text-align:right">Part</th></tr></thead><tbody>
+    ${rangs.map(x => `<tr class="pie-l" data-i="${x.i}"><td><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${x.c};vertical-align:-1px"></i></td><td>${esc(x.k)}${x.autre ? ' <span class="sub" style="font-size:11px">(dans « Autres »)</span>' : ''}</td><td style="text-align:right;font-weight:800;color:#0e1a2b">${x.v}</td><td style="text-align:right;color:#3b4859">${pieFmtPct(x.pct)}</td></tr>`).join('') || '<tr><td colspan="4" class="sub">Aucune donnée pour cette mesure.</td></tr>'}</tbody></table>`;
+}
 function rdvPie(cle) {
   if (!R.pie || !R.pie[cle]) return;
   const P = R.pie[cle];
   const dlg = modal(`<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2 style="margin:0">Répartition — ${esc(cle)}</h2><p class="sub" style="margin:4px 0 0">${esc(R.pieCtx.sous)}</p></div>
       ${P.mv ? '' : `<select class="in" id="pieMes" style="width:auto">${PIE_MESURES.map(m => `<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select>`}</div>
-    <div id="pieZone" style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 6px"></div>
+    <div id="pieZone" style="margin:14px 0 6px"></div>
     ${(() => { const V = pieTableau(cle); return `<h3 style="margin:18px 0 8px;font-size:14px;color:#0e1a2b">Tableau de valeurs</h3>
       <div style="overflow:auto;max-height:340px"><table class="vs2-t"><thead><tr>${V.titres.map((t, i) => `<th${i ? ' style="text-align:right"' : ''}>${esc(t)}</th>`).join('')}</tr></thead>
       <tbody>${V.lignes.map(l => `<tr>${l.map((v, i) => `<td${i ? ' style="text-align:right"' : ''}>${i ? esc(v) : '<b>' + esc(v) + '</b>'}</td>`).join('')}</tr>`).join('')}
       <tr class="gr">${V.total.map((v, i) => `<td${i ? ' style="text-align:right"' : ''}><b>${esc(v)}</b></td>`).join('')}</tr></tbody></table></div>`; })()}
-    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button><button class="vx-btn pri" id="piePdf">${svg('down', 14)} Exporter en PDF</button></div>`, 860);
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button><button class="vx-btn pri" id="piePdf">${svg('down', 14)} Exporter en PDF</button></div>`, 1180);
   const dessiner = () => {
-    const D = pieDonnees(cle, P.mv ? '' : $('pieMes').value), { parts, tot, toutes } = pieParts(D.lignes);
-    const leg = parts.map((p, i) => `<tr class="pie-l" data-i="${i}"><td><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${p.c};vertical-align:-1px"></i></td><td>${esc(p.k)}${p.autres ? `<div class="sub" style="font-size:11px;margin-top:2px">${p.autres.map(a => esc(a.k) + ' ' + a.v).join(' · ')}</div>` : ''}</td><td style="text-align:right;font-weight:800;color:#0e1a2b">${p.v}</td><td style="text-align:right;color:#3b4859">${pieFmtPct(p.pct)}</td></tr>`).join('');
-    $('pieZone').innerHTML = `<div style="flex:0 0 auto">${pieSvg(parts, tot)}<div style="text-align:center;margin-top:8px;font-size:13px;color:#3b4859">Total : <b style="color:#0e1a2b">${tot}</b> ${esc(pieMin(D.mesureLib))}</div></div>
-      <div style="flex:1;min-width:260px;max-height:380px;overflow:auto"><table class="vs2-t pie-t"><thead><tr><th></th><th>${esc(cle.replace(/^Par /, ''))}</th><th style="text-align:right">${esc(D.mesureLib)}</th><th style="text-align:right">Part</th></tr></thead><tbody>${leg || '<tr><td colspan="4" class="sub">Aucune donnée pour cette mesure.</td></tr>'}</tbody></table>
-      ${toutes.length < D.lignes.length ? `<p class="sub" style="font-size:11.5px;margin-top:6px">${D.lignes.length - toutes.length} ligne(s) à 0 non représentée(s).</p>` : ''}</div>`;
-    const lier = i => { $('pieZone').querySelectorAll('.pie-s').forEach(s => s.style.opacity = i === null || s.dataset.i === String(i) ? 1 : .35); $('pieZone').querySelectorAll('.pie-l').forEach(t => t.style.background = String(i) === t.dataset.i ? '#f3f7fc' : ''); };
-    $('pieZone').querySelectorAll('.pie-s,.pie-l').forEach(el => { el.onmouseenter = () => lier(el.dataset.i); el.onmouseleave = () => lier(null); });
-    dlg.querySelector('#piePdf').onclick = () => rdvPiePdf(cle, D, parts, tot, toutes);
+    const B = pieBlocs(cle, P.mv ? '' : $('pieMes').value), plusieurs = B.blocs.length > 1;
+    $('pieZone').innerHTML = `<div style="display:grid;grid-template-columns:${plusieurs ? 'repeat(auto-fit,minmax(420px,1fr))' : '1fr'};gap:22px">${B.blocs.map((b, n) => `
+      <div class="pie-b" data-b="${n}" style="${plusieurs ? 'border:1px solid #e3eaf3;border-radius:16px;padding:12px' : 'display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start'}">
+        <div style="flex:0 0 auto;text-align:center">${b.titre ? `<h3 style="margin:0 0 4px;font-size:15px;color:#1A4E8A">${esc(b.titre)}</h3>` : ''}${pieSvg(b.parts, b.tot)}
+          <div style="margin-top:4px;font-size:13px;color:#3b4859">Total : <b style="color:#0e1a2b">${b.tot}</b> ${esc(pieMin(B.mesureLib))}</div></div>
+        <div style="flex:1;min-width:260px;max-height:${plusieurs ? 260 : 380}px;overflow:auto;margin-top:${plusieurs ? 10 : 0}px">${pieLegende(b, cle, B.mesureLib)}</div></div>`).join('')}</div>`;
+    $('pieZone').querySelectorAll('.pie-b').forEach(bl => {
+      const lier = i => { bl.querySelectorAll('.pie-s').forEach(s => s.style.opacity = i === null || s.dataset.i === String(i) ? 1 : .35); bl.querySelectorAll('.pie-l').forEach(t => t.style.background = String(i) === t.dataset.i ? '#f3f7fc' : ''); };
+      bl.querySelectorAll('.pie-s,.pie-l').forEach(el => { el.onmouseenter = () => lier(el.dataset.i); el.onmouseleave = () => lier(null); });
+    });
+    dlg.querySelector('#piePdf').onclick = () => rdvPiePdf(cle, B);
   };
   if (!P.mv) $('pieMes').onchange = dessiner;
   dessiner();
 }
-async function rdvPiePdf(cle, D, parts, tot, toutes) {
+async function rdvPiePdf(cle, B) {
   let J; try { J = await loadJsPDF(); } catch (e) { toast(e.message, false); return; }
   const doc = new J.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' }), W = 297, H = 210;
   const rgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -2151,40 +2204,46 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
     doc.text('Mêmes définitions que les compteurs du suivi des RDV — document généré depuis le CRM HECG', 14, H - 7); doc.text('Page ' + n + ' / ' + total, W - 14, H - 7, { align: 'right' }); };
   ent();
   doc.setTextColor(14, 26, 43); doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.text('Répartition — ' + cle, 14, 34);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(59, 72, 89); doc.text(doc.splitTextToSize(D.mesureLib + ' · ' + R.pieCtx.sous, W - 28), 14, 41);
-  // camembert dessiné en haute définition (canvas) puis inséré en image
-  const px = 900, cv = document.createElement('canvas'); cv.width = cv.height = px; const g = cv.getContext('2d'), c = px / 2, r = c - 10;
-  g.fillStyle = '#ffffff'; g.fillRect(0, 0, px, px);   // fond blanc : image JPEG légère
-  if (!tot) { g.fillStyle = '#eef2f7'; g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.fill(); }
-  let a0 = -Math.PI / 2;
-  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2; g.beginPath(); g.moveTo(c, c); g.arc(c, c, r, a0, a1); g.closePath(); g.fillStyle = p.c; g.fill();
-    if (parts.length > 1) { g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.lineJoin = 'round'; g.stroke(); } a0 = a1; });
-  a0 = -Math.PI / 2; g.fillStyle = '#ffffff'; g.font = 'bold 34px Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2, am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .62, x = c + rl * Math.cos(am), y = c + rl * Math.sin(am);
-    if (p.pct >= 6) { g.font = 'bold 38px Helvetica, Arial, sans-serif'; g.fillText(String(p.v), x, y - 16); g.font = 'bold 28px Helvetica, Arial, sans-serif'; g.fillText(pieFmtPct(p.pct), x, y + 20); } a0 = a1; });
-  const T = 112; doc.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 18, 52, T, T);
-  doc.setFontSize(11); doc.setTextColor(59, 72, 89); doc.text('Total : ', 18 + T / 2 - 12, 52 + T + 9, { align: 'right' });
-  doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(String(tot) + ' ' + pieMin(D.mesureLib), 18 + T / 2 - 12, 52 + T + 9);
-  // légende-tableau : toutes les lignes (les petites parts regroupées en « Autres » sur le camembert gardent leur détail ici)
-  const X = 148, XR = W - 14; let y = 54, page = 1;
-  const enTete = () => { doc.setFillColor(247, 249, 252); doc.rect(X, y - 5, XR - X, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(125, 138, 156);
-    doc.text(cle.replace(/^Par /, '').toUpperCase(), X + 9, y); doc.text(D.mesureLib.toUpperCase(), XR - 26, y, { align: 'right' }); doc.text('PART', XR - 3, y, { align: 'right' }); y += 8; };
-  enTete();
-  const rangs = toutes.map(x => { const p = parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: tot ? x.v / tot * 100 : 0, autre: !p }; });
-  const lh = Math.max(5, Math.min(7, (H - 21 - y) / Math.max(1, rangs.length)));   // la légende tient sur la page 1 dès que possible
-  rangs.forEach((x, i) => {
-    if (y > H - 20) { doc.addPage(); page++; ent(); y = 34; enTete(); }
-    if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - lh * .66, XR - X, lh, 'F'); }
-    doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 2, y - 3, 4, 4, 0.8, 0.8, 'F');
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(14, 26, 43);
-    doc.text(doc.splitTextToSize(x.k + (x.autre ? '  (dans « Autres »)' : ''), XR - X - 50)[0], X + 9, y);
-    doc.setFont('helvetica', 'bold'); doc.text(String(x.v), XR - 26, y, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(59, 72, 89); doc.text(pieFmtPct(x.pct), XR - 3, y, { align: 'right' });
-    doc.setDrawColor(238, 242, 247); doc.line(X, y + lh / 2 - 1, XR, y + lh / 2 - 1); y += lh;
-  });
-  if (!rangs.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(125, 138, 156); doc.text('Aucune donnée pour cette mesure.', X + 9, y); }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(59, 72, 89); doc.text(doc.splitTextToSize(B.mesureLib + ' · ' + R.pieCtx.sous, W - 28), 14, 41);
+  // légende-tableau d'un bloc entre X et XR, à partir de y ; interligne resserré pour tenir dans la page
+  const legende = (b, X, XR, y, bas) => {
+    doc.setFillColor(247, 249, 252); doc.rect(X, y - 4.4, XR - X, 6.6, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.8); doc.setTextColor(125, 138, 156);
+    doc.text(cle.replace(/^Par /, '').toUpperCase(), X + 8, y); doc.text(B.mesureLib.toUpperCase(), XR - 22, y, { align: 'right' }); doc.text('PART', XR - 2, y, { align: 'right' }); y += 6.4;
+    const rangs = b.toutes.map(x => { const p = b.parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: b.tot ? x.v / b.tot * 100 : 0, autre: !p }; });
+    const lh = Math.max(4.2, Math.min(6.4, (bas - y) / Math.max(1, rangs.length))), fs = lh < 5 ? 8 : 9.2;
+    rangs.forEach((x, i) => {
+      if (y > bas + .5) return;
+      if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - lh * .66, XR - X, lh, 'F'); }
+      doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 1.6, y - lh * .45, 3.4, 3.4, .7, .7, 'F');
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(fs); doc.setTextColor(14, 26, 43);
+      doc.text(doc.splitTextToSize(x.k + (x.autre ? '  (dans « Autres »)' : ''), XR - X - 42)[0], X + 8, y);
+      doc.setFont('helvetica', 'bold'); doc.text(String(x.v), XR - 22, y, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(59, 72, 89); doc.text(pieFmtPct(x.pct), XR - 2, y, { align: 'right' });
+      y += lh;
+    });
+    if (!rangs.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor(125, 138, 156); doc.text('Aucune donnée pour cette mesure.', X + 8, y); }
+  };
+  const totalTxt = (b, x, y) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(59, 72, 89); const t1 = 'Total : ', t2 = b.tot + ' ' + pieMin(B.mesureLib);
+    const w1 = doc.getTextWidth(t1); doc.setFont('helvetica', 'bold'); const w2 = doc.getTextWidth(t2); doc.setFont('helvetica', 'normal'); doc.text(t1, x - (w1 + w2) / 2, y); doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(t2, x - (w1 + w2) / 2 + w1, y); };
+  if (B.blocs.length > 1) {
+    const n = B.blocs.length, gap = 8, cw = (W - 28 - gap * (n - 1)) / n;
+    B.blocs.forEach((b, i) => {
+      const X = 14 + i * (cw + gap), img = pieCanvas(b.parts, b.tot), iw = cw, ih = iw * img.ratio;
+      doc.setDrawColor(227, 234, 243); doc.roundedRect(X, 47, cw, H - 47 - 15, 3, 3, 'S');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(26, 78, 138); doc.text(b.titre, X + cw / 2, 54, { align: 'center' });
+      doc.addImage(img.url, 'JPEG', X + .5, 56, iw - 1, ih);
+      totalTxt(b, X + cw / 2, 56 + ih + 4);
+      legende(b, X + 3, X + cw - 3, 56 + ih + 11, H - 19);
+    });
+  } else {
+    const b = B.blocs[0], img = pieCanvas(b.parts, b.tot), iw = 150, ih = iw * img.ratio;
+    doc.addImage(img.url, 'JPEG', 10, 52, iw, ih);
+    totalTxt(b, 10 + iw / 2, 52 + ih + 7);
+    legende(b, 168, W - 14, 56, H - 20);
+  }
+  // tableau de valeurs : nouvelle page
   const V = pieTableau(cle), nc = V.titres.length, c0 = nc > 3 ? 58 : 120, wc = (W - 28 - c0) / (nc - 1);
-  doc.addPage(); ent(); y = 34;
+  doc.addPage(); ent(); let y = 34;
   doc.setTextColor(14, 26, 43); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Tableau de valeurs — ' + cle, 14, y); y += 6;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(59, 72, 89); doc.text(R.pieCtx.sous, 14, y); y += 9;
   const xCol = i => i ? 14 + c0 + wc * i - 2 : 16;
@@ -2201,7 +2260,7 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
   };
   V.lignes.forEach((l, k) => vLigne(l, k, false)); vLigne(V.total, 0, true);
   const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); pied(i, n); }
-  doc.save(('Repartition_' + cle.replace(/^Par /, '') + '_' + D.mesureLib + '_' + R.pieCtx.annee).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf');
+  doc.save(('Repartition_' + cle.replace(/^Par /, '') + '_' + B.mesureLib + '_' + R.pieCtx.annee).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf');
   toast('PDF exporté ✓');
 }
 
