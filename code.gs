@@ -456,6 +456,7 @@ function doPostInner_(e) {
       case 'saveMemoiresChecklist': return handleSaveMemoiresChecklist(params, ss);
       case 'getFrises':          return handleGetFrises(params, ss);
       case 'saveFrise':          return handleSaveFrise(params, ss);
+      case 'dossierFrise':       return handleDossierFrise(params, ss);
       case 'toggleEtapeFrise':   return handleToggleEtapeFrise(params, ss);
       case 'getSalonRef':        return handleGetSalonRef(params, ss);
       case 'addProspectsSalon':  return handleAddProspectsSalon(params, ss);

@@ -140,7 +140,11 @@ function handleSaveMemoire(p, ss) {
 }
 
 // ═══════════════════════════ FRISES CHRONOLOGIQUES ═══════════════════════════
-var FRISE_HEADERS = ["ID", "Titre", "Description", "Couleur", "Destinataires", "Rappels (jours avant)", "Créé par", "Email créateur", "Créé le", "Archivée", "Participants"];
+var FRISE_HEADERS = ["ID", "Titre", "Description", "Couleur", "Destinataires", "Rappels (jours avant)", "Créé par", "Email créateur", "Créé le", "Archivée", "Participants", "Dossier"];
+function _friseColDossier_(fws) {   // colonne L « Dossier » (rangement des frises, 13/11/2026)
+  if (String(fws.getRange(1, 12).getValue() || "") !== "Dossier") fws.getRange(1, 12).setValue("Dossier").setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+}
+function _friseDossierNom_(v) { return String(v || "").replace(/\s+/g, " ").trim().slice(0, 60); }
 var ETAPE_HEADERS = ["ID", "ID frise", "Date", "Titre", "À rendre", "Statut", "Rappels envoyés", "Rendu le"];
 
 function _friseVisible_(p, row) {
@@ -170,7 +174,8 @@ function handleGetFrises(p, ss) {
       list.push({ id: String(fd[i][0]), titre: String(fd[i][1] || ""), description: String(fd[i][2] || ""), couleur: String(fd[i][3] || "#1A4E8A"),
         destinataires: String(fd[i][4] || ""), rappels: String(fd[i][5] || "7,2,0"), createur: String(fd[i][6] || ""), emailCreateur: String(fd[i][7] || ""),
         creeLe: fd[i][8] instanceof Date ? Utilities.formatDate(fd[i][8], tz, "yyyy-MM-dd") : "", etapes: et,
-        participants: _friseParticipants_(fd[i][10]) });
+        participants: _friseParticipants_(fd[i][10]), dossier: String(fd[i][11] || ""),
+        modifiable: _vsxIsSuper_(p) || String(fd[i][7] || "").toLowerCase() === String(p.emailAuteur || "").toLowerCase() });
     }
     // Référentiel du sélecteur de participants : étudiants actifs, équipe, formateurs (avec mail)
     const ref = _vsxRef_(ss), personnes = [];
@@ -202,6 +207,7 @@ function handleSaveFrise(p, ss) {
       for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(id)) {
         if (!_vsxIsSuper_(p) && String(d[i][7]).toLowerCase() !== me) return createJsonResponse({ success: false, message: "Seul le créateur peut modifier cette frise." });
         fws.getRange(i + 1, 2, 1, 5).setValues([[String(f.titre || ""), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels]]);
+        if (f.dossier !== undefined) { _friseColDossier_(fws); fws.getRange(i + 1, 12).setValue(_friseDossierNom_(f.dossier)); }
         if (f.archiver) fws.getRange(i + 1, 10).setValue("Oui");
         else if (f.participants !== undefined) fws.getRange(i + 1, 11).setValue(partsJson);
         found = true; break;
@@ -210,7 +216,8 @@ function handleSaveFrise(p, ss) {
     } else {
       if (!String(f.titre || "").trim()) return createJsonResponse({ success: false, message: "Donnez un titre à la frise." });
       id = "FR" + now.getTime();
-      fws.appendRow([id, String(f.titre), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels, String(p.nomAuteur || me), me, now, "", partsJson]);
+      _friseColDossier_(fws);
+      fws.appendRow([id, String(f.titre), String(f.description || ""), String(f.couleur || "#1A4E8A"), dest, rappels, String(p.nomAuteur || me), me, now, "", partsJson, _friseDossierNom_(f.dossier)]);
     }
     // Étapes : remplacement de la liste (on conserve l'historique des rappels envoyés par ID)
     if (Array.isArray(f.etapes)) {
@@ -233,6 +240,31 @@ function handleSaveFrise(p, ss) {
     _ensureFriseTrigger_();
     logAction(p.nomAuteur || me, p.vieScRole || "", f.id ? (f.archiver ? "Suppression" : "Modification") : "Création", "Vie scolaire", id, "Frise : " + String(f.titre || "") + (parts.length ? " — " + parts.length + " participant(s) aux rappels" : ""));
     return createJsonResponse({ success: true, id: id });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+/** Range des frises dans un dossier ({ids, dossier}) ou renomme un dossier ({de, vers} ; vers "" = supprimer le dossier). */
+function handleDossierFrise(p, ss) {
+  if (!_vsxCanUse_(p)) return createJsonResponse({ success: false, message: "Accès refusé." });
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const fws = _vsxSheet_(ss, "FRISES", FRISE_HEADERS); _friseColDossier_(fws);
+    const d = fws.getDataRange().getValues(), me = String(p.emailAuteur || "").toLowerCase(), sup = _vsxIsSuper_(p);
+    const ids = Array.isArray(p.ids) ? p.ids.map(String) : null, de = p.de !== undefined ? _friseDossierNom_(p.de) : null;
+    const vers = _friseDossierNom_(ids ? p.dossier : p.vers);
+    let n = 0, refus = 0;
+    for (let i = 1; i < d.length; i++) {
+      if (!d[i][0] || String(d[i][9]) === "Oui") continue;
+      const cible = ids ? ids.indexOf(String(d[i][0])) !== -1 : (de !== null && _friseDossierNom_(d[i][11]) === de && _friseVisible_(p, d[i]));
+      if (!cible) continue;
+      if (!sup && String(d[i][7] || "").toLowerCase() !== me) { refus++; continue; }
+      fws.getRange(i + 1, 12).setValue(vers); n++;
+    }
+    logAction(p.nomAuteur || me, p.vieScRole || "", "Modification", "Vie scolaire — Frises (dossiers)", "FRISES",
+      ids ? n + " frise(s) rangée(s) dans « " + (vers || "Sans dossier") + " »" : "Dossier « " + de + " » " + (vers ? "renommé en « " + vers + " »" : "supprimé (frises remises « Sans dossier »)") + " — " + n + " frise(s)");
+    return createJsonResponse({ success: true, modifiees: n, refusees: refus });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
 }

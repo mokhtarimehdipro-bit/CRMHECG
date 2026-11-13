@@ -1168,18 +1168,70 @@ async function memExport() {
 
 
 // ═══════════════════════════ FRISES ═══════════════════════════
-const F = { data: [], cur: null };
+const F = { data: [], cur: null, dossier: (() => { try { return localStorage.getItem('frDossier') || ''; } catch (e) { return ''; } })() };
+const FR_SANS = '__sans';
+const frDossiers = () => [...new Set(F.data.map(f => f.dossier).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+function frFiltrees() { return F.dossier === '' ? F.data : F.data.filter(f => F.dossier === FR_SANS ? !f.dossier : f.dossier === F.dossier); }
+function frDossierSel(d) { F.dossier = d; try { localStorage.setItem('frDossier', d); } catch (e) {} const l = frFiltrees(); if (!l.find(f => f.id === F.cur)) F.cur = (l[0] || {}).id || null; frRender(); }
+// Barre des dossiers : « Toutes », chaque dossier, « Sans dossier » ; dépôt d'une frise par glisser-déposer
+function frBarre() {
+  const ds = frDossiers(), sans = F.data.filter(f => !f.dossier).length;
+  const chip = (val, lib, n, ico) => `<button class="fr-dos ${F.dossier === val ? 'on' : ''}" data-dos="${esc(val)}" onclick="VX.frDossierSel('${jsq(val)}')">${ico} ${esc(lib)} <span>${n}</span></button>`;
+  const cur = F.dossier && F.dossier !== FR_SANS && ds.includes(F.dossier) ? F.dossier : '';
+  return `<div class="fr-dbar">${chip('', 'Toutes les frises', F.data.length, svg('grid', 13))}${ds.map(d => chip(d, d, F.data.filter(f => f.dossier === d).length, '📁')).join('')}${sans && ds.length ? chip(FR_SANS, 'Sans dossier', sans, '📄') : ''}
+    <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${cur ? `<button class="vx-btn sm" onclick="VX.frDossierRenommer()">${svg('edit', 13)} Renommer</button><button class="vx-btn sm" onclick="VX.frDossierSuppr()">${svg('trash', 13)} Supprimer le dossier</button>` : ''}
+    <button class="vx-btn sm" onclick="VX.frRanger()">📁 Ranger des frises…</button></span></div>
+    <p class="sub" style="margin:-6px 0 14px;font-size:12px">Astuce : faites glisser une frise sur un dossier pour l'y ranger.</p>`;
+}
+async function frDossierApi(o, msg) {
+  const r = await api('dossierFrise', o);
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return false; }
+  toast(msg(r) + (r.refusees ? ' — ' + r.refusees + ' frise(s) non modifiée(s) (seul le créateur peut les ranger)' : ''), !r.refusees); await frLoad(true); return true;
+}
+function frDeplacer(ids, dossier) {
+  return frDossierApi({ ids, dossier }, r => r.modifiees + ' frise(s) rangée(s) dans « ' + (dossier || 'Sans dossier') + ' » ✓');
+}
+// Choix du dossier : existant ou nouveau ; une ou plusieurs frises cochées
+function frRanger(id) {
+  const ds = frDossiers(), mod = F.data.filter(f => f.modifiable);
+  const dlg = modal(`<h2>${id ? 'Ranger « ' + esc((F.data.find(f => f.id === id) || {}).titre || '') + ' »' : 'Ranger des frises dans un dossier'}</h2>
+    <p class="sub">Choisissez un dossier existant ou tapez le nom d'un nouveau dossier. Videz le champ pour retirer du dossier.</p>
+    <label class="fl">Dossier</label><input class="in" id="frDosNom" list="frDosListe" placeholder="Ex : BTS CG 2026-2027" value="${esc(id ? (F.data.find(f => f.id === id) || {}).dossier || '' : (F.dossier !== FR_SANS ? F.dossier : ''))}">
+    <datalist id="frDosListe">${ds.map(d => `<option value="${esc(d)}">`).join('')}</datalist>
+    ${ds.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${ds.map(d => `<button type="button" class="vx-chip" style="cursor:pointer;border:0" data-pick="${esc(d)}">📁 ${esc(d)}</button>`).join('')}</div>` : ''}
+    ${id ? '' : `<label class="fl">Frises à ranger</label><div style="max-height:260px;overflow:auto;border:1px solid #e3eaf3;border-radius:12px;padding:6px">${mod.map(f => `<label style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:13px;cursor:pointer"><input type="checkbox" value="${esc(f.id)}"> <i style="width:10px;height:10px;border-radius:3px;background:${esc(f.couleur)}"></i> ${esc(f.titre)} <small style="margin-left:auto;color:#7d8a9c">${f.dossier ? '📁 ' + esc(f.dossier) : 'sans dossier'}</small></label>`).join('') || '<p class="sub">Aucune frise que vous pouvez ranger (seul le créateur range ses frises).</p>'}</div>`}
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frDosOk">Ranger</button></div>`, 620);
+  dlg.addEventListener('click', ev => { const b = ev.target.closest('[data-pick]'); if (b) $('frDosNom').value = b.dataset.pick; });
+  $('frDosOk').onclick = async () => {
+    const ids = id ? [id] : [...dlg.querySelectorAll('input[type=checkbox]:checked')].map(x => x.value);
+    if (!ids.length) { toast('Cochez au moins une frise', false); return; }
+    const d = $('frDosNom').value.trim();
+    if (await frDeplacer(ids, d)) dlg.remove();
+  };
+  setTimeout(() => $('frDosNom').focus(), 50);
+}
+function frDossierRenommer() {
+  const de = F.dossier; const vers = prompt('Nouveau nom du dossier « ' + de + ' » :', de);
+  if (vers === null || !vers.trim() || vers.trim() === de) return;
+  frDossierApi({ de, vers: vers.trim() }, r => 'Dossier renommé (' + r.modifiees + ' frise(s)) ✓').then(ok => { if (ok) frDossierSel(vers.trim()); });
+}
+function frDossierSuppr() {
+  const de = F.dossier;
+  if (!confirm('Supprimer le dossier « ' + de + ' » ? Les frises ne sont pas supprimées : elles repassent « Sans dossier ».')) return;
+  frDossierApi({ de, vers: '' }, r => 'Dossier supprimé — ' + r.modifiees + ' frise(s) remise(s) sans dossier').then(ok => { if (ok) frDossierSel(''); });
+}
 const REMS = [[30, 'J-30'], [14, 'J-14'], [7, 'J-7'], [3, 'J-3'], [2, 'J-2'], [1, 'Veille'], [0, 'Jour J']];
 
 async function frLoad(force) {
   const r = await api('getFrises', {}, force ? { forceRefresh: true } : {});
   if (!r.success) { $('frBody').innerHTML = `<div class="vx-empty"><div class="ill">${svg('clock', 26)}</div><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
   F.data = r.data || []; F.personnes = r.personnes || [];
-  if (!F.data.find(f => f.id === F.cur)) F.cur = (F.data[0] || {}).id || null;
+  if (F.dossier && F.dossier !== FR_SANS && !frDossiers().includes(F.dossier)) F.dossier = '';
+  if (!frFiltrees().find(f => f.id === F.cur)) F.cur = (frFiltrees()[0] || {}).id || null;
   frRender();
 }
 function frInit() {
-  injectCss();
+  injectCss(); frCss();
   const sec = $('section-frises');
   if (!sec.dataset.ready) {
     sec.dataset.ready = '1'; sec.classList.add('vx');
@@ -1194,16 +1246,31 @@ function jLabel(n) { return n === 0 ? "Aujourd'hui" : (n === 1 ? 'Demain' : (n <
 function frRender() {
   const body = $('frBody');
   if (!F.data.length) { body.innerHTML = `<div class="vx-empty"><div class="ill">${svg('clock', 26)}</div><h3>Aucune frise</h3><p>Créez une frise, ajoutez vos dates et ce qu'il faut rendre : vous recevrez des rappels par mail avant chaque échéance.</p><button class="vx-btn ora" style="margin-top:14px" onclick="VX.frEdit()">${svg('plus', 15, 2.4)} Créer ma première frise</button></div>`; return; }
-  const cards = F.data.map(f => {
+  const carte = f => {
     const n = nextStep(f), done = f.etapes.filter(e => e.statut === 'Rendu').length, tot = f.etapes.length || 1;
-    return `<div class="fr-item ${f.id === F.cur ? 'on' : ''}" style="--c:${esc(f.couleur)}" onclick="VX.frSel('${jsq(f.id)}')">
+    return `<div class="fr-item ${f.id === F.cur ? 'on' : ''}" style="--c:${esc(f.couleur)}" onclick="VX.frSel('${jsq(f.id)}')" ${f.modifiable ? `draggable="true" data-fr="${esc(f.id)}"` : ''}>
+      ${f.modifiable ? `<button class="fr-mv" title="Ranger dans un dossier" onclick="event.stopPropagation();VX.frRanger('${jsq(f.id)}')">📁</button>` : ''}
       <h4>${esc(f.titre)}</h4>
       <div class="nx">${n ? `${svg('flag', 13)} ${esc(n.titre)} · <b style="color:${daysTo(n.date) <= 2 ? '#e5484d' : 'inherit'}">${jLabel(daysTo(n.date))}</b>` : `${svg('check', 13)} Toutes les étapes sont rendues`}</div>
       <div class="fr-prog"><i style="width:${Math.round(done / tot * 100)}%"></i></div>
       <div class="nx" style="margin-top:6px">${done}/${f.etapes.length} étape(s) rendue(s)</div></div>`;
-  }).join('');
-  const f = F.data.find(x => x.id === F.cur);
-  body.innerHTML = `<div class="fr-list">${cards}</div>` + (f ? frBoard(f) : '');
+  };
+  const L = frFiltrees();
+  let cards;
+  if (F.dossier === '' && frDossiers().length) {   // toutes les frises, regroupées par dossier
+    const grp = frDossiers().map(d => [d, L.filter(f => f.dossier === d)]).concat([['', L.filter(f => !f.dossier)]]).filter(g => g[1].length);
+    cards = grp.map(([d, l]) => `<div class="fr-gt">${d ? '📁 ' + esc(d) : '📄 Sans dossier'} <span>${l.length}</span></div><div class="fr-list">${l.map(carte).join('')}</div>`).join('');
+  } else cards = L.length ? `<div class="fr-list">${L.map(carte).join('')}</div>` : `<div class="vx-empty" style="margin-bottom:22px"><h3>Dossier vide</h3></div>`;
+  const f = L.find(x => x.id === F.cur);
+  body.innerHTML = frBarre() + cards + (f ? frBoard(f) : '');
+  // glisser-déposer d'une frise sur un dossier
+  body.querySelectorAll('[data-fr]').forEach(c => c.addEventListener('dragstart', ev => { ev.dataTransfer.setData('text/plain', c.dataset.fr); ev.dataTransfer.effectAllowed = 'move'; }));
+  body.querySelectorAll('.fr-dos').forEach(b => {
+    b.addEventListener('dragover', ev => { ev.preventDefault(); b.classList.add('drop'); });
+    b.addEventListener('dragleave', () => b.classList.remove('drop'));
+    b.addEventListener('drop', ev => { ev.preventDefault(); b.classList.remove('drop'); const id = ev.dataTransfer.getData('text/plain'), d = b.dataset.dos; if (!id) return;
+      const fr = F.data.find(x => x.id === id); const cible = d === FR_SANS ? '' : d; if (!fr || d === '' || (fr.dossier || '') === cible) return; frDeplacer([id], cible); });
+  });
   const sc = document.querySelector('.fr-scroll'), td = document.querySelector('.fr-today');
   if (sc && td) sc.scrollLeft = Math.max(0, td.offsetLeft - sc.clientWidth / 3);
 }
@@ -1335,6 +1402,7 @@ function frEdit(id) {
   const dlg = modal(`<h2>${f ? 'Modifier la frise' : 'Nouvelle frise'}</h2><p class="sub">Un mail de rappel est envoyé avant chaque échéance non rendue à toutes les personnes ajoutées ci-dessous (étudiants, équipe, formateurs).</p>
     <label class="fl">Titre</label><input class="in" id="frT" value="${esc(f ? f.titre : '')}" placeholder="Ex : Calendrier des mémoires BTS CG 2026">
     <label class="fl">Description</label><input class="in" id="frD" value="${esc(f ? f.description : '')}" placeholder="Facultatif">
+    <label class="fl">Dossier</label><input class="in" id="frDos" list="frDosL" value="${esc(f ? f.dossier || '' : (F.dossier && F.dossier !== FR_SANS ? F.dossier : ''))}" placeholder="Facultatif — ex : BTS CG 2026-2027"><datalist id="frDosL">${frDossiers().map(d => `<option value="${esc(d)}">`).join('')}</datalist>
     <label class="fl">Couleur</label><div style="display:flex;gap:8px" id="frC"></div>
     <label class="fl">Échéances</label><div class="fr-steps" id="frSteps"></div>
     <button class="vx-btn sm" style="margin-top:10px" id="frAdd">${svg('plus', 14, 2.4)} Ajouter une échéance</button>
@@ -1382,7 +1450,7 @@ function frEdit(id) {
     const incompletes = E.etapes.filter(e => (e.date || e.titre) && !(e.date && e.titre.trim()));
     if (incompletes.length) { toast('Chaque échéance doit avoir une date et un titre', false); return; }
     const rappels = [...dlg.querySelectorAll('#frR input:checked')].map(i => i.value).join(',');
-    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, participants: E.parts, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
+    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, dossier: $('frDos').value.trim(), participants: E.parts, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     if (!E.parts.length && !$('frDest').value.includes('@')) toast('Aucun destinataire : les rappels iront au créateur de la frise', false);
     dlg.remove(); F.cur = r.id; toast(f ? 'Frise mise à jour ✓' : 'Frise créée ✓ — rappels activés'); frLoad(true);
@@ -1397,6 +1465,20 @@ function frEdit(id) {
 }
 
 // ═══════════════════════════ CSS des modules RDV / Directeurs / Examens ═══════════════════════════
+function frCss() {
+  if ($('frDosCss')) return;
+  const st = document.createElement('style'); st.id = 'frDosCss';
+  st.textContent = `.fr-dbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+  .fr-dos{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:12px;border:1px solid #e3eaf3;background:#fff;font:700 13px 'Plus Jakarta Sans',sans-serif;color:#3b4859;cursor:pointer;transition:all .15s}
+  .fr-dos span{background:#eef2f7;border-radius:999px;padding:1px 8px;font-size:11.5px;color:#7d8a9c}
+  .fr-dos:hover{border-color:#cdd8e6;color:#1A4E8A}.fr-dos.on{background:#1A4E8A;border-color:#1A4E8A;color:#fff}.fr-dos.on span{background:rgba(255,255,255,.2);color:#fff}
+  .fr-dos.drop{outline:2px dashed #F26522;outline-offset:2px;background:#fff4ec}
+  .fr-gt{display:flex;align-items:center;gap:8px;margin:6px 0 10px;font-size:13px;font-weight:800;color:#1A4E8A;text-transform:uppercase;letter-spacing:.04em}
+  .fr-gt span{background:#e8eff8;border-radius:999px;padding:1px 9px;font-size:11.5px}
+  .fr-mv{position:absolute;top:10px;right:10px;border:0;background:rgba(255,255,255,.8);border-radius:8px;padding:3px 6px;cursor:pointer;opacity:0;transition:opacity .15s;font-size:13px}
+  .fr-item:hover .fr-mv{opacity:1}.fr-item[draggable=true]{cursor:grab}`;
+  document.head.appendChild(st);
+}
 function injectCss2() {
   if ($('vxCss2')) return;
   const st = document.createElement('style'); st.id = 'vxCss2';
@@ -3178,7 +3260,7 @@ window.VX = {
   ckSel, ckSelAll, ckFilter, ckAddSel,
   memSort: v => { M.sort = v; memRender(); }, memView: v => { M.view = v; $('memVC').classList.toggle('on', v === 'cards'); $('memVT').classList.toggle('on', v === 'table'); memRender(); },
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
-  frInit, frSel, frToggle, frEdit, frPdf,
+  frInit, frSel, frDossierSel, frRanger, frDossierRenommer, frDossierSuppr, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
   rdvPie, rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvDetail, rdvExportNominatif,
   rdvReset: () => { $('rdvQ').value = ''; $('rdvDip').value = ''; $('rdvResp').value = ''; $('rdvDu').value = ''; $('rdvAu').value = ''; $('rdvVue').value = 'alt'; $('rdvTri').value = 'classe';
