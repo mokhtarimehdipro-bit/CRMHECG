@@ -1239,7 +1239,7 @@ function frInit() {
       <button class="vx-btn ora" onclick="VX.frEdit()">${svg('plus', 15, 2.4)} Nouvelle frise</button></div>
       <div id="frBody"><div class="vx-empty"><div class="ill">${svg('clock', 26)}</div><h3>Chargement…</h3></div></div>`;
   }
-  frLoad();
+  frLoad(true);
 }
 function nextStep(f) { return f.etapes.filter(e => e.statut !== 'Rendu').sort((a, b) => a.date.localeCompare(b.date))[0]; }
 function jLabel(n) { return n === 0 ? "Aujourd'hui" : (n === 1 ? 'Demain' : (n < 0 ? `En retard de ${-n} j` : `Dans ${n} jours`)); }
