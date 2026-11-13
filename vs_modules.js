@@ -2052,7 +2052,7 @@ async function rdvAnalyse() {
   const fl = [R.classes.size ? 'classes : ' + [...R.classes].join(', ') : '', $('rdvDip').value ? 'diplôme : ' + $('rdvDip').value : '', $('rdvResp').value ? 'responsable : ' + $('rdvResp').value : '',
     $('rdvQ').value ? 'recherche « ' + $('rdvQ').value + ' »' : '', $('rdvDu').value || $('rdvAu').value ? 'RDV pris ' + ($('rdvDu').value ? 'du ' + fmtD($('rdvDu').value) + ' ' : '') + ($('rdvAu').value ? 'au ' + fmtD($('rdvAu').value) : '') : ''].filter(Boolean);
   R.pieCtx = { annee: D.annee, sous: 'Année ' + D.annee + (fl.length ? ' · filtres : ' + fl.join(' · ') : ' · tous les étudiants') };
-  R.pie = { 'Par campus': { lignes: campus }, 'Par classe': { lignes: classes }, 'Par référent': { lignes: referents },
+  R.pie = { 'Par campus': { lignes: campus, tot }, 'Par classe': { lignes: classes, tot }, 'Par référent': { lignes: referents, tot },
     "Mouvements d'alternance": { mv: [["Changements d'alternance", nbMv('Changement')], ['Alternances perdues', nbMv('Perte')], ['Alternances gagnées', nbMv('Gain')]] } };
   const lstMv = t => { const l = mv.filter(m => m.type === t).sort((a, b) => b.date.localeCompare(a.date));
     return `<details class="vs2-mv"><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${new Set(l.map(m => m.etuId)).size} étudiant(s)</summary>
@@ -2093,7 +2093,8 @@ function pieSvg(parts, tot, taille = 300) {
     if (parts.length === 1) h += `<circle class="pie-s" data-i="${i}" cx="${c}" cy="${c}" r="${r}" fill="${p.c}"><title>${tip}</title></circle>`;
     else { const g = a1 - a0 > Math.PI ? 1 : 0, x0 = c + r * Math.cos(a0), y0 = c + r * Math.sin(a0), x1 = c + r * Math.cos(a1), y1 = c + r * Math.sin(a1);
       h += `<path class="pie-s" data-i="${i}" d="M${c},${c} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${g} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.c}" stroke="#fff" stroke-width="2" stroke-linejoin="round"><title>${tip}</title></path>`; }
-    if (p.pct >= 6) { const am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .64; h += `<text x="${(c + rl * Math.cos(am)).toFixed(1)}" y="${(c + rl * Math.sin(am) + 4).toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#fff" pointer-events="none">${pieFmtPct(p.pct)}</text>`; }
+    if (p.pct >= 6) { const am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .62, x = (c + rl * Math.cos(am)).toFixed(1), y = c + rl * Math.sin(am);
+      h += `<text x="${x}" y="${(y - 1).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff" pointer-events="none">${p.v}</text><text x="${x}" y="${(y + 13).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" fill-opacity=".92" pointer-events="none">${pieFmtPct(p.pct)}</text>`; }
     a0 = a1;
   });
   return `<svg width="${taille}" height="${taille}" viewBox="0 0 ${taille} ${taille}" role="img" aria-label="Diagramme en camembert">${h}</svg>`;
@@ -2104,12 +2105,24 @@ function pieDonnees(cle, mesure) {
   const lib = (PIE_MESURES.find(m => m[0] === mesure) || PIE_MESURES[0])[1];
   return { titre: lib + ' ' + cle.toLowerCase(), mesureLib: lib, lignes: P.lignes.map(([k, o]) => ({ k, v: o[mesure] || 0 })) };
 }
+// Tableau de valeurs : toutes les mesures de la portion (mêmes chiffres que le tableau de l'analyse), ligne Total comprise
+function pieTableau(cle) {
+  const P = R.pie[cle];
+  if (P.mv) return { titres: ['Mouvement', 'Étudiants concernés'], lignes: P.mv.map(([k, v]) => [k, v]), total: ['Total', P.mv.reduce((a, x) => a + x[1], 0)] };
+  const T = ['Alternants', 'Sans responsable', 'Drapeaux rouges', 'RDV pris à venir', 'RDV honorés', 'Alternants visités', 'Taux de visite', 'Visites (total)', 'Entreprises'];
+  const ln = (k, o) => [k, o.alt, o.sansResp, o.rouges, o.aVenir, o.hon, o.vus, o.taux + ' %', o.total, o.ents];
+  return { titres: [cle.replace(/^Par /, '')].concat(T), lignes: P.lignes.map(([k, o]) => ln(k, o)), total: ln('Total', P.tot) };
+}
 function rdvPie(cle) {
   if (!R.pie || !R.pie[cle]) return;
   const P = R.pie[cle];
   const dlg = modal(`<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2 style="margin:0">Répartition — ${esc(cle)}</h2><p class="sub" style="margin:4px 0 0">${esc(R.pieCtx.sous)}</p></div>
       ${P.mv ? '' : `<select class="in" id="pieMes" style="width:auto">${PIE_MESURES.map(m => `<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select>`}</div>
     <div id="pieZone" style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 6px"></div>
+    ${(() => { const V = pieTableau(cle); return `<h3 style="margin:18px 0 8px;font-size:14px;color:#0e1a2b">Tableau de valeurs</h3>
+      <div style="overflow:auto;max-height:340px"><table class="vs2-t"><thead><tr>${V.titres.map((t, i) => `<th${i ? ' style="text-align:right"' : ''}>${esc(t)}</th>`).join('')}</tr></thead>
+      <tbody>${V.lignes.map(l => `<tr>${l.map((v, i) => `<td${i ? ' style="text-align:right"' : ''}>${i ? esc(v) : '<b>' + esc(v) + '</b>'}</td>`).join('')}</tr>`).join('')}
+      <tr class="gr">${V.total.map((v, i) => `<td${i ? ' style="text-align:right"' : ''}><b>${esc(v)}</b></td>`).join('')}</tr></tbody></table></div>`; })()}
     <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button><button class="vx-btn pri" id="piePdf">${svg('down', 14)} Exporter en PDF</button></div>`, 860);
   const dessiner = () => {
     const D = pieDonnees(cle, P.mv ? '' : $('pieMes').value), { parts, tot, toutes } = pieParts(D.lignes);
@@ -2147,7 +2160,8 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
   parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2; g.beginPath(); g.moveTo(c, c); g.arc(c, c, r, a0, a1); g.closePath(); g.fillStyle = p.c; g.fill();
     if (parts.length > 1) { g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.lineJoin = 'round'; g.stroke(); } a0 = a1; });
   a0 = -Math.PI / 2; g.fillStyle = '#ffffff'; g.font = 'bold 34px Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2, am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .64; if (p.pct >= 6) g.fillText(pieFmtPct(p.pct).replace(' ', ' '), c + rl * Math.cos(am), c + rl * Math.sin(am)); a0 = a1; });
+  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2, am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .62, x = c + rl * Math.cos(am), y = c + rl * Math.sin(am);
+    if (p.pct >= 6) { g.font = 'bold 38px Helvetica, Arial, sans-serif'; g.fillText(String(p.v), x, y - 16); g.font = 'bold 28px Helvetica, Arial, sans-serif'; g.fillText(pieFmtPct(p.pct), x, y + 20); } a0 = a1; });
   const T = 112; doc.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 18, 52, T, T);
   doc.setFontSize(11); doc.setTextColor(59, 72, 89); doc.text('Total : ', 18 + T / 2 - 12, 52 + T + 9, { align: 'right' });
   doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(String(tot) + ' ' + pieMin(D.mesureLib), 18 + T / 2 - 12, 52 + T + 9);
@@ -2168,6 +2182,22 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
     doc.setDrawColor(238, 242, 247); doc.line(X, y + 2.4, XR, y + 2.4); y += 7;
   });
   if (!rangs.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(125, 138, 156); doc.text('Aucune donnée pour cette mesure.', X + 9, y); }
+  const V = pieTableau(cle), nc = V.titres.length, c0 = nc > 3 ? 58 : 120, wc = (W - 28 - c0) / (nc - 1);
+  doc.addPage(); ent(); y = 34;
+  doc.setTextColor(14, 26, 43); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Tableau de valeurs — ' + cle, 14, y); y += 6;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(59, 72, 89); doc.text(R.pieCtx.sous, 14, y); y += 9;
+  const xCol = i => i ? 14 + c0 + wc * i - 2 : 16;
+  const vEnTete = () => { doc.setFillColor(26, 78, 138); doc.rect(14, y - 5.5, W - 28, 9, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.6); doc.setTextColor(255, 255, 255);
+    V.titres.forEach((t, i) => { const l = doc.splitTextToSize(t.toUpperCase(), i ? wc - 2 : c0 - 4); doc.text(l.slice(0, 2), xCol(i), y - (l.length > 1 ? 1.4 : 0), { align: i ? 'right' : 'left' }); }); y += 8; };
+  vEnTete();
+  const vLigne = (l, k, gras) => {
+    if (y > H - 18) { doc.addPage(); ent(); y = 34; vEnTete(); }
+    if (gras) { doc.setFillColor(232, 239, 248); doc.rect(14, y - 4.6, W - 28, 7, 'F'); } else if (k % 2) { doc.setFillColor(247, 249, 252); doc.rect(14, y - 4.6, W - 28, 7, 'F'); }
+    doc.setFontSize(9); doc.setTextColor(14, 26, 43);
+    l.forEach((v, i) => { doc.setFont('helvetica', gras || !i ? 'bold' : 'normal'); doc.text(i ? String(v) : doc.splitTextToSize(String(v), c0 - 4)[0], xCol(i), y, { align: i ? 'right' : 'left' }); });
+    doc.setDrawColor(227, 234, 243); doc.line(14, y + 2.4, W - 14, y + 2.4); y += 7;
+  };
+  V.lignes.forEach((l, k) => vLigne(l, k, false)); vLigne(V.total, 0, true);
   const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); pied(i, n); }
   doc.save(('Repartition_' + cle.replace(/^Par /, '') + '_' + D.mesureLib + '_' + R.pieCtx.annee).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf');
   toast('PDF exporté ✓');
