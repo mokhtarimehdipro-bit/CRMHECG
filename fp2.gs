@@ -25,6 +25,8 @@ var FP2_H = ["ID étudiant", "Nom", "Prénom", "Typo", "Classe", "Diplôme actue
 var FP2_C = { id: 0, nom: 1, prenom: 2, typo: 3, classe: 4, diplome: 5, histo: 6, decision: 7, lien: 8, noteRefus: 9, motifRefus: 10,
   classeurId: 11, classeurUrl: 12, etat: 13, manquants: 14, message: 15, maj: 16 };
 var FP2_HH = ["ID fichier", "Nom fichier", "Type", "Créé le", "Lien", "ID converti", "Formation", "Diplôme", "Données", "Extrait le", "Erreur"];
+var FP2_LIB = { naissance: "Date de naissance", nationalite: "Nationalité", ville: "Ville", civilite: "Civilité", permis: "Permis B", vehicule: "Véhicule" };
+var FP2_CELL = { civilite: "C11", ville: "C14", naissance: "C15", nationalite: "C17", permis: "C22", vehicule: "C23" };
 var FP2_DIPLOMES = ["BTS CG", "BTS GPME", "DCG", "DSCG", "BACHELOR"];
 
 // ── Accès, feuilles, état ────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ function _fp2Inventaire_(ss) {
   var props = PropertiesService.getScriptProperties();
   [props.getProperty("FICHE_POS_MODELE_ID"), FP_MODELE_XLSX].forEach(function (x) { if (x) exclus[x] = 1; });
 
-  var fichiers = _fp2DriveListe_("(name contains 'positionnement' or name contains 'positionement' or name contains 'positionnment' or (fullText contains 'POSITIONNEMENT CANDIDAT' and mimeType contains 'spreadsheet')) and trashed = false");
+  var fichiers = _fp2DriveListe_("(name contains 'positionnement' or name contains 'positionement' or name contains 'positionnment' or (fullText contains 'POSITIONNEMENT CANDIDAT' and (mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel'))) and trashed = false");
   fichiers = fichiers.filter(function (f) {
     if (exclus[f.id]) return false;
     if (/folder|shortcut|image\//.test(f.mimeType)) return false;
@@ -291,7 +293,7 @@ function _fp2Ocr_(dossier) {
       var it2 = s.getFiles(); while (it2.hasNext()) { var f2 = it2.next(), nm2 = _fp2N_(f2.getName());
         if (/pdf|image\/(jpe?g|png)/.test(f2.getMimeType()) && /\bcni\b|carte d identite|identite|passeport|titre de sejour|piece|inscription/.test(nm2)) cands.push(f2); } }
     cands.slice(0, 3).forEach(function (f) {
-      if (res.naissance && res.nationalite && res.ville) return;
+      if (res.naissance && res.nationalite && res.ville && res.civilite && res.permis && res.vehicule) return;
       var r = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + f.getId() + "/copy?supportsAllDrives=true&ocrLanguage=fr", {
         method: "post", contentType: "application/json", muteHttpExceptions: true, headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
         payload: JSON.stringify({ name: "OCR temporaire", mimeType: "application/vnd.google-apps.document", parents: [_fp2DossierTravail_().getId()] }) });
@@ -305,11 +307,38 @@ function _fp2Ocr_(dossier) {
         res.naissance = { v: ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3], src: f.getName() };
       if (!res.nationalite && (m = txt.match(/nationalit[ée]\s*[:\/]?\s*([A-Za-zÀ-ÿ\-]{4,20})/i))) res.nationalite = { v: m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase(), src: f.getName() };
       if (!res.nationalite && /REPUBLIQUE FRAN[CÇ]AISE|CARTE NATIONALE D.IDENTIT/i.test(txt)) res.nationalite = { v: "Française", src: f.getName() };
+      if (!res.civilite && (m = txt.match(/\bsexe\s*(?:\/\s*sex)?\s*[:\/]?\s*([FM])\b/i))) res.civilite = { v: m[1].toUpperCase() === "F" ? "Madame" : "Monsieur", src: f.getName() };
+      if (!res.civilite && (m = txt.match(/civilit[ée]\s*[:\/]?\s*(madame|monsieur|mme|m\.)/i))) res.civilite = { v: /^m(me|adame)/i.test(m[1]) ? "Madame" : "Monsieur", src: f.getName() };
+      if (!res.permis && (m = txt.match(/permis(?: de conduire)?(?: b)?\s*[:?]?\s*(oui|non)\b/i))) res.permis = { v: _fp2OuiNon_(m[1]), src: f.getName() };
+      if (!res.vehicule && (m = txt.match(/v[ée]hicul[ée]?e?s?\s*(?:personnel)?\s*[:?]?\s*(oui|non)\b/i))) res.vehicule = { v: _fp2OuiNon_(m[1]), src: f.getName() };
       if (!res.ville && (m = txt.match(/\b(\d{5})\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]{2,30})/))) res.ville = { v: m[2].trim().replace(/\s+(CEDEX.*)$/i, ""), src: f.getName() };
     });
   } catch (e) {}
   res._lus = n;
   return res;
+}
+
+// Civilité, ville, date de naissance, nationalité, permis B, véhicule :
+// 1) export Charlemagne (CHARLEMAGNE_IMPORT) 2) fiches historiques 3) OCR des pièces du dossier GED (signalé « à vérifier »)
+function _fp2OuiNon_(v) { var t = _fp2N_(v); return /^(oui|o|yes|y|1|vrai|x)$/.test(t) ? "Oui" : /^(non|n|no|0|faux)$/.test(t) ? "Non" : String(v || "").trim(); }
+function _fp2Civ_(v) { var t = _fp2N_(v); return /^(mme|madame|mlle|mademoiselle|f|femme|feminin)$/.test(t) ? "Madame" : /^(m|mr|monsieur|h|homme|masculin)$/.test(t) ? "Monsieur" : ""; }
+function _fp2Cap_(v) { return String(v || "").trim().toLowerCase().replace(/(^|[\s\-'])([a-zà-ÿ])/g, function (m, a, b) { return a + b.toUpperCase(); }); }
+function _fp2Nat_(v) { var t = String(v || "").trim(); if (!t) return ""; if (/^(fr|fra|francais|française|francaise)$/i.test(_fp2N_(t)) || /^fran[cç]ais/i.test(t)) return "Française"; return _fp2Cap_(t); }
+function _fp2Sources_(ctx, e, champ, dossier) {
+  var c = ctx.charl.parId[e.idEleve] || ctx.charl.parNom[_fp2N_(e.nom + " " + e.prenom)] || {}, notes = {}, R = {};
+  R.naissance = c.naissance ? _fp2Fmt_(_charlDate_(c.naissance)) : (champ("naissance") || "");
+  R.civilite = _fp2Civ_(c.civilite) || _fp2Civ_(champ("civilite")) || "";
+  R.ville = c.ville ? _fp2Cap_(c.ville) : (champ("ville") || "");
+  R.nationalite = _fp2Nat_(c.nationalite) || _fp2Nat_(champ("nationalite"));
+  R.permis = _fp2OuiNon_(c.permis) || _fp2OuiNon_(champ("permis"));
+  R.vehicule = _fp2OuiNon_(c.vehicule) || _fp2OuiNon_(champ("vehicule"));
+  var manque = ["naissance", "civilite", "ville", "nationalite", "permis", "vehicule"].filter(function (k) { return !R[k]; });
+  if (manque.length && dossier) {
+    var o = _fp2Ocr_(dossier);
+    manque.forEach(function (k) { if (o[k]) { R[k] = o[k].v; notes[k] = "Lu par OCR sur « " + o[k].src + " » — à vérifier"; } });
+  }
+  R.notes = notes;
+  return R;
 }
 
 // ── 3) GÉNÉRATION ────────────────────────────────────────────────────────────
@@ -330,19 +359,9 @@ function _fp2Generer_(ss, row, ctx) {
   var champ = function (k) { for (var i = 0; i < histos.length; i++) { var D = histos[i].D; if (D && D.champs && D.champs[k]) return D.champs[k]; } return ""; };
 
   var dossier = _fpDossierGed_(ss, e.id, e.nom, e.prenom);
-  var ocr = null, notes = {};
-  var charl = ctx.charl.parId[e.idEleve] || ctx.charl.parNom[_fp2N_(e.nom + " " + e.prenom)] || {};
-  var naissance = charl.naissance ? _fp2Fmt_(_charlDate_(charl.naissance)) : (champ("naissance") || "");
-  var nationalite = champ("nationalite"), ville = champ("ville");
-  if (!naissance || !nationalite || !ville) {
-    ocr = _fp2Ocr_(dossier);
-    if (!naissance && ocr.naissance) { naissance = ocr.naissance.v; notes.naissance = "Lu par OCR sur « " + ocr.naissance.src + " » — à vérifier"; }
-    if (!nationalite && ocr.nationalite) { nationalite = ocr.nationalite.v; notes.nationalite = "Lu par OCR sur « " + ocr.nationalite.src + " » — à vérifier"; }
-    if (!ville && ocr.ville) { ville = ocr.ville.v; notes.ville = "Lu par OCR sur « " + ocr.ville.src + " » — à vérifier"; }
-  }
-  var civ = champ("civilite");
-  var base = { civilite: civ, nom: e.nom.toUpperCase(), prenom: e.prenom, ville: ville, naissance: naissance, nationalite: nationalite,
-    autorisation: champ("autorisation") || (/fran[cç]ais/i.test(nationalite) ? "Oui" : ""), permis: champ("permis"), vehicule: champ("vehicule"), langues: champ("langues") };
+  var SRC = _fp2Sources_(ctx, e, champ, dossier), notes = SRC.notes;
+  var base = { civilite: SRC.civilite, nom: e.nom.toUpperCase(), prenom: e.prenom, ville: SRC.ville, naissance: SRC.naissance, nationalite: SRC.nationalite,
+    autorisation: champ("autorisation") || (/fran[cç]ais/i.test(SRC.nationalite) ? "Oui" : ""), permis: SRC.permis, vehicule: SRC.vehicule, langues: champ("langues") };
 
   // onglets nouvelle trame
   var dipActuel = _fp2Diplome_(_fpFormation_(e.classe)) || "AUTRE";
@@ -461,7 +480,7 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
     sh.getRange("E23").setValue("Note inférieure à 10/20 : candidature non retenue");
   }
   sh.getRange("B4").setFontWeight("bold").setFontColor("#1A4E8A").setHorizontalAlignment("right");
-  var cn = { naissance: "C15", nationalite: "C17", ville: "C14" };
+  var cn = { naissance: "C15", nationalite: "C17", ville: "C14", civilite: "C11", permis: "C22", vehicule: "C23" };
   Object.keys(notes).forEach(function (k) { sh.getRange(cn[k]).setNote(notes[k]).setBackground("#fff4e5"); });
   // mentions manquantes
   var L = [["C11", "Civilité"], ["C14", "Ville"], ["C15", "Date de naissance"], ["C17", "Nationalité"], ["C18", "Autorisation de travail"],
@@ -477,7 +496,7 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
     manq.push("Grille : " + vides.join(", ") + (vides.length === 1 && !D.grille[8] ? " (absent de l'ancienne trame)" : ""));
   }
   if (o.refus && !(D && D.grille && D.grille.filter(Boolean).length)) manq.push("Grille d'évaluation (justifiant le refus)");
-  Object.keys(notes).forEach(function (k) { manq.push({ naissance: "Date de naissance", nationalite: "Nationalité", ville: "Ville" }[k] + " (lue par OCR, à vérifier)"); });
+  Object.keys(notes).forEach(function (k) { manq.push(FP2_LIB[k] + " (lue par OCR, à vérifier)"); });
   return { sheet: sh, manquants: manq };
 }
 
@@ -570,6 +589,7 @@ function _fp2GenererLot_(ss, deadline) {
       // ancien classeur FP2 (régénération) → corbeille
       if (d[i][FP2_C.classeurId]) { try { DriveApp.getFileById(String(d[i][FP2_C.classeurId])).setTrashed(true); } catch (x) {} }
       var r = _fp2Generer_(ss, d[i], ctx);
+      try { var pC = PropertiesService.getScriptProperties(), fC = JSON.parse(pC.getProperty("FP2_COMPL") || "{}"); fC[id] = 1; pC.setProperty("FP2_COMPL", JSON.stringify(fC)); } catch (x) {}
       ws.getRange(i + 1, FP2_C.classeurId + 1, 1, 6).setValues([[r.id, r.url, "fait", JSON.stringify(r.manquants), r.historiques + " historique(s), " + r.onglets + " onglet(s) nouvelle trame", new Date()]]);
       var jp = _fp2Job_(), propsP = PropertiesService.getScriptProperties();
       if (propsP.getProperty("FP2_PILOTE") === "1" || jp.pilote) { propsP.deleteProperty("FP2_PILOTE"); jp.pilote = false; jp.pause = true; jp.piloteUrl = r.url; jp.piloteNom = d[i][1] + " " + d[i][2]; _fp2SetJob_(jp);
@@ -581,6 +601,48 @@ function _fp2GenererLot_(ss, deadline) {
       _fp2Log_(ss, "Erreur", d[i][1] + " " + d[i][2] + " : " + eG);
     }
     _fp2Mesure_("generation", Date.now() - t0);
+  }
+  return faits;
+}
+
+function _fp2CompleterLot_(ss, deadline) {
+  var ws = _fp2Etu_(ss), d = ws.getDataRange().getValues(), ctx = null, faits = 0, props = PropertiesService.getScriptProperties();
+  var fini = {}; try { fini = JSON.parse(props.getProperty("FP2_COMPL") || "{}"); } catch (x) {}
+  for (var i = 1; i < d.length && Date.now() < deadline - 20000; i++) {
+    var id = String(d[i][0]);
+    if (String(d[i][FP2_C.etat]) !== "fait" || !d[i][FP2_C.classeurId] || fini[id]) continue;
+    if (_fp2Job_().pause) break;
+    ctx = ctx || _fp2Ctx_(ss);
+    var t0 = Date.now(), e = ctx.etus[id];
+    try {
+      if (!e) throw new Error("Étudiant introuvable");
+      var hv = []; try { hv = JSON.parse(d[i][FP2_C.histo] || "[]"); } catch (x) {}
+      var Ds = hv.map(function (h) { return (ctx.histo[h.id] || {}).D; }).filter(function (D) { return D && D.champs; });
+      var champ = function (k) { for (var q = Ds.length - 1; q >= 0; q--) if (Ds[q].champs[k]) return Ds[q].champs[k]; return ""; };
+      var cl = SpreadsheetApp.openById(String(d[i][FP2_C.classeurId]));
+      var onglets = cl.getSheets().filter(function (sh) { return /nouvelle trame|Fiche de refus/.test(sh.getName()); });
+      var aRemplir = {};
+      onglets.forEach(function (sh) { Object.keys(FP2_CELL).forEach(function (k) { if (!String(sh.getRange(FP2_CELL[k]).getDisplayValue()).trim()) aRemplir[k] = 1; }); });
+      var remplis = [];
+      if (Object.keys(aRemplir).length) {
+        var dossier = null; try { dossier = DriveApp.getFileById(String(d[i][FP2_C.classeurId])).getParents().next(); } catch (x) {}
+        var S = _fp2Sources_(ctx, e, champ, dossier);
+        onglets.forEach(function (sh) {
+          Object.keys(aRemplir).forEach(function (k) {
+            var r = sh.getRange(FP2_CELL[k]);
+            if (S[k] && !String(r.getDisplayValue()).trim()) { r.setValue(S[k]); if (S.notes[k]) r.setNote(S.notes[k]).setBackground("#fff4e5"); if (remplis.indexOf(FP2_LIB[k]) < 0) remplis.push(FP2_LIB[k]); }
+          });
+        });
+        // mentions manquantes mises à jour
+        var m = []; try { m = JSON.parse(d[i][FP2_C.manquants] || "[]"); } catch (x) {}
+        m = m.filter(function (x) { var lib = String(x).replace(/^[^:]+: /, ""); return remplis.indexOf(lib) < 0; });
+        Object.keys(S.notes).forEach(function (k) { if (remplis.indexOf(FP2_LIB[k]) >= 0) m.push((onglets.length > 1 ? "" : "") + FP2_LIB[k] + " (lue par OCR, à vérifier)"); });
+        ws.getRange(i + 1, FP2_C.manquants + 1).setValue(JSON.stringify(m));
+      }
+      fini[id] = 1; props.setProperty("FP2_COMPL", JSON.stringify(fini));
+      _fp2Log_(ss, "Complétion", d[i][1] + " " + d[i][2] + " — " + (remplis.length ? "complété : " + remplis.join(", ") : "rien de plus trouvé") + " (" + Math.round((Date.now() - t0) / 100) / 10 + " s)");
+      faits++;
+    } catch (eC) { fini[id] = 1; props.setProperty("FP2_COMPL", JSON.stringify(fini)); _fp2Log_(ss, "Erreur", "Complétion " + d[i][1] + " " + d[i][2] + " : " + eC); }
   }
   return faits;
 }
@@ -612,9 +674,16 @@ function fp2Tick(budget) {
     if (job.phase === "generation" && Date.now() < deadline) {
       _fp2GenererLot_(ss, deadline);
       var rest = _fp2Etu_(ss).getDataRange().getValues().slice(1).filter(function (r) { return r[FP2_C.etat] === "à faire" || r[FP2_C.etat] === "en cours"; }).length;
-      if (!rest) {
+      if (!rest) { job = _fp2Job_(); job.phase = "completion"; job.phaseDebut = Date.now(); _fp2SetJob_(job); _fp2Log_(ss, "Phase", "Génération terminée → complétion des champs des fiches déjà faites"); }
+    }
+    job = _fp2Job_();
+    if (job.phase === "completion" && Date.now() < deadline) {
+      _fp2CompleterLot_(ss, deadline);
+      var fin = {}; try { fin = JSON.parse(PropertiesService.getScriptProperties().getProperty("FP2_COMPL") || "{}"); } catch (x) {}
+      var restC = _fp2Etu_(ss).getDataRange().getValues().slice(1).filter(function (r) { return r[FP2_C.etat] === "fait" && r[FP2_C.classeurId] && !fin[String(r[0])]; }).length;
+      if (!restC) {
         job = _fp2Job_(); job.phase = "termine"; job.actif = false; job.fin = Date.now(); _fp2SetJob_(job);
-        _fp2Log_(ss, "Phase", "Génération terminée ✓");
+        _fp2Log_(ss, "Phase", "Traitement terminé ✓");
         logAction(FP2_MAITRE, "", "Création", "Étudiants — Fiches de positionnement (refonte)", "FP2_ETUDIANTS", "Génération terminée");
         _fp2Declencheur_(false);
       }
@@ -737,6 +806,13 @@ function handleFp2(p, ss) {
       _fp2Log_(ss, "Commande", "Relecture de toutes les fiches historiques"); return createJsonResponse({ success: true });
     }
     if (op === "formule") { var shF = SpreadsheetApp.openById(p.id).getSheetByName(p.onglet) || SpreadsheetApp.openById(p.id).getSheets()[0]; return createJsonResponse({ success: true, f: shF.getRange(p.a1).getFormula(), v: shF.getRange(p.a1).getDisplayValue(), modele: SpreadsheetApp.openById(_fpModele_()).getSheets()[0].getRange(p.a1).getFormula() }); }
+    if (op === "entetes") { return createJsonResponse({ success: true, f: ss.getSheets().map(function (sh) { var c = sh.getLastColumn(); return { n: sh.getName(), l: sh.getLastRow(), h: c ? sh.getRange(1, 1, 1, Math.min(c, 80)).getDisplayValues()[0].filter(String) : [] }; }) }); }
+    if (op === "completer") {
+      PropertiesService.getScriptProperties().deleteProperty("FP2_COMPL");
+      var jc = _fp2Job_(); jc.phase = "completion"; jc.phaseDebut = Date.now(); jc.actif = true; jc.pause = false; _fp2SetJob_(jc);
+      _fp2Log_(ss, "Commande", "Complétion des champs (civilité, ville, naissance, nationalité, permis, véhicule) sur toutes les fiches faites");
+      return createJsonResponse({ success: true });
+    }
     if (op === "kick") { fp2Tick(280000); return createJsonResponse({ success: true }); }
     if (op === "declencheurs") return createJsonResponse({ success: true, liste: ScriptApp.getProjectTriggers().map(function (t) { return { f: t.getHandlerFunction(), type: String(t.getEventType()), src: String(t.getTriggerSource()) }; }) });
     if (op === "tests") { var R = _fp2TestsBachelor_(); _fp2Log_(ss, "Bachelor", "Tests d'admission générés"); logAction(p.emailAuteur, "", "Création", "Étudiants — Fiches de positionnement (refonte)", "Bachelor", "Tests d'admission (sujet + corrigé)"); return createJsonResponse({ success: true, tests: R }); }

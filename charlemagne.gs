@@ -28,7 +28,7 @@ var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "
 function _charlInscrit_(typo) { var t = _charlNorm_(typo); return t === "inscrit" || t === "preinscrit" || t === "pre inscrit"; }
 var CHARL_CHAMPS = ["idEleve", "nom", "prenom", "naissance", "email", "mailPerso", "classe", "codeClasse", "niveau",
   "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp",
-  "visites", "pc", "pcCom"];   // pc / pcCom = colonnes AH / AQ (suivi des PC, vs_pc.gs)   // visites = JSON [{h: en-tête, v: valeur}] des colonnes « … visite … » (suivi des RDV, vs_suivi.gs)
+  "visites", "pc", "pcCom", "civilite", "ville", "cp", "nationalite", "permis", "vehicule"];   // derniers : fiches de positionnement (fp2.gs)   // pc / pcCom = colonnes AH / AQ (suivi des PC, vs_pc.gs)   // visites = JSON [{h: en-tête, v: valeur}] des colonnes « … visite … » (suivi des RDV, vs_suivi.gs)
 
 function _charlAutorise_(p) {
   return !!CHARL_ROLES[String(p.vieScRole || "")] || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";

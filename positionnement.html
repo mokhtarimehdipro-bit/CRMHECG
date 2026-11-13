@@ -125,7 +125,7 @@ function rendre() {
 function vueSuivi() {
   const E = S.etat; if (!E) return '<div class="empty">Chargement…</div>';
   const j = E.job || {}, et = E.etats || {}, h = E.histo || {}, du = j.durees || {};
-  const ph = j.phase || '', ordre = ['inventaire', 'extraction', 'generation', 'termine'], io = ordre.indexOf(ph);
+  const ph = j.phase || '', ordre = ['inventaire', 'extraction', 'generation', 'completion', 'termine'], io = ordre.indexOf(ph);
   const gTot = (et['fait'] || 0) + (et['à faire'] || 0) + (et['en cours'] || 0) + (et['erreur'] || 0), gReste = (et['à faire'] || 0) + (et['en cours'] || 0);
   const xReste = Math.max(0, (h.total || 0) - (h.faits || 0) - (h.erreurs || 0));
   const moy = k => du[k] && du[k][1] ? du[k][0] / du[k][1] : (k === 'extraction' ? 6000 : 15000);
@@ -133,15 +133,17 @@ function vueSuivi() {
   let pct = 0, lib = '';
   if (ph === 'inventaire') { pct = 3; lib = 'Recherche des fiches historiques dans tout le Drive…'; }
   else if (ph === 'extraction') { pct = h.total ? Math.round(((h.faits || 0) + (h.erreurs || 0)) / h.total * 100) : 0; lib = `Lecture des fiches historiques : ${(h.faits || 0) + (h.erreurs || 0)} / ${h.total || 0}`; }
+  else if (ph === 'completion') { pct = 50; lib = 'Complétion de la civilité, ville, date de naissance, nationalité, permis et véhicule sur les fiches déjà faites…'; }
   else if (ph === 'generation' || ph === 'termine') { pct = gTot ? Math.round(((et['fait'] || 0) + (et['erreur'] || 0)) / gTot * 100) : 0; lib = `Fiches générées : ${et['fait'] || 0} / ${gTot}`; }
   const enCours = E.bail && E.maintenant - E.bail < 330000;
   const dp = j.dernierPassage ? Math.round((E.maintenant - j.dernierPassage) / 1000) : null;
   return `<h1>Suivi en direct</h1><p class="sub">Le traitement tourne en arrière-plan (un passage automatique toutes les 5 minutes ; tant que cette page est ouverte, les passages s’enchaînent sans pause). En cas de coupure, il reprend tout seul à l’endroit exact où il s’était arrêté. Cette page s’actualise toutes les 4 secondes.</p>
   <div class="card">
     <div class="tools" style="justify-content:space-between;margin:0">
-      <div class="phases">${[['inventaire', '1 · Inventaire'], ['extraction', '2 · Lecture de l’historique'], ['generation', '3 · Génération'], ['termine', 'Terminé']].map(([k, l], i) => `<span class="ph ${ph === k ? 'on' : (io > i ? 'ok' : '')}">${io > i ? '✓ ' : ''}${l}</span>`).join('')}</div>
+      <div class="phases">${[['inventaire', '1 · Inventaire'], ['extraction', '2 · Lecture de l’historique'], ['generation', '3 · Génération'], ['completion', '4 · Complétion des champs'], ['termine', 'Terminé']].map(([k, l], i) => `<span class="ph ${ph === k ? 'on' : (io > i ? 'ok' : '')}">${io > i ? '✓ ' : ''}${l}</span>`).join('')}</div>
       <div class="tools" style="margin:0">
         ${!j.actif || j.phase === 'termine' ? `<button class="btn pri" onclick="lancer('inventaire')">${j.phase ? 'Relancer l’inventaire complet' : 'Lancer la refonte'}</button>` : ''}
+        ${!j.actif || j.phase === 'termine' ? `<button class="btn" onclick="completer()">Compléter les champs des fiches faites</button>` : ''}
         ${j.actif && !j.pause ? `<button class="btn" onclick="cmd('pause')">Mettre en pause</button>` : ''}
         ${j.pause ? `<button class="btn org" onclick="cmd('reprendre')">Reprendre</button>` : ''}
       </div>
@@ -163,6 +165,7 @@ function vueSuivi() {
     <div class="jr">${(E.journal || []).map(l => `<div class="${l[1] === 'Erreur' ? 'er' : ''}"><span>${esc(l[0])}</span><span class="ty">${esc(l[1])}</span><span>${esc(l[2])}</span></div>`).join('') || '<div class="empty">Rien pour l’instant.</div>'}</div></div>`;
 }
 async function lancer(phase) { const r = await api('demarrer', { phase }); toast(r.success ? 'Lancé : le premier passage démarre dans la minute' : r.message, r.success); chargerEtat(); }
+async function completer() { const r = await api('completer'); toast(r.success ? 'Complétion lancée (cases vides uniquement, rien n’est écrasé)' : r.message, r.success); chargerEtat(); }
 async function cmd(op) { const r = await api(op); toast(r.success ? (op === 'pause' ? 'Pause demandée (le passage en cours se termine)' : 'Reprise') : r.message, r.success); chargerEtat(); }
 
 // ── Filtres communs ──
