@@ -2082,6 +2082,7 @@ function pieParts(lignes) {
   parts.forEach((p, i) => { p.c = p.autres ? PIE_AUTRES : PIE_COUL[i]; p.pct = tot ? p.v / tot * 100 : 0; });
   return { parts, tot, toutes: l };
 }
+const pieMin = t => /^RDV/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1);
 const pieFmtPct = p => (p >= 10 || p === 0 ? Math.round(p) : p.toFixed(1).replace('.', ',')) + ' %';
 function pieSvg(parts, tot, taille = 300) {
   const r = taille / 2 - 4, c = taille / 2;
@@ -2113,7 +2114,7 @@ function rdvPie(cle) {
   const dessiner = () => {
     const D = pieDonnees(cle, P.mv ? '' : $('pieMes').value), { parts, tot, toutes } = pieParts(D.lignes);
     const leg = parts.map((p, i) => `<tr class="pie-l" data-i="${i}"><td><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${p.c};vertical-align:-1px"></i></td><td>${esc(p.k)}${p.autres ? `<div class="sub" style="font-size:11px;margin-top:2px">${p.autres.map(a => esc(a.k) + ' ' + a.v).join(' · ')}</div>` : ''}</td><td style="text-align:right;font-weight:800;color:#0e1a2b">${p.v}</td><td style="text-align:right;color:#3b4859">${pieFmtPct(p.pct)}</td></tr>`).join('');
-    $('pieZone').innerHTML = `<div style="flex:0 0 auto">${pieSvg(parts, tot)}<div style="text-align:center;margin-top:8px;font-size:13px;color:#3b4859">Total : <b style="color:#0e1a2b">${tot}</b> ${esc(D.mesureLib.toLowerCase())}</div></div>
+    $('pieZone').innerHTML = `<div style="flex:0 0 auto">${pieSvg(parts, tot)}<div style="text-align:center;margin-top:8px;font-size:13px;color:#3b4859">Total : <b style="color:#0e1a2b">${tot}</b> ${esc(pieMin(D.mesureLib))}</div></div>
       <div style="flex:1;min-width:260px;max-height:380px;overflow:auto"><table class="vs2-t pie-t"><thead><tr><th></th><th>${esc(cle.replace(/^Par /, ''))}</th><th style="text-align:right">${esc(D.mesureLib)}</th><th style="text-align:right">Part</th></tr></thead><tbody>${leg || '<tr><td colspan="4" class="sub">Aucune donnée pour cette mesure.</td></tr>'}</tbody></table>
       ${toutes.length < D.lignes.length ? `<p class="sub" style="font-size:11.5px;margin-top:6px">${D.lignes.length - toutes.length} ligne(s) à 0 non représentée(s).</p>` : ''}</div>`;
     const lier = i => { $('pieZone').querySelectorAll('.pie-s').forEach(s => s.style.opacity = i === null || s.dataset.i === String(i) ? 1 : .35); $('pieZone').querySelectorAll('.pie-l').forEach(t => t.style.background = String(i) === t.dataset.i ? '#f3f7fc' : ''); };
@@ -2140,15 +2141,16 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(59, 72, 89); doc.text(doc.splitTextToSize(D.mesureLib + ' · ' + R.pieCtx.sous, W - 28), 14, 41);
   // camembert dessiné en haute définition (canvas) puis inséré en image
   const px = 900, cv = document.createElement('canvas'); cv.width = cv.height = px; const g = cv.getContext('2d'), c = px / 2, r = c - 10;
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, px, px);   // fond blanc : image JPEG légère
   if (!tot) { g.fillStyle = '#eef2f7'; g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.fill(); }
   let a0 = -Math.PI / 2;
   parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2; g.beginPath(); g.moveTo(c, c); g.arc(c, c, r, a0, a1); g.closePath(); g.fillStyle = p.c; g.fill();
     if (parts.length > 1) { g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.lineJoin = 'round'; g.stroke(); } a0 = a1; });
   a0 = -Math.PI / 2; g.fillStyle = '#ffffff'; g.font = 'bold 34px Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2, am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .64; if (p.pct >= 6) g.fillText(pieFmtPct(p.pct).replace(' ', ' '), c + rl * Math.cos(am), c + rl * Math.sin(am)); a0 = a1; });
-  const T = 112; doc.addImage(cv.toDataURL('image/png'), 'PNG', 18, 52, T, T);
+  const T = 112; doc.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 18, 52, T, T);
   doc.setFontSize(11); doc.setTextColor(59, 72, 89); doc.text('Total : ', 18 + T / 2 - 12, 52 + T + 9, { align: 'right' });
-  doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(String(tot) + ' ' + D.mesureLib.toLowerCase(), 18 + T / 2 - 12, 52 + T + 9);
+  doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(String(tot) + ' ' + pieMin(D.mesureLib), 18 + T / 2 - 12, 52 + T + 9);
   // légende-tableau : toutes les lignes (les petites parts regroupées en « Autres » sur le camembert gardent leur détail ici)
   const X = 148, XR = W - 14; let y = 54, page = 1;
   const enTete = () => { doc.setFillColor(247, 249, 252); doc.rect(X, y - 5, XR - X, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(125, 138, 156);
