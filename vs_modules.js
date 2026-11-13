@@ -1411,7 +1411,11 @@ function frEdit(id) {
     <div class="fr-pp"><div class="fr-sel" id="frSel"></div>
       <div class="fr-tabs" id="frTabs"></div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input class="in" id="frQ" style="flex:1;min-width:220px" placeholder="Rechercher un nom, une classe, un mail…"><select class="in" id="frCls" style="width:auto;flex:0 0 auto"></select></div>
-      <div class="fr-res" id="frRes"></div></div>
+      <div class="fr-res" id="frRes"></div>
+      <details id="frImpBox" style="margin-top:10px"><summary style="cursor:pointer;font-weight:700;font-size:13px">📋 Coller une liste d'adresses mail (depuis Excel, un mail, etc.)</summary>
+        <textarea class="in" id="frImp" rows="5" style="margin-top:8px;font-family:inherit;resize:vertical" placeholder="Copiez une colonne d'adresses dans Excel puis collez-la ici (Ctrl+V). Séparateurs acceptés : retours à la ligne, virgules, points-virgules, espaces. Le texte autour des adresses est ignoré."></textarea>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="vx-btn sm pri" id="frImpGo">${svg('plus', 14, 2.4)} Ajouter ces adresses</button><span id="frImpRes" style="font-size:12.5px;color:var(--mu)"></span></div>
+      </details></div>
     <label class="fl">Autres adresses mail (facultatif)</label><input class="in" id="frDest" value="${esc(autres)}" placeholder="email1@hecg.fr, email2@hecg.fr">
     <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px"><input type="checkbox" id="frNotif" checked> <span><b>Prévenir par mail tous les invités</b> si une échéance est ajoutée, déplacée ou retirée (les étudiants retrouvent la frise dans leur espace « Mes échéances »).</span></label>
     <div class="mft">${f ? `<button class="vx-btn danger" style="margin-right:auto" id="frDel">${svg('trash', 14)} Supprimer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frSave">Enregistrer</button></div>`, 900);
@@ -1435,6 +1439,26 @@ function frEdit(id) {
   };
   const addP = p => { if (p && !E.parts.some(x => x.email === p.email)) E.parts.push({ t: p.t, id: p.id, nom: p.nom, email: p.email }); };
   $('frQ').oninput = () => { E.q = $('frQ').value; drawP(); };
+  // Import en masse : on extrait toutes les adresses du texte collé ; une adresse connue (étudiant, équipe, formateur) devient une puce,
+  // les autres vont dans « Autres adresses mail ». Doublons ignorés.
+  const frImporter = () => {
+    const brut = $('frImp').value, vus = new Set();
+    const mails = (brut.match(/[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map(m => m.toLowerCase().replace(/^[.'-]+|[.'-]+$/g, '')).filter(m => !vus.has(m) && vus.add(m));
+    if (!mails.length) { $('frImpRes').innerHTML = '<span style="color:#c0392b">Aucune adresse mail reconnue dans le texte collé.</span>'; return; }
+    const libres = $('frDest').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => x.includes('@'));
+    let nP = 0, nL = 0, nD = 0;
+    mails.forEach(m => {
+      if (E.parts.some(x => String(x.email).toLowerCase() === m) || libres.includes(m)) { nD++; return; }
+      const cands = P.filter(x => String(x.email).toLowerCase() === m), pers = cands.find(x => x.t === 'etu') || cands[0];
+      if (pers) { addP(pers); nP++; } else { libres.push(m); nL++; }
+    });
+    $('frDest').value = libres.join(', ');
+    $('frImp').value = '';
+    $('frImpRes').innerHTML = `<b style="color:#1baf7a">${mails.length} adresse(s) lue(s)</b> — ${nP} reconnue(s) et ajoutée(s) aux personnes, ${nL} ajoutée(s) en « Autres adresses »${nD ? `, ${nD} déjà présente(s)` : ''}.`;
+    drawP();
+  };
+  $('frImpGo').onclick = frImporter;
+  $('frImp').addEventListener('paste', () => setTimeout(frImporter, 0));
   $('frCls').onchange = () => { const c = $('frCls').value; if (!c) return; P.filter(p => p.t === 'etu' && p.info === c).forEach(addP); toast(`Classe ${c} ajoutée aux rappels`); drawP(); };
   drawC(); drawS(); drawP();
   dlg.addEventListener('click', ev => {
