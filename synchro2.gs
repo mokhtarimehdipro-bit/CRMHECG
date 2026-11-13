@@ -1681,6 +1681,7 @@ function sc2BuildPartMap(ss) {
 // MA-<classe> de façon incohérente avec le libellé de l'étudiant lui-même.
 function sc2ClassifierTypoEtudiant(typoLower) {
   if (typoLower.includes('prein') || typoLower.includes('préin')) return 'Étudiant Préinscrit';
+  if (typoLower.includes('alumni'))                                return 'Alumni';   // ancien étudiant formé (fin d'études)
   if (typoLower.includes('sorti'))                                 return 'Étudiant Sorti';
   if (typoLower.includes('inscrit') || typoLower.includes('alternance')) return 'Étudiant Inscrit';
   return 'Prospect';
@@ -1740,7 +1741,7 @@ function sc2ExtractEtudiants(ss) {
     if (!prenom && !nom) continue;
     const mainLabel = sc2ClassifierTypoEtudiant(typo);
     const labelsSet = new Set([mainLabel]);
-    const isSorti = mainLabel === 'Étudiant Sorti';
+    const isSorti = mainLabel === 'Étudiant Sorti' || mainLabel === 'Alumni';
     if (mainLabel !== 'Prospect') {
       if (isSorti) { if (statut.toLowerCase().includes('contrat') && statut) labelsSet.add(statut); }
       else { if (statut) labelsSet.add(statut); if (classe) labelsSet.add(classe); if (campus) labelsSet.add(campus); }

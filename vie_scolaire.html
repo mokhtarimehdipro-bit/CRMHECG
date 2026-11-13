@@ -3809,7 +3809,7 @@ function updateSaisieCounter(groups, qDiplome, qClasses, qAnnee){
     // typo==='inscrit' faisait donc disparaître des étudiants réellement inscrits. On exclut donc
     // explicitement les 3 catégories à écarter, plutôt que d'exiger une valeur précise pour tous.
     const typo = String(e.typo||'').trim();
-    if (typo==='préinscrit' || typo==='prospect' || typo==='sortie') return false;
+    if (typo==='préinscrit' || typo==='prospect' || typo.startsWith('sortie')) return false;
     if (String(e.sortie||'').trim()) return false; // date de sortie renseignée = plus inscrit
     if (!String(e.classe||'').trim()) return false; // pas de classe = pas rattaché à une promo
     if (diplomeFromClasse(e.classe) !== qDiplome) return false;
@@ -7042,7 +7042,7 @@ function renderSimViewByClass(sim,data,rooms,dates,jours,filtClasse,filtSurv,fil
   }
   let html='<div class="space-y-4">';
   Object.entries(byClasse).sort(([a],[b])=>a.localeCompare(b)).forEach(([classe,slots])=>{
-    const eff=allEtudiants.filter(e=>e.classe===classe&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
+    const eff=allEtudiants.filter(e=>e.classe===classe&&!/^SORTIE/.test(e.statut||'')&&e.statut!=='PROSPECT').length;
     html+=`<div style="background:#fff;border:1px solid #f3f4f6;border-radius:1rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.07)">
       <div style="background:linear-gradient(135deg,#1A4E8A,#2563eb);color:#fff;padding:0.75rem 1.25rem;display:flex;justify-content:space-between;align-items:center">
         <div><div style="font-weight:900;font-size:1rem">${classe}</div><div style="font-size:0.78rem;opacity:0.8">${eff} étudiant${eff>1?'s':''}</div></div>
@@ -7216,7 +7216,7 @@ function renderSimSlotMini(slots, room, rKey, dk, per){
   const conflicts = rKey ? detectSimConflicts() : [];
   return slots.map((sl,i)=>{
     const eff=(sl.classes||[]).reduce((a,c)=>{
-      const cnt=allEtudiants.filter(e=>e.classe===c&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
+      const cnt=allEtudiants.filter(e=>e.classe===c&&!/^SORTIE/.test(e.statut||'')&&e.statut!=='PROSPECT').length;
       return a+cnt;
     },0);
     const over=room.capacite>0&&eff>room.capacite;
@@ -7261,7 +7261,7 @@ function renderSimSlotForm(room){
 
 function renderOneSlotForm(sl,i,room,classes){
   const eff=(sl.classes||[]).reduce((a,c)=>{
-    return a+allEtudiants.filter(e=>e.classe===c&&e.statut!=='SORTIE'&&e.statut!=='PROSPECT').length;
+    return a+allEtudiants.filter(e=>e.classe===c&&!/^SORTIE/.test(e.statut||'')&&e.statut!=='PROSPECT').length;
   },0);
   const over=room?.capacite>0&&eff>room.capacite;
   return `<div style="border:1px solid ${over?'#fecaca':'#e5e7eb'};background:${over?'#fef2f2':'#f9fafb'};border-radius:0.75rem;padding:1rem;margin-bottom:0.75rem">

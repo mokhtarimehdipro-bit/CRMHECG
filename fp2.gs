@@ -281,41 +281,97 @@ function _fp2Charlemagne_(ss) {
 }
 
 // OCR (Drive) des pièces d'identité / dossiers d'inscription du dossier GED
-function _fp2Ocr_(dossier) {
+// Texte OCR d'un PDF / d'une image (copie convertie en Google Doc puis export texte ; la copie part à la corbeille)
+function _fp2OcrTexte_(fileId) {
+  var r = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + fileId + "/copy?supportsAllDrives=true&ocrLanguage=fr", {
+    method: "post", contentType: "application/json", muteHttpExceptions: true, headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+    payload: JSON.stringify({ name: "OCR temporaire", mimeType: "application/vnd.google-apps.document", parents: [_fp2DossierTravail_().getId()] }) });
+  if (r.getResponseCode() !== 200) return "";
+  var docId = JSON.parse(r.getContentText()).id, txt = "";
+  try { txt = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + docId + "/export?mimeType=text/plain", { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }).getContentText(); } catch (e) {}
+  try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {}
+  return txt;
+}
+
+// Pièces utiles, par ordre de priorité : fiche de renseignement, dossier d'inscription / candidature, pièce d'identité
+var FP2_PIECES = [
+  [/fiche de renseignement|renseignements/, 1],
+  [/dossier (hecg|d inscription|inscription)|inscription|dossier d admission/, 2],
+  [/\bcni\b|carte d identite|carte nationale|identite|passeport|titre de sejour|\bpiece\b/, 3],
+  [/candidature/, 4]
+];
+function _fp2Pieces_(dossiers) {
+  var out = [], vus = {};
+  var voir = function (f, nom) {
+    var mt = f.getMimeType(), id = f.getId();
+    if (mt === "application/vnd.google-apps.shortcut") { try { id = f.getTargetId(); mt = DriveApp.getFileById(id).getMimeType(); } catch (e) { return; } }
+    if (vus[id] || !/pdf|image\/(jpe?g|png)/i.test(mt)) return;
+    var n = _fp2N_(nom); for (var q = 0; q < FP2_PIECES.length; q++) if (FP2_PIECES[q][0].test(n)) { vus[id] = 1; out.push({ id: id, nom: nom, prio: FP2_PIECES[q][1] }); return; }
+  };
+  var parc = function (d, prof) {
+    try { var it = d.getFiles(); while (it.hasNext()) { var f = it.next(); voir(f, f.getName()); }
+      if (prof < 2) { var sf = d.getFolders(); while (sf.hasNext()) { var y = sf.next(); if (prof === 0 || /admin|inscri|identit|papier|personnel/i.test(y.getName())) parc(y, prof + 1); } } } catch (e) {}
+  };
+  dossiers.forEach(function (d) { parc(d, 0); });
+  return out.sort(function (a, b) { return a.prio - b.prio; });
+}
+function _fp2Ocr_(dossiers) {
   var res = {}, n = 0;
+  if (!dossiers || !dossiers.length) return res;
   try {
-    var it = dossier.getFiles(), cands = [];
-    while (it.hasNext()) { var f = it.next(), nm = _fp2N_(f.getName()), mt = f.getMimeType();
-      if (!/pdf|image\/(jpe?g|png)/.test(mt)) continue;
-      if (/\bcni\b|carte d identite|identite|passeport|titre de sejour|piece|inscription|dossier d admission|candidature/.test(nm)) cands.push(f); }
-    var subs = dossier.getFolders();
-    while (subs.hasNext() && cands.length < 6) { var s = subs.next(); if (!/administratif|admin|inscription/i.test(s.getName())) continue;
-      var it2 = s.getFiles(); while (it2.hasNext()) { var f2 = it2.next(), nm2 = _fp2N_(f2.getName());
-        if (/pdf|image\/(jpe?g|png)/.test(f2.getMimeType()) && /\bcni\b|carte d identite|identite|passeport|titre de sejour|piece|inscription/.test(nm2)) cands.push(f2); } }
-    cands.slice(0, 3).forEach(function (f) {
+    var cands = _fp2Pieces_(dossiers);
+    cands.slice(0, 4).forEach(function (f) {
       if (res.naissance && res.nationalite && res.ville && res.civilite && res.permis && res.vehicule) return;
-      var r = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + f.getId() + "/copy?supportsAllDrives=true&ocrLanguage=fr", {
-        method: "post", contentType: "application/json", muteHttpExceptions: true, headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
-        payload: JSON.stringify({ name: "OCR temporaire", mimeType: "application/vnd.google-apps.document", parents: [_fp2DossierTravail_().getId()] }) });
-      if (r.getResponseCode() !== 200) return;
-      var docId = JSON.parse(r.getContentText()).id, txt = "";
-      try { txt = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + docId + "/export?mimeType=text/plain", { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }).getContentText(); } catch (e) {}
-      try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {}
-      n++;
-      var m;
+      var txt = _fp2OcrTexte_(f.id); n++;
+      if (!txt) return;
+      var m, src = f.nom;
       if (!res.naissance && (m = txt.match(/n[ée]+\s*\(?e?\)?\s*le\s*[:\s]*(\d{1,2})[\s.\/-](\d{1,2})[\s.\/-](\d{4})/i) || txt.match(/date de naiss\w*\s*[:\s\/]*(\d{1,2})[\s.\/-](\d{1,2})[\s.\/-](\d{4})/i)))
-        res.naissance = { v: ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3], src: f.getName() };
-      if (!res.nationalite && (m = txt.match(/nationalit[ée]\s*[:\/]?\s*([A-Za-zÀ-ÿ\-]{4,20})/i))) res.nationalite = { v: m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase(), src: f.getName() };
-      if (!res.nationalite && /REPUBLIQUE FRAN[CÇ]AISE|CARTE NATIONALE D.IDENTIT/i.test(txt)) res.nationalite = { v: "Française", src: f.getName() };
-      if (!res.civilite && (m = txt.match(/\bsexe\s*(?:\/\s*sex)?\s*[:\/]?\s*([FM])\b/i))) res.civilite = { v: m[1].toUpperCase() === "F" ? "Madame" : "Monsieur", src: f.getName() };
-      if (!res.civilite && (m = txt.match(/civilit[ée]\s*[:\/]?\s*(madame|monsieur|mme|m\.)/i))) res.civilite = { v: /^m(me|adame)/i.test(m[1]) ? "Madame" : "Monsieur", src: f.getName() };
-      if (!res.permis && (m = txt.match(/permis(?: de conduire)?(?: b)?\s*[:?]?\s*(oui|non)\b/i))) res.permis = { v: _fp2OuiNon_(m[1]), src: f.getName() };
-      if (!res.vehicule && (m = txt.match(/v[ée]hicul[ée]?e?s?\s*(?:personnel)?\s*[:?]?\s*(oui|non)\b/i))) res.vehicule = { v: _fp2OuiNon_(m[1]), src: f.getName() };
-      if (!res.ville && (m = txt.match(/\b(\d{5})\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]{2,30})/))) res.ville = { v: m[2].trim().replace(/\s+(CEDEX.*)$/i, ""), src: f.getName() };
+        res.naissance = { v: ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3], src: src };
+      if (!res.nationalite && (m = txt.match(/nationalit[ée]\s*[:\/]?\s*([A-Za-zÀ-ÿ\-]{4,20})/i))) res.nationalite = { v: _fp2Nat_(m[1]), src: src };
+      // nationalité écrite à côté du libellé (formulaires manuscrits) : adjectif reconnu dans le haut du document
+      var NAT = /\b(fran[cç]aise?|alg[ée]rienne?|marocaine?|tunisienne?|comorienne?|s[ée]n[ée]galaise?|ivoirienne?|camerounaise?|italienne?|espagnole?|portugaise?|turque|malienne?|guin[ée]enne?|congolaise?|malgache|arm[ée]nienne?|russe|ukrainienne?|roumaine?|belge|suisse|libanaise?|syrienne?|égyptienne?|egyptienne?|mauritanienne?|djiboutienne?|ha[iï]tienne?|chinoise?|vietnamienne?|am[ée]ricaine?|britannique|allemande?)\b/i;
+      var haut = txt.split("\n").slice(0, 40).join("\n");
+      if (!res.nationalite && /nationalit/i.test(haut) && (m = haut.match(NAT))) { res.nationalite = { v: _fp2Nat_(m[1]), src: src };
+        // l'accord de l'adjectif écrit par l'étudiant(e) indique la civilité (signalé « à vérifier »)
+        if (!res.civilite) { var adj = m[1].toLowerCase(); var fem = /(aise|ienne|aine|ole|oise|ande|nne)$/.test(adj), masc = /(ais|ien|ain|ol|ois|and)$/.test(adj) && !fem;
+          if (fem || masc) res.civilite = { v: fem ? "Madame" : "Monsieur", src: src + " (accord de « " + m[1] + " »)" }; } }
+      if (!res.nationalite && /REPUBLIQUE FRAN[CÇ]AISE|CARTE NATIONALE D.IDENTIT/i.test(txt)) res.nationalite = { v: "Française", src: src };
+      if (!res.civilite && (m = txt.match(/\bsexe\s*(?:\/\s*sex)?\s*[:\/]?\s*([FM])\b/i))) res.civilite = { v: m[1].toUpperCase() === "F" ? "Madame" : "Monsieur", src: src };
+      if (!res.civilite && (m = txt.match(/civilit[ée]\s*[:\/]?\s*(madame|monsieur|mademoiselle|mme|mlle|m\.)/i))) res.civilite = { v: /^m(me|adame|lle|ademoiselle)/i.test(m[1]) ? "Madame" : "Monsieur", src: src };
+      if (!res.civilite && (m = txt.match(/\b(madame|monsieur)\s*[x☒■✓✔]/i))) res.civilite = { v: /^madame/i.test(m[1]) ? "Madame" : "Monsieur", src: src };
+      if (!res.permis && (m = txt.match(/permis(?: de conduire)?(?: b)?\s*[:?]?\s*(oui|non)\b/i))) res.permis = { v: _fp2OuiNon_(m[1]), src: src };
+      if (!res.vehicule && (m = txt.match(/v[ée]hicul[ée]?e?s?\s*(?:personnel|motoris[ée]e?)?\s*[:?]?\s*(oui|non)\b/i))) res.vehicule = { v: _fp2OuiNon_(m[1]), src: src };
+      if (!res.ville && (m = txt.match(/\bville\s*[:\/]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]{2,30})/))) res.ville = { v: _fp2Cap_(m[1].trim()), src: src };
+      if (!res.ville && (m = txt.match(/\b(\d{5})\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]{2,30})/))) res.ville = { v: _fp2Cap_(m[2].trim().replace(/\s+(CEDEX.*)$/i, "")), src: src };
     });
   } catch (e) {}
   res._lus = n;
   return res;
+}
+
+// Dossiers où chercher les pièces : dossier GED du CRM + dossiers d'origine des fiches historiques (« NOM Prénom/Administratif »)
+// + dossier Drive portant le nom de l'étudiant (recherche par nom, mise en cache)
+function _fp2DossiersEtudiant_(e, histoIds, dossierGed) {
+  var L = [], vus = {};
+  var add = function (d) { if (d && !vus[d.getId()]) { vus[d.getId()] = 1; L.push(d); } };
+  add(dossierGed);
+  (histoIds || []).forEach(function (fid) {
+    try { var p = DriveApp.getFileById(fid).getParents(); if (!p.hasNext()) return; var par = p.next();
+      var gp = par.getParents(); add(gp.hasNext() && /admin|archive|scolar|fiche/i.test(par.getName()) ? gp.next() : par); } catch (x) {}
+  });
+  if (L.length < 2) {
+    try {
+      var cle = "fp2etu_" + e.id, sc = CacheService.getScriptCache(), c = sc.get(cle);
+      if (c === null) {
+        var nom = String(e.nom).split(" ")[0].replace(/'/g, "\\'"), ids = [];
+        var it = DriveApp.searchFolders("title contains '" + nom + "' and trashed = false"), pre = _fp2N_(e.prenom).split(" ")[0];
+        while (it.hasNext() && ids.length < 3) { var f = it.next(), t = " " + _fp2N_(f.getName()) + " "; if (pre && t.indexOf(" " + pre + " ") >= 0 && t.indexOf(" " + _fp2N_(e.nom).split(" ")[0] + " ") >= 0) ids.push(f.getId()); }
+        c = ids.join(","); sc.put(cle, c, 21600);
+      }
+      c.split(",").filter(String).forEach(function (id) { try { add(DriveApp.getFolderById(id)); } catch (x) {} });
+    } catch (x) {}
+  }
+  return L;
 }
 
 // Civilité, ville, date de naissance, nationalité, permis B, véhicule :
@@ -324,7 +380,7 @@ function _fp2OuiNon_(v) { var t = _fp2N_(v); return /^(oui|o|yes|y|1|vrai|x)$/.t
 function _fp2Civ_(v) { var t = _fp2N_(v); return /^(mme|madame|mlle|mademoiselle|f|femme|feminin)$/.test(t) ? "Madame" : /^(m|mr|monsieur|h|homme|masculin)$/.test(t) ? "Monsieur" : ""; }
 function _fp2Cap_(v) { return String(v || "").trim().toLowerCase().replace(/(^|[\s\-'])([a-zà-ÿ])/g, function (m, a, b) { return a + b.toUpperCase(); }); }
 function _fp2Nat_(v) { var t = String(v || "").trim(); if (!t) return ""; if (/^(fr|fra|francais|française|francaise)$/i.test(_fp2N_(t)) || /^fran[cç]ais/i.test(t)) return "Française"; return _fp2Cap_(t); }
-function _fp2Sources_(ctx, e, champ, dossier) {
+function _fp2Sources_(ctx, e, champ, dossiers) {
   var c = ctx.charl.parId[e.idEleve] || ctx.charl.parNom[_fp2N_(e.nom + " " + e.prenom)] || {}, notes = {}, R = {};
   R.naissance = c.naissance ? _fp2Fmt_(_charlDate_(c.naissance)) : (champ("naissance") || "");
   R.civilite = _fp2Civ_(c.civilite) || _fp2Civ_(champ("civilite")) || "";
@@ -333,8 +389,8 @@ function _fp2Sources_(ctx, e, champ, dossier) {
   R.permis = _fp2OuiNon_(c.permis) || _fp2OuiNon_(champ("permis"));
   R.vehicule = _fp2OuiNon_(c.vehicule) || _fp2OuiNon_(champ("vehicule"));
   var manque = ["naissance", "civilite", "ville", "nationalite", "permis", "vehicule"].filter(function (k) { return !R[k]; });
-  if (manque.length && dossier) {
-    var o = _fp2Ocr_(dossier);
+  if (manque.length && dossiers && dossiers.length) {
+    var o = _fp2Ocr_(dossiers);
     manque.forEach(function (k) { if (o[k]) { R[k] = o[k].v; notes[k] = "Lu par OCR sur « " + o[k].src + " » — à vérifier"; } });
   }
   R.notes = notes;
@@ -359,7 +415,7 @@ function _fp2Generer_(ss, row, ctx) {
   var champ = function (k) { for (var i = 0; i < histos.length; i++) { var D = histos[i].D; if (D && D.champs && D.champs[k]) return D.champs[k]; } return ""; };
 
   var dossier = _fpDossierGed_(ss, e.id, e.nom, e.prenom);
-  var SRC = _fp2Sources_(ctx, e, champ, dossier), notes = SRC.notes;
+  var SRC = _fp2Sources_(ctx, e, champ, _fp2DossiersEtudiant_(e, histos.map(function (h) { return h.id; }), dossier)), notes = SRC.notes;
   var base = { civilite: SRC.civilite, nom: e.nom.toUpperCase(), prenom: e.prenom, ville: SRC.ville, naissance: SRC.naissance, nationalite: SRC.nationalite,
     autorisation: champ("autorisation") || (/fran[cç]ais/i.test(SRC.nationalite) ? "Oui" : ""), permis: SRC.permis, vehicule: SRC.vehicule, langues: champ("langues") };
 
@@ -626,7 +682,7 @@ function _fp2CompleterLot_(ss, deadline) {
       var remplis = [];
       if (Object.keys(aRemplir).length) {
         var dossier = null; try { dossier = DriveApp.getFileById(String(d[i][FP2_C.classeurId])).getParents().next(); } catch (x) {}
-        var S = _fp2Sources_(ctx, e, champ, dossier);
+        var S = _fp2Sources_(ctx, e, champ, _fp2DossiersEtudiant_(e, hv.map(function (h) { return h.id; }), dossier));
         onglets.forEach(function (sh) {
           Object.keys(aRemplir).forEach(function (k) {
             var r = sh.getRange(FP2_CELL[k]);
@@ -767,7 +823,7 @@ function handleFp2(p, ss) {
     }
     if (op === "sortis") {
       var etus = _fp2Etudiants_(ss), deja = {}; ws.getDataRange().getValues().slice(1).forEach(function (r) { deja[String(r[0])] = r[FP2_C.decision]; });
-      var S = Object.keys(etus).map(function (k) { return etus[k]; }).filter(function (e) { return e.typoN === "sortie" || e.typoN === "refuse"; })
+      var S = Object.keys(etus).map(function (k) { return etus[k]; }).filter(function (e) { return /^sortie/.test(e.typoN) || e.typoN === "refuse"; })
         .map(function (e) { return { id: e.id, nom: e.nom, prenom: e.prenom, classe: e.classe, typo: e.typo, sortie: e.sortie instanceof Date ? _fp2Fmt_(e.sortie) : String(e.sortie || ""), motif: e.motifSortie, decision: deja[e.id] || "" }; });
       return createJsonResponse({ success: true, sortis: S });
     }
@@ -812,6 +868,37 @@ function handleFp2(p, ss) {
       var jc = _fp2Job_(); jc.phase = "completion"; jc.phaseDebut = Date.now(); jc.actif = true; jc.pause = false; _fp2SetJob_(jc);
       _fp2Log_(ss, "Commande", "Complétion des champs (civilité, ville, naissance, nationalité, permis, véhicule) sur toutes les fiches faites");
       return createJsonResponse({ success: true });
+    }
+    if (op === "fichiersDossier") {
+      var etF = _fp2Etudiants_(ss), out = [];
+      (p.ids || []).forEach(function (id) { var e = etF[id]; if (!e) return; var dos = _fpDossierGed_(ss, e.id, e.nom, e.prenom), L = [];
+        var parc = function (f, ch, prof) { var it = f.getFiles(); while (it.hasNext()) { var x = it.next(); L.push(ch + x.getName() + " [" + x.getMimeType().split(/[./]/).pop() + "]"); } if (prof < 2) { var sf = f.getFolders(); while (sf.hasNext()) { var y = sf.next(); parc(y, ch + y.getName() + "/", prof + 1); } } };
+        parc(dos, "", 0); out.push({ id: id, nom: e.nom + " " + e.prenom, fichiers: L }); });
+      return createJsonResponse({ success: true, dossiers: out });
+    }
+    if (op === "fichiersAutour") {
+      var outA = [];
+      (p.fichiers || []).forEach(function (fid) { var L = [];
+        try { var par = DriveApp.getFileById(fid).getParents().next(), gp = par.getParents().hasNext() ? par.getParents().next() : null, base = gp || par;
+          var parc = function (f, ch, prof) { var it = f.getFiles(); while (it.hasNext() && L.length < 80) { var x = it.next(); L.push(ch + x.getName() + " [" + x.getMimeType().split(/[./]/).pop() + "]"); } if (prof < 2) { var sf = f.getFolders(); while (sf.hasNext()) { var y = sf.next(); parc(y, ch + y.getName() + "/", prof + 1); } } };
+          parc(base, base.getName() + "/", 0);
+        } catch (x) { L.push("ERR " + x); }
+        outA.push({ f: fid, fichiers: L }); });
+      return createJsonResponse({ success: true, r: outA });
+    }
+    if (op === "ocr") { return createJsonResponse({ success: true, texte: _fp2OcrTexte_(p.id).slice(0, 6000) }); }
+    if (op === "pieces") { var etP = _fp2Etudiants_(ss)[p.etu], hvP = []; ws.getDataRange().getValues().forEach(function (r) { if (String(r[0]) === p.etu) { try { hvP = JSON.parse(r[FP2_C.histo] || "[]"); } catch (x) {} } });
+      var dsP = _fp2DossiersEtudiant_(etP, hvP.map(function (h) { return h.id; }), _fpDossierGed_(ss, etP.id, etP.nom, etP.prenom));
+      return createJsonResponse({ success: true, dossiers: dsP.map(function (d) { return d.getName(); }), pieces: _fp2Pieces_(dsP) }); }
+    if (op === "alumni") {   // sortis en fin d'études → SORTIE ALUMNI (aperçu, puis application avec appliquer:true)
+      var wsE2 = getSheetSafe(ss, "ETUDIANTS"), dA = wsE2.getDataRange().getValues(), cibles = [];
+      for (var a2 = 1; a2 < dA.length; a2++) { var ty = String(dA[a2][20] || "").toUpperCase();
+        if (/^SORTIE$/.test(ty.trim()) && _estFinEtudes_(dA[a2][19])) cibles.push({ ligne: a2 + 1, id: dA[a2][0], nom: dA[a2][2] + " " + dA[a2][3], motif: dA[a2][19], classe: dA[a2][14] }); }
+      if (p.appliquer === true) {
+        cibles.forEach(function (c) { wsE2.getRange(c.ligne, 21).setValue("SORTIE ALUMNI"); try { _invalidateStudentDetailsCache_(c.id); } catch (x) {} });
+        logAction(p.emailAuteur, "", "Modification", "Étudiants — statut Alumni", "ETUDIANTS", cibles.length + " sorti(s) en fin d'études passé(s) au statut SORTIE ALUMNI");
+      }
+      return createJsonResponse({ success: true, n: cibles.length, applique: p.appliquer === true, parMotif: cibles.reduce(function (o, c) { o[c.motif] = (o[c.motif] || 0) + 1; return o; }, {}) });
     }
     if (op === "kick") { fp2Tick(280000); return createJsonResponse({ success: true }); }
     if (op === "declencheurs") return createJsonResponse({ success: true, liste: ScriptApp.getProjectTriggers().map(function (t) { return { f: t.getHandlerFunction(), type: String(t.getEventType()), src: String(t.getTriggerSource()) }; }) });

@@ -121,7 +121,7 @@ function handleGetTachesRef(p, ss) {
           const lib = (String(dE[k][3] || "") + " " + String(dE[k][2] || "")).trim();
           const cl = String(dE[k][14] || "").trim();
           if (cl) classes[cl] = true;
-          mandats.push(["etudiant", id, lib, cl + (String(dE[k][20] || "").toLowerCase() === "sortie" ? " · sortie" : "")]);
+          mandats.push(["etudiant", id, lib, cl + (/^sortie/.test(String(dE[k][20] || "").toLowerCase()) ? (/alumni/i.test(String(dE[k][20])) ? " · alumni" : " · sortie") : "")]);
         }
         Object.keys(classes).sort().forEach(function(c) { mandats.push(["classe", c, c, "Classe"]); });
         const dPa = getSheetSafe(ss, "PARTENARIAT").getDataRange().getValues();

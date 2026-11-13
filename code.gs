@@ -694,6 +694,9 @@ function _etuAccesFerme_(ss, idEtu) {
   return liste.indexOf("|" + String(idEtu || "").trim().toUpperCase() + "|") !== -1;
 }
 
+// Sortie en fin d'études (motif « Fin de parcours / Diplôme obtenu » ou « … Échoué ») → statut ALUMNI
+function _estFinEtudes_(motif) { var m = String(motif || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); return /fin de parcours|diplome (obtenu|echoue)/.test(m); }
+
 function calculerTypoEtu(entree, sortie, classe) {
   if (sortie && String(sortie).trim() !== "") return "SORTIE";
   if (!classe || String(classe).trim() === "") return "PROSPECT";
@@ -8006,7 +8009,10 @@ function handleUpdateStudent(p, ss) {
 
     let typoFinale = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
     // Si une date de sortie est définie, la typo est forcément SORTIE
-    if (p.sortie && String(p.sortie).trim() && !/^REFUS/.test(typoFinale)) typoFinale = "SORTIE";   // un étudiant refusé reste REFUSÉ
+    if (p.sortie && String(p.sortie).trim() && !/^REFUS/.test(typoFinale) && !/ALUMNI/.test(typoFinale)) typoFinale = "SORTIE";   // un étudiant refusé reste REFUSÉ
+    // Alumni : sortie en fin d'études (diplôme obtenu ou échoué) — statut « SORTIE ALUMNI » (garder le contact)
+    var motifFin = p.motifSortie !== undefined ? p.motifSortie : oldRow[19];
+    if (p.sortie && String(p.sortie).trim() && /^SORTIE/.test(typoFinale) && _estFinEtudes_(motifFin)) typoFinale = "SORTIE ALUMNI";
 
     const updatedRow = [
       oldRow[0],           // A : id_etu
@@ -11726,7 +11732,7 @@ function _countStudentsByClasse(ss) {
     for (var i = 1; i < data.length; i++) {
       var classe = String(data[i][14]||"").trim();
       var statut = String(data[i][20]||"").trim();
-      if (!classe || statut === "SORTIE" || statut === "PROSPECT") continue;
+      if (!classe || /^SORTIE/.test(statut) || statut === "PROSPECT") continue;
       map[classe] = (map[classe]||0) + 1;
     }
   } catch(e) {}

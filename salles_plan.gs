@@ -14,7 +14,7 @@ function _splanEtudiantsParClasse_(ss) {
   const map = {};
   for (let i = 1; i < d.length; i++) {
     const classe = String(d[i][14] || "").trim(), typo = String(d[i][20] || "").trim().toUpperCase();
-    if (!classe || typo === "SORTIE" || typo === "PROSPECT") continue;
+    if (!classe || /^SORTIE/.test(typo) || typo === "PROSPECT") continue;
     (map[classe] = map[classe] || []).push({ id: String(d[i][0]), nom: (String(d[i][3] || "").trim() + " " + String(d[i][2] || "").trim().toUpperCase()).trim() });
   }
   Object.keys(map).forEach(function(c) { map[c].sort(function(a, b) { return a.nom.localeCompare(b.nom, "fr"); }); });

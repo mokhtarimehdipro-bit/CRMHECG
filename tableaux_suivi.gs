@@ -222,7 +222,7 @@ function _tabSuiviLoadCrm_(ss, type, f, cache) {
       }
       match = match && inList(f.campus, r[22]) && (!f.referent || String(r[7]).trim() === String(f.referent).trim());
       const campusLib = r[22] === "HECG_AIX" ? "Aix-en-Provence" : (r[22] === "HECG" ? "Marseille" : String(r[22] || ""));
-      out.push({ id: id, match: match, tag: typo === "sortie" ? "❌ SORTIE" : "", values: [
+      out.push({ id: id, match: match, tag: /^sortie/.test(typo) ? (/alumni/.test(typo) ? "🎓 ALUMNI" : "❌ SORTIE") : "", values: [
         String(r[2] || ""), String(r[3] || ""), String(r[14] || ""), campusLib, String(r[20] || ""), String(r[13] || ""),
         String(r[21] || ""), String(r[4] || ""), String(r[5] || ""), String(r[26] || ""), refNom[String(r[7]).trim()] || String(r[7] || ""),
         String(r[15] || ""), String(r[16] || ""), String(r[24] || ""), fmt(r[17]), fmt(r[18]), String(r[19] || ""), ech ? fmt(ech) : ""

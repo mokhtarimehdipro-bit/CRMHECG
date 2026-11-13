@@ -107,6 +107,7 @@
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="préinscrit" checked onchange="onMsChange('fTypo')"> ⏳ Préinscrits</label>
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="prospect" onchange="onMsChange('fTypo')"> 🎯 Prospects</label>
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="sortie" onchange="onMsChange('fTypo')"> ❌ Sorties</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="sortie alumni" onchange="onMsChange('fTypo')"> 🎓 Alumni</label>
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="refusé" onchange="onMsChange('fTypo')"> ⛔ Refusés</label>
                 </div>
             </div>
@@ -288,6 +289,7 @@
                             <option value="Préinscrit">⏳ Préinscrit</option>
                             <option value="Inscrit">🎓 Inscrit</option>
                             <option value="Sortie">❌ Sortie</option>
+                            <option value="Sortie Alumni">🎓 Alumni (fin d'études)</option>
                             <option value="Refusé">⛔ Refusé</option>
                         </select>
                     </div>
@@ -670,7 +672,7 @@ async function apiPost(payload) {
             if (!labelEl) return;
             const defaults = { fTypo: '🌍 Tous', fCampus: '🌍 Tous les campus', fClasse: '🎓 Toutes les classes', fStatut: '🎯 Tous statuts' };
             const singleLabels = {
-                fTypo: { inscrit: '🎓 Inscrits', 'préinscrit': '⏳ Préinscrits', prospect: '🎯 Prospects', sortie: '❌ Sorties', 'refusé': '⛔ Refusés' },
+                fTypo: { inscrit: '🎓 Inscrits', 'préinscrit': '⏳ Préinscrits', prospect: '🎯 Prospects', sortie: '❌ Sorties', 'sortie alumni': '🎓 Alumni', 'refusé': '⛔ Refusés' },
                 fCampus: { HECG: '📍 Marseille', HECG_AIX: '📍 Aix-en-Provence' },
                 fStatut: { recherche: '🔍 Recherche', initial: '🎒 Initial', alternance: '🏢 Alternance', contrat: '💼 Contrat', 'non su': '❓ Non su' }
             };
@@ -774,7 +776,7 @@ async function apiPost(payload) {
                 if (showAlumniOnly) {
                     let motifLow = String(e.motif || "").toLowerCase();
                     // Tolérance maximale : on cherche juste "dipl" et "obtenu" pour ignorer les accents
-                    let isAlumni = motifLow.includes("dipl") && motifLow.includes("obtenu");
+                    let isAlumni = (e.typo || "").toLowerCase().includes("alumni") || (motifLow.includes("dipl") && (motifLow.includes("obtenu") || motifLow.includes("chou")));
                     
                     // On garde quand même la possibilité de chercher un nom ou un campus spécifique parmi les Alumni
                     const alumniTarget = `${e.id || ""} ${e.nom || ""} ${e.prenom || ""}`.toLowerCase();
@@ -847,7 +849,7 @@ async function apiPost(payload) {
                 else if(s.includes('initial')) countInit++;
                 else if(s.includes('recherche')) countRech++;
 
-                if(t === 'sortie') countSorties++;
+                if(t.startsWith('sortie')) countSorties++;
             });
             
             document.getElementById('kpi-tot').innerText = filtered.length;
@@ -884,7 +886,7 @@ async function apiPost(payload) {
                     </td>
                     <td class="p-5">
                         <div class="font-mono text-xs text-[#1A4E8A] font-black">${e.classe || '-'}</div>
-                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${(e.typo||'').toLowerCase() === 'sortie' ? 'text-red-500' : ''}">${e.typo || 'Non su'}</div>
+                        <div class="text-[9px] font-black uppercase text-slate-400 mt-1 ${(e.typo||'').toLowerCase() === 'sortie' ? 'text-red-500' : ''}${/alumni/i.test(e.typo||'') ? 'text-emerald-600' : ''}">${/alumni/i.test(e.typo||'') ? '🎓 Alumni' : (e.typo || 'Non su')}</div>
                     </td>
                     <td class="p-5">${badgeStatut}</td>
                     <td class="p-5 text-[10px] font-bold text-slate-500">
@@ -903,7 +905,8 @@ async function apiPost(payload) {
             const hasSortie = !!document.getElementById('formSortie').value;
             const hasMotif = !!document.getElementById('formMotif').value;
             if ((hasSortie || hasMotif) && document.getElementById('formForceTypo').value !== 'Refusé') {
-                document.getElementById('formForceTypo').value = 'Sortie';
+                const m = document.getElementById('formMotif').value.toLowerCase();
+                document.getElementById('formForceTypo').value = /fin de parcours/.test(m) ? 'Sortie Alumni' : 'Sortie';
             }
         }
 
@@ -966,6 +969,7 @@ async function apiPost(payload) {
                 // Normalisation typologie (insensible à la casse, valeurs legacy incluses)
                 const _ty = (e.typo || "").toLowerCase().trim();
                 const _typo = _ty.includes('refus') ? "Refusé"
+                    : _ty.includes('alumni') ? "Sortie Alumni"
                     : (_ty.includes('préin') || _ty.includes('prein')) ? "Préinscrit"
                     : _ty.includes('sorti')     ? "Sortie"
                     : _ty.includes('inscrit')   ? "Inscrit"

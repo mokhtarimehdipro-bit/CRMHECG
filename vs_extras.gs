@@ -25,7 +25,7 @@ function _vsxRef_(ss) {
     const typo = String(dE[i][20] || "").toLowerCase();
     if (typo === "prospect") continue;
     etudiants.push({ id: id, nom: String(dE[i][2] || ""), prenom: String(dE[i][3] || ""), classe: String(dE[i][14] || ""),
-                     campus: _vsxCampusLib_(dE[i][22]), sortie: typo === "sortie", typo: typo,
+                     campus: _vsxCampusLib_(dE[i][22]), sortie: /^sortie/.test(typo), typo: typo,
                      mail: String(dE[i][26] || "").trim() || String(dE[i][4] || "").trim(),
                      mailHecg: String(dE[i][26] || "").trim(), mailPerso: String(dE[i][4] || "").trim(), entId: String(dE[i][11] || "").trim() });
   }
