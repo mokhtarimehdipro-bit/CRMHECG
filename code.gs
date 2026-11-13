@@ -446,6 +446,8 @@ function doPostInner_(e) {
       case 'deletePc':                return handleDeletePc(params, ss);
       case 'savePcAnnee':             return handleSavePcAnnee(params, ss);
       case 'importerPc':              return handleImporterPc(params, ss);
+      case 'getPcInventaire':         return handleGetPcInventaire(params, ss);
+      case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
       case 'archiveExamDoc':          return handleArchiveExamDoc(params, ss);

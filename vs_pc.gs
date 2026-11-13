@@ -168,23 +168,24 @@ function handleGetPc(p, ss) {
     var etus = _vsuEtudiants_(ss), byId = {}; etus.forEach(function (e) { byId[e.id] = e; });
     var pcs = _pcLire_(ss), avec = {}, out = [];
     var etat = function (e) { return e ? (e.typo || "Non renseigné") : "Hors CRM"; };
+    var regime = function (e) { return e ? (_vsuAlternant_(e) ? "Alternance" : "Initial") : "—"; };   // alternance = statut ou entreprise renseignée
     pcs.forEach(function (x) {
       var e = x.etuId ? byId[x.etuId] : null; if (x.etuId) avec[x.etuId] = 1;
       var classe = e && e.classe ? e.classe : x.classeCharl;
       var recupAuto = !!(e && /sorti/i.test(e.typo) && x.serie && x.statut === "PC attribué");
       out.push({ pcId: x.pcId, etuId: x.etuId, idEleve: x.idEleve || (e ? e.idEleve : ""), nom: e ? e.nom : x.nom, prenom: e ? e.prenom : x.prenom, classe: classe, diplome: _vsuDiplome_(classe),
-        campus: e ? e.campus : "", etat: etat(e), serie: x.serie, brut: x.brut, modele: x.modele, statut: x.statut, annee: x.annee, dateRestit: x.dateRestit,
+        campus: e ? e.campus : "", etat: etat(e), regime: regime(e), serie: x.serie, brut: x.brut, modele: x.modele, statut: x.statut, annee: x.annee, dateRestit: x.dateRestit,
         commentaire: x.commentaire, comCharl: x.comCharl, source: x.source, verifier: x.verifier, manuel: x.manuel, maj: x.maj, par: x.par, historique: x.historique,
         recupAuto: recupAuto, recupForce: x.recupForce, recupMotif: x.recupMotif, recup: x.recupForce === "Oui" ? true : x.recupForce === "Non" ? false : recupAuto });
     });
     etus.forEach(function (e) {   // étudiants inscrits / préinscrits sans PC enregistré
       if (!e.inscrit || avec[e.id]) return;
-      out.push({ pcId: "", etuId: e.id, idEleve: e.idEleve, nom: e.nom, prenom: e.prenom, classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, etat: etat(e),
+      out.push({ pcId: "", etuId: e.id, idEleve: e.idEleve, nom: e.nom, prenom: e.prenom, classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, etat: etat(e), regime: regime(e),
         serie: "", brut: "", modele: "", statut: "Aucun PC", annee: "", dateRestit: "", commentaire: "", comCharl: "", source: "", verifier: "", manuel: false, maj: "", par: "", historique: [],
         recupAuto: false, recupForce: "", recupMotif: "", recup: false });
     });
     var dern = ""; try { var ci = ss.getSheetByName("CHARLEMAGNE_IMPORT"); if (ci) dern = String(ci.getRange(1, 1).getValue() || ""); } catch (eC) {}
-    return createJsonResponse({ success: true, lignes: out, statuts: PC_STATUTS, annees: _pcAnnees_(), dernierImport: dern });
+    return createJsonResponse({ success: true, lignes: out, statuts: PC_STATUTS, annees: _pcAnnees_(), dernierImport: dern, inventaire: _pcInvAutorise_(p) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 
@@ -294,4 +295,82 @@ function _pcFusionner_(lignes) {
     });
   });
   return out;
+}
+
+// ═══════════════════════════ INVENTAIRE DES PC (réservé m.mokhtari@hecg.fr — 13/11/2026) ═══════════════════════════
+// PC_INVENTAIRE : les PC de l'établissement et leur emplacement de rangement. Un PC est « Disponible » sauf si son
+// n° figure dans PC_SUIVI avec le statut « PC attribué » ou « PC donné » (un PC restitué redevient disponible).
+var PCINV_HEADERS = ["ID", "N° de série", "Modèle", "Emplacement", "Commentaire", "Ajouté le", "Ajouté par", "Mis à jour le", "Par"];
+var PCINV_EMAIL = "m.mokhtari@hecg.fr";
+function _pcInvAutorise_(p) { return String(p.emailAuteur || "").trim().toLowerCase() === PCINV_EMAIL; }
+function _pcInvSheet_(ss) {
+  var ws = _vsuEntete_(_vsxSheet_(ss, "PC_INVENTAIRE", PCINV_HEADERS), PCINV_HEADERS);
+  ws.getRange(1, 2, ws.getMaxRows(), 1).setNumberFormat("@");
+  return ws;
+}
+function _pcInvLire_(ss) {
+  var ws = ss.getSheetByName("PC_INVENTAIRE"); if (!ws || ws.getLastRow() < 2) return [];
+  return ws.getRange(2, 1, ws.getLastRow() - 1, PCINV_HEADERS.length).getValues().map(function (r, i) {
+    return { row: i + 2, id: String(r[0] || ""), serie: String(r[1] || ""), modele: String(r[2] || ""), emplacement: String(r[3] || ""), commentaire: String(r[4] || ""),
+      ajouteLe: _vsuIso_(r[5]), ajoutePar: String(r[6] || ""), maj: _vsuIso_(r[7]), par: String(r[8] || "") };
+  }).filter(function (x) { return x.id; });
+}
+function _pcNormSerie_(s) { return String(s || "").replace(/\s+/g, "").toUpperCase(); }
+
+function handleGetPcInventaire(p, ss) {
+  if (!_pcInvAutorise_(p)) return createJsonResponse({ success: false, message: "Inventaire réservé à la direction." });
+  try {
+    var etus = {}; _vsuEtudiants_(ss).forEach(function (e) { etus[e.id] = e; });
+    var parSerie = {};
+    _pcLire_(ss).forEach(function (x) {
+      if (!x.serie) return;
+      var e = etus[x.etuId], o = { statut: x.statut, etudiant: e ? (e.prenom + " " + e.nom).trim() : (x.prenom + " " + x.nom).trim(), classe: e ? e.classe : x.classeCharl, etat: e ? e.typo : "Hors CRM", dateRestit: x.dateRestit };
+      var c = parSerie[x.serie];   // priorité : attribué > donné > restitué
+      var rang = { "PC attribué": 3, "PC donné": 2, "PC restitué": 1 };
+      if (!c || (rang[o.statut] || 0) > (rang[c.statut] || 0)) parSerie[x.serie] = o;
+    });
+    var inv = _pcInvLire_(ss), dansInv = {};
+    var items = inv.map(function (x) {
+      dansInv[x.serie] = 1;
+      var s = parSerie[x.serie], dispo = !s || s.statut === "PC restitué";
+      return { id: x.id, serie: x.serie, modele: x.modele || _pcModele_(x.serie), emplacement: x.emplacement, commentaire: x.commentaire, ajouteLe: x.ajouteLe, ajoutePar: x.ajoutePar, maj: x.maj, par: x.par,
+        etat: dispo ? "Disponible" : s.statut === "PC donné" ? "Donné" : "Attribué", chez: dispo ? (s ? "restitué par " + s.etudiant + (s.dateRestit ? " le " + s.dateRestit.split("-").reverse().join("/") : "") : "") : s.etudiant + (s.classe ? " (" + s.classe + ")" : "") };
+    });
+    var restitues = Object.keys(parSerie).filter(function (k) { return parSerie[k].statut === "PC restitué" && !dansInv[k]; }).map(function (k) {
+      var s = parSerie[k]; return { serie: k, modele: _pcModele_(k), etudiant: s.etudiant, classe: s.classe, dateRestit: s.dateRestit };
+    });
+    return createJsonResponse({ success: true, items: items, restitues: restitues });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+
+/** ajouts : [{serie, modele, emplacement, commentaire}] (n° déjà présent = mise à jour), maj : [{id, champs}], suppr : [id] */
+function handleSavePcInventaire(p, ss) {
+  if (!_pcInvAutorise_(p)) return createJsonResponse({ success: false, message: "Inventaire réservé à la direction." });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    var ws = _pcInvSheet_(ss), inv = _pcInvLire_(ss), par = String(p.nomAuteur || p.emailAuteur || ""), now = new Date();
+    var bySerie = {}, byId = {}; inv.forEach(function (x) { bySerie[x.serie] = x; byId[x.id] = x; });
+    var nouv = [], nAj = 0, nMaj = 0, nSup = 0, det = [];
+    var maj = function (x, c) {
+      var ch = [];
+      if (c.serie !== undefined) { var s = _pcNormSerie_(c.serie); if (s && s !== x.serie) { if (bySerie[s] && bySerie[s] !== x) throw new Error("Le n° " + s + " est déjà dans l'inventaire."); ch.push("n° " + x.serie + " → " + s); delete bySerie[x.serie]; x.serie = s; bySerie[s] = x; } }
+      ["modele", "emplacement", "commentaire"].forEach(function (f) { if (c[f] === undefined) return; var v = String(c[f] || "").trim(); if (v !== x[f]) { ch.push(f + " : " + (x[f] || "—") + " → " + (v || "—")); x[f] = v; } });
+      if (ch.length && x.row) { ws.getRange(x.row, 2, 1, 8).setValues([[x.serie, x.modele, x.emplacement, x.commentaire, x.ajouteLe ? new Date(x.ajouteLe + "T12:00:00") : now, x.ajoutePar, now, par]]); nMaj++; det.push(x.serie + " (" + ch.join(", ") + ")"); }
+    };
+    (Array.isArray(p.ajouts) ? p.ajouts : []).forEach(function (a, i) {
+      var s = _pcNormSerie_(a.serie); if (!s) return;
+      if (bySerie[s]) { maj(bySerie[s], { modele: a.modele || undefined, emplacement: a.emplacement, commentaire: a.commentaire || undefined }); return; }
+      var x = { id: "INV" + now.getTime() + "-" + i, serie: s, modele: String(a.modele || "") || _pcModele_(s), emplacement: String(a.emplacement || "").trim(), commentaire: String(a.commentaire || "").trim() };
+      bySerie[s] = x; nouv.push([x.id, x.serie, x.modele, x.emplacement, x.commentaire, now, par, now, par]); nAj++;
+    });
+    (Array.isArray(p.maj) ? p.maj : []).forEach(function (m) { var x = byId[String(m.id)]; if (x) maj(x, m.champs || {}); });
+    var sup = (Array.isArray(p.suppr) ? p.suppr : []).map(function (id) { return byId[String(id)]; }).filter(Boolean).sort(function (a, b) { return b.row - a.row; });
+    sup.forEach(function (x) { ws.deleteRow(x.row); nSup++; det.push(x.serie + " supprimé"); });
+    if (nouv.length) ws.getRange(ws.getLastRow() + 1, 1, nouv.length, PCINV_HEADERS.length).setValues(nouv);
+    if (nAj || nMaj || nSup) logAction(par, p.vieScRole || "", nSup ? "Suppression" : nAj ? "Création" : "Modification", PC_CAT + " — Inventaire", "PC_INVENTAIRE",
+      nAj + " PC ajouté(s)" + (nouv.length ? " (" + nouv.slice(0, 10).map(function (r) { return r[1] + (r[3] ? " → " + r[3] : ""); }).join(", ") + (nouv.length > 10 ? "…" : "") + ")" : "") + ", " + nMaj + " modifié(s), " + nSup + " supprimé(s)" + (det.length ? " — " + det.slice(0, 10).join(" ; ") : ""));
+    return createJsonResponse({ success: true, ajoutes: nAj, modifies: nMaj, supprimes: nSup });
+  } catch (err) { return createJsonResponse({ success: false, message: err.message || err.toString() }); }
+  finally { try { lock.releaseLock(); } catch (eL) {} }
 }
