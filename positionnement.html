@@ -177,13 +177,14 @@ const filtrer = L => L.filter(x => (!S.f.classe || x.classe === S.f.classe) && (
 function vueSans() {
   const L = filtrer(S.liste.filter(x => x.decision === 'attente'));
   return `<h1>Inscrits sans fiche historique</h1><p class="sub">Aucune fiche faite à l’époque n’a été trouvée dans le Drive pour ces étudiants. Pour chacun : collez le lien de sa fiche (redirection), ou demandez une nouvelle fiche (nouvelle trame, grille à compléter).</p>
-  <div class="help">Une redirection ajoute la fiche indiquée comme historique de l’étudiant : elle est lue puis recopiée en onglet de base, et sa grille sert à remplir la nouvelle trame.</div>
+  <div class="help">Une redirection ajoute la fiche indiquée comme historique de l’étudiant : elle est lue puis recopiée en onglet de base, et sa grille sert à remplir la nouvelle trame. Les « fiches possibles » sont des fichiers du Drive portant son nom mais non rattachés automatiquement (orthographe différente, prénom absent…) : cliquez sur une suggestion pour la mettre dans le champ, vérifiez avec « voir », puis « Rediriger ».</div>
   ${filtres(S.liste.filter(x => x.decision === 'attente'))}
   <div class="tools"><button class="btn" onclick="toutCocher()">Tout cocher (${L.length})</button><button class="btn pri" ${S.selGen.size ? '' : 'disabled'} onclick="genererSel()">Générer une nouvelle fiche pour la sélection (${S.selGen.size})</button></div>
   <div class="card tw" style="padding:0">${L.length ? `<table><thead><tr><th></th><th>Étudiant</th><th>Classe</th><th>Lien de la fiche (redirection)</th><th></th></tr></thead><tbody>
     ${L.map(x => `<tr><td><input type="checkbox" ${S.selGen.has(x.id) ? 'checked' : ''} onchange="this.checked?S.selGen.add('${x.id}'):S.selGen.delete('${x.id}');rendre()"></td>
       <td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)} · ${esc(x.typo)}</div></td><td>${esc(x.classe)}</td>
-      <td><input class="in" style="width:100%" id="l_${x.id}" placeholder="https://docs.google.com/… ou https://drive.google.com/…"></td>
+      <td><input class="in" style="width:100%" id="l_${x.id}" placeholder="https://docs.google.com/… ou https://drive.google.com/…">
+        ${(x.suggestions || []).length ? `<div style="margin-top:6px;font-size:12px;color:var(--mu)">Fiches possibles : ${x.suggestions.map(f => `<span class="chip b" style="cursor:pointer" title="${esc(f.chemin)}" onclick="document.getElementById('l_${x.id}').value='https://drive.google.com/file/d/${esc(f.id)}'">${esc(f.nom.slice(0, 48))}${f.cree ? ' · ' + esc(f.cree.slice(0, 4)) : ''}</span> <a href="https://drive.google.com/file/d/${esc(f.id)}" target="_blank" style="font-size:11px">voir</a>`).join(' ')}</div>` : ''}</td>
       <td style="white-space:nowrap"><button class="btn sm pri" onclick="rediriger('${x.id}')">Rediriger</button> <button class="btn sm" onclick="decider('${x.id}','generer')">Nouvelle fiche</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Aucun inscrit en attente de décision 🎉</div>'}</div>`;
 }
 function toutCocher() { filtrer(S.liste.filter(x => x.decision === 'attente')).forEach(x => S.selGen.add(x.id)); rendre(); }

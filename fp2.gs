@@ -129,7 +129,7 @@ function _fp2Inventaire_(ss) {
   var liste = Object.keys(etus).map(function (k) { return etus[k]; });
   liste.forEach(function (e) { e._nom = _fp2N_(e.nom).split(" ").filter(function (t) { return t.length > 1; }); e._pre = _fp2N_(e.prenom).split(" ").filter(Boolean); });
 
-  var cache = {}, rattach = {}, ambigus = 0, orphelins = 0;
+  var cache = {}, rattach = {}, ambigus = 0, orphelins = 0, libres = [];
   fichiers.forEach(function (f) {
     var chaine = [], p = _fp2Dossier_(cache, (f.parents || [])[0]);
     for (var k = 0; k < 4 && p; k++) { chaine.push(p); p = p.parent ? _fp2Dossier_(cache, p.parent) : null; }
@@ -142,9 +142,14 @@ function _fp2Inventaire_(ss) {
       if (cands.length > 1) { var act = cands.filter(_fp2EstCible_); if (act.length === 1) cands = act; }
       if (cands.length === 1) idEtu = cands[0].id; else if (cands.length > 1) ambigus++; else orphelins++;
     }
-    if (!idEtu) return;
+    if (!idEtu) { if (!/^Fiches? de positionnement - /.test(f.name) || String(f.createdTime) < "2026-11-10") libres.push([f.id, f.name, String(f.createdTime).slice(0, 10), chaine.slice(0, 3).map(function (d) { return d.nom; }).reverse().join(" / ")]); return; }
     (rattach[idEtu] = rattach[idEtu] || []).push({ id: f.id, nom: f.name, mime: f.mimeType, cree: String(f.createdTime).slice(0, 10) });
   });
+
+  // fichiers non rattachés : base des suggestions de redirection
+  var wsL = _fp2Feuille_(ss, "FP2_NON_RATTACHES", ["ID fichier", "Nom", "Créé le", "Chemin"]);
+  if (wsL.getLastRow() > 1) wsL.getRange(2, 1, wsL.getLastRow() - 1, 4).clearContent();
+  if (libres.length) wsL.getRange(2, 1, libres.length, 4).setValues(libres);
 
   // registre FP2_HISTORIQUES (une ligne par fichier)
   var wsH = _fp2Histo_(ss), dH = wsH.getDataRange().getValues(), connus = {}, nouv = [];
@@ -635,11 +640,21 @@ function handleFp2(p, ss) {
         bail: Number(PropertiesService.getScriptProperties().getProperty("FP2_BAIL") || 0), maintenant: Date.now() });
     }
     if (op === "liste") {
+      var libresL = []; try { var wl = ss.getSheetByName("FP2_NON_RATTACHES"); if (wl && wl.getLastRow() > 1) libresL = wl.getRange(2, 1, wl.getLastRow() - 1, 4).getValues().map(function (x) { return { id: x[0], nom: String(x[1]), cree: x[2] instanceof Date ? Utilities.formatDate(x[2], "Europe/Paris", "yyyy-MM-dd") : String(x[2]), chemin: String(x[3]), t: " " + _fp2N_(x[1] + " " + x[3]) + " " }; }); } catch (eL) {}
+      var sugg = function (nom, prenom) {
+        var toks = _fp2N_(nom).split(" ").filter(function (t) { return t.length >= 3; }), pre = _fp2N_(prenom).split(" ")[0] || "";
+        if (!toks.length) return [];
+        return libresL.map(function (f) {
+          var sc = toks.filter(function (t) { return f.t.indexOf(" " + t + " ") >= 0 || f.t.indexOf(t) >= 0 && t.length >= 5; }).length;
+          if (!sc) return null; if (pre && f.t.indexOf(" " + pre + " ") >= 0) sc += 2; if (/positionn?e?ment/i.test(f.nom)) sc += 1;
+          return { id: f.id, nom: f.nom, cree: f.cree, chemin: f.chemin, sc: sc };
+        }).filter(Boolean).sort(function (a, b) { return b.sc - a.sc; }).slice(0, 4);
+      };
       var L = ws.getDataRange().getValues().slice(1).map(function (r) {
         var m = []; try { m = JSON.parse(r[FP2_C.manquants] || "[]"); } catch (e) {}
         var h = []; try { h = JSON.parse(r[FP2_C.histo] || "[]"); } catch (e) {}
         return { id: r[0], nom: r[1], prenom: r[2], typo: r[3], classe: r[4], diplome: r[5], histo: h, decision: r[7], lien: r[8], noteRefus: r[9], motifRefus: r[10],
-          url: r[12], etat: r[13], manquants: m, message: r[15] };
+          url: r[12], etat: r[13], manquants: m, message: r[15], suggestions: r[7] === "attente" ? sugg(r[1], r[2]) : [] };
       });
       return createJsonResponse({ success: true, liste: L });
     }
