@@ -2214,7 +2214,7 @@ async function rdvPiePdf(cle, B) {
     rangs.forEach((x, i) => {
       if (y > bas + .5) return;
       if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - lh * .66, XR - X, lh, 'F'); }
-      doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 1.6, y - lh * .45, 3.4, 3.4, .7, .7, 'F');
+      doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 1.6, y - (fs < 9 ? 2.6 : 3), fs < 9 ? 3 : 3.4, fs < 9 ? 3 : 3.4, .7, .7, 'F');
       doc.setFont('helvetica', 'normal'); doc.setFontSize(fs); doc.setTextColor(14, 26, 43);
       doc.text(doc.splitTextToSize(x.k + (x.autre ? '  (dans « Autres »)' : ''), XR - X - 42)[0], X + 8, y);
       doc.setFont('helvetica', 'bold'); doc.text(String(x.v), XR - 22, y, { align: 'right' });
