@@ -9,7 +9,9 @@
 // =============================================================================
 var PC_HEADERS = ["ID", "ID étudiant", "ID élève Charlemagne", "Nom", "Prénom", "Classe (Charlemagne)", "N° de série", "N° brut Charlemagne",
   "Modèle", "Statut", "Année d'attribution", "Date de restitution", "Commentaire", "Commentaire Charlemagne", "Source", "À vérifier",
-  "Saisie manuelle", "Mis à jour le", "Par", "Historique"];
+  "Saisie manuelle", "Mis à jour le", "Par", "Historique", "À récupérer (choix manuel)", "Motif (récupération)"];
+// Alerte « PC à récupérer » (13/11/2026) : étudiant sorti, avec un n° de PC, statut « PC attribué » (ni restitué ni donné
+// = pas de diplôme obtenu). Ajustable au cas par cas : « Oui » force l'alerte, « Non » l'écarte (avec un motif).
 var PC_STATUTS = ["PC attribué", "PC restitué", "PC donné"];
 var PC_ANNEES_DEFAUT = ["Années précédentes", "2026-2027", "2027-2028"];
 var PC_CAT = "Vie scolaire — Suivi des PC";
@@ -30,13 +32,13 @@ function _pcLire_(ss) {
       classeCharl: String(r[5] || ""), serie: String(r[6] || ""), brut: String(r[7] || ""), modele: String(r[8] || ""), statut: String(r[9] || ""),
       annee: String(r[10] || ""), dateRestit: r[11] instanceof Date ? _vsuIso_(r[11]) : String(r[11] || ""), commentaire: String(r[12] || ""),
       comCharl: String(r[13] || ""), source: String(r[14] || ""), verifier: String(r[15] || ""), manuel: String(r[16]) === "Oui",
-      maj: _vsuIso_(r[17]), par: String(r[18] || ""), historique: h });
+      maj: _vsuIso_(r[17]), par: String(r[18] || ""), historique: h, recupForce: String(r[20] || ""), recupMotif: String(r[21] || "") });
   });
   return out;
 }
 function _pcVersLigne_(x) {
   return [x.pcId, x.etuId, x.idEleve, x.nom, x.prenom, x.classeCharl, x.serie, x.brut, x.modele, x.statut, x.annee, x.dateRestit,
-    x.commentaire, x.comCharl, x.source, x.verifier, x.manuel ? "Oui" : "", x.majDate || new Date(), x.par, JSON.stringify(x.historique || [])];
+    x.commentaire, x.comCharl, x.source, x.verifier, x.manuel ? "Oui" : "", x.majDate || new Date(), x.par, JSON.stringify(x.historique || []), x.recupForce || "", x.recupMotif || ""];
 }
 function _pcAnnees_() {
   var l = PC_ANNEES_DEFAUT.slice();
@@ -169,14 +171,17 @@ function handleGetPc(p, ss) {
     pcs.forEach(function (x) {
       var e = x.etuId ? byId[x.etuId] : null; if (x.etuId) avec[x.etuId] = 1;
       var classe = e && e.classe ? e.classe : x.classeCharl;
+      var recupAuto = !!(e && /sorti/i.test(e.typo) && x.serie && x.statut === "PC attribué");
       out.push({ pcId: x.pcId, etuId: x.etuId, idEleve: x.idEleve || (e ? e.idEleve : ""), nom: e ? e.nom : x.nom, prenom: e ? e.prenom : x.prenom, classe: classe, diplome: _vsuDiplome_(classe),
         campus: e ? e.campus : "", etat: etat(e), serie: x.serie, brut: x.brut, modele: x.modele, statut: x.statut, annee: x.annee, dateRestit: x.dateRestit,
-        commentaire: x.commentaire, comCharl: x.comCharl, source: x.source, verifier: x.verifier, manuel: x.manuel, maj: x.maj, par: x.par, historique: x.historique });
+        commentaire: x.commentaire, comCharl: x.comCharl, source: x.source, verifier: x.verifier, manuel: x.manuel, maj: x.maj, par: x.par, historique: x.historique,
+        recupAuto: recupAuto, recupForce: x.recupForce, recupMotif: x.recupMotif, recup: x.recupForce === "Oui" ? true : x.recupForce === "Non" ? false : recupAuto });
     });
     etus.forEach(function (e) {   // étudiants inscrits / préinscrits sans PC enregistré
       if (!e.inscrit || avec[e.id]) return;
       out.push({ pcId: "", etuId: e.id, idEleve: e.idEleve, nom: e.nom, prenom: e.prenom, classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, etat: etat(e),
-        serie: "", brut: "", modele: "", statut: "Aucun PC", annee: "", dateRestit: "", commentaire: "", comCharl: "", source: "", verifier: "", manuel: false, maj: "", par: "", historique: [] });
+        serie: "", brut: "", modele: "", statut: "Aucun PC", annee: "", dateRestit: "", commentaire: "", comCharl: "", source: "", verifier: "", manuel: false, maj: "", par: "", historique: [],
+        recupAuto: false, recupForce: "", recupMotif: "", recup: false });
     });
     var dern = ""; try { var ci = ss.getSheetByName("CHARLEMAGNE_IMPORT"); if (ci) dern = String(ci.getRange(1, 1).getValue() || ""); } catch (eC) {}
     return createJsonResponse({ success: true, lignes: out, statuts: PC_STATUTS, annees: _pcAnnees_(), dernierImport: dern });
@@ -206,9 +211,11 @@ function handleSavePc(p, ss) {
       }
       var ch = [];
       if (c.serie !== undefined) { var s = String(c.serie || "").replace(/\s+/g, "").toUpperCase(); if (s !== x.serie) { ch.push("n° " + (x.serie || "—") + " → " + (s || "—")); x.serie = s; if (c.modele === undefined && !x.modele) x.modele = _pcModele_(s); } }
-      ["modele", "statut", "annee", "dateRestit", "commentaire"].forEach(function (f) {
-        if (c[f] === undefined) return; var v = String(c[f] || "").trim(); if (v === x[f]) return;
-        ch.push({ modele: "modèle", statut: "statut", annee: "année", dateRestit: "date de restitution", commentaire: "commentaire" }[f] + " : " + (f === "commentaire" ? "modifié" : (x[f] || "—") + " → " + (v || "—")));
+      if (c.recupForce !== undefined && ["", "Oui", "Non"].indexOf(String(c.recupForce)) === -1) throw new Error("Choix de récupération inconnu");
+      ["modele", "statut", "annee", "dateRestit", "commentaire", "recupForce", "recupMotif"].forEach(function (f) {
+        if (c[f] === undefined) return; var v = String(c[f] || "").trim(); if (v === (x[f] || "")) return;
+        ch.push({ modele: "modèle", statut: "statut", annee: "année", dateRestit: "date de restitution", commentaire: "commentaire", recupForce: "alerte « à récupérer »", recupMotif: "motif récupération" }[f] + " : "
+          + (f === "commentaire" || f === "recupMotif" ? (f === "recupMotif" ? v || "—" : "modifié") : f === "recupForce" ? ({ "": "automatique", Oui: "forcée", Non: "écartée" }[x[f] || ""] + " → " + { "": "automatique", Oui: "forcée", Non: "écartée" }[v]) : (x[f] || "—") + " → " + (v || "—")));
         x[f] = v;
       });
       if (c.statut === "PC restitué" && !x.dateRestit && c.dateRestit === undefined) x.dateRestit = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd");

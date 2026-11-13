@@ -2557,16 +2557,22 @@ const PC_COULEUR = { 'PC attribué': ['#e8eff8', '#1A4E8A'], 'PC restitué': ['#
 const PC_COLS = [
   ['nom', 'Nom', 1], ['prenom', 'Prénom', 1], ['classe', 'Classe', 1], ['etat', 'État étudiant', 1], ['serie', 'N° de PC', 1], ['modele', 'Modèle', 1],
   ['statut', 'Statut PC', 1], ['annee', "Année d'attribution", 1], ['dateRestit', 'Date de restitution', 1], ['commentaire', 'Commentaire', 1],
-  ['verifier', 'À vérifier', 1], ['comCharl', 'Commentaire Charlemagne', 0], ['campus', 'Campus', 0], ['diplome', 'Diplôme', 0], ['idEleve', 'ID élève', 0]];
-const PC_FILTRES = [['classe', 'Classes'], ['etat', 'États'], ['statut', 'Statuts'], ['modele', 'Modèles'], ['annee', 'Années'], ['campus', 'Campus']];
-const pcVal = (e, k) => k === 'verifier' ? (e.verifier ? 'À vérifier' : 'OK') : (e[k] || (k === 'modele' || k === 'annee' ? '—' : k === 'classe' ? 'Classe non renseignée' : ''));
+  ['recup', 'À récupérer', 1], ['verifier', 'À vérifier', 1], ['comCharl', 'Commentaire Charlemagne', 0], ['campus', 'Campus', 0], ['diplome', 'Diplôme', 0], ['idEleve', 'ID élève', 0]];
+const PC_FILTRES = [['classe', 'Classes'], ['etat', 'États'], ['statut', 'Statuts'], ['modele', 'Modèles'], ['annee', 'Années'], ['recup', 'Récupération'], ['campus', 'Campus']];
+const PC_RECUP = 'PC à récupérer';
+const pcRecupLib = e => e.recup ? PC_RECUP : e.recupForce === 'Non' ? 'Écarté à la main' : 'Non concerné';
+const pcVal = (e, k) => k === 'recup' ? pcRecupLib(e) : k === 'verifier' ? (e.verifier ? 'À vérifier' : 'OK') : (e[k] || (k === 'modele' || k === 'annee' ? '—' : k === 'classe' ? 'Classe non renseignée' : ''));
 function pcCss() {
   if ($('pcCss')) return;
   const st = document.createElement('style'); st.id = 'pcCss';
   st.textContent = `.pc-st{border:0;border-radius:999px;padding:4px 10px;font:700 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
   .pc-in{border:1px solid #e3eaf3;border-radius:8px;padding:4px 7px;font:600 12.5px 'Plus Jakarta Sans',sans-serif;background:#fff;min-width:0}
   .pc-in:focus{outline:2px solid #1A4E8A33;border-color:#1A4E8A}
-  .pc-ser{width:150px;font-family:ui-monospace,Consolas,monospace;letter-spacing:.02em}
+  .pc-ser{font-family:ui-monospace,Consolas,monospace;font-weight:800;letter-spacing:.03em;color:#0e1a2b;white-space:nowrap}
+  .pc-pen{border:0;background:none;color:#7d8a9c;cursor:pointer;padding:2px 4px;border-radius:6px;vertical-align:middle}.pc-pen:hover{color:#1A4E8A;background:#e8eff8}
+  select.pc-mod{min-width:125px}select.pc-st{min-width:150px}
+  .pc-rc{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}
+  .pc-alerte{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:#fff1f0;border:1px solid #f5c2c0;color:#9f1d1d;border-radius:14px;padding:10px 14px;margin:0 0 12px;font-weight:700}
   .pc-ver{display:inline-block;max-width:260px;font-size:11.5px;color:#b45309;font-weight:700;line-height:1.3}
   .pc-k{cursor:pointer}.pc-k.on{outline:2px solid #1A4E8A;outline-offset:-2px}
   .pc-th{cursor:pointer;user-select:none;white-space:nowrap}.pc-th:hover{color:#1A4E8A}
@@ -2581,6 +2587,7 @@ function pcInit() {
   if (!sec.dataset.ready) {
     sec.dataset.ready = '1'; sec.classList.add('vx');
     try { PC.cols = new Set(JSON.parse(localStorage.getItem('pcCols') || 'null') || PC_COLS.filter(c => c[2]).map(c => c[0])); } catch (e) { PC.cols = new Set(PC_COLS.filter(c => c[2]).map(c => c[0])); }
+    try { if (!localStorage.getItem('pcColsV2')) { PC.cols.add('recup'); localStorage.setItem('pcColsV2', '1'); } } catch (e) { PC.cols.add('recup'); }
     PC_FILTRES.forEach(([k]) => PC.f[k] = new Set());
     sec.innerHTML = `<div class="vx-hd"><div><h1>Suivi des PC</h1><p>PC attribués chaque année aux étudiants : n° de série, modèle, statut (attribué · restitué · donné aux diplômés), année d'attribution et date de restitution.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -2628,6 +2635,7 @@ function pcRender() {
   $('pcKpis').innerHTML = k('PC suivis', L.filter(e => e.statut !== 'Aucun PC').length, mod('Lenovo') + ' Lenovo · ' + mod('Acer') + ' Acer', '', '')
     + k('PC attribués', n('PC attribué'), 'en cours de prêt', 'PC attribué', '#1A4E8A') + k('PC restitués', n('PC restitué'), 'rendus à l\'école', 'PC restitué', '#b45309')
     + k('PC donnés', n('PC donné'), 'diplômés', 'PC donné', '#15803d') + k('Sans PC', n('Aucun PC'), 'inscrits / préinscrits', 'Aucun PC', '#7d8a9c')
+    + `<div class="vx-kpi pc-k ${PC.f.recup.size === 1 && PC.f.recup.has(PC_RECUP) ? 'on' : ''}" onclick="VX.pcVoirRecup()"><span>À récupérer</span><b style="color:#c62828">${L.filter(e => e.recup).length}</b><small>sortis sans diplôme</small></div>`
     + `<div class="vx-kpi pc-k ${$('pcVer').checked ? 'on' : ''}" onclick="const c=document.getElementById('pcVer');c.checked=!c.checked;VX.pcRender()"><span>À vérifier</span><b style="color:#b45309">${L.filter(e => e.verifier).length}</b><small>n° exponentiel, doublon, écart…</small></div>`;
   PC_FILTRES.forEach(([f, lib]) => { const b = $('pcFb-' + f); if (b) b.innerHTML = esc(lib) + ' : ' + (PC.f[f].size ? (PC.f[f].size === 1 ? esc([...PC.f[f]][0]) : PC.f[f].size + ' choisis') : 'tous') + ' ▾'; });
   PC.sel.forEach(id => { if (!L.some(e => pcCle(e) === id)) PC.sel.delete(id); });
@@ -2641,8 +2649,9 @@ function pcRender() {
     switch (k) {
       case 'nom': return `<td><b>${esc(e.nom)}</b></td>`;
       case 'etat': return `<td><span style="font-weight:700;color:${/sorti/i.test(e.etat) ? '#c62828' : /inscrit/i.test(e.etat) ? '#15803d' : '#7d8a9c'}">${esc(e.etat)}</span></td>`;
-      case 'serie': return `<td><input class="pc-in pc-ser" value="${esc(e.serie)}" placeholder="—" onchange="VX.pcSet('${id}','serie',this.value)" title="${e.brut && e.brut !== e.serie ? 'Charlemagne : ' + esc(e.brut) : ''}"></td>`;
-      case 'modele': return `<td><select class="pc-in" onchange="VX.pcSet('${id}','modele',this.value)"><option value="">—</option>${opt(['Lenovo', 'Acer', 'À préciser'].concat(e.modele && !['Lenovo', 'Acer', 'À préciser'].includes(e.modele) ? [e.modele] : []), e.modele)}</select></td>`;
+      case 'serie': return `<td><span class="pc-ser" title="${e.brut && e.brut !== e.serie ? 'Dans Charlemagne : ' + esc(e.brut) : ''}">${e.serie ? esc(e.serie) : '<span style="color:#9aa6b6">—</span>'}</span><button class="pc-pen" title="Modifier le n° de PC" onclick="VX.pcSerie('${id}')">${svg('edit', 13)}</button></td>`;
+      case 'recup': return `<td>${e.recup ? `<span class="pc-rc" style="background:#fde8e8;color:#c62828">⚠ À récupérer${e.recupForce === 'Oui' ? ' (manuel)' : ''}</span>` : e.recupForce === 'Non' ? `<span class="pc-rc" style="background:#f1f4f8;color:#7d8a9c" title="${esc(e.recupMotif)}">Écarté${e.recupMotif ? ' · ' + esc(e.recupMotif.slice(0, 30)) : ''}</span>` : ''}${e.pcId ? `<button class="pc-pen" title="Ajuster l'alerte pour cet étudiant" onclick="VX.pcRecup('${id}')">${svg('flag', 13)}</button>` : ''}</td>`;
+      case 'modele': return `<td><select class="pc-in pc-mod" onchange="VX.pcSet('${id}','modele',this.value)"><option value="">—</option>${opt(['Lenovo', 'Acer', 'À préciser'].concat(e.modele && !['Lenovo', 'Acer', 'À préciser'].includes(e.modele) ? [e.modele] : []), e.modele)}</select></td>`;
       case 'statut': { const c = PC_COULEUR[e.statut] || PC_COULEUR['Aucun PC'];
         return `<td><select class="pc-st" style="background:${c[0]};color:${c[1]}" onchange="VX.pcSet('${id}','statut',this.value)">${e.statut === 'Aucun PC' ? '<option selected disabled>Aucun PC</option>' : ''}${opt(D.statuts, e.statut)}</select></td>`; }
       case 'annee': return `<td><select class="pc-in" onchange="VX.pcSet('${id}','annee',this.value)"><option value="">—</option>${opt(D.annees, e.annee)}<option value="__ajout">＋ Ajouter une année…</option></select></td>`;
@@ -2654,7 +2663,10 @@ function pcRender() {
     }
   };
   const tous = L.length && L.every(e => PC.sel.has(pcCle(e)));
-  $('pcBody').innerHTML = `<p class="sub" style="margin:4px 0 8px">${L.length} ligne(s) affichée(s) sur ${all.length} — les modifications sont enregistrées dès que vous quittez la case.</p>
+  const aR = all.filter(e => e.recup), aRS = aR.filter(e => e.recupForce !== 'Oui').length;
+  const alerte = aR.length ? `<div class="pc-alerte">${svg('bell', 16)} ${aR.length} PC à récupérer — étudiants sortis avec un n° de PC, ni restitué ni donné (pas de diplôme obtenu)${aR.length - aRS ? ' · dont ' + (aR.length - aRS) + ' ajouté(s) à la main' : ''}.
+    <button class="vx-btn sm" onclick="VX.pcVoirRecup()">Voir la liste</button><span class="sub" style="color:#9f1d1d;font-weight:600">Alerte indicative : le drapeau ${svg('flag', 12)} de chaque ligne permet de l'écarter ou de la forcer.</span></div>` : '';
+  $('pcBody').innerHTML = alerte + `<p class="sub" style="margin:4px 0 8px">${L.length} ligne(s) affichée(s) sur ${all.length} — les modifications sont enregistrées dès que vous quittez la case.</p>
     <div style="overflow-x:auto"><table class="vs2-t"><thead><tr><th><input type="checkbox" ${tous ? 'checked' : ''} onchange="VX.pcSelTout(this.checked)"></th>${cols.map(c => `<th class="pc-th" onclick="VX.pcTri('${c[0]}')">${esc(c[1])}${fl(c[0])}</th>`).join('')}<th></th></tr></thead>
     <tbody>${L.slice(0, 1500).map(e => `<tr class="${e.statut === 'Aucun PC' ? 'pc-off' : ''}"><td><input type="checkbox" ${PC.sel.has(pcCle(e)) ? 'checked' : ''} onchange="VX.pcSel('${jsq(pcCle(e))}',this.checked)"></td>${cols.map(c => cell(e, c[0])).join('')}
       <td><button class="vx-link" onclick="VX.pcFiche('${jsq(pcCle(e))}')">${svg('clock', 12)} Historique</button>${e.statut !== 'Aucun PC' ? ` <button class="vx-link" onclick="VX.pcAjouter('${jsq(e.etuId)}')" title="Attribuer un autre PC à cet étudiant">${svg('plus', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
@@ -2710,6 +2722,28 @@ async function pcSet(id, champ, v) {
   const r = await pcSave([{ pcId: e.pcId, etuId: e.etuId, champs }], 'Enregistré ✓');
   if (!r) { pcRender(); return; }
   pcLoadSilencieux();
+}
+function pcSerie(id) {
+  const e = pcTrouve(id); if (!e) return;
+  const v = prompt('N° de PC de ' + e.prenom + ' ' + e.nom + (e.brut && e.brut !== e.serie ? '\n(dans Charlemagne : ' + e.brut + ')' : '') + ' :', e.serie || '');
+  if (v === null || v.replace(/\s+/g, '').toUpperCase() === (e.serie || '')) return;
+  pcSet(id, 'serie', v);
+}
+function pcRecup(id) {
+  const e = pcTrouve(id); if (!e) return;
+  const auto = e.recupAuto ? 'oui (sorti, PC attribué, pas de diplôme)' : 'non';
+  const dlg = modal(`<h2>PC à récupérer — ${esc(e.prenom + ' ' + e.nom)}</h2>
+    <p class="sub">${esc(e.classe)} · ${esc(e.etat)} · n° ${esc(e.serie || '—')} · ${esc(e.statut)}<br>Alerte automatique : <b>${auto}</b></p>
+    <div style="display:grid;gap:8px;margin:14px 0">
+      <label class="vx-chip" style="justify-content:flex-start;cursor:pointer"><input type="radio" name="pcRc" value="" ${!e.recupForce ? 'checked' : ''}> Automatique (règle ci-dessus)</label>
+      <label class="vx-chip" style="justify-content:flex-start;cursor:pointer"><input type="radio" name="pcRc" value="Oui" ${e.recupForce === 'Oui' ? 'checked' : ''}> Toujours signaler ce PC à récupérer</label>
+      <label class="vx-chip" style="justify-content:flex-start;cursor:pointer"><input type="radio" name="pcRc" value="Non" ${e.recupForce === 'Non' ? 'checked' : ''}> Ne pas récupérer ce PC (écarter l'alerte)</label></div>
+    <label class="fl">Motif / précision</label><input class="in" id="pcRcMotif" value="${esc(e.recupMotif)}" placeholder="Ex : diplôme obtenu en session de rattrapage, accord direction…">
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="pcRcOk">Enregistrer</button></div>`, 560);
+  dlg.querySelector('#pcRcOk').onclick = async () => {
+    const f = (dlg.querySelector('[name=pcRc]:checked') || {}).value || '';
+    if (await pcSave([{ pcId: e.pcId, etuId: e.etuId, champs: { recupForce: f, recupMotif: $('pcRcMotif').value.trim() } }], 'Alerte ajustée ✓')) { dlg.remove(); pcLoadSilencieux(); }
+  };
 }
 async function pcLoadSilencieux() { const r = await api('getPc', {}, { forceRefresh: true }); if (r.success) { PC.data = r; pcRender(); } }
 async function pcAppliquer() {
@@ -2784,7 +2818,7 @@ async function pcExport() {
   xlTitle(ws, 'Suivi des PC', 'Export du ' + fmtLong(todayISO()), cols.length); xlHeader(ws, 4, cols.map(c => c[1]));
   let r = 5;
   pcTrier(pcFiltrees()).forEach(e => {
-    ws.getRow(r).values = cols.map(c => c[0] === 'dateRestit' ? (e.dateRestit ? new Date(e.dateRestit + 'T12:00:00') : '') : c[0] === 'verifier' ? e.verifier : (e[c[0]] || ''));
+    ws.getRow(r).values = cols.map(c => c[0] === 'dateRestit' ? (e.dateRestit ? new Date(e.dateRestit + 'T12:00:00') : '') : c[0] === 'verifier' ? e.verifier : c[0] === 'recup' ? (e.recup ? 'À récupérer' : e.recupForce === 'Non' ? 'Écarté' + (e.recupMotif ? ' : ' + e.recupMotif : '') : '') : (e[c[0]] || ''));
     const iS = cols.findIndex(c => c[0] === 'serie'); if (iS >= 0) ws.getCell(r, iS + 1).numFmt = '@';
     const iD = cols.findIndex(c => c[0] === 'dateRestit'); if (iD >= 0) ws.getCell(r, iD + 1).numFmt = 'dd/mm/yyyy';
     const iT = cols.findIndex(c => c[0] === 'statut'); if (iT >= 0) { const c = PC_COULEUR[e.statut] || PC_COULEUR['Aucun PC'], cl = ws.getCell(r, iT + 1); cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + c[0].slice(1) } }; cl.font = { bold: true, color: { argb: 'FF' + c[1].slice(1) } }; }
@@ -2810,6 +2844,7 @@ window.VX = {
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
   dirQ: v => { DR.q = v; dirRender(); const i = $('dirQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } },
   exInit, exLoad: s => exLoad(s), exRender, exClsPanel, exCls, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport,
+  pcSerie, pcRecup, pcVoirRecup: () => { const on = PC.f.recup.size === 1 && PC.f.recup.has(PC_RECUP); PC.f.recup.clear(); if (!on) PC.f.recup.add(PC_RECUP); pcRender(); },
   pcInit, pcRender, pcPanel, pcF, pcCol, pcSet, pcAppliquer, pcAjouter, pcFiche, pcReprendre, pcExport,
   pcStatut: st => { const on = PC.f.statut.size === 1 && PC.f.statut.has(st); PC.f.statut.clear(); if (!on) PC.f.statut.add(st); pcRender(); }, pcTri: k => { PC.sens = PC.tri === k ? -PC.sens : 1; PC.tri = k; pcRender(); },
   pcSel: (id, on) => { if (on) PC.sel.add(id); else PC.sel.delete(id); pcSelBar(); }, pcSelTout: on => { if (on) pcFiltrees().forEach(e => PC.sel.add(pcCle(e))); else PC.sel.clear(); pcRender(); },
