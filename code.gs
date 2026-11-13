@@ -447,6 +447,12 @@ function doPostInner_(e) {
       case 'savePcAnnee':             return handleSavePcAnnee(params, ss);
       case 'importerPc':              return handleImporterPc(params, ss);
       case 'getPcInventaire':         return handleGetPcInventaire(params, ss);
+      case 'auditLibelleContacts':    return handleAuditLibelleContacts(params, ss);
+      case 'fpDecouverte':            return handleFpDecouverte(params, ss);
+      case 'fpLireFiche':             return handleFpLireFiche(params, ss);
+      case 'fpInventaire':            return handleFpInventaire(params, ss);
+      case 'fpEtudiants':             return handleFpEtudiants(params, ss);
+      case 'fp2':                     return handleFp2(params, ss);
       case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
@@ -8000,7 +8006,7 @@ function handleUpdateStudent(p, ss) {
 
     let typoFinale = String(p.forceTypo || "PROSPECT").trim().toUpperCase();
     // Si une date de sortie est définie, la typo est forcément SORTIE
-    if (p.sortie && String(p.sortie).trim()) typoFinale = "SORTIE";
+    if (p.sortie && String(p.sortie).trim() && !/^REFUS/.test(typoFinale)) typoFinale = "SORTIE";   // un étudiant refusé reste REFUSÉ
 
     const updatedRow = [
       oldRow[0],           // A : id_etu

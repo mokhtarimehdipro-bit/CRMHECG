@@ -109,7 +109,9 @@
                     setTimeout(() => {
                         // --- L'AIGUILLEUR EST ICI ---
                         let apres = ''; try { apres = sessionStorage.getItem('apresConnexion') || ''; sessionStorage.removeItem('apresConnexion'); } catch (e) {}
-                        if (apres === 'mes_frises.html') {
+                        if (apres === 'positionnement.html' && data.role !== 'Etudiant') {
+                            window.location.replace('positionnement.html');
+                        } else if (apres === 'mes_frises.html') {
                             window.location.replace('mes_frises.html'); // lien « Voir mes échéances » d'un mail
                         } else if (data.role === 'Etudiant') {
                             window.location.replace('dossier.html'); // Vers le dossier

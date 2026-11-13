@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiches de positionnement — HECG</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--b:#1A4E8A;--o:#F26522;--ink:#0e1a2b;--tx:#3b4859;--mu:#7d8a9c;--li:#e3eaf3;--bg:#f4f7fb;--ok:#15803d;--red:#c62828;--amb:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif;color:var(--tx);font-size:14px}
+  header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--li)}
+  .hd{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
+  .hd img{height:30px}.hd .t{flex:1;min-width:0}.hd .t b{display:block;color:var(--ink);font-size:15px}.hd .t span{font-size:12px;color:var(--mu)}
+  nav{max-width:1240px;margin:0 auto;display:flex;gap:4px;padding:0 12px;overflow-x:auto}
+  nav button{border:0;background:none;padding:10px 14px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:var(--mu);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+  nav button.on{color:var(--b);border-color:var(--o)}
+  nav .n{display:inline-block;min-width:20px;padding:1px 6px;margin-left:6px;border-radius:9px;background:#eef2f7;color:var(--tx);font-size:11px}
+  nav button.on .n{background:#fff1e8;color:var(--o)}
+  main{max-width:1240px;margin:0 auto;padding:20px 16px 70px}
+  h1{margin:0 0 4px;font-size:24px;color:var(--ink);letter-spacing:-.02em}.sub{color:var(--mu);margin:0 0 18px}
+  .btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--li);background:#fff;color:var(--tx);font:700 13px 'Plus Jakarta Sans',sans-serif;cursor:pointer;text-decoration:none}
+  .btn:hover{border-color:#cdd8e6;color:var(--b)}.btn.pri{background:var(--b);border-color:var(--b);color:#fff}.btn.pri:hover{background:#163f70;color:#fff}
+  .btn.org{background:var(--o);border-color:var(--o);color:#fff}.btn.red{color:var(--red);border-color:#f3c4c4}.btn.sm{height:30px;padding:0 10px;font-size:12px}
+  .btn[disabled]{opacity:.5;cursor:default}
+  .card{background:#fff;border:1px solid var(--li);border-radius:18px;padding:18px;box-shadow:0 14px 30px -28px rgba(14,26,43,.5);margin-bottom:16px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--li);border-radius:16px;padding:14px 16px}
+  .kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--mu);font-weight:800}.kpi .v{font-size:26px;font-weight:800;color:var(--ink);margin-top:4px}.kpi .s{font-size:12px;color:var(--mu)}
+  .bar{height:12px;border-radius:9px;background:#eef2f7;overflow:hidden;margin:10px 0 6px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--b),#2f6db8);border-radius:9px;transition:width .6s}
+  .phases{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}.ph{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:800;background:#eef2f7;color:var(--mu)}
+  .ph.on{background:#fff1e8;color:var(--o)}.ph.ok{background:#e8f6ee;color:var(--ok)}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--mu)}.live i{width:9px;height:9px;border-radius:50%;background:#c3cbd6}.live.on i{background:#16a34a;box-shadow:0 0 0 0 rgba(22,163,74,.5);animation:pu 1.4s infinite}
+  @keyframes pu{70%{box-shadow:0 0 0 8px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+  .jr{max-height:420px;overflow:auto;font-size:12.5px;border-top:1px solid var(--li)}
+  .jr div{display:grid;grid-template-columns:110px 92px 1fr;gap:8px;padding:6px 2px;border-bottom:1px solid #f0f3f8}.jr .ty{font-weight:800;color:var(--b)}.jr .er .ty{color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);padding:8px;border-bottom:2px solid var(--li);position:sticky;top:0;background:#fff}
+  td{padding:8px;border-bottom:1px solid #f0f3f8;vertical-align:top}tr:hover td{background:#fafcff}
+  .tw{max-height:620px;overflow:auto}
+  .chip{display:inline-block;margin:2px 4px 2px 0;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#fff4e5;color:var(--amb)}
+  .chip.b{background:#e8eff8;color:var(--b)}.chip.g{background:#e8f6ee;color:var(--ok)}.chip.r{background:#fde8e8;color:var(--red)}.chip.m{background:#eef2f7;color:var(--mu)}
+  .in{height:34px;border:1px solid var(--li);border-radius:9px;padding:0 10px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:var(--ink);background:#fff}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .help{background:#f7faff;border:1px solid #dbe6f4;border-radius:14px;padding:12px 14px;color:var(--tx);font-size:13px;margin-bottom:14px}
+  .empty{text-align:center;padding:40px 20px;color:var(--mu)}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-weight:700;font-size:13px;display:none;z-index:50}
+  a{color:var(--b)}
+  @media (max-width:640px){.jr div{grid-template-columns:1fr}.hd .t span{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hd"><img src="logo.png" alt="HECG" onerror="this.style.display='none'"><div class="t"><b>Fiches de positionnement</b><span>Refonte · espace réservé au compte maître</span></div>
+    <span class="live" id="live"><i></i><span>—</span></span><a class="btn sm" href="vie_scolaire.html">Vie scolaire</a></div>
+  <nav id="nav"></nav>
+</header>
+<main id="app"><div class="empty">Chargement…</div></main>
+<div id="toast"></div>
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const MAITRE = 'm.mokhtari@hecg.fr';
+let user = null; try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch (e) {}
+if (!user || !user.sessionToken) { try { sessionStorage.setItem('apresConnexion', 'positionnement.html'); } catch (e) {} location.replace('index.html'); }
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const $ = id => document.getElementById(id);
+const toast = (m, ok = true) => { const t = $('toast'); t.textContent = m; t.style.background = ok ? '#0e1a2b' : '#c62828'; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 3500); };
+async function api(op, extra = {}) {
+  const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'fp2', op, nomAuteur: user.nom || '', emailAuteur: user.email || '' }, extra)) }).then(x => x.json());
+  return r;
+}
+const S = { vue: 'suivi', etat: null, liste: null, sortis: null, bach: null, f: { q: '', classe: '', mention: '' }, selRefus: new Set(), selGen: new Set() };
+const VUES = [['suivi', 'Suivi en direct'], ['sans', 'Sans historique'], ['manq', 'Mentions manquantes'], ['refus', 'Refus'], ['bach', 'Bachelor'], ['toutes', 'Toutes les fiches']];
+
+if (user && String(user.email || '').toLowerCase() !== MAITRE) {
+  $('app').innerHTML = '<div class="empty"><h2>Accès réservé</h2><p>Cet espace est réservé au compte maître.</p></div>';
+} else if (user) { nav(); charger(); setInterval(() => { if (!document.hidden && S.vue === 'suivi') chargerEtat(); }, 4000); }
+
+function nav() {
+  const L = S.liste || [], n = {
+    sans: L.filter(x => x.decision === 'attente').length,
+    manq: L.filter(x => x.etat === 'fait' && x.manquants.length).length,
+    refus: L.filter(x => x.decision === 'refus').length,
+    toutes: L.length };
+  $('nav').innerHTML = VUES.map(([k, l]) => `<button class="${S.vue === k ? 'on' : ''}" onclick="voir('${k}')">${l}${n[k] != null ? `<span class="n">${n[k]}</span>` : ''}</button>`).join('');
+}
+function voir(k) { S.vue = k; nav(); rendre(); if (k === 'refus' && !S.sortis) chargerSortis(); if (k === 'bach' && !S.bach) chargerBach(); if (k !== 'suivi') chargerListe(); }
+async function charger() { await Promise.all([chargerEtat(), chargerListe()]); }
+async function chargerEtat() {
+  try { const r = await api('etat'); if (!r.success) throw new Error(r.message); S.etat = r; if (S.vue === 'suivi') rendre(); live(); } catch (e) { if (S.vue === 'suivi') $('app').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function chargerListe() { const r = await api('liste'); if (r.success) { S.liste = r.liste; nav(); if (S.vue !== 'suivi') rendre(); } }
+async function chargerSortis() { const r = await api('sortis'); if (r.success) { S.sortis = r.sortis; rendre(); } }
+async function chargerBach() { const r = await api('bachelor'); if (r.success) { S.bach = r; rendre(); } }
+
+function live() {
+  const E = S.etat, j = E.job || {}, actif = j.actif && !j.pause, enCours = E.bail && E.maintenant - E.bail < 330000;
+  $('live').className = 'live' + (actif ? ' on' : '');
+  $('live').querySelector('span').textContent = j.pause ? 'En pause' : !j.actif ? (j.phase === 'termine' ? 'Terminé' : 'À l’arrêt') : enCours ? 'Traitement en cours' : 'En attente du prochain passage';
+}
+const dureeTxt = ms => { if (!isFinite(ms) || ms <= 0) return '—'; const m = Math.round(ms / 60000); return m < 1 ? 'moins d’1 min' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
+
+function rendre() {
+  nav();
+  const v = S.vue, app = $('app');
+  if (v === 'suivi') return app.innerHTML = vueSuivi();
+  if (!S.liste) return app.innerHTML = '<div class="empty">Chargement…</div>';
+  if (v === 'sans') return app.innerHTML = vueSans();
+  if (v === 'manq') return app.innerHTML = vueManq();
+  if (v === 'refus') return app.innerHTML = vueRefus();
+  if (v === 'bach') return app.innerHTML = vueBach();
+  if (v === 'toutes') return app.innerHTML = vueToutes();
+}
+
+// ── Suivi en direct ──
+function vueSuivi() {
+  const E = S.etat; if (!E) return '<div class="empty">Chargement…</div>';
+  const j = E.job || {}, et = E.etats || {}, h = E.histo || {}, du = j.durees || {};
+  const ph = j.phase || '', ordre = ['inventaire', 'extraction', 'generation', 'termine'], io = ordre.indexOf(ph);
+  const gTot = (et['fait'] || 0) + (et['à faire'] || 0) + (et['en cours'] || 0) + (et['erreur'] || 0), gReste = (et['à faire'] || 0) + (et['en cours'] || 0);
+  const xReste = Math.max(0, (h.total || 0) - (h.faits || 0) - (h.erreurs || 0));
+  const moy = k => du[k] && du[k][1] ? du[k][0] / du[k][1] : (k === 'extraction' ? 6000 : 15000);
+  const eta = (ph === 'inventaire' ? 120000 : 0) + (io <= 1 ? xReste * moy('extraction') * 1.1 : 0) + (io <= 2 ? gReste * moy('generation') * 1.1 : 0);
+  let pct = 0, lib = '';
+  if (ph === 'inventaire') { pct = 3; lib = 'Recherche des fiches historiques dans tout le Drive…'; }
+  else if (ph === 'extraction') { pct = h.total ? Math.round(((h.faits || 0) + (h.erreurs || 0)) / h.total * 100) : 0; lib = `Lecture des fiches historiques : ${(h.faits || 0) + (h.erreurs || 0)} / ${h.total || 0}`; }
+  else if (ph === 'generation' || ph === 'termine') { pct = gTot ? Math.round(((et['fait'] || 0) + (et['erreur'] || 0)) / gTot * 100) : 0; lib = `Fiches générées : ${et['fait'] || 0} / ${gTot}`; }
+  const enCours = E.bail && E.maintenant - E.bail < 330000;
+  const dp = j.dernierPassage ? Math.round((E.maintenant - j.dernierPassage) / 1000) : null;
+  return `<h1>Suivi en direct</h1><p class="sub">Le traitement tourne en arrière-plan (un passage par minute, jusqu’à 4 min 30 de travail chacun). En cas de coupure, il reprend tout seul à l’endroit exact où il s’était arrêté. Cette page s’actualise toutes les 4 secondes.</p>
+  <div class="card">
+    <div class="tools" style="justify-content:space-between;margin:0">
+      <div class="phases">${[['inventaire', '1 · Inventaire'], ['extraction', '2 · Lecture de l’historique'], ['generation', '3 · Génération'], ['termine', 'Terminé']].map(([k, l], i) => `<span class="ph ${ph === k ? 'on' : (io > i ? 'ok' : '')}">${io > i ? '✓ ' : ''}${l}</span>`).join('')}</div>
+      <div class="tools" style="margin:0">
+        ${!j.actif || j.phase === 'termine' ? `<button class="btn pri" onclick="lancer('inventaire')">${j.phase ? 'Relancer l’inventaire complet' : 'Lancer la refonte'}</button>` : ''}
+        ${j.actif && !j.pause ? `<button class="btn" onclick="cmd('pause')">Mettre en pause</button>` : ''}
+        ${j.pause ? `<button class="btn org" onclick="cmd('reprendre')">Reprendre</button>` : ''}
+      </div>
+    </div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:13px"><b style="color:var(--ink)">${lib || 'Aucun traitement lancé'}</b>
+      <span>${j.actif && !j.pause ? 'Temps restant estimé : <b style="color:var(--ink)">' + dureeTxt(eta) + '</b>' : ''}${dp != null ? ` · dernier passage il y a ${dp < 90 ? dp + ' s' : Math.round(dp / 60) + ' min'}` : ''}${enCours ? ' · <b style="color:var(--ok)">passage en cours</b>' : ''}</span></div>
+    ${!E.declencheur && j.actif ? '<p style="color:var(--red);font-size:12.5px">Déclencheur absent : cliquez sur « Reprendre » pour le recréer.</p>' : ''}
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Fiches historiques</div><div class="v">${h.total || 0}</div><div class="s">${h.faits || 0} lues · ${h.erreurs || 0} non lisibles</div></div>
+    <div class="kpi"><div class="l">Fiches générées</div><div class="v">${et['fait'] || 0}</div><div class="s">${gReste} restante(s)</div></div>
+    <div class="kpi"><div class="l">En attente de décision</div><div class="v" style="color:${et['attente décision'] ? 'var(--o)' : 'var(--ink)'}">${et['attente décision'] || 0}</div><div class="s"><a href="#" onclick="voir('sans');return false">inscrits sans historique →</a></div></div>
+    <div class="kpi"><div class="l">Avec mentions manquantes</div><div class="v">${E.avecManquants || 0}</div><div class="s"><a href="#" onclick="voir('manq');return false">voir l’état →</a></div></div>
+    <div class="kpi"><div class="l">Erreurs</div><div class="v" style="color:${et['erreur'] ? 'var(--red)' : 'var(--ink)'}">${et['erreur'] || 0}</div><div class="s">relancées automatiquement à l’inventaire</div></div>
+  </div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b style="color:var(--ink)">Journal en temps réel</b><span style="font-size:12px;color:var(--mu)">80 dernières actions</span></div>
+    <div class="jr">${(E.journal || []).map(l => `<div class="${l[1] === 'Erreur' ? 'er' : ''}"><span>${esc(l[0])}</span><span class="ty">${esc(l[1])}</span><span>${esc(l[2])}</span></div>`).join('') || '<div class="empty">Rien pour l’instant.</div>'}</div></div>`;
+}
+async function lancer(phase) { const r = await api('demarrer', { phase }); toast(r.success ? 'Lancé : le premier passage démarre dans la minute' : r.message, r.success); chargerEtat(); }
+async function cmd(op) { const r = await api(op); toast(r.success ? (op === 'pause' ? 'Pause demandée (le passage en cours se termine)' : 'Reprise') : r.message, r.success); chargerEtat(); }
+
+// ── Filtres communs ──
+function filtres(L, avecMention) {
+  const cls = [...new Set(L.map(x => x.classe).filter(Boolean))].sort();
+  const ments = avecMention ? [...new Set(L.flatMap(x => x.manquants.map(m => String(m).replace(/^[^:]+: /, ''))))].sort() : [];
+  return `<div class="tools"><input class="in" style="flex:1;min-width:200px" placeholder="Rechercher un nom…" value="${esc(S.f.q)}" oninput="S.f.q=this.value;rendreFiltre()">
+    <select class="in" onchange="S.f.classe=this.value;rendre()"><option value="">Toutes les classes</option>${cls.map(c => `<option ${S.f.classe === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    ${avecMention ? `<select class="in" onchange="S.f.mention=this.value;rendre()"><option value="">Toutes les mentions</option>${ments.map(c => `<option ${S.f.mention === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}</div>`;
+}
+let _rf; function rendreFiltre() { clearTimeout(_rf); _rf = setTimeout(() => { const a = document.activeElement, pos = a && a.selectionStart; rendre(); const i = document.querySelector('.tools input.in'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) {} } }, 200); }
+const filtrer = L => L.filter(x => (!S.f.classe || x.classe === S.f.classe) && (!S.f.q || (x.nom + ' ' + x.prenom).toLowerCase().includes(S.f.q.toLowerCase())) && (!S.f.mention || x.manquants.some(m => String(m).endsWith(S.f.mention))));
+
+// ── Inscrits sans historique ──
+function vueSans() {
+  const L = filtrer(S.liste.filter(x => x.decision === 'attente'));
+  return `<h1>Inscrits sans fiche historique</h1><p class="sub">Aucune fiche faite à l’époque n’a été trouvée dans le Drive pour ces étudiants. Pour chacun : collez le lien de sa fiche (redirection), ou demandez une nouvelle fiche (nouvelle trame, grille à compléter).</p>
+  <div class="help">Une redirection ajoute la fiche indiquée comme historique de l’étudiant : elle est lue puis recopiée en onglet de base, et sa grille sert à remplir la nouvelle trame.</div>
+  ${filtres(S.liste.filter(x => x.decision === 'attente'))}
+  <div class="tools"><button class="btn" onclick="toutCocher()">Tout cocher (${L.length})</button><button class="btn pri" ${S.selGen.size ? '' : 'disabled'} onclick="genererSel()">Générer une nouvelle fiche pour la sélection (${S.selGen.size})</button></div>
+  <div class="card tw" style="padding:0">${L.length ? `<table><thead><tr><th></th><th>Étudiant</th><th>Classe</th><th>Lien de la fiche (redirection)</th><th></th></tr></thead><tbody>
+    ${L.map(x => `<tr><td><input type="checkbox" ${S.selGen.has(x.id) ? 'checked' : ''} onchange="this.checked?S.selGen.add('${x.id}'):S.selGen.delete('${x.id}');rendre()"></td>
+      <td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)} · ${esc(x.typo)}</div></td><td>${esc(x.classe)}</td>
+      <td><input class="in" style="width:100%" id="l_${x.id}" placeholder="https://docs.google.com/… ou https://drive.google.com/…"></td>
+      <td style="white-space:nowrap"><button class="btn sm pri" onclick="rediriger('${x.id}')">Rediriger</button> <button class="btn sm" onclick="decider('${x.id}','generer')">Nouvelle fiche</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Aucun inscrit en attente de décision 🎉</div>'}</div>`;
+}
+function toutCocher() { filtrer(S.liste.filter(x => x.decision === 'attente')).forEach(x => S.selGen.add(x.id)); rendre(); }
+async function rediriger(id) { const lien = $('l_' + id).value.trim(); if (!lien) return toast('Collez le lien de la fiche', false); await decider(id, 'redirection', lien); }
+async function decider(id, decision, lien) {
+  const r = await api('decision', { id, decision, lien }); if (!r.success) return toast(r.message, false);
+  const x = S.liste.find(y => y.id === id); if (x) { x.decision = decision; x.etat = 'à faire'; } S.selGen.delete(id); toast(decision === 'redirection' ? 'Fiche rattachée : lecture puis génération en arrière-plan' : 'Nouvelle fiche programmée'); rendre();
+}
+async function genererSel() { for (const id of [...S.selGen]) await decider(id, 'generer'); }
+
+// ── Mentions manquantes ──
+function vueManq() {
+  const base = S.liste.filter(x => x.etat === 'fait' && x.manquants.length), L = filtrer(base);
+  const tot = {}; base.forEach(x => x.manquants.forEach(m => { const k = String(m).replace(/^[^:]+: /, ''); tot[k] = (tot[k] || 0) + 1; }));
+  return `<h1>État des mentions manquantes</h1><p class="sub">Ce que le CRM n’a trouvé ni dans les fiches historiques, ni dans Charlemagne, ni dans les pièces du dossier. Complétez directement dans le classeur de l’étudiant, ou exportez la liste pour déléguer.</p>
+  <div class="tools">${Object.entries(tot).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<span class="chip ${S.f.mention === k ? 'b' : ''}" style="cursor:pointer" onclick="S.f.mention=S.f.mention==='${esc(k).replace(/'/g, "\\'")}'?'':'${esc(k).replace(/'/g, "\\'")}';rendre()">${esc(k)} · ${n}</span>`).join('')}</div>
+  ${filtres(base, true)}
+  <div class="tools"><button class="btn" onclick="exporter()">Exporter pour délégation (Excel/CSV)</button><span style="font-size:12.5px;color:var(--mu)">${L.length} étudiant(s)</span></div>
+  <div class="card tw" style="padding:0">${L.length ? `<table><thead><tr><th>Étudiant</th><th>Classe</th><th>Mentions à compléter</th><th>Fiche</th></tr></thead><tbody>
+    ${L.map(x => `<tr><td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)}</div></td><td>${esc(x.classe)}</td>
+      <td>${x.manquants.map(m => `<span class="chip ${/OCR/.test(m) ? 'b' : ''}">${esc(m)}</span>`).join('')}</td><td><a class="btn sm" target="_blank" href="${esc(x.url)}">Ouvrir</a></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Aucune mention manquante pour ce filtre.</div>'}</div>`;
+}
+function exporter() {
+  const L = filtrer(S.liste.filter(x => x.etat === 'fait' && x.manquants.length));
+  const lignes = [['ID', 'Nom', 'Prénom', 'Classe', 'Mention manquante', 'Lien de la fiche', 'Attribué à', 'Fait']];
+  L.forEach(x => x.manquants.forEach(m => lignes.push([x.id, x.nom, x.prenom, x.classe, m, x.url, '', ''])));
+  const csv = '\ufeff' + lignes.map(l => l.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'Mentions_manquantes_fiches_positionnement.csv'; a.click();
+}
+
+// ── Refus ──
+const MOTIFS = ['Note inférieure à 10/20 à l’entretien de positionnement', 'Prérequis du diplôme non remplis', 'Niveau insuffisant aux tests d’admission', 'Projet professionnel inadapté à la formation', 'Dossier de candidature incomplet', 'Absence à l’entretien de positionnement'];
+function vueRefus() {
+  if (!S.sortis) return '<h1>Fiches de refus</h1><div class="empty">Chargement des étudiants sortis…</div>';
+  const deja = S.sortis.filter(x => x.decision === 'refus'), L = S.sortis.filter(x => x.decision !== 'refus' && (!S.f.classe || x.classe === S.f.classe) && (!S.f.q || (x.nom + ' ' + x.prenom).toLowerCase().includes(S.f.q.toLowerCase())));
+  const cls = [...new Set(S.sortis.map(x => x.classe).filter(Boolean))].sort();
+  return `<h1>Fiches de refus</h1><p class="sub">Cochez les étudiants sortis qui sont en réalité des candidats refusés. Le CRM génère une fiche de positionnement avec une note inférieure à 10/20 et le motif, et passe leur statut à « Refusé ».</p>
+  <div class="card"><div class="tools" style="margin:0"><label style="font-weight:700">Note /20</label><input class="in" id="rfNote" type="number" min="0" max="9.99" step="0.25" value="8" style="width:90px">
+    <label style="font-weight:700">Motif</label><select class="in" id="rfMotif" style="flex:1;min-width:260px">${MOTIFS.map(m => `<option>${esc(m)}</option>`).join('')}<option value="__autre">Autre motif…</option></select>
+    <input class="in" id="rfAutre" placeholder="Précisez le motif" style="flex:1;min-width:200px">
+    <button class="btn red" ${S.selRefus.size ? '' : 'disabled'} onclick="refuser()">Générer ${S.selRefus.size} fiche(s) de refus</button></div></div>
+  ${deja.length ? `<div class="help"><b>${deja.length}</b> refus déjà demandé(s) : ${deja.map(x => esc(x.nom + ' ' + x.prenom)).join(', ')}</div>` : ''}
+  <div class="tools"><input class="in" style="flex:1;min-width:200px" placeholder="Rechercher un nom…" value="${esc(S.f.q)}" oninput="S.f.q=this.value;rendreFiltre()">
+    <select class="in" onchange="S.f.classe=this.value;rendre()"><option value="">Toutes les classes</option>${cls.map(c => `<option ${S.f.classe === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span style="font-size:12.5px;color:var(--mu)">${L.length} sorti(s)</span></div>
+  <div class="card tw" style="padding:0"><table><thead><tr><th></th><th>Étudiant</th><th>Dernière classe</th><th>Sortie</th><th>Motif de sortie (CRM)</th></tr></thead><tbody>
+    ${L.map(x => `<tr><td><input type="checkbox" ${S.selRefus.has(x.id) ? 'checked' : ''} onchange="this.checked?S.selRefus.add('${x.id}'):S.selRefus.delete('${x.id}');rendre()"></td><td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)} · ${esc(x.typo)}</div></td><td>${esc(x.classe)}</td><td>${esc(x.sortie)}</td><td>${esc(x.motif)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function refuser() {
+  const note = $('rfNote').value, motif = $('rfMotif').value === '__autre' ? $('rfAutre').value.trim() : $('rfMotif').value;
+  if (!(Number(note) >= 0 && Number(note) < 10)) return toast('La note doit être inférieure à 10', false);
+  if (!motif) return toast('Indiquez le motif', false);
+  if (!confirm(`Générer ${S.selRefus.size} fiche(s) de refus (note ${note}/20) et passer ces étudiants au statut « Refusé » ?`)) return;
+  const r = await api('refuser', { ids: [...S.selRefus], note, motif });
+  if (!r.success) return toast(r.message, false);
+  S.sortis.forEach(x => { if (S.selRefus.has(x.id)) x.decision = 'refus'; }); S.selRefus.clear(); toast(r.n + ' fiche(s) de refus programmée(s)'); rendre(); chargerListe();
+}
+
+// ── Bachelor ──
+function vueBach() {
+  if (!S.bach) return '<h1>Bachelor CDSP</h1><div class="empty">Chargement…</div>';
+  const C = S.bach.criteres, T = S.bach.tests, tot = C.reduce((s, c) => s + Number(c[2] || 0), 0);
+  return `<h1>Bachelor CDSP — admission</h1><p class="sub">Critères pondérés ajoutés systématiquement aux fiches Bachelor (onglet « Critères d’admission Bachelor »), et tests d’admission avec corrigé.</p>
+  <div class="card"><b style="color:var(--ink)">Critères d’admission pondérés</b> <span class="chip ${tot === 100 ? 'g' : 'r'}">Total ${tot} %</span>
+    <table style="margin-top:10px"><thead><tr><th>Critère</th><th>Compétence visée (RH et paie)</th><th style="width:110px">Poids (%)</th><th></th></tr></thead><tbody>
+    ${C.map((c, i) => `<tr><td><input class="in" style="width:100%" value="${esc(c[0])}" onchange="S.bach.criteres[${i}][0]=this.value"></td><td><input class="in" style="width:100%" value="${esc(c[1])}" onchange="S.bach.criteres[${i}][1]=this.value"></td>
+      <td><input class="in" type="number" min="0" max="100" style="width:90px" value="${esc(c[2])}" onchange="S.bach.criteres[${i}][2]=Number(this.value);rendre()"></td><td><button class="btn sm red" onclick="S.bach.criteres.splice(${i},1);rendre()">Retirer</button></td></tr>`).join('')}</tbody></table>
+    <div class="tools" style="margin-top:10px"><button class="btn" onclick="S.bach.criteres.push(['Nouveau critère','',0]);rendre()">Ajouter un critère</button><button class="btn pri" onclick="sauverBach()">Enregistrer les critères</button>
+      <span style="font-size:12.5px;color:var(--mu)">S’applique aux fiches générées ensuite ; pour les fiches déjà faites, relancez-les depuis « Toutes les fiches ».</span></div></div>
+  <div class="card"><b style="color:var(--ink)">Tests d’admission</b><p style="margin:6px 0 12px;color:var(--mu)">QCM de 20 questions (/8), exercice rédactionnel (/6), exercice de calcul de paie (/6) : sujet et corrigé au format Google Docs, mise en forme HECG.</p>
+    ${T ? `<div class="tools"><a class="btn" target="_blank" href="${esc(T.sujet)}">Ouvrir le sujet</a><a class="btn" target="_blank" href="${esc(T.corrige)}">Ouvrir le corrigé (jury)</a><a class="btn" target="_blank" href="${esc(T.dossier)}">Dossier Drive</a><span style="font-size:12.5px;color:var(--mu)">Générés le ${esc(T.le)}</span></div>` : ''}
+    <button class="btn ${T ? '' : 'pri'}" onclick="genererTests(this)">${T ? 'Régénérer les tests' : 'Générer les tests'}</button></div>`;
+}
+async function sauverBach() { const r = await api('bachelor', { criteres: S.bach.criteres }); if (!r.success) return toast(r.message, false); S.bach = r; toast('Critères enregistrés'); rendre(); }
+async function genererTests(b) { b.disabled = true; b.textContent = 'Génération…'; const r = await api('tests'); if (!r.success) { b.disabled = false; return toast(r.message, false); } S.bach.tests = r.tests; toast('Tests générés'); rendre(); }
+
+// ── Toutes les fiches ──
+const ETAT_C = { 'fait': 'g', 'à faire': 'b', 'en cours': 'b', 'erreur': 'r', 'attente décision': '' };
+function vueToutes() {
+  const L = filtrer(S.liste);
+  return `<h1>Toutes les fiches</h1><p class="sub">Un classeur par étudiant dans son dossier GED : onglets historiques (copies fidèles) puis onglets nouvelle trame.</p>${filtres(S.liste)}
+  <div class="card tw" style="padding:0"><table><thead><tr><th>Étudiant</th><th>Classe</th><th>Historique</th><th>Décision</th><th>État</th><th>Fiche</th><th></th></tr></thead><tbody>
+  ${L.map(x => `<tr><td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)} · ${esc(x.typo)}</div></td><td>${esc(x.classe)}</td>
+    <td>${x.histo.length ? x.histo.map(h => `<a target="_blank" href="https://drive.google.com/file/d/${esc(h.id)}" title="${esc(h.nom)}" class="chip m">${esc((h.cree || '').slice(0, 4) || 'fiche')}</a>`).join('') : '<span style="color:var(--mu)">—</span>'}</td>
+    <td>${esc({ auto: 'Automatique', generer: 'Nouvelle fiche', redirection: 'Redirection', refus: 'Refus', attente: 'À décider' }[x.decision] || x.decision)}</td>
+    <td><span class="chip ${ETAT_C[x.etat] || ''}">${esc(x.etat)}</span>${x.etat === 'erreur' ? `<div style="font-size:12px;color:var(--red)">${esc(x.message)}</div>` : ''}</td>
+    <td>${x.url ? `<a class="btn sm" target="_blank" href="${esc(x.url)}">Ouvrir</a>` : ''}</td>
+    <td>${x.decision !== 'attente' ? `<button class="btn sm" onclick="regenerer('${x.id}')">Refaire</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function regenerer(id) { if (!confirm('Refaire la fiche de cet étudiant ? Le classeur actuel part à la corbeille (les compléments saisis à la main seront perdus).')) return; const r = await api('regenerer', { ids: [id] }); toast(r.success ? 'Programmé' : r.message, r.success); chargerListe(); }
+</script>
+</body>
+</html>

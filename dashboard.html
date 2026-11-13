@@ -107,6 +107,7 @@
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="préinscrit" checked onchange="onMsChange('fTypo')"> ⏳ Préinscrits</label>
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="prospect" onchange="onMsChange('fTypo')"> 🎯 Prospects</label>
                     <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="sortie" onchange="onMsChange('fTypo')"> ❌ Sorties</label>
+                    <label class="ms-item"><input type="checkbox" data-filter="fTypo" value="refusé" onchange="onMsChange('fTypo')"> ⛔ Refusés</label>
                 </div>
             </div>
 
@@ -287,6 +288,7 @@
                             <option value="Préinscrit">⏳ Préinscrit</option>
                             <option value="Inscrit">🎓 Inscrit</option>
                             <option value="Sortie">❌ Sortie</option>
+                            <option value="Refusé">⛔ Refusé</option>
                         </select>
                     </div>
                 </div>
@@ -668,7 +670,7 @@ async function apiPost(payload) {
             if (!labelEl) return;
             const defaults = { fTypo: '🌍 Tous', fCampus: '🌍 Tous les campus', fClasse: '🎓 Toutes les classes', fStatut: '🎯 Tous statuts' };
             const singleLabels = {
-                fTypo: { inscrit: '🎓 Inscrits', 'préinscrit': '⏳ Préinscrits', prospect: '🎯 Prospects', sortie: '❌ Sorties' },
+                fTypo: { inscrit: '🎓 Inscrits', 'préinscrit': '⏳ Préinscrits', prospect: '🎯 Prospects', sortie: '❌ Sorties', 'refusé': '⛔ Refusés' },
                 fCampus: { HECG: '📍 Marseille', HECG_AIX: '📍 Aix-en-Provence' },
                 fStatut: { recherche: '🔍 Recherche', initial: '🎒 Initial', alternance: '🏢 Alternance', contrat: '💼 Contrat', 'non su': '❓ Non su' }
             };
@@ -900,7 +902,7 @@ async function apiPost(payload) {
         function autoSetSortieTypo() {
             const hasSortie = !!document.getElementById('formSortie').value;
             const hasMotif = !!document.getElementById('formMotif').value;
-            if (hasSortie || hasMotif) {
+            if ((hasSortie || hasMotif) && document.getElementById('formForceTypo').value !== 'Refusé') {
                 document.getElementById('formForceTypo').value = 'Sortie';
             }
         }
@@ -963,7 +965,8 @@ async function apiPost(payload) {
                 document.getElementById('formStatut').value = _statut;
                 // Normalisation typologie (insensible à la casse, valeurs legacy incluses)
                 const _ty = (e.typo || "").toLowerCase().trim();
-                const _typo = (_ty.includes('préin') || _ty.includes('prein')) ? "Préinscrit"
+                const _typo = _ty.includes('refus') ? "Refusé"
+                    : (_ty.includes('préin') || _ty.includes('prein')) ? "Préinscrit"
                     : _ty.includes('sorti')     ? "Sortie"
                     : _ty.includes('inscrit')   ? "Inscrit"
                     : _ty.includes('prospect')  ? "Prospect"
