@@ -140,6 +140,7 @@ function vueSuivi() {
     <div class="bar"><i style="width:${pct}%"></i></div>
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:13px"><b style="color:var(--ink)">${lib || 'Aucun traitement lancé'}</b>
       <span>${j.actif && !j.pause ? 'Temps restant estimé : <b style="color:var(--ink)">' + dureeTxt(eta) + '</b>' : ''}${dp != null ? ` · dernier passage il y a ${dp < 90 ? dp + ' s' : Math.round(dp / 60) + ' min'}` : ''}${enCours ? ' · <b style="color:var(--ok)">passage en cours</b>' : ''}</span></div>
+    ${j.piloteUrl && j.pause ? `<div class="help" style="margin-top:12px;border-color:#f9c9a9;background:#fff8f2"><b>Fiche pilote prête</b> (${esc(j.piloteNom || '')}) : <a target="_blank" href="${esc(j.piloteUrl)}">ouvrir la fiche</a>. Si le rendu vous convient, cliquez sur « Reprendre » pour générer toutes les autres.</div>` : ''}
     ${!E.declencheur && j.actif ? '<p style="color:var(--red);font-size:12.5px">Déclencheur absent : cliquez sur « Reprendre » pour le recréer.</p>' : ''}
   </div>
   <div class="kpis">

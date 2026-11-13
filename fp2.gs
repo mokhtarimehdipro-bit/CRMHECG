@@ -510,6 +510,9 @@ function _fp2GenererLot_(ss, deadline) {
       if (d[i][FP2_C.classeurId]) { try { DriveApp.getFileById(String(d[i][FP2_C.classeurId])).setTrashed(true); } catch (x) {} }
       var r = _fp2Generer_(ss, d[i], ctx);
       ws.getRange(i + 1, FP2_C.classeurId + 1, 1, 6).setValues([[r.id, r.url, "fait", JSON.stringify(r.manquants), r.historiques + " historique(s), " + r.onglets + " onglet(s) nouvelle trame", new Date()]]);
+      var jp = _fp2Job_();
+      if (jp.pilote) { jp.pilote = false; jp.pause = true; jp.piloteUrl = r.url; jp.piloteNom = d[i][1] + " " + d[i][2]; _fp2SetJob_(jp);
+        _fp2Log_(ss, "Pilote", "Fiche pilote créée pour " + jp.piloteNom + " — vérifiez-la puis cliquez sur « Reprendre »"); }
       _fp2Log_(ss, "Fiche", d[i][1] + " " + d[i][2] + " — " + r.historiques + " historique(s), " + r.onglets + " onglet(s), " + r.manquants.length + " mention(s) manquante(s) (" + Math.round((Date.now() - t0) / 100) / 10 + " s)");
       faits++;
     } catch (eG) {
@@ -565,6 +568,7 @@ function _fp2Declencheur_(on) {
 function _fp2Relancer_(phase) {
   var job = _fp2Job_();
   if (phase === "inventaire" || !job.phase || job.phase === "termine") { job.phase = phase || "inventaire"; job.debut = Date.now(); job.phaseDebut = Date.now(); job.fait = 0; }
+  if (job.piloteFait !== true) { job.pilote = true; job.piloteFait = true; }   // 1re génération : une seule fiche, puis pause pour contrôle
   else if (phase && phase !== job.phase && !(phase === "generation" && job.phase !== "termine")) { job.phase = phase; job.phaseDebut = Date.now(); job.fait = 0; }
   job.actif = true; job.pause = false; _fp2SetJob_(job);
   PropertiesService.getScriptProperties().setProperty("FICHES_POS_ACTIVE", "0");   // l'ancien générateur (10/11) est coupé
