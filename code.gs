@@ -441,6 +441,11 @@ function doPostInner_(e) {
       case 'saveDrapeauRdv':          return handleSaveDrapeauRdv(params, ss);
       case 'getComparatifDirecteurs': return handleGetComparatifDirecteurs(params, ss);
       case 'getExamens':              return handleGetExamens(params, ss);
+      case 'getPc':                   return handleGetPc(params, ss);
+      case 'savePc':                  return handleSavePc(params, ss);
+      case 'deletePc':                return handleDeletePc(params, ss);
+      case 'savePcAnnee':             return handleSavePcAnnee(params, ss);
+      case 'importerPc':              return handleImporterPc(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
       case 'archiveExamDoc':          return handleArchiveExamDoc(params, ss);

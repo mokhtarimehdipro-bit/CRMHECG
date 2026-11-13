@@ -146,6 +146,7 @@
     <button onclick="showModule('rdv')"        id="nav-rdv"         class="nav-btn hidden">🤝 Suivi des RDV</button>
     <button onclick="showModule('directeurs')" id="nav-directeurs"  class="nav-btn hidden">🧭 Comparatif directeurs</button>
     <button onclick="showModule('examens')"    id="nav-examens"     class="nav-btn hidden">📝 Inscriptions examens</button>
+    <button onclick="showModule('pc')"         id="nav-pc"          class="nav-btn hidden">💻 Suivi des PC</button>
     <button onclick="showModule('maintenance')" id="nav-maintenance" class="nav-btn hidden">🛠️ Tickets maintenance</button>
     <button onclick="showModule('formulaires')" id="nav-formulaires" class="nav-btn hidden">🧾 Formulaires</button>
     <button onclick="showModule('recruteurs')" id="nav-recruteurs" class="nav-btn hidden">🎯 Recruteurs & relances</button>
@@ -793,6 +794,7 @@
     <div id="section-rdv" class="section"></div>
     <div id="section-directeurs" class="section"></div>
     <div id="section-examens" class="section"></div>
+    <div id="section-pc" class="section"></div>
     <div id="section-frises" class="section"></div>
     <div id="section-maintenance" class="section"></div>
     <div id="section-formulaires" class="section"></div>
@@ -865,16 +867,14 @@ async function charlInit(){
   if (charlRapport) return;
   try { const r = await api('getControleCharlemagne'); if (r.success && r.rapport) { charlRapport = r.rapport; charlAfficher(); } } catch(e){}
 }
-async function charlImporter(){
-  const f = document.getElementById('charlFichier').files[0];
-  if (!f) { toast('Choisissez d\'abord le fichier exporté de Charlemagne', false); return; }
-  const btn = document.getElementById('btnCharlImport'); btn.disabled = true; btn.textContent = '⏳ Lecture du fichier…';
-  try {
-    const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, { type:'array', cellDates:true, dateNF:'dd/mm/yyyy' });
-    let lignes = null;
+// Lecture de l'export « Tableau de bord COMPLET MMOK » (contrôle Charlemagne + suivi des PC)
+function charlLireClasseur(wb){
+  let lignes = null;
     for (const nomFeuille of wb.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header:1, raw:false, dateNF:'dd/mm/yyyy', defval:'' });
+      const ws = wb.Sheets[nomFeuille];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, dateNF:'dd/mm/yyyy', defval:'' });
+      const rowsRaw = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });   // valeurs brutes : n° de PC sans notation exponentielle
+      const off = XLSX.utils.decode_range(ws['!ref'] || 'A1').s.c;
       const iEnt = rows.findIndex(r => { const h = r.map(charlCle); return h.includes(charlCle('nom')) && h.includes(charlCle('prenom')); });
       if (iEnt < 0) continue;
       const h = rows[iEnt].map(charlCle), idx = {};
@@ -887,14 +887,38 @@ async function charlImporter(){
       if (idx.societe === undefined) throw new Error('colonne « Société Resp » introuvable : utilisez l\'édition « Tableau de bord COMPLET MMOK »');
       // Suivi des RDV : toutes les colonnes dont l'en-tête contient « visite » (ex. « Responsable visite »)
       const colsVisite = rows[iEnt].map((t, i) => ({ t: String(t).trim(), i })).filter(x => charlCle(x.t).includes('visit'));
-      lignes = rows.slice(iEnt+1).filter(r => r.some(x => String(x).trim())).map(r => {
+      lignes = rows.slice(iEnt+1).map((r, k) => [r, rowsRaw[iEnt+1+k] || []]).filter(([r]) => r.some(x => String(x).trim())).map(([r, rr]) => {
         const o = {}; Object.keys(idx).forEach(k => { o[k] = String(r[idx[k]] ?? '').trim(); });   // liste blanche
         const vis = colsVisite.map(c => ({ h: c.t, v: String(r[c.i] ?? '').trim() })).filter(x => x.v);
         if (vis.length) o.visites = JSON.stringify(vis);
+        const pc = charlPc(r, rr, off); if (pc.pc) o.pc = pc.pc; if (pc.pcCom) o.pcCom = pc.pcCom;   // Suivi des PC : colonnes AH / AQ
         return o;
       }).filter(o => o.nom || o.idEleve);
       break;
     }
+  return lignes;
+}
+// Suivi des PC : colonne AH = n° du PC (valeur brute : la notation exponentielle d'Excel est harmonisée),
+// colonne AQ = commentaires — seules les phrases qui parlent du PC / du diplôme sont envoyées.
+const CHARL_COL_PC = 33, CHARL_COL_COM = 42;
+const CHARL_RE_PC = /\b(pc|pcs|ordi|ordis|ordinateur|ordinateurs|portable|laptop|lenovo|acer|chargeur|materiel|serie|restitu\w*|rendu|rendue|recupere\w*|diplome\w*)\b/;
+function charlNumPc(raw, txt){
+  if (typeof raw === 'number' && isFinite(raw)) return Math.abs(raw) < 1e21 && Number.isInteger(Math.round(raw)) ? BigInt(Math.round(raw)).toString() : String(raw);
+  return String(txt ?? raw ?? '').trim();
+}
+function charlPc(rowTxt, rowRaw, off){
+  const i = CHARL_COL_PC - (off || 0), j = CHARL_COL_COM - (off || 0);
+  const pc = i >= 0 ? charlNumPc(rowRaw[i], rowTxt[i]) : '';
+  const com = j >= 0 ? String(rowTxt[j] ?? '').trim() : '';
+  const phr = com.split(/\n|\r|(?<=[.!?;])\s+/).map(s => s.trim()).filter(s => s && CHARL_RE_PC.test(charlNorm(s)));
+  return { pc, pcCom: phr.join(' | ') };
+}
+async function charlImporter(){
+  const f = document.getElementById('charlFichier').files[0];
+  if (!f) { toast('Choisissez d\'abord le fichier exporté de Charlemagne', false); return; }
+  const btn = document.getElementById('btnCharlImport'); btn.disabled = true; btn.textContent = '⏳ Lecture du fichier…';
+  try {
+    const lignes = charlLireClasseur(XLSX.read(await f.arrayBuffer(), { type:'array', cellDates:true, dateNF:'dd/mm/yyyy' }));
     if (!lignes || !lignes.length) throw new Error('aucun tableau avec les colonnes « Nom » et « Prénom » dans ce fichier');
     const nbIds = new Set(lignes.map(l => l.idEleve || ('?' + l.nom + ' ' + l.prenom))).size;
     if (!confirm(lignes.length + ' ligne(s) lues dans « ' + f.name + ' » = ' + nbIds + ' étudiant(s) distincts (regroupés par Identifiant Elève).\n\nLancer le contrôle avec le CRM ? (aucune donnée du CRM n\'est modifiée)')) return;
@@ -902,7 +926,7 @@ async function charlImporter(){
     const r = await api('controleCharlemagne', { lignes: JSON.stringify(lignes), fichier: f.name });
     if (!r.success) throw new Error(r.message || 'erreur serveur');
     charlRapport = r.rapport; charlAfficher();
-    toast('Contrôle terminé : ' + r.rapport.stats.erreurs + ' erreur(s), ' + r.rapport.stats.aVerifier + ' à vérifier' + (r.rapport.rdv && r.rapport.rdv.visites !== undefined ? ' · Suivi des RDV : ' + r.rapport.rdv.responsables + ' responsable(s), ' + r.rapport.rdv.visites + ' visite(s) reprise(s)' : ''));
+    toast('Contrôle terminé : ' + r.rapport.stats.erreurs + ' erreur(s), ' + r.rapport.stats.aVerifier + ' à vérifier' + (r.rapport.pc && r.rapport.pc.etudiants ? ' · Suivi des PC : ' + r.rapport.pc.etudiants + ' étudiant(s) avec un PC' : '') + (r.rapport.rdv && r.rapport.rdv.visites !== undefined ? ' · Suivi des RDV : ' + r.rapport.rdv.responsables + ' responsable(s), ' + r.rapport.rdv.visites + ' visite(s) reprise(s)' : ''));
   } catch(e) { toast('Import impossible : ' + e.message, false); }
   finally { btn.disabled = false; btn.textContent = 'Importer et contrôler'; }
 }
@@ -2130,6 +2154,7 @@ const ACCESS = {
   rdv:         ['Super-admin','Pédagogie','Administratif'],
   directeurs:  ['Super-admin','Pédagogie','Administratif'],
   examens:     ['Super-admin','Pédagogie','Administratif'],
+  pc:          ['Super-admin','Pédagogie','Administratif'],
   maintenance: ['Super-admin','Pédagogie','Administratif'],
   formulaires: ['Super-admin','Pédagogie','Administratif'],
   recruteurs: ['Super-admin','Pédagogie','Administratif'],
@@ -2153,6 +2178,7 @@ const WRITE = {
   rdv:         ['Super-admin','Pédagogie','Administratif'],
   directeurs:  ['Super-admin','Pédagogie','Administratif'],
   examens:     ['Super-admin','Pédagogie','Administratif'],
+  pc:          ['Super-admin','Pédagogie','Administratif'],
   maintenance: ['Super-admin','Pédagogie','Administratif'],
   formulaires: ['Super-admin','Pédagogie','Administratif'],
   recruteurs: ['Super-admin','Pédagogie','Administratif'],
@@ -2346,7 +2372,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','rdv','directeurs','examens','maintenance','formulaires','recruteurs'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','rdv','directeurs','examens','pc','maintenance','formulaires','recruteurs'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   const first = ALL_MODULES.find(m=>canAccess(m));
   if (first) showModule(first);
@@ -2397,6 +2423,7 @@ function showModule(m){
   if (m==='rdv')         VX.rdvInit();
   if (m==='directeurs')  VX.dirInit();
   if (m==='examens')     VX.exInit();
+  if (m==='pc')          VX.pcInit();
   if (m==='maintenance') loadMaintenance();
   if (m==='formulaires') loadFormulaires();
   if (m==='recruteurs') loadRecruteurs();
@@ -8484,7 +8511,7 @@ async function importSuiviData(){
 }
 </script>
 <script src="cube.js?v=2"></script>
-<script src="vs_modules.js?v=29"></script>
+<script src="vs_modules.js?v=30"></script>
 <script src="salles_plan.js?v=1"></script>
 <script src="vs_qualite.js?v=11"></script>
 </body>

@@ -2549,6 +2549,252 @@ async function exExport() {
   await xlDownload(wb, 'Inscriptions_examens_' + D.session + '.xlsx');
 }
 
+// ═══════════════════════════ SUIVI DES PC ═══════════════════════════
+// Backend : vs_pc.gs. Une ligne par PC (un étudiant sans PC enregistré apparaît en « Aucun PC »).
+const PC = { data: null, f: {}, cols: null, sel: new Set(), tri: 'classe', sens: 1 };
+const PC_STATUTS_UI = ['PC attribué', 'PC restitué', 'PC donné', 'Aucun PC'];
+const PC_COULEUR = { 'PC attribué': ['#e8eff8', '#1A4E8A'], 'PC restitué': ['#fff4e5', '#b45309'], 'PC donné': ['#e8f6ee', '#15803d'], 'Aucun PC': ['#f1f4f8', '#7d8a9c'] };
+const PC_COLS = [
+  ['nom', 'Nom', 1], ['prenom', 'Prénom', 1], ['classe', 'Classe', 1], ['etat', 'État étudiant', 1], ['serie', 'N° de PC', 1], ['modele', 'Modèle', 1],
+  ['statut', 'Statut PC', 1], ['annee', "Année d'attribution", 1], ['dateRestit', 'Date de restitution', 1], ['commentaire', 'Commentaire', 1],
+  ['verifier', 'À vérifier', 1], ['comCharl', 'Commentaire Charlemagne', 0], ['campus', 'Campus', 0], ['diplome', 'Diplôme', 0], ['idEleve', 'ID élève', 0]];
+const PC_FILTRES = [['classe', 'Classes'], ['etat', 'États'], ['statut', 'Statuts'], ['modele', 'Modèles'], ['annee', 'Années'], ['campus', 'Campus']];
+const pcVal = (e, k) => k === 'verifier' ? (e.verifier ? 'À vérifier' : 'OK') : (e[k] || (k === 'modele' || k === 'annee' ? '—' : k === 'classe' ? 'Classe non renseignée' : ''));
+function pcCss() {
+  if ($('pcCss')) return;
+  const st = document.createElement('style'); st.id = 'pcCss';
+  st.textContent = `.pc-st{border:0;border-radius:999px;padding:4px 10px;font:700 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+  .pc-in{border:1px solid #e3eaf3;border-radius:8px;padding:4px 7px;font:600 12.5px 'Plus Jakarta Sans',sans-serif;background:#fff;min-width:0}
+  .pc-in:focus{outline:2px solid #1A4E8A33;border-color:#1A4E8A}
+  .pc-ser{width:150px;font-family:ui-monospace,Consolas,monospace;letter-spacing:.02em}
+  .pc-ver{display:inline-block;max-width:260px;font-size:11.5px;color:#b45309;font-weight:700;line-height:1.3}
+  .pc-k{cursor:pointer}.pc-k.on{outline:2px solid #1A4E8A;outline-offset:-2px}
+  .pc-th{cursor:pointer;user-select:none;white-space:nowrap}.pc-th:hover{color:#1A4E8A}
+  .pc-sel{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#1A4E8A;color:#fff;border-radius:12px;padding:8px 12px;margin:8px 0}
+  .pc-sel select{border-radius:8px;border:0;padding:5px 8px;font:600 12.5px 'Plus Jakarta Sans',sans-serif}
+  tr.pc-off td{color:#9aa6b6}`;
+  document.head.appendChild(st);
+}
+function pcInit() {
+  injectCss(); injectCss2(); pcCss();
+  const sec = $('section-pc');
+  if (!sec.dataset.ready) {
+    sec.dataset.ready = '1'; sec.classList.add('vx');
+    try { PC.cols = new Set(JSON.parse(localStorage.getItem('pcCols') || 'null') || PC_COLS.filter(c => c[2]).map(c => c[0])); } catch (e) { PC.cols = new Set(PC_COLS.filter(c => c[2]).map(c => c[0])); }
+    PC_FILTRES.forEach(([k]) => PC.f[k] = new Set());
+    sec.innerHTML = `<div class="vx-hd"><div><h1>Suivi des PC</h1><p>PC attribués chaque année aux étudiants : n° de série, modèle, statut (attribué · restitué · donné aux diplômés), année d'attribution et date de restitution.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="vx-btn" onclick="document.getElementById('pcFile').click()">${svg('upload', 15)} Importer l'export Charlemagne</button>
+        <button class="vx-btn" onclick="VX.pcReprendre()" title="Relit le dernier fichier importé dans « Contrôle Charlemagne »">${svg('clock', 15)} Reprendre le dernier import</button>
+        <button class="vx-btn" onclick="VX.pcExport()">${svg('down', 15)} Exporter Excel</button></div></div>
+      <input type="file" id="pcFile" accept=".xls,.xlsx,.csv,.htm,.html" hidden>
+      <div class="vx-kpis" id="pcKpis"></div>
+      <div class="vx-bar" style="flex-wrap:wrap">
+        <div class="vx-search">${svg('search', 15)}<input id="pcQ" placeholder="Nom, prénom, n° de PC, commentaire…" oninput="VX.pcRender()"></div>
+        ${PC_FILTRES.map(([k, lib]) => `<div style="position:relative"><button class="vx-btn sm" id="pcFb-${k}" onclick="VX.pcPanel('${k}')">${esc(lib)} : tous ▾</button><div id="pcFp-${k}" class="rdv-cls pc-fp" style="display:none"></div></div>`).join('')}
+        <label class="sub" style="display:flex;gap:6px;align-items:center;margin:0">Restitué du <input type="date" class="pc-in" id="pcDu" onchange="VX.pcRender()"> au <input type="date" class="pc-in" id="pcAu" onchange="VX.pcRender()"></label>
+        <label class="sub" style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="pcVer" onchange="VX.pcRender()"> À vérifier seulement</label>
+        <div style="position:relative"><button class="vx-btn sm" id="pcFb-cols" onclick="VX.pcPanel('cols')">${svg('grid', 13)} Colonnes ▾</button><div id="pcFp-cols" class="rdv-cls pc-fp" style="display:none"></div></div>
+        <button class="vx-btn sm" onclick="VX.pcReset()">${svg('x', 13)} Réinitialiser</button>
+      </div>
+      <div id="pcSelBar"></div>
+      <div id="pcBody"><div class="vx-empty"><h3>Chargement…</h3></div></div>`;
+    $('pcFile').onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) pcImport(f); };
+    document.addEventListener('mousedown', ev => { document.querySelectorAll('.pc-fp').forEach(p => { if (p.style.display !== 'none' && !ev.target.closest('.pc-fp,[id^="pcFb-"]')) p.style.display = 'none'; }); });
+  }
+  pcLoad();
+}
+async function pcLoad() {
+  const r = await api('getPc', {}, { forceRefresh: true });
+  if (!r.success) { $('pcBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
+  PC.data = r; pcRender();
+}
+function pcFiltrees(sauf) {
+  const q = norm($('pcQ').value), du = $('pcDu').value, au = $('pcAu').value, ver = $('pcVer').checked;
+  return PC.data.lignes.filter(e => PC_FILTRES.every(([k]) => k === sauf || !PC.f[k].size || PC.f[k].has(pcVal(e, k)))
+    && (!q || norm([e.nom, e.prenom, e.serie, e.brut, e.commentaire, e.comCharl, e.classe, e.idEleve].join(' ')).includes(q))
+    && (!du || (e.dateRestit && e.dateRestit >= du)) && (!au || (e.dateRestit && e.dateRestit <= au)) && (!ver || e.verifier));
+}
+function pcTrier(l) {
+  const k = PC.tri, s = PC.sens;
+  return l.slice().sort((a, b) => (k === 'classe' ? (dipOrdreTri(a.diplome) - dipOrdreTri(b.diplome)) * s : 0)
+    || String(pcVal(a, k)).localeCompare(String(pcVal(b, k)), 'fr', { numeric: true }) * s || a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
+}
+function pcRender() {
+  const D = PC.data; if (!D) return;
+  const all = D.lignes, L = pcTrier(pcFiltrees());
+  const n = st => L.filter(e => e.statut === st).length, mod = m => L.filter(e => e.statut !== 'Aucun PC' && e.modele === m).length;
+  const k = (lib, v, sous, filtre, coul) => `<div class="vx-kpi pc-k ${filtre && PC.f.statut.size === 1 && PC.f.statut.has(filtre) ? 'on' : ''}" ${filtre ? `onclick="VX.pcStatut('${jsq(filtre)}')" title="Filtrer sur ce statut"` : ''}><span>${lib}</span><b ${coul ? `style="color:${coul}"` : ''}>${v}</b><small>${sous}</small></div>`;
+  $('pcKpis').innerHTML = k('PC suivis', L.filter(e => e.statut !== 'Aucun PC').length, mod('Lenovo') + ' Lenovo · ' + mod('Acer') + ' Acer', '', '')
+    + k('PC attribués', n('PC attribué'), 'en cours de prêt', 'PC attribué', '#1A4E8A') + k('PC restitués', n('PC restitué'), 'rendus à l\'école', 'PC restitué', '#b45309')
+    + k('PC donnés', n('PC donné'), 'diplômés', 'PC donné', '#15803d') + k('Sans PC', n('Aucun PC'), 'inscrits / préinscrits', 'Aucun PC', '#7d8a9c')
+    + `<div class="vx-kpi pc-k ${$('pcVer').checked ? 'on' : ''}" onclick="const c=document.getElementById('pcVer');c.checked=!c.checked;VX.pcRender()"><span>À vérifier</span><b style="color:#b45309">${L.filter(e => e.verifier).length}</b><small>n° exponentiel, doublon, écart…</small></div>`;
+  PC_FILTRES.forEach(([f, lib]) => { const b = $('pcFb-' + f); if (b) b.innerHTML = esc(lib) + ' : ' + (PC.f[f].size ? (PC.f[f].size === 1 ? esc([...PC.f[f]][0]) : PC.f[f].size + ' choisis') : 'tous') + ' ▾'; });
+  PC.sel.forEach(id => { if (!L.some(e => pcCle(e) === id)) PC.sel.delete(id); });
+  pcSelBar();
+  if (!L.length) { $('pcBody').innerHTML = `<div class="vx-empty"><h3>Aucun étudiant pour ces filtres</h3>${all.length ? '' : '<p>Importez l\'export Charlemagne pour reprendre les n° de PC (colonne AH) et les commentaires (colonne AQ).</p>'}</div>`; return; }
+  const cols = PC_COLS.filter(c => PC.cols.has(c[0]));
+  const fl = k => PC.tri === k ? (PC.sens > 0 ? ' ▲' : ' ▼') : '';
+  const opt = (l, v) => l.map(x => `<option ${x === v ? 'selected' : ''} value="${esc(x)}">${esc(x)}</option>`).join('');
+  const cell = (e, k) => {
+    const id = jsq(pcCle(e));
+    switch (k) {
+      case 'nom': return `<td><b>${esc(e.nom)}</b></td>`;
+      case 'etat': return `<td><span style="font-weight:700;color:${/sorti/i.test(e.etat) ? '#c62828' : /inscrit/i.test(e.etat) ? '#15803d' : '#7d8a9c'}">${esc(e.etat)}</span></td>`;
+      case 'serie': return `<td><input class="pc-in pc-ser" value="${esc(e.serie)}" placeholder="—" onchange="VX.pcSet('${id}','serie',this.value)" title="${e.brut && e.brut !== e.serie ? 'Charlemagne : ' + esc(e.brut) : ''}"></td>`;
+      case 'modele': return `<td><select class="pc-in" onchange="VX.pcSet('${id}','modele',this.value)"><option value="">—</option>${opt(['Lenovo', 'Acer', 'À préciser'].concat(e.modele && !['Lenovo', 'Acer', 'À préciser'].includes(e.modele) ? [e.modele] : []), e.modele)}</select></td>`;
+      case 'statut': { const c = PC_COULEUR[e.statut] || PC_COULEUR['Aucun PC'];
+        return `<td><select class="pc-st" style="background:${c[0]};color:${c[1]}" onchange="VX.pcSet('${id}','statut',this.value)">${e.statut === 'Aucun PC' ? '<option selected disabled>Aucun PC</option>' : ''}${opt(D.statuts, e.statut)}</select></td>`; }
+      case 'annee': return `<td><select class="pc-in" onchange="VX.pcSet('${id}','annee',this.value)"><option value="">—</option>${opt(D.annees, e.annee)}<option value="__ajout">＋ Ajouter une année…</option></select></td>`;
+      case 'dateRestit': return `<td><input type="date" class="pc-in" value="${esc(e.dateRestit)}" onchange="VX.pcSet('${id}','dateRestit',this.value)"></td>`;
+      case 'commentaire': return `<td><input class="pc-in" style="width:200px" value="${esc(e.commentaire)}" placeholder="—" onchange="VX.pcSet('${id}','commentaire',this.value)"></td>`;
+      case 'verifier': return `<td>${e.verifier ? `<span class="pc-ver">⚠ ${esc(e.verifier)}</span>` : ''}</td>`;
+      case 'comCharl': return `<td style="max-width:320px;font-size:12px">${esc(e.comCharl)}</td>`;
+      default: return `<td>${esc(e[k] || '')}</td>`;
+    }
+  };
+  const tous = L.length && L.every(e => PC.sel.has(pcCle(e)));
+  $('pcBody').innerHTML = `<p class="sub" style="margin:4px 0 8px">${L.length} ligne(s) affichée(s) sur ${all.length} — les modifications sont enregistrées dès que vous quittez la case.</p>
+    <div style="overflow-x:auto"><table class="vs2-t"><thead><tr><th><input type="checkbox" ${tous ? 'checked' : ''} onchange="VX.pcSelTout(this.checked)"></th>${cols.map(c => `<th class="pc-th" onclick="VX.pcTri('${c[0]}')">${esc(c[1])}${fl(c[0])}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${L.slice(0, 1500).map(e => `<tr class="${e.statut === 'Aucun PC' ? 'pc-off' : ''}"><td><input type="checkbox" ${PC.sel.has(pcCle(e)) ? 'checked' : ''} onchange="VX.pcSel('${jsq(pcCle(e))}',this.checked)"></td>${cols.map(c => cell(e, c[0])).join('')}
+      <td><button class="vx-link" onclick="VX.pcFiche('${jsq(pcCle(e))}')">${svg('clock', 12)} Historique</button>${e.statut !== 'Aucun PC' ? ` <button class="vx-link" onclick="VX.pcAjouter('${jsq(e.etuId)}')" title="Attribuer un autre PC à cet étudiant">${svg('plus', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+    ${L.length > 1500 ? '<p class="sub">Affichage limité à 1 500 lignes : affinez les filtres (l\'export Excel contient tout).</p>' : ''}`;
+}
+const pcCle = e => e.pcId || 'E:' + e.etuId;
+const pcTrouve = id => PC.data.lignes.find(e => pcCle(e) === id);
+function pcPanel(k) {
+  const p = $('pcFp-' + k);
+  if (p.style.display !== 'none') { p.style.display = 'none'; return; }
+  document.querySelectorAll('.pc-fp').forEach(x => x.style.display = 'none');
+  if (k === 'cols') {
+    p.innerHTML = `<div class="sub" style="margin:0 0 6px">Colonnes affichées</div>` + PC_COLS.map(c => `<label><input type="checkbox" ${PC.cols.has(c[0]) ? 'checked' : ''} onchange="VX.pcCol('${c[0]}',this.checked)"> ${esc(c[1])}</label>`).join('');
+  } else {
+    const cpt = {}; pcFiltrees(k).forEach(e => { const v = pcVal(e, k); cpt[v] = (cpt[v] || 0) + 1; });
+    PC.f[k].forEach(v => { if (!(v in cpt)) cpt[v] = 0; });
+    const vals = Object.keys(cpt).sort((a, b) => k === 'statut' ? PC_STATUTS_UI.indexOf(a) - PC_STATUTS_UI.indexOf(b) : a.localeCompare(b, 'fr', { numeric: true }));
+    p.innerHTML = `<div style="margin-bottom:8px"><button class="vx-btn sm" onclick="VX.pcF('${k}','__tout')">Tout afficher</button></div>`
+      + vals.map(v => `<label><input type="checkbox" ${PC.f[k].has(v) ? 'checked' : ''} onchange="VX.pcF('${k}','${jsq(v)}',this.checked)"> ${esc(v)} <small style="margin-left:auto;color:#7d8a9c">${cpt[v]}</small></label>`).join('');
+  }
+  p.style.display = 'block';
+}
+function pcF(k, v, on) {
+  if (v === '__tout') { PC.f[k].clear(); $('pcFp-' + k).style.display = 'none'; } else if (on) PC.f[k].add(v); else PC.f[k].delete(v);
+  pcRender();
+}
+function pcCol(k, on) { if (on) PC.cols.add(k); else PC.cols.delete(k); try { localStorage.setItem('pcCols', JSON.stringify([...PC.cols])); } catch (e) {} pcRender(); }
+function pcSelBar() {
+  const n = PC.sel.size, b = $('pcSelBar'); if (!b) return;
+  if (!n) { b.innerHTML = ''; return; }
+  const D = PC.data;
+  b.innerHTML = `<div class="pc-sel"><b>${n} sélectionné(s)</b>
+    <select id="pcBSt"><option value="">Statut…</option>${D.statuts.map(s => `<option>${esc(s)}</option>`).join('')}</select>
+    <select id="pcBAn"><option value="">Année d'attribution…</option>${D.annees.map(s => `<option>${esc(s)}</option>`).join('')}</select>
+    <input type="date" id="pcBRe" title="Date de restitution" style="border-radius:8px;border:0;padding:4px 6px">
+    <button class="vx-btn sm" onclick="VX.pcAppliquer()">Appliquer</button><button class="vx-btn sm" onclick="VX.pcSelTout(false)">Annuler</button></div>`;
+}
+async function pcSave(items, msg) {
+  const r = await api('savePc', { items });
+  if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return null; }
+  if (msg) toast(msg); return r;
+}
+async function pcSet(id, champ, v) {
+  const e = pcTrouve(id); if (!e) return;
+  if (champ === 'annee' && v === '__ajout') {
+    const a = prompt('Nouvelle année scolaire (format 2028-2029) :', ''); if (!a) { pcRender(); return; }
+    const r = await api('savePcAnnee', { annee: a.trim() }); if (!r.success) { toast(errTxt(r.message), false); pcRender(); return; }
+    PC.data.annees = r.annees; v = a.trim();
+  }
+  if (e.statut === 'Aucun PC' && champ !== 'serie' && champ !== 'statut' && !e.pcId && !confirm('Attribuer un PC à ' + e.prenom + ' ' + e.nom + ' ?')) { pcRender(); return; }
+  const champs = { [champ]: v };
+  if (champ === 'statut' && v === 'PC restitué' && !e.dateRestit) { const d = prompt('Date de restitution (JJ/MM/AAAA) :', fmtD(todayISO())); if (d === null) { pcRender(); return; } const m = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); champs.dateRestit = m ? m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0') : ''; }
+  const r = await pcSave([{ pcId: e.pcId, etuId: e.etuId, champs }], 'Enregistré ✓');
+  if (!r) { pcRender(); return; }
+  pcLoadSilencieux();
+}
+async function pcLoadSilencieux() { const r = await api('getPc', {}, { forceRefresh: true }); if (r.success) { PC.data = r; pcRender(); } }
+async function pcAppliquer() {
+  const st = $('pcBSt').value, an = $('pcBAn').value, re = $('pcBRe').value;
+  if (!st && !an && !re) { toast('Choisissez un statut, une année ou une date de restitution', false); return; }
+  const l = [...PC.sel].map(pcTrouve).filter(Boolean);
+  const champs = {}; if (st) champs.statut = st; if (an) champs.annee = an; if (re) champs.dateRestit = re;
+  const sansPc = l.filter(e => !e.pcId).length;
+  if (!confirm('Appliquer à ' + l.length + ' ligne(s) : ' + Object.entries(champs).map(([k, v]) => (k === 'dateRestit' ? 'restitution le ' + fmtD(v) : v)).join(', ') + (sansPc ? '\n\n' + sansPc + ' étudiant(s) sans PC : un PC (sans n°) leur sera créé.' : '') + ' ?')) return;
+  if (await pcSave(l.map(e => ({ pcId: e.pcId, etuId: e.etuId, champs })), l.length + ' ligne(s) mise(s) à jour ✓')) { PC.sel.clear(); pcLoadSilencieux(); }
+}
+async function pcAjouter(etuId) {
+  const e = PC.data.lignes.find(x => x.etuId === etuId); if (!e) return;
+  const s = prompt('N° de série du nouveau PC pour ' + e.prenom + ' ' + e.nom + ' :', ''); if (s === null) return;
+  if (await pcSave([{ etuId, champs: { serie: s, statut: 'PC attribué' } }], 'PC ajouté ✓')) pcLoadSilencieux();
+}
+function pcFiche(id) {
+  const e = pcTrouve(id); if (!e) return;
+  const admin = ['Super-admin', 'Administratif'].includes(vieScRole);
+  const dlg = modal(`<h2>${esc(e.prenom + ' ' + e.nom)}</h2><p class="sub">${esc(e.classe)} · ${esc(e.etat)}${e.idEleve ? ' · ID élève ' + esc(e.idEleve) : ''}</p>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 12px;margin:12px 0;font-size:13px">
+      <span class="sub">N° de PC</span><b>${esc(e.serie || '—')}</b>
+      <span class="sub">N° dans Charlemagne</span><span>${esc(e.brut || '—')}</span>
+      <span class="sub">Modèle</span><span>${esc(e.modele || '—')}</span>
+      <span class="sub">Statut</span><b>${esc(e.statut)}</b>
+      <span class="sub">Année d'attribution</span><span>${esc(e.annee || '—')}</span>
+      <span class="sub">Date de restitution</span><span>${e.dateRestit ? fmtD(e.dateRestit) : '—'}</span>
+      <span class="sub">Commentaire Charlemagne</span><span>${esc(e.comCharl || '—')}</span>
+      <span class="sub">Source</span><span>${esc(e.source || '—')}${e.manuel ? ' · modifié à la main (l\'import ne l\'écrase plus)' : ''}</span>
+      ${e.verifier ? `<span class="sub">À vérifier</span><span class="pc-ver">${esc(e.verifier)}</span>` : ''}</div>
+    <h3 style="margin:14px 0 6px;font-size:14px">Historique</h3>
+    ${(e.historique || []).length ? `<table class="vs2-t"><thead><tr><th>Le</th><th>Par</th><th>Modification</th></tr></thead><tbody>${e.historique.slice().reverse().map(h => `<tr><td>${esc(h.le)}</td><td>${esc(h.par)}</td><td>${esc(h.quoi)}</td></tr>`).join('')}</tbody></table>` : '<p class="sub">Aucune modification enregistrée.</p>'}
+    <div class="mft">${admin && e.pcId ? `<button class="vx-btn" style="color:#c62828;margin-right:auto" id="pcDel">${svg('trash', 13)} Supprimer cette ligne</button>` : ''}<button class="vx-btn pri" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 720);
+  const b = dlg.querySelector('#pcDel');
+  if (b) b.onclick = async () => {
+    if (!confirm('Supprimer définitivement la ligne PC de ' + e.prenom + ' ' + e.nom + ' (n° ' + (e.serie || '—') + ') ?')) return;
+    const r = await api('deletePc', { pcId: e.pcId }); if (!r.success) { toast(errTxt(r.message), false); return; }
+    dlg.remove(); toast('Ligne supprimée'); pcLoadSilencieux();
+  };
+}
+function pcBilan(S) {
+  return S.etudiants + ' étudiant(s) avec un PC dans Charlemagne : ' + S.crees + ' créé(s), ' + S.maj + ' mis à jour, ' + S.restitues + ' restitué(s), ' + S.donnes + ' donné(s)'
+    + (S.nonRapproches ? ', ' + S.nonRapproches + ' hors CRM' : '') + (S.manuelsPreserves ? ', ' + S.manuelsPreserves + ' saisie(s) manuelle(s) conservée(s)' : '');
+}
+async function pcImport(f) {
+  try {
+    toast('Lecture de « ' + f.name + ' »…');
+    const lignes = charlLireClasseur(XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true, dateNF: 'dd/mm/yyyy' }));
+    if (!lignes || !lignes.length) throw new Error('aucun tableau avec les colonnes « Nom » et « Prénom » dans ce fichier');
+    const pcs = lignes.filter(l => l.pc || l.pcCom).map(l => ({ idEleve: l.idEleve, nom: l.nom, prenom: l.prenom, email: l.email, mailPerso: l.mailPerso, classe: l.classe, entree: l.entree, motif: l.motif, pc: l.pc || '', pcCom: l.pcCom || '' }));
+    if (!pcs.length) throw new Error('aucun n° de PC (colonne AH) ni commentaire PC (colonne AQ) dans ce fichier');
+    if (!confirm(pcs.length + ' ligne(s) avec un n° de PC ou un commentaire PC dans « ' + f.name + ' ».\n\nMettre à jour le suivi des PC ? (les saisies manuelles ne sont jamais écrasées)')) return;
+    toast('Import en cours…');
+    const r = await api('importerPc', { lignes: JSON.stringify(pcs) });
+    if (!r.success) throw new Error(errTxt(r.message));
+    toast(pcBilan(r.stats)); pcLoadSilencieux();
+  } catch (e) { toast('Import impossible : ' + e.message, false); }
+}
+async function pcReprendre() {
+  if (!confirm('Reprendre les n° de PC du dernier fichier importé dans « Contrôle Charlemagne » ?' + (PC.data && PC.data.dernierImport ? '\n\n' + PC.data.dernierImport : ''))) return;
+  toast('Reprise en cours…');
+  const r = await api('importerPc', {});
+  if (!r.success) { toast(errTxt(r.message), false); return; }
+  toast(pcBilan(r.stats)); pcLoadSilencieux();
+}
+async function pcExport() {
+  const D = PC.data; if (!D) return;
+  let X; try { X = await loadExcelJS(); } catch (e) { toast(e.message, false); return; }
+  const cols = PC_COLS.filter(c => PC.cols.has(c[0]));
+  const wb = new X.Workbook(), ws = wb.addWorksheet('Suivi des PC', { views: [{ state: 'frozen', ySplit: 4 }] });
+  ws.columns = cols.map(c => ({ width: { nom: 20, prenom: 18, serie: 20, commentaire: 34, verifier: 44, comCharl: 50 }[c[0]] || 16 }));
+  xlTitle(ws, 'Suivi des PC', 'Export du ' + fmtLong(todayISO()), cols.length); xlHeader(ws, 4, cols.map(c => c[1]));
+  let r = 5;
+  pcTrier(pcFiltrees()).forEach(e => {
+    ws.getRow(r).values = cols.map(c => c[0] === 'dateRestit' ? (e.dateRestit ? new Date(e.dateRestit + 'T12:00:00') : '') : c[0] === 'verifier' ? e.verifier : (e[c[0]] || ''));
+    const iS = cols.findIndex(c => c[0] === 'serie'); if (iS >= 0) ws.getCell(r, iS + 1).numFmt = '@';
+    const iD = cols.findIndex(c => c[0] === 'dateRestit'); if (iD >= 0) ws.getCell(r, iD + 1).numFmt = 'dd/mm/yyyy';
+    const iT = cols.findIndex(c => c[0] === 'statut'); if (iT >= 0) { const c = PC_COULEUR[e.statut] || PC_COULEUR['Aucun PC'], cl = ws.getCell(r, iT + 1); cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + c[0].slice(1) } }; cl.font = { bold: true, color: { argb: 'FF' + c[1].slice(1) } }; }
+    r++;
+  });
+  xlBand(ws, 5, r - 1, cols.length);
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, r - 1), column: cols.length } };
+  await xlDownload(wb, 'Suivi_PC_' + todayISO() + '.xlsx');
+}
+
 window.VX = {
   memInit, memRender, memEdit, memExport, memKwManage, memTab, ckDip, ckYear, ckConcerne, ckCyclade, ckExport,
   ckSel, ckSelAll, ckFilter, ckAddSel,
@@ -2563,6 +2809,10 @@ window.VX = {
   rdvQ: q => { $('rdvQ').value = q; rdvRender(); }, rdvNew, rdvEdit, rdvStatut, rdvReferent, rdvHisto, rdvCharl, rdvExport,
   dirInit, dirLoad, dirCsv, dirVerdict: v => { DR.verdict = DR.verdict === v ? '' : v; dirRender(); }, dirLecture: n => { DR.lecture = n; DR.verdict = ''; dirRender(); },
   dirQ: v => { DR.q = v; dirRender(); const i = $('dirQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } },
-  exInit, exLoad: s => exLoad(s), exRender, exClsPanel, exCls, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport
+  exInit, exLoad: s => exLoad(s), exRender, exClsPanel, exCls, exInscrit, exInscrireClasse, exNum, exEpreuves, exPick, exDocDel, exExport,
+  pcInit, pcRender, pcPanel, pcF, pcCol, pcSet, pcAppliquer, pcAjouter, pcFiche, pcReprendre, pcExport,
+  pcStatut: st => { const on = PC.f.statut.size === 1 && PC.f.statut.has(st); PC.f.statut.clear(); if (!on) PC.f.statut.add(st); pcRender(); }, pcTri: k => { PC.sens = PC.tri === k ? -PC.sens : 1; PC.tri = k; pcRender(); },
+  pcSel: (id, on) => { if (on) PC.sel.add(id); else PC.sel.delete(id); pcSelBar(); }, pcSelTout: on => { if (on) pcFiltrees().forEach(e => PC.sel.add(pcCle(e))); else PC.sel.clear(); pcRender(); },
+  pcReset: () => { PC_FILTRES.forEach(([k]) => PC.f[k].clear()); $('pcQ').value = ''; $('pcDu').value = ''; $('pcAu').value = ''; $('pcVer').checked = false; PC.sel.clear(); pcRender(); toast('Filtres réinitialisés'); }
 };
 })();
