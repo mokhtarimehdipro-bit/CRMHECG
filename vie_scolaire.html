@@ -860,7 +860,9 @@ const CHARL_COLONNES = {
   entree: ['date entree'], sortie: ['date sortie'], motif: ['motif de sortie'], etatPreinscription: ['etat preinscription*'],
   societe: ['societe resp', 'societe'], nomResp: ['nom resp'], prenomResp: ['prenom resp'], emailResp: ['email bureau resp'], professionResp: ['profession resp'],
   // fiches de positionnement : pris seulement si l'export contient ces colonnes
-  civilite: ['civilite eleve', 'civilite', 'sexe'], ville: ['ville eleve', 'ville'], cp: ['cp eleve', 'cp', 'code postal'], nationalite: ['nationalite'], permis: ['permis b', 'permis*'], vehicule: ['vehicule*']
+  civilite: ['civilite eleve', 'civilite', 'sexe', 'sexe eleve', 'genre', 'civilite*', 'sexe*'], ville: ['ville eleve', 'ville'], cp: ['cp eleve', 'cp', 'code postal'],
+  nationalite: ['nationalite eleve', 'nationalite', 'nationalite*'], villeNaissance: ['ville de naissance', 'lieu de naissance', 'commune de naissance', 'ville naissance*', 'lieu naissance*'],
+  permis: ['permis b', 'permis*'], vehicule: ['vehicule*']
 };
 function charlNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
 // clé d'en-tête tolérante aux accents mal décodés (« Pr�nom » = « Prénom ») : sans espaces ni « e »

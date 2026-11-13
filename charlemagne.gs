@@ -28,7 +28,7 @@ var CHARL_VERDICTS = ["Différente", "Charlemagne seulement", "CRM seulement", "
 function _charlInscrit_(typo) { var t = _charlNorm_(typo); return t === "inscrit" || t === "preinscrit" || t === "pre inscrit"; }
 var CHARL_CHAMPS = ["idEleve", "nom", "prenom", "naissance", "email", "mailPerso", "classe", "codeClasse", "niveau",
   "entree", "sortie", "motif", "etatPreinscription", "societe", "nomResp", "prenomResp", "emailResp", "professionResp",
-  "visites", "pc", "pcCom", "civilite", "ville", "cp", "nationalite", "permis", "vehicule"];   // derniers : fiches de positionnement (fp2.gs)   // pc / pcCom = colonnes AH / AQ (suivi des PC, vs_pc.gs)   // visites = JSON [{h: en-tête, v: valeur}] des colonnes « … visite … » (suivi des RDV, vs_suivi.gs)
+  "visites", "pc", "pcCom", "civilite", "ville", "cp", "nationalite", "permis", "vehicule", "villeNaissance"];   // derniers : fiches de positionnement (fp2.gs)   // pc / pcCom = colonnes AH / AQ (suivi des PC, vs_pc.gs)   // visites = JSON [{h: en-tête, v: valeur}] des colonnes « … visite … » (suivi des RDV, vs_suivi.gs)
 
 function _charlAutorise_(p) {
   return !!CHARL_ROLES[String(p.vieScRole || "")] || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr";
@@ -137,6 +137,9 @@ function handleControleCharlemagne(p, ss) {
     R.importePar = p.nomAuteur || p.emailAuteur || "";
     R.date = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm");
     _charlEcrireImport_(ss, lignes, R);
+    // Fiches de positionnement : les données Charlemagne (civilité, naissance, nationalité…) complètent les cases vides
+    try { if (typeof _fp2Job_ === "function") { var jF = _fp2Job_(); if (!jF.actif || jF.phase === "termine") {
+      PropertiesService.getScriptProperties().deleteProperty("FP2_COMPL"); jF.phase = "completion"; jF.actif = true; jF.pause = false; jF.phaseDebut = Date.now(); _fp2SetJob_(jF); } } } catch (eF) {}
     _charlEcrireRapport_(ss, R);
     _charlEcrireComparatif_(ss, R);
     try { R.rdv = _rdvImporterCharl_(ss, lignes, R.importePar); } catch (eV) { R.rdv = { erreur: String(eV) }; }

@@ -388,7 +388,8 @@ function _fp2Sources_(ctx, e, champ, dossiers) {
   R.nationalite = _fp2Nat_(c.nationalite) || _fp2Nat_(champ("nationalite"));
   R.permis = _fp2OuiNon_(c.permis) || _fp2OuiNon_(champ("permis"));
   R.vehicule = _fp2OuiNon_(c.vehicule) || _fp2OuiNon_(champ("vehicule"));
-  var manque = ["naissance", "civilite", "ville", "nationalite", "permis", "vehicule"].filter(function (k) { return !R[k]; });
+  // OCR réservé à l'adresse (ville) et au permis / véhicule : civilité, naissance, nationalité viennent de Charlemagne (consigne direction)
+  var manque = ["ville", "permis", "vehicule"].filter(function (k) { return !R[k]; });
   if (manque.length && dossiers && dossiers.length) {
     var o = _fp2Ocr_(dossiers);
     manque.forEach(function (k) { if (o[k]) { R[k] = o[k].v; notes[k] = "Lu par OCR sur « " + o[k].src + " » — à vérifier"; } });
