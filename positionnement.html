@@ -87,12 +87,18 @@ function nav() {
 function voir(k) { S.vue = k; nav(); rendre(); if (k === 'refus' && !S.sortis) chargerSortis(); if (k === 'bach' && !S.bach) chargerBach(); if (k !== 'suivi') chargerListe(); }
 async function charger() { await Promise.all([chargerEtat(), chargerListe()]); }
 async function chargerEtat() {
-  try { const r = await api('etat'); if (!r.success) throw new Error(r.message); S.etat = r; if (S.vue === 'suivi') rendre(); live(); } catch (e) { if (S.vue === 'suivi') $('app').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  try { const r = await api('etat'); if (!r.success) throw new Error(r.message); S.etat = r; if (S.vue === 'suivi') rendre(); live(); relancer(); } catch (e) { if (S.vue === 'suivi') $('app').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 async function chargerListe() { const r = await api('liste'); if (r.success) { S.liste = r.liste; nav(); if (S.vue !== 'suivi') rendre(); } }
 async function chargerSortis() { const r = await api('sortis'); if (r.success) { S.sortis = r.sortis; rendre(); } }
 async function chargerBach() { const r = await api('bachelor'); if (r.success) { S.bach = r; rendre(); } }
 
+// Page ouverte : relance un passage dès que le précédent est terminé (le serveur garantit un seul passage à la fois)
+function relancer() {
+  const E = S.etat, j = E.job || {}, enCours = E.bail && E.maintenant - E.bail < 330000;
+  if (!j.actif || j.pause || enCours || S.kick || j.phase === 'termine') return;
+  S.kick = true; api('kick').catch(() => {}).finally(() => { S.kick = false; });
+}
 function live() {
   const E = S.etat, j = E.job || {}, actif = j.actif && !j.pause, enCours = E.bail && E.maintenant - E.bail < 330000;
   $('live').className = 'live' + (actif ? ' on' : '');
@@ -127,7 +133,7 @@ function vueSuivi() {
   else if (ph === 'generation' || ph === 'termine') { pct = gTot ? Math.round(((et['fait'] || 0) + (et['erreur'] || 0)) / gTot * 100) : 0; lib = `Fiches générées : ${et['fait'] || 0} / ${gTot}`; }
   const enCours = E.bail && E.maintenant - E.bail < 330000;
   const dp = j.dernierPassage ? Math.round((E.maintenant - j.dernierPassage) / 1000) : null;
-  return `<h1>Suivi en direct</h1><p class="sub">Le traitement tourne en arrière-plan (un passage par minute, jusqu’à 4 min 30 de travail chacun). En cas de coupure, il reprend tout seul à l’endroit exact où il s’était arrêté. Cette page s’actualise toutes les 4 secondes.</p>
+  return `<h1>Suivi en direct</h1><p class="sub">Le traitement tourne en arrière-plan (un passage automatique toutes les 5 minutes ; tant que cette page est ouverte, les passages s’enchaînent sans pause). En cas de coupure, il reprend tout seul à l’endroit exact où il s’était arrêté. Cette page s’actualise toutes les 4 secondes.</p>
   <div class="card">
     <div class="tools" style="justify-content:space-between;margin:0">
       <div class="phases">${[['inventaire', '1 · Inventaire'], ['extraction', '2 · Lecture de l’historique'], ['generation', '3 · Génération'], ['termine', 'Terminé']].map(([k, l], i) => `<span class="ph ${ph === k ? 'on' : (io > i ? 'ok' : '')}">${io > i ? '✓ ' : ''}${l}</span>`).join('')}</div>
@@ -141,7 +147,7 @@ function vueSuivi() {
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:13px"><b style="color:var(--ink)">${lib || 'Aucun traitement lancé'}</b>
       <span>${j.actif && !j.pause ? 'Temps restant estimé : <b style="color:var(--ink)">' + dureeTxt(eta) + '</b>' : ''}${dp != null ? ` · dernier passage il y a ${dp < 90 ? dp + ' s' : Math.round(dp / 60) + ' min'}` : ''}${enCours ? ' · <b style="color:var(--ok)">passage en cours</b>' : ''}</span></div>
     ${j.piloteUrl && j.pause ? `<div class="help" style="margin-top:12px;border-color:#f9c9a9;background:#fff8f2"><b>Fiche pilote prête</b> (${esc(j.piloteNom || '')}) : <a target="_blank" href="${esc(j.piloteUrl)}">ouvrir la fiche</a>. Si le rendu vous convient, cliquez sur « Reprendre » pour générer toutes les autres.</div>` : ''}
-    ${!E.declencheur && j.actif ? '<p style="color:var(--red);font-size:12.5px">Déclencheur absent : cliquez sur « Reprendre » pour le recréer.</p>' : ''}
+    ${!E.declencheur && j.actif ? '<p style="color:var(--red);font-size:12.5px">Passage automatique introuvable : gardez cette page ouverte pour faire avancer le traitement.</p>' : ''}
   </div>
   <div class="kpis">
     <div class="kpi"><div class="l">Fiches historiques</div><div class="v">${h.total || 0}</div><div class="s">${h.faits || 0} lues · ${h.erreurs || 0} non lisibles</div></div>

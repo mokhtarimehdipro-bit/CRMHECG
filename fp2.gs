@@ -524,8 +524,9 @@ function _fp2GenererLot_(ss, deadline) {
   return faits;
 }
 
-// Déclencheur (chaque minute) : un seul passage à la fois grâce à un bail de 5 min 30
-function fp2Tick() {
+// Passage de travail : appelé par auditAdressesTick (toutes les 5 min) et, tant que la page de suivi
+// est ouverte, relancé par elle dès que le précédent est fini. Un seul passage à la fois (bail de 5 min 30).
+function fp2Tick(budget) {
   var t0 = Date.now(), props = PropertiesService.getScriptProperties();
   var lock = LockService.getScriptLock(); if (!lock.tryLock(3000)) return;
   try {
@@ -536,7 +537,7 @@ function fp2Tick() {
   var ss = SpreadsheetApp.openById(FP2_SS), job = _fp2Job_();
   try {
     if (!job.actif || job.pause) return;
-    var deadline = t0 + 270000;
+    var deadline = t0 + Math.min(280000, budget || 270000);
     job.dernierPassage = t0; _fp2SetJob_(job);
     if (job.phase === "inventaire") {
       _fp2Inventaire_(ss); job = _fp2Job_(); job.phase = "extraction"; job.phaseDebut = Date.now(); _fp2SetJob_(job);
@@ -560,11 +561,8 @@ function fp2Tick() {
   } catch (e) { _fp2Log_(ss, "Erreur", "Passage : " + e); }
   finally { props.deleteProperty("FP2_BAIL"); }
 }
-function _fp2Declencheur_(on) {
-  var t = ScriptApp.getProjectTriggers().filter(function (x) { return x.getHandlerFunction() === "fp2Tick"; });
-  if (on && !t.length) ScriptApp.newTrigger("fp2Tick").timeBased().everyMinutes(1).create();
-  if (!on) t.forEach(function (x) { ScriptApp.deleteTrigger(x); });
-}
+// Pas de déclencheur dédié (limite Google de 20 atteinte) : le moteur vit dans auditAdressesTick.
+function _fp2Declencheur_(on) {}
 function _fp2Relancer_(phase) {
   var job = _fp2Job_();
   if (phase === "inventaire" || !job.phase || job.phase === "termine") { job.phase = phase || "inventaire"; job.debut = Date.now(); job.phaseDebut = Date.now(); job.fait = 0; }
@@ -586,7 +584,7 @@ function handleFp2(p, ss) {
       var hd = _fp2Histo_(ss).getDataRange().getValues().slice(1), hx = { total: hd.length, faits: hd.filter(function (r) { return r[9] && !r[10]; }).length, erreurs: hd.filter(function (r) { return r[10]; }).length };
       var jr = ss.getSheetByName("FP2_JOURNAL"), journal = [];
       if (jr && jr.getLastRow() > 1) { var n = Math.min(80, jr.getLastRow() - 1); journal = jr.getRange(jr.getLastRow() - n + 1, 1, n, 3).getDisplayValues().reverse(); }
-      var job = _fp2Job_(), trig = ScriptApp.getProjectTriggers().some(function (x) { return x.getHandlerFunction() === "fp2Tick"; });
+      var job = _fp2Job_(), trig = ScriptApp.getProjectTriggers().some(function (x) { return x.getHandlerFunction() === "auditAdressesTick"; });
       return createJsonResponse({ success: true, job: job, etats: cpt, decisions: dec, histo: hx, avecManquants: manq, journal: journal, declencheur: trig,
         bail: Number(PropertiesService.getScriptProperties().getProperty("FP2_BAIL") || 0), maintenant: Date.now() });
     }
@@ -659,6 +657,8 @@ function handleFp2(p, ss) {
       var T = null; try { T = JSON.parse(PropertiesService.getScriptProperties().getProperty("FP2_BACH_TESTS") || "null"); } catch (e) {}
       return createJsonResponse({ success: true, criteres: _fp2BachCriteres_(), tests: T });
     }
+    if (op === "kick") { fp2Tick(280000); return createJsonResponse({ success: true }); }
+    if (op === "declencheurs") return createJsonResponse({ success: true, liste: ScriptApp.getProjectTriggers().map(function (t) { return { f: t.getHandlerFunction(), type: String(t.getEventType()), src: String(t.getTriggerSource()) }; }) });
     if (op === "tests") { var R = _fp2TestsBachelor_(); _fp2Log_(ss, "Bachelor", "Tests d'admission générés"); logAction(p.emailAuteur, "", "Création", "Étudiants — Fiches de positionnement (refonte)", "Bachelor", "Tests d'admission (sujet + corrigé)"); return createJsonResponse({ success: true, tests: R }); }
     return createJsonResponse({ success: false, message: "Opération inconnue" });
   } catch (e) { return createJsonResponse({ success: false, message: String(e) }); }

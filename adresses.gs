@@ -896,6 +896,7 @@ function auditAdressesTick() {
   try { if (typeof _ofAuto_ === 'function') _ofAuto_(t0); } catch (eO) { console.error('offres (lieux / partages) : ' + eO); }   // offres_lieux.gs
   try { if (typeof _maintAuto_ === 'function') _maintAuto_(); } catch (eM) { console.warn('tickets : ' + eM); }   // formulaires.gs — numérotation
   try { if (typeof _fpAuto_ === 'function') _fpAuto_(t0); } catch (eP) { console.error('fiches de positionnement : ' + eP); }   // positionnement.gs
+  try { var bFp2 = 200000 - (Date.now() - t0); if (typeof fp2Tick === 'function' && bFp2 > 60000) fp2Tick(bFp2); } catch (eF2) { console.error('fiches de positionnement (refonte) : ' + eF2); }   // fp2.gs
   _ADR_LIMITE_ = t0 + 320000;
   var etat = _adrEtat_();
   var h = Number(Utilities.formatDate(new Date(), "Europe/Paris", "H"));
