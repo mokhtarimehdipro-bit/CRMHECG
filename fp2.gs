@@ -47,6 +47,7 @@ function _fp2Log_(ss, type, msg) {
     var ws = _fp2Feuille_(ss, "FP2_JOURNAL", ["Date", "Type", "Message"]);
     ws.appendRow([Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM HH:mm:ss"), type, String(msg).slice(0, 500)]);
     if (ws.getLastRow() > 700) ws.deleteRows(2, 200);
+    SpreadsheetApp.flush();   // visible tout de suite dans la page de suivi
   } catch (e) {}
 }
 
@@ -544,7 +545,16 @@ function _fp2GenererLot_(ss, deadline) {
     if (_fp2Job_().pause) break;
     ctx = ctx || _fp2Ctx_(ss);
     var t0 = Date.now(), id = String(d[i][0]);
-    ws.getRange(i + 1, FP2_C.etat + 1).setValue("en cours");
+    // un passage précédent s'est arrêté au milieu de cet étudiant : 2 tentatives maximum
+    if (String(d[i][FP2_C.etat]) === "en cours") {
+      var pE = PropertiesService.getScriptProperties(), ess = {}; try { ess = JSON.parse(pE.getProperty("FP2_ESSAIS") || "{}"); } catch (x) {}
+      ess[id] = (ess[id] || 0) + 1; pE.setProperty("FP2_ESSAIS", JSON.stringify(ess));
+      if (ess[id] >= 2) {
+        ws.getRange(i + 1, FP2_C.etat + 1, 1, 4).setValues([["erreur", d[i][FP2_C.manquants], "Génération interrompue deux fois (dossier trop volumineux ?) — relancez avec « Refaire »", new Date()]]);
+        _fp2Log_(ss, "Erreur", d[i][1] + " " + d[i][2] + " : génération interrompue deux fois, étudiant mis de côté"); continue;
+      }
+    }
+    ws.getRange(i + 1, FP2_C.etat + 1).setValue("en cours"); SpreadsheetApp.flush();
     try {
       var e = ctx.etus[id]; if (e) { e._noteRefus = d[i][FP2_C.noteRefus]; e._motifRefus = d[i][FP2_C.motifRefus]; }
       if (e && String(d[i][FP2_C.decision]) === "auto" && e.typoN === "inscrit") {

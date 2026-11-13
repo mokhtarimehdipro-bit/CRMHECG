@@ -97,7 +97,10 @@ async function chargerBach() { const r = await api('bachelor'); if (r.success) {
 function relancer() {
   const E = S.etat, j = E.job || {}, enCours = E.bail && E.maintenant - E.bail < 330000;
   if (!j.actif || j.pause || enCours || S.kick || j.phase === 'termine') return;
-  S.kick = true; api('kick').catch(() => {}).finally(() => { S.kick = false; });
+  // on n'attend pas la fin du passage (5 min) : la requête est coupée côté navigateur, le serveur continue
+  S.kick = true; const ac = new AbortController(); setTimeout(() => ac.abort(), 15000);
+  fetch(API_URL, { method: 'POST', signal: ac.signal, body: JSON.stringify({ action: 'fp2', op: 'kick', nomAuteur: user.nom || '', emailAuteur: user.email || '' }) })
+    .catch(() => {}).finally(() => { setTimeout(() => { S.kick = false; }, 20000); });
 }
 function live() {
   const E = S.etat, j = E.job || {}, actif = j.actif && !j.pause, enCours = E.bail && E.maintenant - E.bail < 330000;
