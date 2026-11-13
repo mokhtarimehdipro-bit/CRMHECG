@@ -1830,7 +1830,7 @@ function rdvAudit() {
     const i = +b.dataset.appl, x = L[i];
     const v = dlg.querySelector(`[name="au${i}"]:checked`).value;
     let nom = v, email = '';
-    if (v === '__autre') { const q = (R.data.equipe || []).find(z => z.email === dlg.querySelector(`[data-autre="${i}"]`).value); if (!q) { toast("Choisissez un membre de l'équipe", false); return; } nom = q.nom; email = q.email; }
+    if (v === '__autre') { const q = rdvEquipeDe(dlg.querySelector(`[data-autre="${i}"]`).value); if (!q) { toast("Choisissez un membre de l'équipe", false); return; } nom = q.nom; email = q.email; }
     else { const ex = x.responsables[v][0]; email = ex.referentEmail || ''; }
     b.disabled = true; b.innerHTML = 'Enregistrement…';
     const r = await api('saveReferentRdv', { annee: R.annee, etuIds: x.etudiants.map(e => e.id), nom, email });
@@ -1862,7 +1862,7 @@ function rdvAffecter(ids) {
   const dlg = modal(`<h2>Responsable des visites${e ? ' — ' + esc(e.nom) : ` — ${L.length} étudiants`}</h2>
     <p class="sub">Membre de l'équipe chargé des RDV en ${esc(R.annee)}. La date d'attribution est enregistrée.${!e && dejaR ? ` <b style="color:#c2410c">${dejaR} étudiant(s) ont déjà un responsable : il sera remplacé.</b>` : ''}</p>
     ${!e ? `<div class="vx-note" style="display:block;max-height:120px;overflow:auto;margin-bottom:8px">${L.map(x => esc(x.nom) + (x.referent ? ` <i>(${esc(x.referent)})</i>` : '')).join(', ')}</div>` : ''}
-    <select class="in" id="rfVis">${rdvEquipeOptions(e ? (e.referentEmail || e.referent) : '')}</select>
+    <select class="in" id="rfVis">${rdvEquipeOptions(e ? e.referentEmail : '', e ? e.referent : '')}</select>
     <input class="in" id="rfLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px">
     <label class="fl">Précision (zone libre)</label><input class="in" id="rfPrec" placeholder="Ex : à sa demande" value="${esc(e ? e.referentPrecision || '' : '')}">
     <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="rfOk">Affecter${e ? '' : ' aux ' + L.length + ' étudiants'}</button></div>`, 520);
@@ -2530,13 +2530,20 @@ function rdvApercu(r, cible, resp) {
     rdvLoad();
   };
 }
-function rdvEquipeOptions(sel) {
-  return `<option value="">— choisir —</option>` + (R.data.equipe || []).map(x => `<option value="${esc(x.email)}" ${sel && (sel === x.email || norm(sel) === norm(x.nom)) ? 'selected' : ''}>${esc(x.nom)}${x.role ? ' · ' + esc(x.role) : ''}</option>`).join('') + `<option value="__autre">Autre (saisie libre)…</option>`;
+// La valeur d'une option est le rang dans la liste, jamais le mail : plusieurs membres partagent une adresse générique
+// (contact@hecg.fr pour Lyes BENMOSTEFA et Salah FLIFLA, communication@hecg.fr…). Sélection d'abord par le nom.
+function rdvEquipeOptions(sel, selNom) {
+  const eq = R.data.equipe || [];
+  let iSel = selNom ? eq.findIndex(x => norm(x.nom) === norm(selNom)) : -1;
+  if (iSel < 0 && sel) iSel = eq.findIndex(x => norm(x.nom) === norm(sel));
+  if (iSel < 0 && sel) iSel = eq.findIndex(x => x.email === sel);
+  return `<option value="">— choisir —</option>` + eq.map((x, i) => `<option value="${i}" ${i === iSel ? 'selected' : ''}>${esc(x.nom)}${x.role ? ' · ' + esc(x.role) : ''}${eq.some((y, j) => j !== i && y.email && y.email === x.email) ? ' (' + esc(x.email) + ')' : ''}</option>`).join('') + `<option value="__autre">Autre (saisie libre)…</option>`;
 }
+const rdvEquipeDe = v => (v === '' || v === '__autre' || v == null) ? null : (R.data.equipe || [])[+v] || null;
 function rdvVisiteurChoisi(selId, libreId) {
   const v = $(selId).value;
   if (v === '__autre') return { visiteur: $(libreId).value.trim(), visiteurEmail: '' };
-  const x = (R.data.equipe || []).find(q => q.email === v);
+  const x = rdvEquipeDe(v);
   return x ? { visiteur: x.nom, visiteurEmail: x.email } : { visiteur: '', visiteurEmail: '' };
 }
 function rdvForm(e, v) {
@@ -2544,7 +2551,7 @@ function rdvForm(e, v) {
   const dlg = modal(`<h2>${v ? 'RDV de ' + esc(v.etudiant) : 'Nouveau RDV — ' + esc(e.nom)}</h2>
     <p class="sub">${v ? `${esc(v.entreprise || '')}${v.lieu ? ' — ' + esc(v.lieu) : ''} · statut <b>${esc(v.statut)}</b>` : `${esc(e.entreprise || 'Entreprise non renseignée')}${e.lieu ? ' — ' + esc(e.lieu) : ''} (lieu figé dans l'historique)`}</p>
     <label class="fl">Membre de l'équipe qui se déplace</label>
-    <select class="in" id="rvVis">${rdvEquipeOptions(ref)}</select>
+    <select class="in" id="rvVis">${rdvEquipeOptions(ref, v ? v.visiteur : e.referent)}</select>
     <input class="in" id="rvLibre" placeholder="Prénom NOM" style="display:none;margin-top:6px" value="${esc(v && !v.visiteurEmail ? v.visiteur : '')}">
     <label class="fl">Précision (zone libre)</label><input class="in" id="rvPrec" placeholder="Ex : à sa demande, remplace un collègue…" value="${esc(v ? v.precision || '' : '')}">
     <label class="fl">${v ? 'Date du RDV' : 'Date RDV pris'}</label><input type="date" class="in" id="rvDate" value="${v ? (v.date || '') : ''}" ${v && v.statut === 'Honoré' ? 'disabled' : ''}>
