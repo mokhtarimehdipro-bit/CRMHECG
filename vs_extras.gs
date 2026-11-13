@@ -201,7 +201,7 @@ function handleSaveFrise(p, ss) {
     parts.forEach(function(x) { if (emails.indexOf(x.email) === -1) emails.push(x.email); });
     const dest = emails.join(", "), partsJson = JSON.stringify(parts);
     if (!String(fws.getRange(1, 11).getValue() || "")) fws.getRange(1, 11).setValue("Participants").setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
-    let id = f.id;
+    let id = f.id, alertes = 0;
     if (id) {
       const d = fws.getDataRange().getValues(); let found = false;
       for (let i = 1; i < d.length; i++) if (String(d[i][0]) === String(id)) {
@@ -236,10 +236,25 @@ function handleSaveFrise(p, ss) {
         ews.getRange(start, 3, rows.length, 1).setNumberFormat("@");
         ews.getRange(start, 1, rows.length, ETAPE_HEADERS.length).setValues(rows);
       }
+      // Alerte à tous les invités : échéance ajoutée, date déplacée ou échéance retirée (sauf si décoché à l'enregistrement)
+      if (!f.archiver && f.notifier !== false) {
+        const tzA = Session.getScriptTimeZone(), isoA = function (v) { return v instanceof Date ? Utilities.formatDate(v, tzA, "yyyy-MM-dd") : String(v || ""); };
+        const chg = [], gardes = {};
+        rows.forEach(function (r) {
+          const o = old[String(r[0])];
+          if (!o) chg.push({ type: "ajout", titre: r[3], date: r[2], aRendre: r[4] });
+          else { gardes[String(r[0])] = 1; if (isoA(o[2]) !== String(r[2])) chg.push({ type: "date", titre: r[3], date: r[2], avant: isoA(o[2]), aRendre: r[4] }); }
+        });
+        Object.keys(old).forEach(function (k) { if (!gardes[k]) chg.push({ type: "retrait", titre: String(old[k][3] || ""), date: isoA(old[k][2]) }); });
+        if (chg.length) {
+          const fr = fws.getDataRange().getValues().filter(function (r) { return String(r[0]) === String(id); })[0];
+          if (fr) { try { alertes = _friseAlerterChangements_(ss, fr, chg, p.nomAuteur || me); } catch (eA) { Logger.log("Alerte frise : " + eA); } }
+        }
+      }
     }
     _ensureFriseTrigger_();
     logAction(p.nomAuteur || me, p.vieScRole || "", f.id ? (f.archiver ? "Suppression" : "Modification") : "Création", "Vie scolaire", id, "Frise : " + String(f.titre || "") + (parts.length ? " — " + parts.length + " participant(s) aux rappels" : ""));
-    return createJsonResponse({ success: true, id: id });
+    return createJsonResponse({ success: true, id: id, alertes: alertes });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
 }
@@ -361,7 +376,7 @@ function rappelsFrises() {
       + '<div style="padding:8px 26px 24px">'
       + (prenom ? '<p style="font-size:14.5px;color:#1f2937;margin:16px 0 4px">Bonjour ' + esc(prenom) + ',</p><p style="font-size:14px;color:#475569;margin:0 0 6px">' + (items.length > 1 ? 'voici les échéances qui approchent :' : "voici l'échéance qui approche :") + '</p>' : '')
       + '<table style="width:100%;border-collapse:collapse">' + lignes + '</table>'
-      + (etu ? '<p style="font-size:13px;color:#64748b;margin-top:18px">Une question ? Contactez le pôle pédagogique : polepedagogique@hecg.fr</p>'
+      + (etu ? '<a href="' + FRISE_URL_ETU + '" style="display:inline-block;margin-top:20px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">Voir mes échéances</a><p style="font-size:13px;color:#64748b;margin-top:18px">Une question ? Contactez le pôle pédagogique : polepedagogique@hecg.fr</p>'
              : '<a href="https://mokhtarimehdipro-bit.github.io/CRMHECG/vie_scolaire.html" style="display:inline-block;margin-top:20px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">Ouvrir les frises</a>')
       + '</div></div></div>';
     try { MailApp.sendEmail({ to: em, subject: "[HECG] ⏰ " + (items[0].jours === 0 ? "Échéance aujourd'hui" : "Échéance proche") + " : " + items[0].et[3], htmlBody: html, name: "HECG — Rappel d'échéance" }); envoyes++; }
@@ -886,4 +901,73 @@ function handleSaveMemoiresChecklist(p, ss) {
     return createJsonResponse({ success: true });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
   finally { try { lock.releaseLock(); } catch (eL) {} }
+}
+
+// ═══════════ FRISES — ESPACE « MES ÉCHÉANCES » (lecture seule) + ALERTES DE CHANGEMENT (13/11/2026) ═══════════
+var FRISE_URL_ETU = "https://mokhtarimehdipro-bit.github.io/CRMHECG/mes_frises.html";
+var FRISE_URL_EQUIPE = "https://mokhtarimehdipro-bit.github.io/CRMHECG/vie_scolaire.html";
+function _friseEmailsDe_(row) {   // destinataires + participants + créateur d'une frise
+  const l = String(row[4] || "").toLowerCase().split(/[,;\s]+/).filter(function (s) { return s.indexOf("@") > 0; });
+  _friseParticipants_(row[10]).forEach(function (x) { if (x.email && l.indexOf(x.email) === -1) l.push(x.email); });
+  return l;
+}
+/** Frises auxquelles la personne connectée est invitée (étudiant : ses deux adresses). Lecture seule, sans la liste des invités. */
+function handleGetMesFrises(p, ss) {
+  try {
+    const mails = [String(p.emailAuteur || "").toLowerCase()];
+    if (String(p.roleAuteurValide || "") === "Etudiant") {
+      const moi = String(p.targetId || "").toUpperCase();
+      _vsuEtudiants_(ss).forEach(function (e) { if (e.id.toUpperCase() === moi) [e.mailPerso, e.mailHecg].forEach(function (m) { if (m && mails.indexOf(m) === -1) mails.push(m); }); });
+    }
+    const tz = Session.getScriptTimeZone();
+    const fd = _vsxSheet_(ss, "FRISES", FRISE_HEADERS).getDataRange().getValues(), ed = _vsxSheet_(ss, "FRISES_ETAPES", ETAPE_HEADERS).getDataRange().getValues();
+    const iso = function (v) { return v instanceof Date ? Utilities.formatDate(v, tz, "yyyy-MM-dd") : String(v || ""); };
+    const out = [], idx = {};
+    for (let i = 1; i < fd.length; i++) {
+      if (!fd[i][0] || String(fd[i][9]) === "Oui") continue;
+      const em = _friseEmailsDe_(fd[i]); em.push(String(fd[i][7] || "").toLowerCase());
+      if (!mails.some(function (m) { return m && em.indexOf(m) !== -1; })) continue;
+      idx[String(fd[i][0])] = out.length;
+      out.push({ id: String(fd[i][0]), titre: String(fd[i][1] || ""), description: String(fd[i][2] || ""), couleur: String(fd[i][3] || "#1A4E8A"), dossier: String(fd[i][11] || ""), etapes: [] });
+    }
+    for (let j = 1; j < ed.length; j++) {
+      const k = idx[String(ed[j][1])]; if (k === undefined || !ed[j][0]) continue;
+      out[k].etapes.push({ date: iso(ed[j][2]), titre: String(ed[j][3] || ""), aRendre: String(ed[j][4] || ""), statut: String(ed[j][5] || "À faire"), renduLe: iso(ed[j][7]) });
+    }
+    out.forEach(function (f) { f.etapes.sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+    return createJsonResponse({ success: true, frises: out, nom: String(p.nomAuteur || "") });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
+}
+/** Mail à tous les invités quand une échéance est ajoutée, déplacée ou retirée. */
+function _friseAlerterChangements_(ss, frise, changements, parQui) {
+  if (!changements.length) return 0;
+  const tz = Session.getScriptTimeZone(), esc = function (s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  const long = function (d) { return d ? Utilities.formatDate(new Date(d + "T12:00:00"), tz, "EEEE d MMMM yyyy") : ""; };
+  const etus = {}; _friseParticipants_(frise[10]).forEach(function (x) { if (x.t === "etu") etus[x.email] = x; });
+  try { _vsuEtudiants_(ss).forEach(function (e) { [e.mailPerso, e.mailHecg].forEach(function (m) { if (m && !etus[m]) etus[m] = { t: "etu", nom: e.prenom }; }); }); } catch (eE) {}
+  const col = String(frise[3] || "#1A4E8A"), badge = { ajout: ["Nouvelle échéance", "#e8f6ee", "#15803d"], date: ["Date modifiée", "#fff4ed", "#c2410c"], retrait: ["Échéance retirée", "#f1f4f8", "#475569"] };
+  const lignes = changements.map(function (c) {
+    const b = badge[c.type];
+    return '<tr><td style="padding:12px 0;border-bottom:1px solid #eef2f7;vertical-align:top;width:140px"><span style="display:inline-block;background:' + b[1] + ';color:' + b[2] + ';font-weight:700;font-size:12px;padding:4px 10px;border-radius:999px">' + b[0] + '</span></td>'
+      + '<td style="padding:12px 0 12px 10px;border-bottom:1px solid #eef2f7"><div style="font-size:15px;font-weight:700;color:#0f1b2d">' + esc(c.titre) + '</div>'
+      + (c.type === "date" ? '<div style="font-size:13.5px;color:#475569;margin-top:4px"><s style="color:#94a3b8">' + long(c.avant) + '</s> → <b style="color:#0f1b2d">' + long(c.date) + '</b></div>'
+        : '<div style="font-size:13.5px;color:#475569;margin-top:4px">' + (c.type === "retrait" ? '<s>' + long(c.date) + '</s>' : long(c.date)) + '</div>')
+      + (c.aRendre && c.type !== "retrait" ? '<div style="font-size:13px;color:#64748b;margin-top:3px">À rendre : ' + esc(c.aRendre) + '</div>' : '') + '</td></tr>';
+  }).join("");
+  let n = 0;
+  _friseEmailsDe_(frise).forEach(function (em) {
+    const etu = etus[em], prenom = etu && etu.nom ? String(etu.nom).split(/\s+/)[0] : "";
+    const html = '<div style="font-family:Segoe UI,Arial,sans-serif;background:#f5f7fb;padding:28px"><div style="max-width:580px;margin:0 auto;background:#fff;border-radius:16px;border:1px solid #e6ebf2;overflow:hidden">'
+      + '<div style="background:#1A4E8A;color:#fff;padding:20px 26px"><div style="font-size:12px;opacity:.85;text-transform:uppercase;letter-spacing:.08em">Frise mise à jour</div><div style="font-size:19px;font-weight:700;margin-top:4px">' + esc(frise[1]) + '</div></div>'
+      + '<div style="height:4px;background:' + col + '"></div><div style="padding:8px 26px 24px">'
+      + '<p style="font-size:14.5px;color:#1f2937;margin:16px 0 6px">Bonjour' + (prenom ? ' ' + esc(prenom) : '') + ',</p>'
+      + '<p style="font-size:14px;color:#475569;margin:0 0 6px">' + (changements.length > 1 ? 'Les échéances suivantes ont été modifiées :' : "L'échéance suivante a été modifiée :") + '</p>'
+      + '<table style="width:100%;border-collapse:collapse">' + lignes + '</table>'
+      + '<a href="' + (etu ? FRISE_URL_ETU : FRISE_URL_EQUIPE) + '" style="display:inline-block;margin-top:20px;background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px">' + (etu ? 'Voir mes échéances' : 'Ouvrir les frises') + '</a>'
+      + '<p style="font-size:12.5px;color:#94a3b8;margin-top:18px">Une question ? Contactez le pôle pédagogique : polepedagogique@hecg.fr</p></div></div></div>';
+    try { MailApp.sendEmail({ to: em, subject: "[HECG] 📅 " + String(frise[1]) + " — " + (changements.length > 1 ? changements.length + " échéances modifiées" : badge[changements[0].type][0].toLowerCase() + " : " + changements[0].titre), htmlBody: html, name: "HECG — Pôle pédagogique", replyTo: "polepedagogique@hecg.fr" }); n++; }
+    catch (eM) { Logger.log("Alerte frise " + em + " : " + eM); }
+  });
+  try { logAction(parQui || "", "", "Action", "Vie scolaire — Frises (alertes)", String(frise[0]), "Frise « " + frise[1] + " » : " + changements.map(function (c) { return badge[c.type][0] + " — " + c.titre + (c.type === "date" ? " (" + c.avant + " → " + c.date + ")" : " (" + c.date + ")"); }).join(" ; ") + " — alerte envoyée à " + n + " personne(s)"); } catch (eL) {}
+  return n;
 }

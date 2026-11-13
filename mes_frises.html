@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<script src="auth-fetch.js?v=1"></script><script src="hecg-skins.js?v=1"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mes échéances — HECG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--b:#1A4E8A;--o:#F26522;--ink:#0e1a2b;--tx:#3b4859;--mu:#7d8a9c;--li:#e3eaf3;--bg:#f4f7fb;--ok:#15803d;--red:#c62828}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif;color:var(--tx);font-size:14px}
+  header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--li);padding:12px 16px}
+  .hd{max-width:920px;margin:0 auto;display:flex;align-items:center;gap:12px}
+  .hd img{height:30px}
+  .hd .t{flex:1;min-width:0}
+  .hd .t b{display:block;color:var(--ink);font-size:15px}
+  .hd .t span{font-size:12px;color:var(--mu)}
+  .btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--li);background:#fff;color:var(--tx);font:700 13px 'Plus Jakarta Sans',sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap}
+  .btn:hover{color:var(--b);border-color:#cdd8e6}
+  .btn.out{color:var(--red);border-color:#f3c4c4}
+  main{max-width:920px;margin:0 auto;padding:22px 16px 60px}
+  h1{margin:0 0 4px;font-size:26px;color:var(--ink);letter-spacing:-.02em}
+  .sub{color:var(--mu);margin:0 0 20px}
+  .next{display:flex;gap:18px;align-items:center;background:linear-gradient(120deg,#1A4E8A,#2d64a8);color:#fff;border-radius:20px;padding:20px 22px;margin-bottom:22px;box-shadow:0 18px 40px -28px rgba(26,78,138,.9)}
+  .cd{flex:0 0 auto;width:78px;height:78px;border-radius:18px;background:rgba(255,255,255,.14);display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .cd b{font-size:26px;line-height:1}.cd span{font-size:11px;opacity:.85;margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
+  .next .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
+  .next .n{font-size:18px;font-weight:800;margin-top:3px}
+  .next .r{font-size:13.5px;opacity:.9;margin-top:3px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+  .chip{border:1px solid var(--li);background:#fff;border-radius:999px;padding:6px 13px;font:700 12.5px 'Plus Jakarta Sans',sans-serif;color:var(--tx);cursor:pointer}
+  .chip.on{background:var(--b);border-color:var(--b);color:#fff}
+  .fr{background:#fff;border:1px solid var(--li);border-radius:20px;margin-bottom:18px;overflow:hidden;box-shadow:0 14px 30px -28px rgba(14,26,43,.5)}
+  .fr-h{padding:18px 20px 14px;border-top:5px solid var(--c)}
+  .fr-h h2{margin:0;font-size:18px;color:var(--ink)}
+  .fr-h p{margin:5px 0 0;color:var(--mu)}
+  .meta{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12.5px;color:var(--mu)}
+  .prog{flex:1;height:8px;border-radius:9px;background:#eef2f7;overflow:hidden}.prog i{display:block;height:100%;background:var(--c);border-radius:9px}
+  .tl{padding:6px 20px 18px}
+  .st{display:grid;grid-template-columns:92px 26px 1fr;gap:0 10px;position:relative}
+  .st .d{padding:14px 0;text-align:right;font-size:12.5px;color:var(--mu);font-weight:600;line-height:1.3}
+  .st .d b{display:block;font-size:15px;color:var(--ink)}
+  .st .ax{position:relative;display:flex;justify-content:center}
+  .st .ax:before{content:"";position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:#e3eaf3}
+  .st:first-child .ax:before{top:22px}.st:last-child .ax:before{bottom:calc(100% - 22px)}
+  .dot{position:relative;z-index:1;margin-top:16px;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--c);display:flex;align-items:center;justify-content:center}
+  .dot.ok{background:var(--ok);border-color:var(--ok)}.dot.late{border-color:var(--red);background:#fde8e8}.dot.soon{border-color:#ea580c;background:#fff4ec}
+  .dot svg{width:10px;height:10px}
+  .st .c{padding:12px 0;border-bottom:1px solid #f0f3f8}
+  .st:last-child .c{border-bottom:0}
+  .st .c .ti{font-weight:700;color:var(--ink);font-size:14.5px}
+  .st.done .c .ti{color:var(--mu);text-decoration:line-through;text-decoration-color:#c3cbd6}
+  .st .c .ar{margin-top:3px;font-size:13px;color:var(--tx)}
+  .bd{display:inline-block;margin-top:6px;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:800}
+  .bd.ok{background:#e8f6ee;color:var(--ok)}.bd.late{background:#fde8e8;color:var(--red)}.bd.soon{background:#fff4ec;color:#c2410c}.bd.fut{background:#e8eff8;color:var(--b)}
+  .today{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px;font-weight:800;color:var(--o);text-transform:uppercase;letter-spacing:.08em}
+  .today:before,.today:after{content:"";flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--o) 0 6px,transparent 6px 10px)}
+  .empty{text-align:center;padding:60px 20px;color:var(--mu)}
+  .empty h3{color:var(--ink);margin:0 0 6px}
+  .ro{font-size:12px;color:var(--mu);text-align:center;margin-top:26px}
+  @media (max-width:560px){.st{grid-template-columns:70px 22px 1fr}.next{flex-direction:column;align-items:flex-start}.hd .t span{display:none}}
+</style>
+</head>
+<body>
+<header><div class="hd">
+  <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="HECG">
+  <div class="t"><b>Mes échéances</b><span id="qui"></span></div>
+  <a class="btn" id="btnDossier" href="dossier.html" style="display:none">Mon dossier</a>
+  <button class="btn out" onclick="localStorage.clear(); location.href='index.html'">Se déconnecter</button>
+</div></header>
+<main>
+  <h1>Avancée des travaux</h1>
+  <p class="sub">Les frises chronologiques auxquelles vous êtes invité(e) : chaque échéance, ce qu'il faut rendre et où vous en êtes.</p>
+  <div id="app"><div class="empty"><h3>Chargement…</h3></div></div>
+  <p class="ro">Consultation uniquement — pour toute question : polepedagogique@hecg.fr</p>
+</main>
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+let user = null; try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch (e) {}
+if (!user || !user.sessionToken) { try { sessionStorage.setItem('apresConnexion', 'mes_frises.html'); } catch (e) {} location.replace('index.html'); }
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const auj = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+const jours = iso => Math.round((new Date(iso + 'T12:00:00') - new Date(auj + 'T12:00:00')) / 86400000);
+const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+const dJ = iso => { const d = new Date(iso + 'T12:00:00'); return { j: d.getDate() + ' ' + MOIS[d.getMonth()], s: JOURS[d.getDay()] + ' ' + d.getFullYear() }; };
+const fmtD = iso => iso ? iso.split('-').reverse().join('/') : '';
+const quand = n => n === 0 ? "Aujourd'hui" : n === 1 ? 'Demain' : n < 0 ? 'En retard de ' + (-n) + ' j' : 'Dans ' + n + ' jours';
+const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+let DATA = [], dossier = '';
+if (user) {
+  document.getElementById('qui').textContent = user.nom || '';
+  if (user.role === 'Etudiant') document.getElementById('btnDossier').style.display = '';
+  charger();
+}
+async function charger() {
+  try {
+    const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getMesFrises', nomAuteur: user.nom || '', emailAuteur: user.email || '' }) }).then(x => x.json());
+    if (!r.success) throw new Error(r.message || 'erreur');
+    DATA = r.frises || []; rendre();
+  } catch (e) { document.getElementById('app').innerHTML = `<div class="empty"><h3>Chargement impossible</h3><p>${esc(e.message)}</p></div>`; }
+}
+function choisir(d) { dossier = d; rendre(); }
+function rendre() {
+  const app = document.getElementById('app');
+  if (!DATA.length) { app.innerHTML = `<div class="empty"><h3>Aucune frise pour l'instant</h3><p>Dès que l'équipe pédagogique vous invite sur une frise chronologique, elle apparaît ici.</p></div>`; return; }
+  const dossiers = [...new Set(DATA.map(f => f.dossier).filter(Boolean))].sort();
+  const L = DATA.filter(f => !dossier || f.dossier === dossier);
+  // prochaine échéance toutes frises confondues
+  const prochaines = L.flatMap(f => f.etapes.filter(e => e.statut !== 'Rendu').map(e => ({ ...e, frise: f.titre }))).sort((a, b) => a.date.localeCompare(b.date));
+  const nx = prochaines.find(e => e.date >= auj) || prochaines[0];
+  let h = dossiers.length ? `<div class="chips"><button class="chip ${dossier ? '' : 'on'}" onclick="choisir('')">Toutes</button>${dossiers.map(d => `<button class="chip ${dossier === d ? 'on' : ''}" onclick="choisir('${esc(d).replace(/'/g, "\\'")}')">📁 ${esc(d)}</button>`).join('')}</div>` : '';
+  if (nx) { const n = jours(nx.date);
+    h += `<div class="next"><div class="cd"><b>${n < 0 ? '!' : n === 0 ? 'J' : 'J-' + n}</b><span>${n < 0 ? 'retard' : n === 0 ? "aujourd'hui" : 'jours'}</span></div>
+      <div><div class="k">Prochaine échéance · ${esc(nx.frise)}</div><div class="n">${esc(nx.titre)}</div><div class="r">${dJ(nx.date).s.split(' ')[0]} ${dJ(nx.date).j} ${nx.date.slice(0, 4)}${nx.aRendre ? ' — à rendre : ' + esc(nx.aRendre) : ''}</div></div></div>`; }
+  h += L.map(f => {
+    const done = f.etapes.filter(e => e.statut === 'Rendu').length, tot = f.etapes.length;
+    let pose = false;
+    const steps = f.etapes.map(e => {
+      const n = jours(e.date), ok = e.statut === 'Rendu', late = !ok && n < 0, soon = !ok && n >= 0 && n <= 3;
+      let ligne = '';
+      if (!pose && e.date >= auj) { pose = true; ligne = `<div class="today">Aujourd'hui</div>`; }
+      const d = dJ(e.date);
+      return ligne + `<div class="st ${ok ? 'done' : ''}"><div class="d"><b>${d.j}</b>${d.s}</div><div class="ax"><span class="dot ${ok ? 'ok' : late ? 'late' : soon ? 'soon' : ''}">${ok ? CHECK : ''}</span></div>
+        <div class="c"><div class="ti">${esc(e.titre)}</div>${e.aRendre ? `<div class="ar">À rendre : ${esc(e.aRendre)}</div>` : ''}
+        <span class="bd ${ok ? 'ok' : late ? 'late' : soon ? 'soon' : 'fut'}">${ok ? '✓ Rendu' + (e.renduLe ? ' le ' + fmtD(e.renduLe) : '') : quand(n)}</span></div></div>`;
+    }).join('') + (!pose && f.etapes.length ? `<div class="today">Aujourd'hui</div>` : '');
+    return `<section class="fr" style="--c:${esc(f.couleur)}"><div class="fr-h"><h2>${esc(f.titre)}</h2>${f.description ? `<p>${esc(f.description)}</p>` : ''}
+      <div class="meta"><div class="prog"><i style="width:${tot ? Math.round(done / tot * 100) : 0}%"></i></div><span>${done}/${tot} échéance(s) rendue(s)</span></div></div>
+      <div class="tl">${steps || '<p class="sub" style="margin:12px 0">Aucune échéance pour le moment.</p>'}</div></section>`;
+  }).join('');
+  app.innerHTML = h;
+}
+</script>
+</body>
+</html>

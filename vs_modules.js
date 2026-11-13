@@ -1413,6 +1413,7 @@ function frEdit(id) {
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input class="in" id="frQ" style="flex:1;min-width:220px" placeholder="Rechercher un nom, une classe, un mail…"><select class="in" id="frCls" style="width:auto;flex:0 0 auto"></select></div>
       <div class="fr-res" id="frRes"></div></div>
     <label class="fl">Autres adresses mail (facultatif)</label><input class="in" id="frDest" value="${esc(autres)}" placeholder="email1@hecg.fr, email2@hecg.fr">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px"><input type="checkbox" id="frNotif" checked> <span><b>Prévenir par mail tous les invités</b> si une échéance est ajoutée, déplacée ou retirée (les étudiants retrouvent la frise dans leur espace « Mes échéances »).</span></label>
     <div class="mft">${f ? `<button class="vx-btn danger" style="margin-right:auto" id="frDel">${svg('trash', 14)} Supprimer</button>` : ''}<button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn pri" id="frSave">Enregistrer</button></div>`, 900);
   const drawC = () => { $('frC').innerHTML = PALETTE.map(c => `<span class="vx-dot ${c === E.couleur ? 'on' : ''}" style="background:${c}" data-c="${c}"></span>`).join(''); };
   const readSteps = () => { dlg.querySelectorAll('.fr-step').forEach((row, i) => { E.etapes[i].date = row.querySelector('[data-k=date]').value; E.etapes[i].titre = row.querySelector('[data-k=titre]').value; E.etapes[i].aRendre = row.querySelector('[data-k=ar]').value; }); };
@@ -1450,10 +1451,10 @@ function frEdit(id) {
     const incompletes = E.etapes.filter(e => (e.date || e.titre) && !(e.date && e.titre.trim()));
     if (incompletes.length) { toast('Chaque échéance doit avoir une date et un titre', false); return; }
     const rappels = [...dlg.querySelectorAll('#frR input:checked')].map(i => i.value).join(',');
-    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, dossier: $('frDos').value.trim(), participants: E.parts, etapes: E.etapes.filter(e => e.date && e.titre.trim()) } });
+    const r = await api('saveFrise', { frise: { id: f ? f.id : '', titre, description: $('frD').value.trim(), couleur: E.couleur, rappels: rappels || '0', destinataires: $('frDest').value, dossier: $('frDos').value.trim(), participants: E.parts, etapes: E.etapes.filter(e => e.date && e.titre.trim()), notifier: $('frNotif').checked } });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
     if (!E.parts.length && !$('frDest').value.includes('@')) toast('Aucun destinataire : les rappels iront au créateur de la frise', false);
-    dlg.remove(); F.cur = r.id; toast(f ? 'Frise mise à jour ✓' : 'Frise créée ✓ — rappels activés'); frLoad(true);
+    dlg.remove(); F.cur = r.id; toast((f ? 'Frise mise à jour ✓' : 'Frise créée ✓ — rappels activés') + (r.alertes ? ' — alerte envoyée à ' + r.alertes + ' personne(s)' : '')); frLoad(true);
   };
   if ($('frDel')) $('frDel').onclick = async () => {
     if (!confirm('Supprimer cette frise ? Les rappels s\'arrêteront (elle reste archivée dans la feuille FRISES).')) return;

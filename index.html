@@ -108,7 +108,10 @@
                     
                     setTimeout(() => {
                         // --- L'AIGUILLEUR EST ICI ---
-                        if (data.role === 'Etudiant') {
+                        let apres = ''; try { apres = sessionStorage.getItem('apresConnexion') || ''; sessionStorage.removeItem('apresConnexion'); } catch (e) {}
+                        if (apres === 'mes_frises.html') {
+                            window.location.replace('mes_frises.html'); // lien « Voir mes échéances » d'un mail
+                        } else if (data.role === 'Etudiant') {
                             window.location.replace('dossier.html'); // Vers le dossier
                         } else {
                             window.location.replace('dashboard.html'); // Vers l'administration
