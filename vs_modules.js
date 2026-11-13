@@ -1647,9 +1647,12 @@ async function rdvInit() {
   }
   rdvLoad();
 }
+let rdvSeq = 0;   // seul le dernier chargement lancé est affiché (une réponse plus ancienne et plus lente n'écrase plus une modification)
 async function rdvLoad(annee) {
   if (annee) { R.annee = annee; R.analyse = null; }
+  const seq = ++rdvSeq;
   const r = await api('getRdv', R.annee ? { annee: R.annee } : {}, { forceRefresh: true });
+  if (seq !== rdvSeq) return;
   if (!r.success) { $('rdvBody').innerHTML = `<div class="vx-empty"><h3>Chargement impossible</h3><p>${esc(errTxt(r.message))}</p></div>`; return; }
   R.data = r; R.annee = r.annee; r.envois = r.envois || {};
   ['rdvCharlBtn', 'rdvParamBtn', 'rdvMailBtn', 'rdvHarmBtn', 'rdvImpBtn'].forEach(id => $(id).style.display = r.peutSuivre ? '' : 'none');
@@ -1869,7 +1872,10 @@ function rdvAffecter(ids) {
     if (!who.visiteur && !confirm('Aucun responsable choisi : retirer le responsable ?')) return;
     const r = await api('saveReferentRdv', { annee: R.annee, etuIds: L.map(x => x.id), nom: who.visiteur, email: who.visiteurEmail, precision: $('rfPrec').value.trim() });
     if (!r.success) { toast('Erreur : ' + errTxt(r.message), false); return; }
-    dlg.remove(); R.sel.clear(); toast('Responsable affecté à ' + L.length + ' étudiant(s) ✓'); rdvLoad();
+    // affichage immédiat, puis rechargement complet en arrière-plan
+    const auj = todayISO();
+    L.forEach(x => { if (norm(x.referent || '') !== norm(who.visiteur || '')) x.referentDepuis = who.visiteur ? auj : ''; x.referent = who.visiteur || ''; x.referentEmail = who.visiteurEmail || ''; x.referentPrecision = $('rfPrec').value.trim(); x.referentSource = 'Saisie'; });
+    dlg.remove(); R.sel.clear(); R.analyse = null; rdvRender(); toast('Responsable affecté à ' + L.length + ' étudiant(s) ✓'); rdvLoad();
   };
 }
 function rdvDrapeau(ids) {
