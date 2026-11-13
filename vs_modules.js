@@ -2171,15 +2171,16 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
     doc.text(cle.replace(/^Par /, '').toUpperCase(), X + 9, y); doc.text(D.mesureLib.toUpperCase(), XR - 26, y, { align: 'right' }); doc.text('PART', XR - 3, y, { align: 'right' }); y += 8; };
   enTete();
   const rangs = toutes.map(x => { const p = parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: tot ? x.v / tot * 100 : 0, autre: !p }; });
+  const lh = rangs.length > 19 ? Math.max(5, (H - 20 - 54) / rangs.length) : 7;
   rangs.forEach((x, i) => {
     if (y > H - 20) { doc.addPage(); page++; ent(); y = 34; enTete(); }
-    if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - 4.6, XR - X, 7, 'F'); }
+    if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - lh * .66, XR - X, lh, 'F'); }
     doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 2, y - 3, 4, 4, 0.8, 0.8, 'F');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(14, 26, 43);
     doc.text(doc.splitTextToSize(x.k + (x.autre ? '  (dans « Autres »)' : ''), XR - X - 50)[0], X + 9, y);
     doc.setFont('helvetica', 'bold'); doc.text(String(x.v), XR - 26, y, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setTextColor(59, 72, 89); doc.text(pieFmtPct(x.pct), XR - 3, y, { align: 'right' });
-    doc.setDrawColor(238, 242, 247); doc.line(X, y + 2.4, XR, y + 2.4); y += 7;
+    doc.setDrawColor(238, 242, 247); doc.line(X, y + lh / 2 - 1, XR, y + lh / 2 - 1); y += lh;
   });
   if (!rangs.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(125, 138, 156); doc.text('Aucune donnée pour cette mesure.', X + 9, y); }
   const V = pieTableau(cle), nc = V.titres.length, c0 = nc > 3 ? 58 : 120, wc = (W - 28 - c0) / (nc - 1);
@@ -2190,12 +2191,13 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
   const vEnTete = () => { doc.setFillColor(26, 78, 138); doc.rect(14, y - 5.5, W - 28, 9, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.6); doc.setTextColor(255, 255, 255);
     V.titres.forEach((t, i) => { const l = doc.splitTextToSize(t.toUpperCase(), i ? wc - 2 : c0 - 4); doc.text(l.slice(0, 2), xCol(i), y - (l.length > 1 ? 1.4 : 0), { align: i ? 'right' : 'left' }); }); y += 8; };
   vEnTete();
+  const vh = Math.max(5.2, Math.min(7, (H - 18 - y - 3) / (V.lignes.length + 1)));
   const vLigne = (l, k, gras) => {
     if (y > H - 18) { doc.addPage(); ent(); y = 34; vEnTete(); }
-    if (gras) { doc.setFillColor(232, 239, 248); doc.rect(14, y - 4.6, W - 28, 7, 'F'); } else if (k % 2) { doc.setFillColor(247, 249, 252); doc.rect(14, y - 4.6, W - 28, 7, 'F'); }
+    if (gras) { doc.setFillColor(232, 239, 248); doc.rect(14, y - vh * .66, W - 28, vh, 'F'); } else if (k % 2) { doc.setFillColor(247, 249, 252); doc.rect(14, y - vh * .66, W - 28, vh, 'F'); }
     doc.setFontSize(9); doc.setTextColor(14, 26, 43);
     l.forEach((v, i) => { doc.setFont('helvetica', gras || !i ? 'bold' : 'normal'); doc.text(i ? String(v) : doc.splitTextToSize(String(v), c0 - 4)[0], xCol(i), y, { align: i ? 'right' : 'left' }); });
-    doc.setDrawColor(227, 234, 243); doc.line(14, y + 2.4, W - 14, y + 2.4); y += 7;
+    doc.setDrawColor(227, 234, 243); doc.line(14, y + vh / 2 - 1, W - 14, y + vh / 2 - 1); y += vh;
   };
   V.lignes.forEach((l, k) => vLigne(l, k, false)); vLigne(V.total, 0, true);
   const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); pied(i, n); }
