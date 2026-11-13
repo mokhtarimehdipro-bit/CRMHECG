@@ -2038,7 +2038,7 @@ async function rdvAnalyse() {
   const tot = calc(S.L);
   const barre = p => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:60px;height:8px;border-radius:9px;background:#eef2f7;overflow:hidden"><i style="display:block;height:100%;width:${p}%;background:${p >= 80 ? '#16a34a' : p >= 50 ? '#F26522' : '#e5484d'}"></i></div><b>${p} %</b></div>`;
   const ligne = (lib, o, gras) => `<tr${gras ? ' class="gr"' : ''}><td>${gras ? '<b>' + lib + '</b>' : lib}</td><td>${o.alt}</td><td style="color:${o.sansResp ? '#c62828' : 'inherit'};font-weight:${o.sansResp ? 800 : 400}">${o.sansResp}</td><td style="color:${o.rouges ? '#c62828' : 'inherit'}">${o.rouges}</td><td style="color:#c2410c">${o.aVenir}</td><td style="color:#15803d;font-weight:800">${o.hon}</td><td>${o.vus}</td><td style="min-width:130px">${barre(o.taux)}</td><td>${o.total}</td><td>${o.ents}</td></tr>`;
-  const tableau = (titre, lignes) => `<div class="vx-dip"><span class="t">${titre}</span><span class="n">${lignes.length}</span></div>
+  const tableau = (titre, lignes) => `<div class="vx-dip"><span class="t">${titre}</span><span class="n">${lignes.length}</span><button class="vx-btn sm" style="margin-left:auto" onclick="VX.rdvPie('${jsq(titre)}')" title="Diagramme en camembert de la répartition (export PDF)">◔ Camembert</button></div>
     <div style="overflow-x:auto;margin-top:12px"><table class="vs2-t"><thead><tr><th>${titre.replace(/^Par /, '')}</th><th>Alternants</th><th>Sans responsable</th><th>Drapeaux rouges</th><th>RDV pris à venir</th><th>RDV honorés</th><th>Alternants visités</th><th>Taux de visite</th><th>Visites (total)</th><th>Entreprises</th></tr></thead>
     <tbody>${lignes.map(([k, o]) => ligne(esc(k), o)).join('')}${ligne('Total', tot, true)}</tbody></table></div>`;
   const campus = grouper(e => e.campus || 'Campus non renseigné', (a, b) => a.localeCompare(b, 'fr'));
@@ -2048,14 +2048,127 @@ async function rdvAnalyse() {
   const ids = new Set(S.L.map(e => e.id));
   const filtre = !!(R.classes.size || $('rdvDip').value || $('rdvResp').value || $('rdvQ').value || $('rdvDu').value || $('rdvAu').value);
   const mv = R.analyse.mouvements.filter(m => !filtre || ids.has(m.etuId));
+  const nbMv = t => new Set(mv.filter(m => m.type === t).map(m => m.etuId)).size;
+  const fl = [R.classes.size ? 'classes : ' + [...R.classes].join(', ') : '', $('rdvDip').value ? 'diplôme : ' + $('rdvDip').value : '', $('rdvResp').value ? 'responsable : ' + $('rdvResp').value : '',
+    $('rdvQ').value ? 'recherche « ' + $('rdvQ').value + ' »' : '', $('rdvDu').value || $('rdvAu').value ? 'RDV pris ' + ($('rdvDu').value ? 'du ' + fmtD($('rdvDu').value) + ' ' : '') + ($('rdvAu').value ? 'au ' + fmtD($('rdvAu').value) : '') : ''].filter(Boolean);
+  R.pieCtx = { annee: D.annee, sous: 'Année ' + D.annee + (fl.length ? ' · filtres : ' + fl.join(' · ') : ' · tous les étudiants') };
+  R.pie = { 'Par campus': { lignes: campus }, 'Par classe': { lignes: classes }, 'Par référent': { lignes: referents },
+    "Mouvements d'alternance": { mv: [["Changements d'alternance", nbMv('Changement')], ['Alternances perdues', nbMv('Perte')], ['Alternances gagnées', nbMv('Gain')]] } };
   const lstMv = t => { const l = mv.filter(m => m.type === t).sort((a, b) => b.date.localeCompare(a.date));
     return `<details class="vs2-mv"><summary><b>${t === 'Gain' ? 'Alternances gagnées' : t === 'Perte' ? 'Alternances perdues' : "Changements d'alternance"}</b> · ${new Set(l.map(m => m.etuId)).size} étudiant(s)</summary>
       ${l.length ? `<table class="vs2-t" style="margin-top:8px"><thead><tr><th>Date</th><th>Étudiant</th><th>Classe</th><th>Avant</th><th>Après</th></tr></thead><tbody>${l.map(m => `<tr><td>${fmtD(m.date)}</td><td><b>${esc(m.etudiant)}</b></td><td>${esc(m.classe)}</td><td>${esc(m.avant || '—')}</td><td>${esc(m.apres || '—')}</td></tr>`).join('')}</tbody></table>` : '<p class="sub" style="margin:8px 0">Aucun.</p>'}</details>`; };
   $('rdvBody').innerHTML = `<p class="sub" style="margin:0 0 6px">Mêmes définitions que les compteurs ci-dessus (année ${esc(D.annee)}, filtres appliqués) : la ligne « Total » de chaque tableau correspond aux compteurs.</p>
     ${tableau('Par campus', campus)}${tableau('Par classe', classes)}${tableau('Par référent', referents)}
-    <div class="vx-dip"><span class="t">Mouvements d'alternance en ${esc(D.annee)}</span></div>
+    <div class="vx-dip"><span class="t">Mouvements d'alternance en ${esc(D.annee)}</span><button class="vx-btn sm" style="margin-left:auto" onclick="VX.rdvPie('Mouvements d\'alternance')" title="Diagramme en camembert de la répartition (export PDF)">◔ Camembert</button></div>
     <div class="vx-note" style="margin:12px 0">${svg('clock', 14)} Relevé quotidien des entreprises des étudiants inscrits${R.analyse.suiviDepuis ? ' depuis le ' + fmtD(R.analyse.suiviDepuis) : ''}. Avant cette date, seuls les départs enregistrés dans le CRM sont connus : les alternances gagnées ne sont comptées qu'à partir du premier relevé.</div>
     ${lstMv('Changement')}${lstMv('Perte')}${lstMv('Gain')}`;
+}
+
+// ── Analyse des visites : camembert de répartition par portion + export PDF mis en forme ──
+const PIE_COUL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'], PIE_AUTRES = '#8a94a3';
+const PIE_MESURES = [['alt', 'Alternants'], ['hon', 'RDV honorés'], ['total', 'Visites (total)'], ['vus', 'Alternants visités'], ['aVenir', 'RDV pris à venir'],
+  ['rouges', 'Drapeaux rouges'], ['sansResp', 'Sans responsable'], ['ents', 'Entreprises']];
+let _jspdf = null;
+function loadJsPDF() {
+  if (window.jspdf) return Promise.resolve(window.jspdf);
+  if (_jspdf) return _jspdf;
+  _jspdf = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; sc.onload = () => res(window.jspdf); sc.onerror = () => { _jspdf = null; rej(new Error('Bibliothèque PDF indisponible (réseau)')); }; document.head.appendChild(sc); });
+  return _jspdf;
+}
+// Parts du camembert : 8 couleurs dans un ordre fixe, au-delà regroupé dans « Autres » (gris). Le détail reste dans la légende.
+function pieParts(lignes) {
+  const l = lignes.filter(x => x.v > 0).sort((a, b) => b.v - a.v), tot = l.reduce((s, x) => s + x.v, 0);
+  const parts = l.length > 8 ? l.slice(0, 7).concat([{ k: 'Autres (' + (l.length - 7) + ')', v: l.slice(7).reduce((s, x) => s + x.v, 0), autres: l.slice(7) }]) : l;
+  parts.forEach((p, i) => { p.c = p.autres ? PIE_AUTRES : PIE_COUL[i]; p.pct = tot ? p.v / tot * 100 : 0; });
+  return { parts, tot, toutes: l };
+}
+const pieFmtPct = p => (p >= 10 || p === 0 ? Math.round(p) : p.toFixed(1).replace('.', ',')) + ' %';
+function pieSvg(parts, tot, taille = 300) {
+  const r = taille / 2 - 4, c = taille / 2;
+  if (!tot) return `<svg width="${taille}" height="${taille}"><circle cx="${c}" cy="${c}" r="${r}" fill="#eef2f7"/><text x="${c}" y="${c + 5}" text-anchor="middle" font-size="13" fill="#7d8a9c">Aucune donnée</text></svg>`;
+  let a0 = -Math.PI / 2, h = '';
+  parts.forEach((p, i) => {
+    const a1 = a0 + p.v / tot * Math.PI * 2, tip = `${esc(p.k)} : ${p.v} (${pieFmtPct(p.pct)})`;
+    if (parts.length === 1) h += `<circle class="pie-s" data-i="${i}" cx="${c}" cy="${c}" r="${r}" fill="${p.c}"><title>${tip}</title></circle>`;
+    else { const g = a1 - a0 > Math.PI ? 1 : 0, x0 = c + r * Math.cos(a0), y0 = c + r * Math.sin(a0), x1 = c + r * Math.cos(a1), y1 = c + r * Math.sin(a1);
+      h += `<path class="pie-s" data-i="${i}" d="M${c},${c} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${g} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.c}" stroke="#fff" stroke-width="2" stroke-linejoin="round"><title>${tip}</title></path>`; }
+    if (p.pct >= 6) { const am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .64; h += `<text x="${(c + rl * Math.cos(am)).toFixed(1)}" y="${(c + rl * Math.sin(am) + 4).toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#fff" pointer-events="none">${pieFmtPct(p.pct)}</text>`; }
+    a0 = a1;
+  });
+  return `<svg width="${taille}" height="${taille}" viewBox="0 0 ${taille} ${taille}" role="img" aria-label="Diagramme en camembert">${h}</svg>`;
+}
+function pieDonnees(cle, mesure) {
+  const P = R.pie[cle];
+  if (P.mv) return { titre: "Mouvements d'alternance", mesureLib: 'Étudiants concernés', lignes: P.mv.map(([k, v]) => ({ k, v })) };
+  const lib = (PIE_MESURES.find(m => m[0] === mesure) || PIE_MESURES[0])[1];
+  return { titre: lib + ' ' + cle.toLowerCase(), mesureLib: lib, lignes: P.lignes.map(([k, o]) => ({ k, v: o[mesure] || 0 })) };
+}
+function rdvPie(cle) {
+  if (!R.pie || !R.pie[cle]) return;
+  const P = R.pie[cle];
+  const dlg = modal(`<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2 style="margin:0">Répartition — ${esc(cle)}</h2><p class="sub" style="margin:4px 0 0">${esc(R.pieCtx.sous)}</p></div>
+      ${P.mv ? '' : `<select class="in" id="pieMes" style="width:auto">${PIE_MESURES.map(m => `<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select>`}</div>
+    <div id="pieZone" style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 6px"></div>
+    <div class="mft"><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Fermer</button><button class="vx-btn pri" id="piePdf">${svg('down', 14)} Exporter en PDF</button></div>`, 860);
+  const dessiner = () => {
+    const D = pieDonnees(cle, P.mv ? '' : $('pieMes').value), { parts, tot, toutes } = pieParts(D.lignes);
+    const leg = parts.map((p, i) => `<tr class="pie-l" data-i="${i}"><td><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${p.c};vertical-align:-1px"></i></td><td>${esc(p.k)}${p.autres ? `<div class="sub" style="font-size:11px;margin-top:2px">${p.autres.map(a => esc(a.k) + ' ' + a.v).join(' · ')}</div>` : ''}</td><td style="text-align:right;font-weight:800;color:#0e1a2b">${p.v}</td><td style="text-align:right;color:#3b4859">${pieFmtPct(p.pct)}</td></tr>`).join('');
+    $('pieZone').innerHTML = `<div style="flex:0 0 auto">${pieSvg(parts, tot)}<div style="text-align:center;margin-top:8px;font-size:13px;color:#3b4859">Total : <b style="color:#0e1a2b">${tot}</b> ${esc(D.mesureLib.toLowerCase())}</div></div>
+      <div style="flex:1;min-width:260px;max-height:380px;overflow:auto"><table class="vs2-t pie-t"><thead><tr><th></th><th>${esc(cle.replace(/^Par /, ''))}</th><th style="text-align:right">${esc(D.mesureLib)}</th><th style="text-align:right">Part</th></tr></thead><tbody>${leg || '<tr><td colspan="4" class="sub">Aucune donnée pour cette mesure.</td></tr>'}</tbody></table>
+      ${toutes.length < D.lignes.length ? `<p class="sub" style="font-size:11.5px;margin-top:6px">${D.lignes.length - toutes.length} ligne(s) à 0 non représentée(s).</p>` : ''}</div>`;
+    const lier = i => { $('pieZone').querySelectorAll('.pie-s').forEach(s => s.style.opacity = i === null || s.dataset.i === String(i) ? 1 : .35); $('pieZone').querySelectorAll('.pie-l').forEach(t => t.style.background = String(i) === t.dataset.i ? '#f3f7fc' : ''); };
+    $('pieZone').querySelectorAll('.pie-s,.pie-l').forEach(el => { el.onmouseenter = () => lier(el.dataset.i); el.onmouseleave = () => lier(null); });
+    dlg.querySelector('#piePdf').onclick = () => rdvPiePdf(cle, D, parts, tot, toutes);
+  };
+  if (!P.mv) $('pieMes').onchange = dessiner;
+  dessiner();
+}
+async function rdvPiePdf(cle, D, parts, tot, toutes) {
+  let J; try { J = await loadJsPDF(); } catch (e) { toast(e.message, false); return; }
+  const doc = new J.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' }), W = 297, H = 210;
+  const rgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const ent = () => {
+    doc.setFillColor(26, 78, 138); doc.rect(0, 0, W, 20, 'F'); doc.setFillColor(242, 101, 34); doc.rect(0, 20, W, 1.2, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('HECG', 14, 12.6);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.text('Vie scolaire — Suivi des RDV en entreprise · Analyse des visites', 33, 12.4);
+    doc.setFontSize(9); doc.text(fmtLong(todayISO()), W - 14, 12.4, { align: 'right' });
+  };
+  const pied = (n, total) => { doc.setDrawColor(227, 234, 243); doc.line(14, H - 12, W - 14, H - 12); doc.setFontSize(8); doc.setTextColor(125, 138, 156);
+    doc.text('Mêmes définitions que les compteurs du suivi des RDV — document généré depuis le CRM HECG', 14, H - 7); doc.text('Page ' + n + ' / ' + total, W - 14, H - 7, { align: 'right' }); };
+  ent();
+  doc.setTextColor(14, 26, 43); doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.text('Répartition — ' + cle, 14, 34);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(59, 72, 89); doc.text(doc.splitTextToSize(D.mesureLib + ' · ' + R.pieCtx.sous, W - 28), 14, 41);
+  // camembert dessiné en haute définition (canvas) puis inséré en image
+  const px = 900, cv = document.createElement('canvas'); cv.width = cv.height = px; const g = cv.getContext('2d'), c = px / 2, r = c - 10;
+  if (!tot) { g.fillStyle = '#eef2f7'; g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.fill(); }
+  let a0 = -Math.PI / 2;
+  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2; g.beginPath(); g.moveTo(c, c); g.arc(c, c, r, a0, a1); g.closePath(); g.fillStyle = p.c; g.fill();
+    if (parts.length > 1) { g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.lineJoin = 'round'; g.stroke(); } a0 = a1; });
+  a0 = -Math.PI / 2; g.fillStyle = '#ffffff'; g.font = 'bold 34px Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  parts.forEach(p => { const a1 = a0 + p.v / tot * Math.PI * 2, am = (a0 + a1) / 2, rl = parts.length === 1 ? 0 : r * .64; if (p.pct >= 6) g.fillText(pieFmtPct(p.pct).replace(' ', ' '), c + rl * Math.cos(am), c + rl * Math.sin(am)); a0 = a1; });
+  const T = 112; doc.addImage(cv.toDataURL('image/png'), 'PNG', 18, 52, T, T);
+  doc.setFontSize(11); doc.setTextColor(59, 72, 89); doc.text('Total : ', 18 + T / 2 - 12, 52 + T + 9, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setTextColor(14, 26, 43); doc.text(String(tot) + ' ' + D.mesureLib.toLowerCase(), 18 + T / 2 - 12, 52 + T + 9);
+  // légende-tableau : toutes les lignes (les petites parts regroupées en « Autres » sur le camembert gardent leur détail ici)
+  const X = 148, XR = W - 14; let y = 54, page = 1;
+  const enTete = () => { doc.setFillColor(247, 249, 252); doc.rect(X, y - 5, XR - X, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(125, 138, 156);
+    doc.text(cle.replace(/^Par /, '').toUpperCase(), X + 9, y); doc.text(D.mesureLib.toUpperCase(), XR - 26, y, { align: 'right' }); doc.text('PART', XR - 3, y, { align: 'right' }); y += 8; };
+  enTete();
+  const rangs = toutes.map(x => { const p = parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: tot ? x.v / tot * 100 : 0, autre: !p }; });
+  rangs.forEach((x, i) => {
+    if (y > H - 20) { doc.addPage(); page++; ent(); y = 34; enTete(); }
+    if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - 4.6, XR - X, 7, 'F'); }
+    doc.setFillColor(...rgb(x.c)); doc.roundedRect(X + 2, y - 3, 4, 4, 0.8, 0.8, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(14, 26, 43);
+    doc.text(doc.splitTextToSize(x.k + (x.autre ? '  (dans « Autres »)' : ''), XR - X - 50)[0], X + 9, y);
+    doc.setFont('helvetica', 'bold'); doc.text(String(x.v), XR - 26, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(59, 72, 89); doc.text(pieFmtPct(x.pct), XR - 3, y, { align: 'right' });
+    doc.setDrawColor(238, 242, 247); doc.line(X, y + 2.4, XR, y + 2.4); y += 7;
+  });
+  if (!rangs.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(125, 138, 156); doc.text('Aucune donnée pour cette mesure.', X + 9, y); }
+  const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); pied(i, n); }
+  doc.save(('Repartition_' + cle.replace(/^Par /, '') + '_' + D.mesureLib + '_' + R.pieCtx.annee).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf');
+  toast('PDF exporté ✓');
 }
 
 // ── Paramètres : lien de calendrier de chaque responsable + modèle du mail ──
@@ -2974,7 +3087,7 @@ window.VX = {
   memKw: k => { M.kw = norm(M.kw) === norm(k) ? '' : k; memRender(); }, memSortCol: k => { M.sortDir = M.sortCol === k ? -M.sortDir : 1; M.sortCol = k; memRender(); },
   frInit, frSel, frToggle, frEdit, frPdf,
   rdvInit, rdvLoad: a => rdvLoad(a), rdvRender, rdvOnglet, rdvClsPanel, rdvCls, rdvParams, rdvMails, rdvHarmoniser, rdvImport,
-  rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvDetail, rdvExportNominatif,
+  rdvPie, rdvSel, rdvSelTout, rdvAffecter, rdvDrapeau, rdvAudit, rdvDetail, rdvExportNominatif,
   rdvReset: () => { $('rdvQ').value = ''; $('rdvDip').value = ''; $('rdvResp').value = ''; $('rdvDu').value = ''; $('rdvAu').value = ''; $('rdvVue').value = 'alt'; $('rdvTri').value = 'classe';
     R.classes.clear(); R.sel.clear(); $('rdvClsBtn').innerHTML = svg('user', 13) + ' Classes : toutes ▾'; $('rdvClsPanel').style.display = 'none'; rdvRender(); toast('Filtres réinitialisés'); }, rdvResp: r => { $('rdvResp').value = r; rdvRender(); }, rdvDates: () => { $('rdvDu').value = ''; $('rdvAu').value = ''; rdvRender(); },
   rdvVue: v => { $('rdvVue').value = v; if (R.onglet !== 'suivi') rdvOnglet('suivi'); else rdvRender(); },
