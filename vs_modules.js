@@ -2171,7 +2171,7 @@ async function rdvPiePdf(cle, D, parts, tot, toutes) {
     doc.text(cle.replace(/^Par /, '').toUpperCase(), X + 9, y); doc.text(D.mesureLib.toUpperCase(), XR - 26, y, { align: 'right' }); doc.text('PART', XR - 3, y, { align: 'right' }); y += 8; };
   enTete();
   const rangs = toutes.map(x => { const p = parts.find(q => q.k === x.k); return { k: x.k, v: x.v, c: p ? p.c : PIE_AUTRES, pct: tot ? x.v / tot * 100 : 0, autre: !p }; });
-  const lh = rangs.length > 19 ? Math.max(5, (H - 20 - 54) / rangs.length) : 7;
+  const lh = Math.max(5, Math.min(7, (H - 21 - y) / Math.max(1, rangs.length)));   // la légende tient sur la page 1 dès que possible
   rangs.forEach((x, i) => {
     if (y > H - 20) { doc.addPage(); page++; ent(); y = 34; enTete(); }
     if (i % 2) { doc.setFillColor(250, 251, 253); doc.rect(X, y - lh * .66, XR - X, lh, 'F'); }
