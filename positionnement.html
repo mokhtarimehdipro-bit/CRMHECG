@@ -150,7 +150,7 @@ function vueSuivi() {
     ${!E.declencheur && j.actif ? '<p style="color:var(--red);font-size:12.5px">Passage automatique introuvable : gardez cette page ouverte pour faire avancer le traitement.</p>' : ''}
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="l">Fiches historiques</div><div class="v">${h.total || 0}</div><div class="s">${h.faits || 0} lues · ${h.erreurs || 0} non lisibles</div></div>
+    <div class="kpi"><div class="l">Fiches historiques</div><div class="v">${h.total || 0}</div><div class="s">${h.faits || 0} tableurs lus · ${h.erreurs || 0} PDF/Word gardés en lien</div></div>
     <div class="kpi"><div class="l">Fiches générées</div><div class="v">${et['fait'] || 0}</div><div class="s">${gReste} restante(s)</div></div>
     <div class="kpi"><div class="l">En attente de décision</div><div class="v" style="color:${et['attente décision'] ? 'var(--o)' : 'var(--ink)'}">${et['attente décision'] || 0}</div><div class="s"><a href="#" onclick="voir('sans');return false">inscrits sans historique →</a></div></div>
     <div class="kpi"><div class="l">Avec mentions manquantes</div><div class="v">${E.avecManquants || 0}</div><div class="s"><a href="#" onclick="voir('manq');return false">voir l’état →</a></div></div>

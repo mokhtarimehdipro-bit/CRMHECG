@@ -93,9 +93,13 @@ function _fp2DriveListe_(q) {
 function _fp2Dossier_(cache, id) {
   if (!id) return null;
   if (cache[id]) return cache[id];
+  var sc = CacheService.getScriptCache(), k = "fp2d_" + id, c = sc.get(k);
+  if (c) { try { return (cache[id] = JSON.parse(c)); } catch (e) {} }
   var r = {}; try { r = JSON.parse(UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + id + "?supportsAllDrives=true&fields=name,parents",
     { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }).getContentText()); } catch (e) {}
-  return (cache[id] = { id: id, nom: r.name || "", parent: (r.parents || [])[0] || "" });
+  cache[id] = { id: id, nom: r.name || "", parent: (r.parents || [])[0] || "" };
+  try { sc.put(k, JSON.stringify(cache[id]), 21600); } catch (e) {}
+  return cache[id];
 }
 
 function _fp2Inventaire_(ss) {
@@ -108,7 +112,7 @@ function _fp2Inventaire_(ss) {
   var props = PropertiesService.getScriptProperties();
   [props.getProperty("FICHE_POS_MODELE_ID"), FP_MODELE_XLSX].forEach(function (x) { if (x) exclus[x] = 1; });
 
-  var fichiers = _fp2DriveListe_("(name contains 'positionnement' or name contains 'positionement' or name contains 'positionnment' or fullText contains 'POSITIONNEMENT CANDIDAT') and trashed = false");
+  var fichiers = _fp2DriveListe_("(name contains 'positionnement' or name contains 'positionement' or name contains 'positionnment' or (fullText contains 'POSITIONNEMENT CANDIDAT' and mimeType contains 'spreadsheet')) and trashed = false");
   fichiers = fichiers.filter(function (f) {
     if (exclus[f.id]) return false;
     if (/folder|shortcut|image\//.test(f.mimeType)) return false;
@@ -196,22 +200,24 @@ function _fp2Convertir_(idFichier, mime) {
 // Lecture par libellés (les anciennes fiches n'ont pas toutes la même mise en page)
 function _fp2Lire_(sheetId) {
   var sh = SpreadsheetApp.openById(sheetId).getSheets()[0], v = sh.getRange(1, 1, Math.min(60, sh.getMaxRows()), Math.min(14, sh.getMaxColumns())).getDisplayValues();
-  var D = { champs: {}, grille: [], cursus: {} }, N = _fp2N_;
+  var D = { champs: {}, grille: [], cursus: {} }, N = _fp2N_, titre = false;
   var cell = function (r, c) { return (v[r] && v[r][c] != null) ? String(v[r][c]).trim() : ""; };
-  var droite = function (r, c) { for (var k = c + 1; k < Math.min(c + 4, 14); k++) if (cell(r, k)) return cell(r, k); return ""; };
+  // valeur à droite d'un libellé : zone identité = colonnes C-D seulement ; zone administration = 3 colonnes
+  var droite = function (r, c, large) { var fin = large ? Math.min(c + 4, 14) : Math.min(4, 14); for (var k = c + 1; k < fin; k++) if (cell(r, k)) return cell(r, k); return ""; };
   var LIB = { "civilite": "civilite", "nom": "nom", "prenom": "prenom", "ville": "ville", "ville gare de depart": "ville", "age": "age", "date de naissance": "naissance",
     "nationalite": "nationalite", "autorisation de travail": "autorisation", "date fin titre de sejour": "titreFin", "benefice rqth": "rqth", "source": "source",
     "permis b": "permis", "vehicule": "vehicule", "langues parlees": "langues", "entreprise": "entreprise", "nom de la societe": "societe" };
-  var CRIT = [/preparation/, /attitude/, /expression/, /argumentation|projet/, /adequation/, /bases? theorique|theorique/, /experience|pratique/, /resultat/, /appreciation/];
+  var CRIT = [/preparation/, /attitude/, /expression/, /argumentation|projet/, /adequation/, /bases? theorique|theorique/, /experience|pratique/, /resultat|^bulletins? scolaires/, /appreciation/];   // ancienne trame : une seule ligne « Bulletins scolaires » = résultats
   for (var r = 0; r < v.length; r++) for (var c = 0; c < v[r].length; c++) {
     var t = N(cell(r, c)); if (!t) continue;
+    if (/fiche de positionn?e?ment/.test(t)) titre = true;
     if (LIB[t] && c <= 3 && D.champs[LIB[t]] == null) D.champs[LIB[t]] = droite(r, c);
     if (/intitule de la formation/.test(t)) { for (var r2 = r + 1; r2 < r + 4; r2++) if (cell(r2, c)) { D.formation = cell(r2, c); break; } }
     if (t === "statut" && !D.statut) D.statut = cell(r + 1, c) || droite(r, c);
     if (t === "campus" && !D.campus) { for (var r3 = r + 1; r3 < r + 4; r3++) if (cell(r3, c)) { D.campus = cell(r3, c); break; } }
-    if (t === "dates" && !D.date) D.date = droite(r, c);
-    if (t === "interlocuteur" && !D.interlocuteur) D.interlocuteur = droite(r, c);
-    if (t === "resultat" && !D.note) { D.note = droite(r, c); D.resultat = cell(r + 1, c + 1) || cell(r + 1, c); }
+    if (t === "dates" && !D.date) D.date = droite(r, c, 1);
+    if (t === "interlocuteur" && !D.interlocuteur) D.interlocuteur = droite(r, c, 1);
+    if (t === "resultat" && !D.note) { D.note = droite(r, c, 1); D.resultat = cell(r + 1, c + 1) || cell(r + 1, c); }
     if (t === "etudes en cours") D.cursus.encours = [cell(r, c + 1), cell(r, c + 2)];
     if (/^autre s diplome/.test(t)) D.cursus.autres = [cell(r, c + 1), cell(r, c + 2)];
     if (t === "points forts") D.forts = cell(r + 1, c);
@@ -223,7 +229,9 @@ function _fp2Lire_(sheetId) {
     }
   }
   if (!D.date) D.date = "";
-  D.complete = D.grille.filter(Boolean).length === 9;
+  D.nbCriteres = D.grille.filter(Boolean).length;
+  D.estFiche = titre || D.nbCriteres > 0;
+  D.complete = D.nbCriteres === 9;
   return D;
 }
 
@@ -234,18 +242,20 @@ function _fp2Extraire_(ss, deadline) {
     var t0 = Date.now(), id = String(d[i][0]), mime = String(d[i][2] || "");
     try {
       if (!mime) { mime = DriveApp.getFileById(id).getMimeType(); ws.getRange(i + 1, 3).setValue(mime); }
-      var conv = _fp2Convertir_(id, mime);
+      var conv = String(d[i][5] || "") || _fp2Convertir_(id, mime);
       if (!conv) { ws.getRange(i + 1, 10, 1, 2).setValues([[new Date(), "Document non tableur (" + mime.split(/[./]/).pop() + ") : gardé en lien"]]); continue; }
       var D = _fp2Lire_(conv);
       var dip = _fp2Diplome_(D.formation);
       ws.getRange(i + 1, 6, 1, 5).setValues([[conv, D.formation || "", dip, JSON.stringify(D), new Date()]]);
-      _fp2Log_(ss, "Extraction", d[i][1] + " → " + (D.formation || "formation ?") + (D.complete ? " · grille complète" : " · grille incomplète") + " (" + Math.round((Date.now() - t0) / 100) / 10 + " s)");
+      _fp2Log_(ss, "Extraction", d[i][1] + " → " + (D.formation || "formation ?") + " · grille " + D.nbCriteres + "/9" + " (" + Math.round((Date.now() - t0) / 100) / 10 + " s)");
       faits++;
     } catch (e) { ws.getRange(i + 1, 10, 1, 2).setValues([[new Date(), String(e).slice(0, 200)]]); _fp2Log_(ss, "Erreur", "Extraction " + d[i][1] + " : " + e); }
     _fp2Mesure_("extraction", Date.now() - t0);
   }
   return faits;
 }
+
+function _fp2EstFiche_(D) { if (!D) return false; return D.estFiche != null ? !!D.estFiche : ((D.grille || []).filter(Boolean).length > 0 || !!D.formation); }
 
 // ── Sources complémentaires ──────────────────────────────────────────────────
 function _fp2Charlemagne_(ss) {
@@ -281,7 +291,7 @@ function _fp2Ocr_(dossier) {
         payload: JSON.stringify({ name: "OCR temporaire", mimeType: "application/vnd.google-apps.document", parents: [_fp2DossierTravail_().getId()] }) });
       if (r.getResponseCode() !== 200) return;
       var docId = JSON.parse(r.getContentText()).id, txt = "";
-      try { txt = DocumentApp.openById(docId).getBody().getText(); } catch (e) {}
+      try { txt = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + docId + "/export?mimeType=text/plain", { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }).getContentText(); } catch (e) {}
       try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {}
       n++;
       var m;
@@ -307,7 +317,8 @@ function _fp2Generer_(ss, row, ctx) {
   if (!e) throw new Error("Étudiant introuvable dans ETUDIANTS");
   var dec = String(row[FP2_C.decision]), refus = dec === "refus", pre = e.typoN === "preinscrit";
   var histos = []; try { histos = JSON.parse(row[FP2_C.histo] || "[]"); } catch (x) {}
-  histos = histos.map(function (h) { var H = ctx.histo[h.id] || {}; return { id: h.id, nom: h.nom, cree: h.cree, conv: H.conv, D: H.D, dip: H.dip, formation: H.formation, lien: "https://drive.google.com/file/d/" + h.id }; });
+  histos = histos.map(function (h) { var H = ctx.histo[h.id] || {}; return { id: h.id, nom: h.nom, cree: h.cree, conv: H.conv, D: H.D, dip: H.dip, formation: H.formation, doc: H.doc, lien: "https://drive.google.com/file/d/" + h.id }; })
+    .filter(function (h) { return _fp2EstFiche_(h.D) || (h.doc && /positionn?e?ment/i.test(h.nom)); });   // documents qui ne sont pas des fiches : écartés
   histos.sort(function (a, b) { return String(b.cree).localeCompare(String(a.cree)); });   // plus récent d'abord
   var recent = histos.filter(function (h) { return h.D; })[0];
   var champ = function (k) { for (var i = 0; i < histos.length; i++) { var D = histos[i].D; if (D && D.champs && D.champs[k]) return D.champs[k]; } return ""; };
@@ -363,8 +374,11 @@ function _fp2Generer_(ss, row, ctx) {
     onglets.forEach(function (o) {
       var src = o.actuel ? null : histos.filter(function (h) { return h.dip === o.dip && h.D; })[0];
       if (o.actuel) src = histos.filter(function (h) { return h.dip === o.dip && h.D; })[0] || null;
+      var srcDouteuse = false;
+      if (o.actuel && !src) { src = histos.filter(function (h) { return !h.dip && h.D && _fp2EstFiche_(h.D); })[0] || null; srcDouteuse = !!src; }   // fiche historique sans formation lisible
       var r = _fp2Onglet_(classeur, ctx, e, o, src, base, notes);
       r.manquants.forEach(function (m) { manq.push(o.dip + " : " + m); });
+      if (srcDouteuse) manq.push(o.dip + " : Grille reprise d'une fiche historique sans formation indiquée — à vérifier");
       creees.push(r.sheet);
       if (o.dip === "BACHELOR" && !o.refus) { var rb = _fp2OngletBachelor_(classeur, ctx); creees.push(rb); manq.push("BACHELOR : notes des critères d'admission pondérés"); }
     });
@@ -409,7 +423,7 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   set("B7", formation); set("E7", aix ? "Aix" : "MARSEILLE");
   set("D8", alternance ? "Contrat d'apprentissage" : "Initiale");
   set("H7", D && D.date ? D.date : ""); set("H8", D && D.interlocuteur ? D.interlocuteur : "");
-  set("L8", o.refus ? "Refusé" : "Admis");
+  set("L8", o.refus ? "Refus" : "Admis");
   set("C11", base.civilite); set("C12", base.nom); set("C13", base.prenom); set("C14", base.ville); set("C15", base.naissance);
   set("C16", ""); set("C17", base.nationalite); set("C18", base.autorisation); set("C19", "");
   set("C22", base.permis); set("C23", base.vehicule); set("C24", base.langues);
@@ -429,11 +443,13 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   set("B32", synth);
   // note : calculée seulement quand la grille est complète (sinon vide, pas 0)
   var fNote = String(M.formuleNote || "");
-  if (fNote) set("F22", "=IF(COUNTIF(F13:I21,\"X\")<9,\"\"," + fNote.replace(/^=/, "") + ")");
   sh.getRange(2, 2, V.length, V[0].length).setValues(V);
+  // séparateurs d'arguments selon la langue du classeur (« ; » en français)
+  if (fNote) sh.getRange("F22").setFormula(_fp2F_(classeur, "=IF(COUNTIF(F13:I21,\"X\")=0,\"\"," + fNote.replace(/^=/, "") + ")"));
+  sh.setRowHeight(4, 20);
   if (o.refus) {
     var n = Number(String(e._noteRefus).replace(",", "."));
-    sh.getRange("L8").clearDataValidations().setValue("Refusé").setFontColor("#c62828").setFontWeight("bold");
+    sh.getRange("L8").setValue("Refus").setFontColor("#c62828").setFontWeight("bold");   // valeur de la liste du modèle (Admis / Refus)
     sh.getRange("L7").setValue(isNaN(n) ? "" : n).setNumberFormat("0.00");
     sh.getRange("F22").setValue(isNaN(n) ? "" : n).setNumberFormat("0.00");
     sh.getRange("E23").setValue("Note inférieure à 10/20 : candidature non retenue");
@@ -447,10 +463,25 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
     ["E26", "Points forts"], ["H26", "Axes d'amélioration"], ["B32", "Synthèse de l'entretien"]];
   var get = function (a1) { var col = a1.charCodeAt(0) - 66, row = Number(a1.slice(1)) - 2; return String(V[row][col] || "").trim(); };
   L.forEach(function (x) { if (!get(x[0])) manq.push(x[1]); });
-  if (!(D && D.grille && D.grille.filter(Boolean).length === 9) && !o.refus) manq.push("Grille d'évaluation (9 critères)");
+  var nbG = D && D.grille ? D.grille.filter(Boolean).length : 0;
+  if (!o.refus && nbG === 0) manq.push("Grille d'évaluation (9 critères)");
+  else if (!o.refus && nbG < 9) {
+    var NOMS = ["Préparation de l'entretien", "Attitude générale", "Expression verbale", "Argumentation métier/projet", "Adéquation du profil", "Connaissances théoriques", "Connaissances pratiques", "Résultats scolaires", "Appréciations sur bulletins"];
+    var vides = NOMS.filter(function (n, k) { return !(D.grille[k]); });
+    manq.push("Grille : " + vides.join(", ") + (vides.length === 1 && !D.grille[8] ? " (absent de l'ancienne trame)" : ""));
+  }
   if (o.refus && !(D && D.grille && D.grille.filter(Boolean).length)) manq.push("Grille d'évaluation (justifiant le refus)");
   Object.keys(notes).forEach(function (k) { manq.push({ naissance: "Date de naissance", nationalite: "Nationalité", ville: "Ville" }[k] + " (lue par OCR, à vérifier)"); });
   return { sheet: sh, manquants: manq };
+}
+
+// Formule écrite en syntaxe anglaise → séparateurs « ; » si le classeur est dans une langue à virgule décimale
+function _fp2F_(classeur, f) {
+  var loc = ""; try { loc = String(classeur.getSpreadsheetLocale() || ""); } catch (e) {}
+  if (!/^(fr|de|es|it|pt|nl|ru|pl|tr|sv|da|fi|nb|no|cs|el|hu|ro|uk|id|vi)/i.test(loc)) return f;
+  var out = "", q = false;
+  for (var i = 0; i < f.length; i++) { var ch = f.charAt(i); if (ch === '"') q = !q; out += (!q && ch === ",") ? ";" : ch; }
+  return out;
 }
 
 // ── BACHELOR CDSP : critères pondérés ───────────────────────────────────────
@@ -472,13 +503,17 @@ function _fp2OngletBachelor_(classeur, ctx) {
   sh.getRange("B3").setValue("Chaque critère est noté sur 20 par le jury ; la note finale est la moyenne pondérée. Admission si la note finale est supérieure ou égale à 10/20.").setFontColor("#3b4859");
   sh.getRange(5, 2, 1, 5).setValues([["Critère", "Compétence visée (Bachelor CDSP — RH et paie)", "Poids (%)", "Note /20", "Note pondérée"]])
     .setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
-  var rows = C.map(function (c, i) { return [c[0], c[1], c[2], "", "=IF(E" + (6 + i) + "=\"\",\"\",E" + (6 + i) + "*D" + (6 + i) + "/100)"]; });
-  sh.getRange(6, 2, n, 5).setValues(rows);
+  sh.getRange(6, 2, n, 4).setValues(C.map(function (c) { return [c[0], c[1], c[2], ""]; }));
+  sh.getRange(6, 6, n, 1).setFormulas(C.map(function (c, i) { return [_fp2F_(classeur, "=IF(E" + (6 + i) + "=\"\",\"\",E" + (6 + i) + "*D" + (6 + i) + "/100)")]; }));
   sh.getRange(6, 5, n, 1).setBackground("#fff8e6");
   var t = 6 + n;
-  sh.getRange(t, 2, 1, 5).setValues([["NOTE FINALE /20", "", "=SUM(D6:D" + (t - 1) + ")", "", "=IF(COUNT(E6:E" + (t - 1) + ")<" + n + ",\"\",SUM(F6:F" + (t - 1) + ")*100/D" + t + ")"]])
-    .setFontWeight("bold").setBackground("#e8eff8");
-  sh.getRange(t + 1, 2, 1, 2).setValues([["Décision", "=IF(F" + t + "=\"\",\"À compléter\",IF(F" + t + ">=10,\"Admis\",\"Refusé\"))"]]).setFontWeight("bold");
+  sh.getRange(t, 2, 1, 5).setFontWeight("bold").setBackground("#e8eff8");
+  sh.getRange(t, 2).setValue("NOTE FINALE /20");
+  sh.getRange(t, 4).setFormula("=SUM(D6:D" + (t - 1) + ")");
+  sh.getRange(t, 6).setFormula(_fp2F_(classeur, "=IF(COUNT(E6:E" + (t - 1) + ")<" + n + ",\"\",SUM(F6:F" + (t - 1) + ")*100/D" + t + ")"));
+  sh.getRange(t + 1, 2, 1, 2).setFontWeight("bold");
+  sh.getRange(t + 1, 2).setValue("Décision");
+  sh.getRange(t + 1, 3).setFormula(_fp2F_(classeur, "=IF(F" + t + "=\"\",\"À compléter\",IF(F" + t + ">=10,\"Admis\",\"Refusé\"))"));
   var tests = PropertiesService.getScriptProperties().getProperty("FP2_BACH_TESTS");
   if (tests) { try { var T = JSON.parse(tests); sh.getRange(t + 3, 2, 3, 2).setValues([["Test d'admission — sujet", T.sujet], ["Test d'admission — corrigé (jury uniquement)", T.corrige], ["Grille de notation du test", "QCM /8 · Rédaction /6 · Calcul /6 = /20 → reporter la note dans le 1er critère"]]); } catch (e) {} }
   sh.setColumnWidth(2, 360); sh.setColumnWidth(3, 330); sh.setColumnWidths(4, 3, 110);
@@ -492,7 +527,8 @@ function _fp2Ctx_(ss) {
   var M = _fpModeleCharge_(ss), shM = SpreadsheetApp.openById(M.id).getSheets()[0], f = shM.getRange("F22").getFormula();
   M.formuleNote = f;
   var hd = _fp2Histo_(ss).getDataRange().getValues(), histo = {};
-  for (var i = 1; i < hd.length; i++) { var D = null; try { D = hd[i][8] ? JSON.parse(hd[i][8]) : null; } catch (e) {} histo[String(hd[i][0])] = { conv: String(hd[i][5] || ""), formation: String(hd[i][6] || ""), dip: String(hd[i][7] || ""), D: D }; }
+  for (var i = 1; i < hd.length; i++) { var D = null; try { D = hd[i][8] ? JSON.parse(hd[i][8]) : null; } catch (e) {}
+    histo[String(hd[i][0])] = { conv: String(hd[i][5] || ""), formation: String(hd[i][6] || ""), dip: String(hd[i][7] || ""), D: D, doc: /non tableur/.test(String(hd[i][10] || "")) }; }
   return { modele: M, etus: _fp2Etudiants_(ss), charl: _fp2Charlemagne_(ss), histo: histo };
 }
 
@@ -506,12 +542,22 @@ function _fp2GenererLot_(ss, deadline) {
     ws.getRange(i + 1, FP2_C.etat + 1).setValue("en cours");
     try {
       var e = ctx.etus[id]; if (e) { e._noteRefus = d[i][FP2_C.noteRefus]; e._motifRefus = d[i][FP2_C.motifRefus]; }
+      if (e && String(d[i][FP2_C.decision]) === "auto" && e.typoN === "inscrit") {
+        var hv = []; try { hv = JSON.parse(d[i][FP2_C.histo] || "[]"); } catch (x) {}
+        var valides = hv.filter(function (h) { var H = ctx.histo[h.id] || {}; return _fp2EstFiche_(H.D) || (H.doc && /positionn?e?ment/i.test(h.nom)); });
+        if (!valides.length) {
+          ws.getRange(i + 1, FP2_C.decision + 1).setValue("attente"); ws.getRange(i + 1, FP2_C.etat + 1).setValue("attente décision");
+          ws.getRange(i + 1, FP2_C.message + 1).setValue("Documents trouvés mais aucun n'est une fiche de positionnement");
+          _fp2Log_(ss, "Décision", d[i][1] + " " + d[i][2] + " : aucun des documents rattachés n'est une fiche → à décider");
+          continue;
+        }
+      }
       // ancien classeur FP2 (régénération) → corbeille
       if (d[i][FP2_C.classeurId]) { try { DriveApp.getFileById(String(d[i][FP2_C.classeurId])).setTrashed(true); } catch (x) {} }
       var r = _fp2Generer_(ss, d[i], ctx);
       ws.getRange(i + 1, FP2_C.classeurId + 1, 1, 6).setValues([[r.id, r.url, "fait", JSON.stringify(r.manquants), r.historiques + " historique(s), " + r.onglets + " onglet(s) nouvelle trame", new Date()]]);
-      var jp = _fp2Job_();
-      if (jp.pilote) { jp.pilote = false; jp.pause = true; jp.piloteUrl = r.url; jp.piloteNom = d[i][1] + " " + d[i][2]; _fp2SetJob_(jp);
+      var jp = _fp2Job_(), propsP = PropertiesService.getScriptProperties();
+      if (propsP.getProperty("FP2_PILOTE") === "1" || jp.pilote) { propsP.deleteProperty("FP2_PILOTE"); jp.pilote = false; jp.pause = true; jp.piloteUrl = r.url; jp.piloteNom = d[i][1] + " " + d[i][2]; _fp2SetJob_(jp);
         _fp2Log_(ss, "Pilote", "Fiche pilote créée pour " + jp.piloteNom + " — vérifiez-la puis cliquez sur « Reprendre »"); }
       _fp2Log_(ss, "Fiche", d[i][1] + " " + d[i][2] + " — " + r.historiques + " historique(s), " + r.onglets + " onglet(s), " + r.manquants.length + " mention(s) manquante(s) (" + Math.round((Date.now() - t0) / 100) / 10 + " s)");
       faits++;
@@ -621,7 +667,9 @@ function handleFp2(p, ss) {
     if (op === "regenerer") {
       var dg = ws.getDataRange().getValues(), n2 = 0;
       for (var g = 1; g < dg.length; g++) if ((p.ids || []).indexOf(String(dg[g][0])) >= 0 && dg[g][FP2_C.decision] !== "attente") { ws.getRange(g + 1, FP2_C.etat + 1).setValue("à faire"); n2++; }
-      _fp2Relancer_("generation"); return createJsonResponse({ success: true, n: n2 });
+      _fp2Relancer_("generation");
+      if (p.pilote) PropertiesService.getScriptProperties().setProperty("FP2_PILOTE", "1");   // propriété à part : jamais écrasée par un passage en cours
+      return createJsonResponse({ success: true, n: n2 });
     }
     if (op === "sortis") {
       var etus = _fp2Etudiants_(ss), deja = {}; ws.getDataRange().getValues().slice(1).forEach(function (r) { deja[String(r[0])] = r[FP2_C.decision]; });
@@ -657,6 +705,13 @@ function handleFp2(p, ss) {
       var T = null; try { T = JSON.parse(PropertiesService.getScriptProperties().getProperty("FP2_BACH_TESTS") || "null"); } catch (e) {}
       return createJsonResponse({ success: true, criteres: _fp2BachCriteres_(), tests: T });
     }
+    if (op === "lire") { var conv = _fp2Convertir_(p.id, DriveApp.getFileById(p.id).getMimeType()); var Dl = _fp2Lire_(conv); if (conv !== p.id) DriveApp.getFileById(conv).setTrashed(true); return createJsonResponse({ success: true, d: Dl }); }
+    if (op === "reextraire") {
+      var wh = _fp2Histo_(ss); if (wh.getLastRow() > 1) wh.getRange(2, 9, wh.getLastRow() - 1, 3).clearContent();
+      var jx = _fp2Job_(); jx.phase = "extraction"; jx.phaseDebut = Date.now(); jx.actif = true; jx.pause = false; _fp2SetJob_(jx);
+      _fp2Log_(ss, "Commande", "Relecture de toutes les fiches historiques"); return createJsonResponse({ success: true });
+    }
+    if (op === "formule") { var shF = SpreadsheetApp.openById(p.id).getSheetByName(p.onglet) || SpreadsheetApp.openById(p.id).getSheets()[0]; return createJsonResponse({ success: true, f: shF.getRange(p.a1).getFormula(), v: shF.getRange(p.a1).getDisplayValue(), modele: SpreadsheetApp.openById(_fpModele_()).getSheets()[0].getRange(p.a1).getFormula() }); }
     if (op === "kick") { fp2Tick(280000); return createJsonResponse({ success: true }); }
     if (op === "declencheurs") return createJsonResponse({ success: true, liste: ScriptApp.getProjectTriggers().map(function (t) { return { f: t.getHandlerFunction(), type: String(t.getEventType()), src: String(t.getTriggerSource()) }; }) });
     if (op === "tests") { var R = _fp2TestsBachelor_(); _fp2Log_(ss, "Bachelor", "Tests d'admission générés"); logAction(p.emailAuteur, "", "Création", "Étudiants — Fiches de positionnement (refonte)", "Bachelor", "Tests d'admission (sujet + corrigé)"); return createJsonResponse({ success: true, tests: R }); }
