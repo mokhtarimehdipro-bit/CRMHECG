@@ -197,6 +197,11 @@
             <form id="addContactForm" class="space-y-4">
                 <div class="space-y-1">
                     <label class="text-[10px] font-black uppercase text-slate-400 ml-2">Entreprise de rattachement</label>
+                    <div id="addContSiretBloc" class="flex gap-2">
+                        <input type="text" id="addContSiret" inputmode="numeric" placeholder="SIRET (14 chiffres) ou SIREN — remplit tout automatiquement" onkeydown="if(event.key==='Enter'){event.preventDefault();recupererSiret();}" class="flex-1 p-3 bg-indigo-50/60 border border-indigo-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400">
+                        <button type="button" id="addContSiretBtn" onclick="recupererSiret()" class="shrink-0 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700">🔎 Récupérer</button>
+                    </div>
+                    <div id="addContSiretRes" class="hidden"></div>
                     <input type="text" id="addContEntNom" oninput="detecterEntrepriseExistante()" placeholder="Nom de l'entreprise" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#1A4E8A]">
                     <div id="addContEntMatch" class="hidden space-y-1"></div>
                     <input type="hidden" id="addContEntId">
@@ -761,8 +766,10 @@
             document.getElementById('addContIsMA').checked = false;
             document.getElementById('maStudentBlock').classList.add('hidden');
             HecgPostes.attacher(document.getElementById('addContPoste'));
-            _newEntAdr = null;
+            _newEntAdr = null; _sireneInfo = null;
             document.getElementById('addContEntMatch').classList.add('hidden');
+            document.getElementById('addContSiretRes').classList.add('hidden');
+            document.getElementById('addContSiretBloc').classList.toggle('hidden', !!idEnt);
             if (idEnt) {
                 const ent = allPartners.find(p => String(p.id) === String(idEnt));
                 document.getElementById('addContEntNom').value = ent.nom;
@@ -854,6 +861,9 @@
                         id_contact: result.id_contact || "",
                         nom_entreprise: payload.nom_entreprise
                     });
+                }
+                if (!payload.id_entreprise && _sireneInfo && result.id_entreprise && _newEntAdr && _newEntAdr.siret === _sireneInfo.siret) {
+                    try { await apiPost({ action: 'addPartnerNote', id_entreprise: result.id_entreprise, texte: _sireneInfo.note }); } catch (eN) {}
                 }
                 alert("✅ " + result.message);
                 closeAddContact();
@@ -1071,13 +1081,63 @@
                 + hits.map(p => `<button type="button" onclick="rattacherEntrepriseExistante('${p.id}')" class="block w-full text-left px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100"><span class="text-xs font-black text-slate-700">${escAdr(p.nom)}</span> <span class="text-[10px] text-slate-500">— ${escAdr(HecgAdresse.texte(p) || 'sans adresse')}</span></button>`).join('');
             box.classList.remove('hidden');
         }
+        // ── Création par SIRET : répertoire SIRENE officiel (INSEE, gratuit, sans clé) ──
+        let _sireneInfo = null;
+        const _TRANCHES = { '00': '0 salarié', '01': '1-2 salariés', '02': '3-5 salariés', '03': '6-9 salariés', '11': '10-19 salariés', '12': '20-49 salariés', '21': '50-99 salariés', '22': '100-199 salariés', '31': '200-249 salariés', '32': '250-499 salariés', '41': '500-999 salariés', '42': '1 000-1 999 salariés', '51': '2 000-4 999 salariés', '52': '5 000-9 999 salariés', '53': '10 000 salariés et plus' };
+        function _casseEnt(t) { return String(t || '').toLowerCase().replace(/(^|[\s\-'’(])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()); }
+        function _escS(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        async function recupererSiret() {
+            const brut = document.getElementById('addContSiret').value.replace(/\s|\./g, '');
+            const box = document.getElementById('addContSiretRes'), btn = document.getElementById('addContSiretBtn');
+            box.classList.remove('hidden');
+            if (!/^\d{9}$|^\d{14}$/.test(brut)) { box.innerHTML = '<p class="text-[11px] font-bold text-red-500 ml-2">Saisissez un SIRET (14 chiffres) ou un SIREN (9 chiffres).</p>'; return; }
+            // déjà dans le CRM ?
+            const deja = (allPartners || []).filter(p => { const x = String(p.siret || '').replace(/\D/g, ''); return x && (x === brut || x.slice(0, 9) === brut.slice(0, 9)); });
+            btn.disabled = true; btn.innerText = '⏳';
+            box.innerHTML = '<p class="text-[11px] text-slate-400 italic ml-2">Recherche dans le répertoire SIRENE…</p>';
+            try {
+                const j = await fetch('https://recherche-entreprises.api.gouv.fr/search?per_page=1&q=' + brut.slice(0, 9)).then(r => r.json());
+                const r = (j.results || [])[0];
+                if (!r) { box.innerHTML = '<p class="text-[11px] font-bold text-red-500 ml-2">Aucune entreprise trouvée pour ce numéro.</p>'; return; }
+                const etabs = (r.matching_etablissements || []).concat(r.siege ? [r.siege] : []);
+                const e = brut.length === 14 ? (etabs.find(x => x.siret === brut) || null) : r.siege;
+                if (!e) { box.innerHTML = '<p class="text-[11px] font-bold text-red-500 ml-2">Entreprise ' + _escS(r.nom_complet) + ' trouvée, mais pas cet établissement (SIRET ' + _escS(brut) + '). Vérifiez le numéro.</p>'; return; }
+                const enseigne = (e.liste_enseignes || [])[0] || e.nom_commercial || '';
+                const nom = _casseEnt(r.nom_raison_sociale || r.nom_complet);
+                let voie = [e.numero_voie, e.indice_repetition, e.type_voie, e.libelle_voie].filter(Boolean).join(' ');
+                if (!voie && e.adresse) voie = String(e.adresse).replace(/\s*\b\d{5}\b.*$/, '').trim();
+                _newEntAdr = { adresse: _casseEnt(voie), complement: e.complement_adresse ? _casseEnt(e.complement_adresse) : '', cp: e.code_postal || '', ville: _casseEnt(e.libelle_commune || ''),
+                    lat: Number(e.latitude) || '', lon: Number(e.longitude) || '', statut: 'SIRENE', siret: e.siret || '' };
+                document.getElementById('addContEntNom').value = enseigne && _normNomEnt(enseigne) !== _normNomEnt(nom) ? nom + ' (' + _casseEnt(enseigne) + ')' : nom;
+                _afficherAdresseNouveauContact(_newEntAdr, false);
+                detecterEntrepriseExistante();
+                const dir = (r.dirigeants || []).slice(0, 3).map(d => d.nom ? _casseEnt((d.prenoms || '') + ' ' + d.nom) + (d.qualite ? ' (' + d.qualite + ')' : '') : _casseEnt(d.denomination || '')).filter(Boolean);
+                const ferme = e.etat_administratif === 'F' || r.etat_administratif === 'C';
+                const lignes = [
+                    ['Raison sociale', r.nom_complet], ['SIRET', e.siret + (e.est_siege ? ' (siège)' : ' (établissement secondaire)')],
+                    ['Activité (NAF)', (e.activite_principale || r.activite_principale || '') + (r.libelle_activite_principale ? ' — ' + r.libelle_activite_principale : '')],
+                    ['Effectif', _TRANCHES[e.tranche_effectif_salarie || r.tranche_effectif_salarie] || 'non renseigné'],
+                    ['Création', r.date_creation ? r.date_creation.split('-').reverse().join('/') : ''], ['Dirigeant(s)', dir.join(', ')]
+                ].filter(x => x[1]);
+                _sireneInfo = { siret: e.siret, note: '🏛️ Fiche SIRENE (création par SIRET) — ' + lignes.map(x => x[0] + ' : ' + x[1]).join(' · ') };
+                box.innerHTML = `<div class="mt-1 p-3 rounded-xl border ${ferme ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'} text-[11px] space-y-0.5">
+                    ${ferme ? '<p class="font-black text-red-600">⚠️ Établissement FERMÉ selon l\'INSEE — vérifiez avant de créer.</p>' : '<p class="font-black text-emerald-700">✅ Informations récupérées (répertoire SIRENE de l\'INSEE)</p>'}
+                    ${lignes.map(x => `<div><span class="text-slate-400 font-bold">${_escS(x[0])} :</span> <span class="text-slate-700">${_escS(x[1])}</span></div>`).join('')}
+                    ${deja.length ? `<p class="font-black text-amber-700 mt-1">⚠️ Déjà dans le CRM : ${deja.slice(0, 3).map(p => `<button type="button" class="underline" onclick="rattacherEntrepriseExistante('${p.id}')">${_escS(p.nom)}</button>`).join(', ')} — rattachez plutôt le contact à cette fiche.</p>` : ''}
+                    <p class="text-slate-400 mt-1">Nom et adresse remplis automatiquement (modifiables) ; ces informations seront ajoutées en note sur la fiche de l'entreprise.</p></div>`;
+            } catch (err) {
+                box.innerHTML = '<p class="text-[11px] font-bold text-red-500 ml-2">Répertoire SIRENE indisponible, réessayez dans un instant.</p>';
+            } finally { btn.disabled = false; btn.innerText = '🔎 Récupérer'; }
+        }
         function rattacherEntrepriseExistante(id) {
             const ent = allPartners.find(p => String(p.id) === String(id)); if (!ent) return;
             document.getElementById('addContEntNom').value = ent.nom;
             document.getElementById('addContEntNom').readOnly = true;
             document.getElementById('addContEntId').value = ent.id;
             document.getElementById('addContEntMatch').classList.add('hidden');
-            _newEntAdr = null;
+            document.getElementById('addContSiretBloc').classList.add('hidden');
+            document.getElementById('addContSiretRes').classList.add('hidden');
+            _newEntAdr = null; _sireneInfo = null;
             _afficherAdresseNouveauContact({ adresse: ent.adresse, complement: ent.complement, cp: ent.cp, ville: ent.ville, statut: ent.adrStatut }, true);
         }
         function choisirAdresseNouveauContact() {

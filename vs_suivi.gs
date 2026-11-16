@@ -78,7 +78,7 @@ function handleGetRdv(p, ss) {
     var avecVisite = {}; visites.forEach(function (v) { avecVisite[v.etuId] = true; });
     var liste = [];
     etus.forEach(function (e) {
-      if (!e.inscrit && !(avecVisite[e.id] && visites.some(function (v) { return v.etuId === e.id && v.annee === annee; }))) return;
+      if (!e.inscrit) return;   // sortis / prospects masqués, même avec un RDV fixé (le RDV reste conservé dans RDV_VISITES)
       var ent = e.idEnt ? ents[e.idEnt.toUpperCase()] : null;
       liste.push({ id: e.id, nom: (e.prenom + " " + e.nom).trim(), classe: e.classe, diplome: _vsuDiplome_(e.classe), campus: e.campus, typo: e.typo,
         alternant: _vsuAlternant_(e), statut: e.statut, entId: ent ? ent.id : "", entreprise: ent ? ent.nom : e.nomEnt, lieu: ent ? ent.lieu : "", cp: ent ? ent.cp : "", ville: ent ? ent.ville : "",
@@ -90,6 +90,8 @@ function handleGetRdv(p, ss) {
     liste.forEach(function (x) { var dr = drap[x.id]; x.drapeau = dr && dr.niveau ? dr.niveau : ""; x.drapeauCom = dr ? dr.commentaire : ""; x.drapeauLe = dr ? dr.poseLe : ""; x.drapeauPar = dr ? dr.par : ""; x.drapeauLeve = dr && dr.leveLe ? dr.leveLe + " par " + dr.levePar : ""; });
     var annees = {}; annees[_ckAnneeCourante_()] = 1; visites.forEach(function (v) { if (v.annee) annees[v.annee] = 1; });
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; }).map(function (x) { return { nom: x.nom, email: x.email, role: x.role }; });
+    var affiches = {}; liste.forEach(function (x) { affiches[x.id] = 1; });
+    visites = visites.filter(function (v) { return affiches[v.etuId]; });
     visites.forEach(function (v) { delete v.row; });
     return createJsonResponse({ success: true, annee: annee, annees: Object.keys(annees).sort().reverse(), etudiants: liste, visites: visites,
       equipe: equipe, peutSuivre: _vsuAdmin_(p), envois: _rdvEnvois_(ss, annee),
@@ -1084,6 +1086,7 @@ function _rdvEnvoyerRappels_(ss) {
   var ctx = _rdvCtx_(ss), ws = _rdvSheet_(ss), now = new Date(), envoyes = 0, sans = [];
   visites.forEach(function (v) {
     var e = etus[v.etuId];
+    if (e && !e.inscrit) return;   // étudiant sorti : pas de rappel
     var mailEtu = e ? (e.mailHecg || e.mailPerso || e.mail) : "";
     if (!mailEtu || mailEtu.indexOf("@") < 1) { sans.push(v.etudiant + " (pas de mail)"); return; }
     var vis = v.visiteur || "", visMail = v.visiteurEmail || "";
