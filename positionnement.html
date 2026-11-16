@@ -283,7 +283,7 @@ async function genererTests(b) { b.disabled = true; b.textContent = 'Génératio
 const ETAT_C = { 'fait': 'g', 'à faire': 'b', 'en cours': 'b', 'erreur': 'r', 'attente décision': '' };
 function vueToutes() {
   const L = filtrer(S.liste);
-  return `<h1>Toutes les fiches</h1><p class="sub">Un classeur par étudiant dans son dossier GED : onglets historiques (copies fidèles) puis onglets nouvelle trame.</p>${filtres(S.liste)}
+  return `<h1>Toutes les fiches</h1><p class="sub">Un classeur par étudiant dans son dossier GED : onglets historiques (copies fidèles, intouchées) puis un onglet au nom du diplôme actuel (ex. « Bachelor ») seulement s’il n’a pas déjà de fiche historique. Ce qui manque se complète directement sur la fiche.</p>${filtres(S.liste)}
   <div class="card tw" style="padding:0"><table><thead><tr><th>Étudiant</th><th>Classe</th><th>Historique</th><th>Décision</th><th>État</th><th>Fiche</th><th></th></tr></thead><tbody>
   ${L.map(x => `<tr><td><b style="color:var(--ink)">${esc(x.nom)} ${esc(x.prenom)}</b><div style="font-size:12px;color:var(--mu)">${esc(x.id)} · ${esc(x.typo)}</div></td><td>${esc(x.classe)}</td>
     <td>${x.histo.length ? x.histo.map(h => `<a target="_blank" href="https://drive.google.com/file/d/${esc(h.id)}" title="${esc(h.nom)}" class="chip m">${esc((h.cree || '').slice(0, 4) || 'fiche')}</a>`).join('') : '<span style="color:var(--mu)">—</span>'}</td>

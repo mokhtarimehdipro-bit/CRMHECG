@@ -441,21 +441,21 @@ function _fp2Generer_(ss, row, ctx) {
   if (refus) onglets.push({ dip: dipActuel, actuel: true, refus: true });
   else if (pre) onglets.push({ dip: dipActuel, actuel: true });
   else {
-    var vus = {};
-    histos.slice().reverse().forEach(function (h) { if (h.dip && h.dip !== dipActuel && !vus[h.dip]) { vus[h.dip] = 1; onglets.push({ dip: h.dip, actuel: false }); } });
-    onglets.push({ dip: dipActuel, actuel: true });
+    // les diplômes déjà couverts par une fiche historique gardent leur historique (copie fidèle), sans onglet en double
+    var couvert = histos.some(function (h) { return h.dip === dipActuel && (h.conv || h.doc); });
+    if (!couvert) onglets.push({ dip: dipActuel, actuel: true });
   }
 
   var nomF = "Fiche de positionnement - " + e.nom.toUpperCase() + " " + e.prenom;
   var classeur = SpreadsheetApp.create(nomF), fichier = DriveApp.getFileById(classeur.getId());
   fichier.moveTo(dossier);
-  var premier = classeur.getSheets()[0], manq = [], creees = [];
+  var premier = classeur.getSheets()[0], manq = [], creees = [], histoSh = [];
   try {
     // copies fidèles des fiches historiques (onglets « base »)
     var docs = [];
     if (!pre || refus) histos.slice().reverse().forEach(function (h, k) {
       if (h.conv) {
-        try { var sh = SpreadsheetApp.openById(h.conv).getSheets()[0].copyTo(classeur);
+        try { var sh = SpreadsheetApp.openById(h.conv).getSheets()[0].copyTo(classeur); histoSh.push(sh);
           sh.setName(("Historique " + (h.cree || "").slice(0, 4) + " — " + (h.formation || h.dip || "fiche")).slice(0, 90) + (k ? " (" + (k + 1) + ")" : ""));
           sh.getRange("A1").setNote("Copie fidèle de la fiche historique « " + h.nom + " » (" + h.lien + "). L'original reste inchangé.");
         } catch (eC) { docs.push(h); }
@@ -473,15 +473,26 @@ function _fp2Generer_(ss, row, ctx) {
       if (o.actuel) src = histos.filter(function (h) { return h.dip === o.dip && h.D; })[0] || null;
       var srcDouteuse = false;
       if (o.actuel && !src) { src = histos.filter(function (h) { return !h.dip && h.D && _fp2EstFiche_(h.D); })[0] || null; srcDouteuse = !!src; }   // fiche historique sans formation lisible
+      if (o.actuel && !src && !o.refus) {   // autre diplôme : on reprend l'entretien le plus récent (critères, points forts, axes, synthèse)
+        src = histos.filter(function (h) { return h.D && _fp2EstFiche_(h.D); })[0] || null;
+        if (src) o.reprise = src;
+      }
       var r = _fp2Onglet_(classeur, ctx, e, o, src, base, notes);
       r.manquants.forEach(function (m) { manq.push(o.dip + " : " + m); });
-      if (srcDouteuse) manq.push(o.dip + " : Grille reprise d'une fiche historique sans formation indiquée — à vérifier");
+      if (srcDouteuse) manq.push(o.dip + " : Grille reprise d'une fiche historique sans formation indiquée — à vérifier directement sur la fiche");
+      if (o.reprise) manq.push(o.dip + " : Critères repris de la fiche historique " + String(o.reprise.cree || "").slice(0, 4) + " (" + (o.reprise.formation || o.reprise.dip || "autre formation") + ") — à ajuster directement sur la fiche");
       creees.push(r.sheet);
-      if (o.dip === "BACHELOR" && !o.refus) { var rb = _fp2OngletBachelor_(classeur, ctx); creees.push(rb); manq.push("BACHELOR : notes des critères d'admission pondérés"); }
     });
+    // Bachelor : critères pondérés dès que l'étudiant est (ou a été) en Bachelor
+    if (!refus && (dipActuel === "BACHELOR" || onglets.some(function (o) { return o.dip === "BACHELOR"; }))) {
+      creees.push(_fp2OngletBachelor_(classeur, ctx));
+      manq.push("BACHELOR : notes des critères d'admission pondérés — à compléter directement sur la fiche (onglet « Critères d'admission Bachelor », colonne « Note /20 »)");
+    }
     classeur.deleteSheet(premier);
+    if (!creees.length) creees = histoSh.slice(-1);
     // ordre : historiques d'abord, nouvelle trame ensuite, onglet actif = fiche du diplôme actuel
-    classeur.setActiveSheet(creees[creees.length - 1] && /Critères/.test(creees[creees.length - 1].getName()) ? creees[creees.length - 2] : creees[creees.length - 1]);
+    var actif = creees.filter(function (x) { return !/Critères/.test(x.getName()); }).pop() || creees[creees.length - 1] || histoSh[histoSh.length - 1];
+    if (actif) classeur.setActiveSheet(actif);
     SpreadsheetApp.flush();
   } catch (eG) { try { fichier.setTrashed(true); } catch (x) {} throw eG; }
 
@@ -508,7 +519,7 @@ function _fp2Generer_(ss, row, ctx) {
 function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   var M = ctx.modele, sh = SpreadsheetApp.openById(M.id).getSheets()[0].copyTo(classeur);
   var annee = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1;
-  var nomO = o.refus ? "Fiche de refus" : (o.dip === "AUTRE" ? "Fiche" : o.dip) + " — nouvelle trame";
+  var nomO = o.refus ? "Fiche de refus" : _fp2NomOnglet_(o.dip);
   sh.setName(nomO);
   var D = src ? src.D : null, V = M.valeurs.map(function (l) { return l.slice(); }), manq = [];
   var set = function (a1, v) { var col = a1.charCodeAt(0) - 66, row = Number(a1.slice(1)) - 2; V[row][col] = v; };
@@ -516,10 +527,14 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   var aix = o.actuel ? (e.campus.toUpperCase() === "HECG_AIX" || /AIX/i.test(e.classe)) : /aix/i.test(D && D.campus || "");
   var alternance = o.actuel ? /altern|contrat/i.test(e.statut) : /contrat|altern|apprent/i.test(D && D.statut || "");
   var refId = _referentPourClasse_(e.classe, e.campus) || e.ref;
+  var memeDip = !!(D && !o.reprise);   // date / interlocuteur de l'ancien entretien seulement si c'est le même diplôme
+  var dEnt = _fpDate_(e.crea) || _fpDate_(e.entree) || new Date();
+  dEnt = new Date(dEnt.getFullYear(), dEnt.getMonth(), dEnt.getDate(), 12);   // midi : pas de décalage de fuseau
   set("B4", "Date de rédaction : " + _fp2Fmt_(new Date()));
   set("B7", formation); set("E7", aix ? "Aix" : "MARSEILLE");
   set("D8", alternance ? "Contrat d'apprentissage" : "Initiale");
-  set("H7", D && D.date ? D.date : ""); set("H8", D && D.interlocuteur ? D.interlocuteur : "");
+  set("H7", memeDip && D.date ? D.date : dEnt);
+  set("H8", memeDip && D.interlocuteur ? D.interlocuteur : (_fp2Perso_(ctx)[refId] || refId || ""));
   set("L8", o.refus ? "Refus" : "Admis");
   set("C11", base.civilite); set("C12", base.nom); set("C13", base.prenom); set("C14", base.ville); set("C15", base.naissance);
   set("C16", ""); set("C17", base.nationalite); set("C18", base.autorisation); set("C19", "");
@@ -561,7 +576,7 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   var get = function (a1) { var col = a1.charCodeAt(0) - 66, row = Number(a1.slice(1)) - 2; return String(V[row][col] || "").trim(); };
   L.forEach(function (x) { if (!get(x[0])) manq.push(x[1]); });
   var nbG = D && D.grille ? D.grille.filter(Boolean).length : 0;
-  if (!o.refus && nbG === 0) manq.push("Grille d'évaluation (9 critères)");
+  if (!o.refus && nbG === 0) manq.push("Grille d'évaluation (9 critères) — à compléter directement sur la fiche");
   else if (!o.refus && nbG < 9) {
     var NOMS = ["Préparation de l'entretien", "Attitude générale", "Expression verbale", "Argumentation métier/projet", "Adéquation du profil", "Connaissances théoriques", "Connaissances pratiques", "Résultats scolaires", "Appréciations sur bulletins"];
     var vides = NOMS.filter(function (n, k) { return !(D.grille[k]); });
@@ -570,6 +585,16 @@ function _fp2Onglet_(classeur, ctx, e, o, src, base, notes) {
   if (o.refus && !(D && D.grille && D.grille.filter(Boolean).length)) manq.push("Grille d'évaluation (justifiant le refus)");
   Object.keys(notes).forEach(function (k) { manq.push(FP2_LIB[k] + " (lue par OCR, à vérifier)"); });
   return { sheet: sh, manquants: manq };
+}
+
+// Nom d'onglet de la fiche du diplôme : « Bachelor », « BTS CG », « DCG »…
+function _fp2NomOnglet_(dip) { return dip === "AUTRE" ? "Fiche" : dip === "BACHELOR" ? "Bachelor" : dip; }
+// Trigramme → « Prénom NOM » (onglet PERSONNEL)
+function _fp2Perso_(ctx) {
+  if (ctx.perso) return ctx.perso;
+  var m = {}; try { var dP = getPersonnelDataCached_(SpreadsheetApp.openById(FP2_SS));
+    for (var p = 1; p < dP.length; p++) if (dP[p][0]) m[String(dP[p][0]).trim()] = (String(dP[p][2] || "") + " " + String(dP[p][1] || "").toUpperCase()).trim(); } catch (e) {}
+  return (ctx.perso = m);
 }
 
 // Formule écrite en syntaxe anglaise → séparateurs « ; » si le classeur est dans une langue à virgule décimale
@@ -598,6 +623,7 @@ function _fp2OngletBachelor_(classeur, ctx) {
   var C = _fp2BachCriteres_(), sh = classeur.insertSheet("Critères d'admission Bachelor"), n = C.length;
   sh.getRange("B2").setValue("BACHELOR CDSP — CRITÈRES D'ADMISSION PONDÉRÉS").setFontSize(15).setFontWeight("bold").setFontColor("#1A4E8A");
   sh.getRange("B3").setValue("Chaque critère est noté sur 20 par le jury ; la note finale est la moyenne pondérée. Admission si la note finale est supérieure ou égale à 10/20.").setFontColor("#3b4859");
+  sh.getRange("B4").setValue("➜ À compléter directement sur cette fiche : saisir chaque note dans la colonne « Note /20 » (cases jaunes).").setFontWeight("bold").setFontColor("#b45309");
   sh.getRange(5, 2, 1, 5).setValues([["Critère", "Compétence visée (Bachelor CDSP — RH et paie)", "Poids (%)", "Note /20", "Note pondérée"]])
     .setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
   sh.getRange(6, 2, n, 4).setValues(C.map(function (c) { return [c[0], c[1], c[2], ""]; }));
@@ -610,7 +636,7 @@ function _fp2OngletBachelor_(classeur, ctx) {
   sh.getRange(t, 6).setFormula(_fp2F_(classeur, "=IF(COUNT(E6:E" + (t - 1) + ")<" + n + ",\"\",SUM(F6:F" + (t - 1) + ")*100/D" + t + ")"));
   sh.getRange(t + 1, 2, 1, 2).setFontWeight("bold");
   sh.getRange(t + 1, 2).setValue("Décision");
-  sh.getRange(t + 1, 3).setFormula(_fp2F_(classeur, "=IF(F" + t + "=\"\",\"À compléter\",IF(F" + t + ">=10,\"Admis\",\"Refusé\"))"));
+  sh.getRange(t + 1, 3).setFormula(_fp2F_(classeur, "=IF(F" + t + "=\"\",\"À compléter directement sur cette fiche\",IF(F" + t + ">=10,\"Admis\",\"Refusé\"))"));
   var tests = PropertiesService.getScriptProperties().getProperty("FP2_BACH_TESTS");
   if (tests) { try { var T = JSON.parse(tests); sh.getRange(t + 3, 2, 3, 2).setValues([["Test d'admission — sujet", T.sujet], ["Test d'admission — corrigé (jury uniquement)", T.corrige], ["Grille de notation du test", "QCM /8 · Rédaction /6 · Calcul /6 = /20 → reporter la note dans le 1er critère"]]); } catch (e) {} }
   sh.setColumnWidth(2, 360); sh.setColumnWidth(3, 330); sh.setColumnWidths(4, 3, 110);
@@ -692,7 +718,7 @@ function _fp2CompleterLot_(ss, deadline) {
       var Ds = hv.map(function (h) { return (ctx.histo[h.id] || {}).D; }).filter(function (D) { return D && D.champs; });
       var champ = function (k) { for (var q = Ds.length - 1; q >= 0; q--) if (Ds[q].champs[k]) return Ds[q].champs[k]; return ""; };
       var cl = SpreadsheetApp.openById(String(d[i][FP2_C.classeurId]));
-      var onglets = cl.getSheets().filter(function (sh) { return /nouvelle trame|Fiche de refus/.test(sh.getName()); });
+      var onglets = cl.getSheets().filter(function (sh) { return !/^Historique|^Critères/.test(sh.getName()); });
       var aRemplir = {};
       onglets.forEach(function (sh) { Object.keys(FP2_CELL).forEach(function (k) { if (!String(sh.getRange(FP2_CELL[k]).getDisplayValue()).trim()) aRemplir[k] = 1; }); });
       var remplis = [];
