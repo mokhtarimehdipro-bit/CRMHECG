@@ -41,12 +41,12 @@ function _fp2E_(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;
 var FP2_CSS = "body{font-family:Arial,sans-serif;color:#0e1a2b;font-size:11pt}h1{color:#1A4E8A;font-size:22pt;margin:0}h2{color:#1A4E8A;font-size:14pt;margin-top:18pt;border-bottom:2px solid #F26522;padding-bottom:3pt}"
   + ".k{color:#F26522;font-weight:bold;font-size:9pt;letter-spacing:1px}.s{color:#3b4859;font-size:10pt}table{border-collapse:collapse;width:100%}th{background:#1A4E8A;color:#ffffff;font-size:9.5pt;padding:5pt;border:1px solid #1A4E8A;text-align:left}"
   + "td{border:1px solid #cdd8e6;padding:5pt;font-size:10pt;vertical-align:top}.q{font-weight:bold;margin:9pt 0 2pt}.r{margin:0 0 0 18pt}.l{color:#c3cbd6}";
-function _fp2Entete_(titre, sous) { return "<p class='k'>HECG — ÉCOLE DE COMMERCE ET DE GESTION</p><h1>" + _fp2E_(titre) + "</h1><p class='s'>" + _fp2E_(sous) + "</p><hr>"; }
+function _fp2Entete_(titre, sous) { return "<p class='k'>HECG — HAUTES ÉTUDES DE COMPTABILITÉ ET GESTION</p><h1>" + _fp2E_(titre) + "</h1><p class='s'>" + _fp2E_(sous) + "</p><hr>"; }
 function _fp2Table_(rows) { return "<table><tr>" + rows[0].map(function (h) { return "<th>" + _fp2E_(h) + "</th>"; }).join("") + "</tr>" + rows.slice(1).map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + _fp2E_(c) + "</td>"; }).join("") + "</tr>"; }).join("") + "</table>"; }
 
 function _fp2TestsBachelor_() {
   var props = PropertiesService.getScriptProperties(), L = "ABCD";
-  var parent; try { var it = DriveApp.getFoldersByName("Bachelor CDSP — Tests d'admission"); parent = it.hasNext() ? it.next() : DriveApp.createFolder("Bachelor CDSP — Tests d'admission"); } catch (e) { parent = DriveApp.getRootFolder(); }
+  var parent, app = _fp2DossierApp_(); try { var it = DriveApp.getFoldersByName("Bachelor CDSP — Tests d'admission"); parent = it.hasNext() ? _fp2Ranger_(it.next()) : app.createFolder("Bachelor CDSP — Tests d'admission"); } catch (e) { parent = app; }
   var calc = [["Élément", "Valeur"], ["Salaire de base mensuel brut", "2 000,00 €"], ["Heures supplémentaires effectuées", "6 heures, majorées à 25 %"], ["Prime d'objectif", "150,00 €"],
     ["Taux global (simplifié) des cotisations salariales", "22 % du brut"], ["Taux global (simplifié) des cotisations patronales", "42 % du brut"],
     ["Taux de prélèvement à la source", "4,5 % (appliqué au net avant impôt, simplification)"], ["Ancienneté au 31 mars", "7 mois de travail effectif"]];
@@ -93,6 +93,8 @@ function _fp2TestsBachelor_() {
         ["7. Congés payés acquis", "7 × 2,5 = 17,5 → arrondi au nombre entier supérieur", "18 jours ouvrables", "0,5"]])
     + "<p><b>Note du test (/20)</b> à reporter dans le premier critère de l'onglet « Critères d'admission Bachelor » de la fiche de positionnement.</p></body></html>";
   var dc = _fp2DocHtml_("Bachelor CDSP — Test d'admission — Corrigé (jury)", c, parent.getId());
+  // anciennes versions → corbeille (une seule version à jour dans le dossier)
+  try { var old = JSON.parse(props.getProperty("FP2_BACH_TESTS") || "{}"); [old.sujet, old.corrige].forEach(function (u) { var m = String(u || "").match(/\/d\/([\w-]+)/); if (m && m[1] !== ds.id && m[1] !== dc.id) try { DriveApp.getFileById(m[1]).setTrashed(true); } catch (x) {} }); } catch (x) {}
   var T = { sujet: ds.url, corrige: dc.url, dossier: parent.getUrl(), le: Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm") };
   props.setProperty("FP2_BACH_TESTS", JSON.stringify(T));
   return T;

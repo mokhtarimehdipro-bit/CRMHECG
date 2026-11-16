@@ -188,10 +188,25 @@ function _fp2Inventaire_(ss) {
 }
 
 // ── 2) EXTRACTION DES FICHES HISTORIQUES ─────────────────────────────────────
+// Dossier « Fiches de positionnement » dans la GED de l'application (jamais à la racine du Drive)
+function _fp2DossierApp_() {
+  var props = PropertiesService.getScriptProperties(), id = props.getProperty("FP2_APP");
+  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  var ged = DriveApp.getFolderById(GED_ROOT_ID), it = ged.getFoldersByName("Fiches de positionnement");
+  var d = it.hasNext() ? it.next() : ged.createFolder("Fiches de positionnement");
+  props.setProperty("FP2_APP", d.getId());
+  return d;
+}
+// Range un dossier dans le dossier de l'application s'il n'y est pas déjà
+function _fp2Ranger_(dossier) {
+  try { var app = _fp2DossierApp_(), p = dossier.getParents();
+    if (!p.hasNext() || p.next().getId() !== app.getId()) dossier.moveTo(app); } catch (e) {}
+  return dossier;
+}
 function _fp2DossierTravail_() {
   var props = PropertiesService.getScriptProperties(), id = props.getProperty("FP2_TRAVAIL");
-  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
-  var d = DriveApp.createFolder("CRM — Fiches de positionnement (copies de travail)");
+  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return _fp2Ranger_(f); } catch (e) {} }
+  var d = _fp2DossierApp_().createFolder("Copies de travail (temporaires)");
   props.setProperty("FP2_TRAVAIL", d.getId());
   return d;
 }
@@ -901,6 +916,10 @@ function handleFp2(p, ss) {
       }
       return createJsonResponse({ success: true, n: cibles.length, applique: p.appliquer === true, parMotif: cibles.reduce(function (o, c) { o[c.motif] = (o[c.motif] || 0) + 1; return o; }, {}) });
     }
+    if (op === "ranger") {
+      var rg = [_fp2DossierTravail_()];
+      ["Bachelor CDSP — Tests d'admission", "CRM — Fiches de positionnement (copies de travail)"].forEach(function (n) { var itR = DriveApp.getFoldersByName(n); while (itR.hasNext()) rg.push(_fp2Ranger_(itR.next())); });
+      return createJsonResponse({ success: true, app: _fp2DossierApp_().getUrl(), ranges: rg.map(function (d) { return d.getName(); }) }); }
     if (op === "kick") { fp2Tick(280000); return createJsonResponse({ success: true }); }
     if (op === "declencheurs") return createJsonResponse({ success: true, liste: ScriptApp.getProjectTriggers().map(function (t) { return { f: t.getHandlerFunction(), type: String(t.getEventType()), src: String(t.getTriggerSource()) }; }) });
     if (op === "tests") { var R = _fp2TestsBachelor_(); _fp2Log_(ss, "Bachelor", "Tests d'admission générés"); logAction(p.emailAuteur, "", "Création", "Étudiants — Fiches de positionnement (refonte)", "Bachelor", "Tests d'admission (sujet + corrigé)"); return createJsonResponse({ success: true, tests: R }); }

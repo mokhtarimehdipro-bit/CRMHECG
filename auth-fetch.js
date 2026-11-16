@@ -20,7 +20,11 @@
         const u = JSON.parse(localStorage.getItem('user') || '{}');
         if (u.sessionToken) {
           const b = JSON.parse(init.body);
-          if (b && !b.sessionToken) { b.sessionToken = u.sessionToken; init = Object.assign({}, init, { body: JSON.stringify(b) }); }
+          if (b && (!b.sessionToken || !b._page)) {
+            if (!b.sessionToken) b.sessionToken = u.sessionToken;
+            if (!b._page) b._page = (location.pathname.split('/').pop() || 'index.html');   // page d'origine (mouchard)
+            init = Object.assign({}, init, { body: JSON.stringify(b) });
+          }
         }
       }
     } catch (e) { /* corps non JSON : envoyé tel quel */ }

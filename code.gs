@@ -206,9 +206,11 @@ function fixStatutDataValidation() {
 // lecture (version globale des données). Les lectures restent servies depuis le cache.
 var READ_ACTION_RE = /^(get|check|list|preview|ged(List|Get|Scan)|login|search|export|count)/;
 function doPost(e) {
-  var action = "";
-  try { action = String(JSON.parse(e.postData.contents).action || ""); } catch (eA) {}
+  var action = "", _pT = {}, _t0T = Date.now();
+  try { _pT = JSON.parse(e.postData.contents); action = String(_pT.action || ""); } catch (eA) {}
+  __LOGS_REQ__ = 0; __TRACE_SESSION__ = null;
   var out = doPostInner_(e);
+  _vsTracer_(_pT, out, Date.now() - _t0T);   // mouchard Vie scolaire / RDV (traces_vs.gs)
   if (action === "getPartners") _adrAuditAutoProgrammer_();   // audit des adresses : une seule fois (adresses.gs)
   if (action && !READ_ACTION_RE.test(action)) {
     try { if (String(out.getContent()).indexOf('"success":false') === -1) bumpDataVersion_(); } catch (eB) { bumpDataVersion_(); }
@@ -261,6 +263,7 @@ function doPostInner_(e) {
       params.nomAuteur   = session.nom;
       p.emailAuteur      = session.email;
       p.nomAuteur        = session.nom;
+      __TRACE_SESSION__ = { nom: session.nom, email: session.email, role: session.role, vieScRole: session.vieScRole || "" };
       // Identité de confiance (issue du token, non falsifiable côté client) —
       // utilisée par les modules où un étudiant ne doit agir que sur ses propres données.
       params.refAuteur       = session.ref  || "";
@@ -6593,6 +6596,7 @@ function notifierSuppression(auteur, role, type, details) {
 }
 
 function logAction(idAuteur, roleAuteur, typeAction, categorie, idCible, details) {
+  try { __LOGS_REQ__++; } catch (eC) {}
   try {
     // On récupère le classeur actif
     const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
