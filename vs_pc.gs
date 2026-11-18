@@ -101,7 +101,8 @@ function _pcImporterCharl_(ss, lignes, par) {
   });
   var ws = _pcSheet_(ss), exist = _pcLire_(ss), now = new Date(), le = Utilities.formatDate(now, "Europe/Paris", "yyyy-MM-dd HH:mm");
   var cle = function (x) { return x.etuId || ("CH:" + x.idEleve); };
-  var ajouts = [], modifs = {};
+  var ajouts = [], modifs = {}, supprimes = {};
+  try { JSON.parse(PropertiesService.getScriptProperties().getProperty("PC_SUPPRIMES") || "[]").forEach(function (k) { supprimes[k] = 1; }); } catch (eS) {}
   avecPc.forEach(function (l) {
     var A = _pcAnalyser_(l.pc, l.pcCom, l.motif);
     if (!A.series.length && !A.statut) return;   // commentaire sans information exploitable
@@ -116,6 +117,7 @@ function _pcImporterCharl_(ss, lignes, par) {
         || (serie ? exist.filter(function (y) { return cle(y) === k && !y.serie; })[0] : exist.filter(function (y) { return cle(y) === k; }).length === 1 ? exist.filter(function (y) { return cle(y) === k; })[0] : null);
       var notes = A.notes.slice(); if (!e) notes.push("étudiant introuvable dans le CRM (rapproché par l'identifiant élève Charlemagne)");
       var statut = A.statut || "PC attribué";
+      if (!x && supprimes[k + "|" + serie]) return;   // ligne supprimée à la main : pas recréée par l'import
       if (!x) {
         x = { pcId: "PC" + now.getTime() + "-" + (ajouts.length + 1), etuId: base.etuId, idEleve: base.idEleve, nom: base.nom, prenom: base.prenom, classeCharl: base.classeCharl,
           serie: serie, brut: String(l.pc || ""), modele: _pcModele_(serie), statut: statut, annee: _pcAnneeDeEntree_(l.entree), dateRestit: statut === "PC restitué" ? A.dateRestit : "",
@@ -244,6 +246,8 @@ function handleDeletePc(p, ss) {
     var x = _pcLire_(ss).filter(function (y) { return y.pcId === String(p.pcId || ""); })[0];
     if (!x) return createJsonResponse({ success: false, message: "PC introuvable." });
     ss.getSheetByName("PC_SUIVI").deleteRow(x.row);
+    try { var pS = PropertiesService.getScriptProperties(), sup = JSON.parse(pS.getProperty("PC_SUPPRIMES") || "[]"), kS = (x.etuId || ("CH:" + x.idEleve)) + "|" + (x.serie || "");
+      if (sup.indexOf(kS) === -1) { sup.push(kS); pS.setProperty("PC_SUPPRIMES", JSON.stringify(sup.slice(-2000))); } } catch (eS) {}
     logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Suppression", PC_CAT, x.pcId, "Ligne PC supprimée : " + (x.prenom + " " + x.nom).trim() + " — n° " + (x.serie || "—") + " — " + x.statut);
     return createJsonResponse({ success: true });
   } catch (err) { return createJsonResponse({ success: false, message: err.toString() }); }

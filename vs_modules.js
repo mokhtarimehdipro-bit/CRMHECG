@@ -3133,7 +3133,7 @@ function pcRender() {
   $('pcBody').innerHTML = alerte + `<p class="sub" style="margin:4px 0 8px">${L.length} ligne(s) affichée(s) sur ${all.length} — les modifications sont enregistrées dès que vous quittez la case.</p>
     <div style="overflow-x:auto"><table class="vs2-t"><thead><tr><th><input type="checkbox" ${tous ? 'checked' : ''} onchange="VX.pcSelTout(this.checked)"></th>${cols.map(c => `<th class="pc-th" onclick="VX.pcTri('${c[0]}')">${esc(c[1])}${fl(c[0])}</th>`).join('')}<th></th></tr></thead>
     <tbody>${L.slice(0, 1500).map(e => `<tr class="${e.statut === 'Aucun PC' ? 'pc-off' : ''}"><td><input type="checkbox" ${PC.sel.has(pcCle(e)) ? 'checked' : ''} onchange="VX.pcSel('${jsq(pcCle(e))}',this.checked)"></td>${cols.map(c => cell(e, c[0])).join('')}
-      <td><button class="vx-link" onclick="VX.pcFiche('${jsq(pcCle(e))}')">${svg('clock', 12)} Historique</button>${e.statut !== 'Aucun PC' ? ` <button class="vx-link" onclick="VX.pcAjouter('${jsq(e.etuId)}')" title="Attribuer un autre PC à cet étudiant">${svg('plus', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+      <td><button class="vx-link" onclick="VX.pcFiche('${jsq(pcCle(e))}')">${svg('clock', 12)} Historique</button>${e.pcId && ['Super-admin', 'Administratif'].includes(vieScRole) ? ` <button class="vx-link" style="color:#c62828" onclick="VX.pcSuppr('${jsq(pcCle(e))}')" title="Supprimer cette ligne (doublon, erreur…)">${svg('trash', 12)}</button>` : ''}${e.statut !== 'Aucun PC' ? ` <button class="vx-link" onclick="VX.pcAjouter('${jsq(e.etuId)}')" title="Attribuer un autre PC à cet étudiant">${svg('plus', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
     ${L.length > 1500 ? '<p class="sub">Affichage limité à 1 500 lignes : affinez les filtres (l\'export Excel contient tout).</p>' : ''}`;
 }
 const pcCle = e => e.pcId || 'E:' + e.etuId;
@@ -3242,11 +3242,16 @@ function pcFiche(id) {
     ${(e.historique || []).length ? `<table class="vs2-t"><thead><tr><th>Le</th><th>Par</th><th>Modification</th></tr></thead><tbody>${e.historique.slice().reverse().map(h => `<tr><td>${esc(h.le)}</td><td>${esc(h.par)}</td><td>${esc(h.quoi)}</td></tr>`).join('')}</tbody></table>` : '<p class="sub">Aucune modification enregistrée.</p>'}
     <div class="mft">${admin && e.pcId ? `<button class="vx-btn" style="color:#c62828;margin-right:auto" id="pcDel">${svg('trash', 13)} Supprimer cette ligne</button>` : ''}<button class="vx-btn pri" onclick="this.closest('.vx-modal').remove()">Fermer</button></div>`, 720);
   const b = dlg.querySelector('#pcDel');
-  if (b) b.onclick = async () => {
-    if (!confirm('Supprimer définitivement la ligne PC de ' + e.prenom + ' ' + e.nom + ' (n° ' + (e.serie || '—') + ') ?')) return;
-    const r = await api('deletePc', { pcId: e.pcId }); if (!r.success) { toast(errTxt(r.message), false); return; }
-    dlg.remove(); toast('Ligne supprimée'); pcLoadSilencieux();
-  };
+  if (b) b.onclick = async () => { if (await pcSuppr(id)) dlg.remove(); };
+}
+async function pcSuppr(id) {
+  const e = pcTrouve(id); if (!e || !e.pcId) return false;
+  const autres = PC.data.lignes.filter(x => x.etuId && x.etuId === e.etuId && x.pcId && x.pcId !== e.pcId).length;
+  if (!confirm('Supprimer la ligne PC de ' + e.prenom + ' ' + e.nom + ' (n° ' + (e.serie || '—') + ', ' + e.statut + ') ?'
+    + (autres ? '\n\nL\'étudiante / l\'étudiant garde ' + autres + ' autre(s) ligne(s) PC.' : '')
+    + '\n\nLa suppression est tracée dans l\'historique et l\'import Charlemagne ne recréera pas cette ligne.')) return false;
+  const r = await api('deletePc', { pcId: e.pcId }); if (!r.success) { toast(errTxt(r.message), false); return false; }
+  PC.sel.delete(id); toast('Ligne supprimée'); pcLoadSilencieux(); return true;
 }
 function pcBilan(S) {
   return S.etudiants + ' étudiant(s) avec un PC dans Charlemagne : ' + S.crees + ' créé(s), ' + S.maj + ' mis à jour, ' + S.restitues + ' restitué(s), ' + S.donnes + ' donné(s)'
@@ -3311,7 +3316,7 @@ window.VX = {
   pcOnglet, pcInvRender: () => pcInvRender(), pcInvAjout, pcInvSet, pcInvSerie, pcInvRanger, pcInvDeplacer, pcInvSuppr, pcInvSel, pcInvExport,
   pcRegime: v => { const on = PC.f.regime.size === 1 && PC.f.regime.has(v); PC.f.regime.clear(); if (!on) PC.f.regime.add(v); pcRender(); },
   pcSerie, pcRecup, pcVoirRecup: () => { const on = PC.f.recup.size === 1 && PC.f.recup.has(PC_RECUP); PC.f.recup.clear(); if (!on) PC.f.recup.add(PC_RECUP); pcRender(); },
-  pcInit, pcRender, pcPanel, pcF, pcCol, pcSet, pcAppliquer, pcAjouter, pcFiche, pcReprendre, pcExport,
+  pcInit, pcRender, pcPanel, pcF, pcCol, pcSet, pcAppliquer, pcAjouter, pcFiche, pcSuppr, pcReprendre, pcExport,
   pcStatut: st => { const on = PC.f.statut.size === 1 && PC.f.statut.has(st); PC.f.statut.clear(); if (!on) PC.f.statut.add(st); pcRender(); }, pcTri: k => { PC.sens = PC.tri === k ? -PC.sens : 1; PC.tri = k; pcRender(); },
   pcSel: (id, on) => { if (on) PC.sel.add(id); else PC.sel.delete(id); pcSelBar(); }, pcSelTout: on => { if (on) pcFiltrees().forEach(e => PC.sel.add(pcCle(e))); else PC.sel.clear(); pcRender(); },
   pcReset: () => { PC_FILTRES.forEach(([k]) => PC.f[k].clear()); $('pcQ').value = ''; $('pcDu').value = ''; $('pcAu').value = ''; $('pcVer').checked = false; PC.sel.clear(); pcRender(); toast('Filtres réinitialisés'); }

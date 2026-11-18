@@ -942,6 +942,12 @@ function handleFp2(p, ss) {
       }
       return createJsonResponse({ success: true, n: cibles.length, applique: p.appliquer === true, parMotif: cibles.reduce(function (o, c) { o[c.motif] = (o[c.motif] || 0) + 1; return o; }, {}) });
     }
+    if (op === "deplacerDossier") {   // compte maître : déplacer un dossier Drive (aperçu sans appliquer)
+      var fD = DriveApp.getFolderById(String(p.id)), dD = DriveApp.getFolderById(String(p.dest || GED_ROOT_ID)), parD = fD.getParents(), avant = parD.hasNext() ? parD.next() : null;
+      var info = { nom: fD.getName(), proprietaire: (function () { try { return fD.getOwner().getEmail(); } catch (x) { return ""; } })(), parent: avant ? avant.getName() : "(racine)", dest: dD.getName() };
+      if (p.appliquer) { fD.moveTo(dD); info.deplace = true;
+        logAction(p.nomAuteur || p.emailAuteur || "", "", "Modification", "Étudiants — Fiches de positionnement (refonte)", String(p.id), "Dossier « " + info.nom + " » déplacé de « " + info.parent + " » vers « " + info.dest + " »"); }
+      return createJsonResponse({ success: true, info: info }); }
     if (op === "ranger") {
       var rg = [_fp2DossierTravail_()];
       ["Bachelor CDSP — Tests d'admission", "CRM — Fiches de positionnement (copies de travail)"].forEach(function (n) { var itR = DriveApp.getFoldersByName(n); while (itR.hasNext()) rg.push(_fp2Ranger_(itR.next())); });

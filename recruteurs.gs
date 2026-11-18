@@ -80,7 +80,7 @@ function _rcFiches_(html) {
 function _rcDossier_() {
   var props = PropertiesService.getScriptProperties(), id = props.getProperty("RC_DOSSIER");
   if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  var f = DriveApp.createFolder("CRM HECG — CV espace recruteurs");
+  var f = DriveApp.getFolderById(GED_ROOT_ID).createFolder("CRM HECG — CV espace recruteurs");   // dans la GED, jamais à la racine
   props.setProperty("RC_DOSSIER", f.getId());
   return f;
 }
