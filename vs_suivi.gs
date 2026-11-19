@@ -565,9 +565,14 @@ var RDV_MODELE_DEFAUT = {   // impersonnel (12/11/2026) : « Bonjour », aucun n
 var RDV_EXPEDITEUR = "HECG — Équipe pédagogique";
 var RDV_VARIABLES = ["contact", "etudiant", "prenom_etudiant", "classe", "entreprise", "responsable", "lien_rdv", "annee"];
 var RDV_SS_ID = "1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ";
-var RDV_CC_POLE = "polepedagogique@hecg.fr";   // en copie de TOUS les envois du lien de RDV (demande direction 12/11/2026)
-var RDV_CC_FIXES = [RDV_CC_POLE, "contact@hecg.fr"];   // copies systématiques (pôle pédagogique + contact)
-// Retouche d'un mail dans l'aperçu : { to: [e-mails], objet, corps } ; les copies fixes sont toujours ajoutées.
+// Copies du mail de prise de RDV (paramétrables, 19/11/2026) : par défaut UNIQUEMENT le responsable visite.
+// RDV_MAIL_COPIES = { resp: true|false, autres: [e-mails en copie systématique] }
+function _rdvCopies_() {
+  try { var c = JSON.parse(PropertiesService.getScriptProperties().getProperty("RDV_MAIL_COPIES") || "null");
+    if (c) return { resp: c.resp !== false, autres: (c.autres || []).map(function (m) { return String(m).trim().toLowerCase(); }).filter(Boolean) }; } catch (e) {}
+  return { resp: true, autres: [] };
+}
+// Retouche d'un mail dans l'aperçu : { to: [e-mails], cc, objet, corps } ; la copie retouchée est envoyée telle quelle.
 function _rdvAppliquerModif_(x, m) {
   if (!m) return x;
   var ok = function (e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || "").trim()); };
@@ -578,7 +583,6 @@ function _rdvAppliquerModif_(x, m) {
   if (Array.isArray(m.cc)) x.cc = m.cc.map(function (e) { return String(e).trim(); }).filter(ok);
   if (m.objet && String(m.objet).trim()) x.objet = String(m.objet).trim();
   if (m.corps && String(m.corps).trim()) x.corps = String(m.corps);
-  RDV_CC_FIXES.forEach(function (f) { if (x.cc.indexOf(f) === -1 && !x.destinataires.some(function (d) { return d.email.toLowerCase() === f; })) x.cc.push(f); });
   x.modifie = true;
   return x;
 }
@@ -614,7 +618,7 @@ function handleGetRdvParams(p, ss) {
     var equipe = _vsxRef_(ss).personnel.filter(function (x) { return x.email; });
     var liens = {}; _rdvResponsables_(ss).forEach(function (r) { liens[r.email || _vsuNorm_(r.nom)] = r.lien; });
     var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (eQ) {}
-    return createJsonResponse({ success: true, modele: _rdvModele_(), modeleDefaut: RDV_MODELE_DEFAUT, variables: RDV_VARIABLES, quota: quota, rappelActif: _rdvRappelActif_(),
+    return createJsonResponse({ success: true, modele: _rdvModele_(), modeleDefaut: RDV_MODELE_DEFAUT, variables: RDV_VARIABLES, quota: quota, rappelActif: _rdvRappelActif_(), copies: _rdvCopies_(),
       responsables: equipe.map(function (x) { return { email: x.email, nom: x.nom, role: x.role, lien: liens[x.email] || liens[_vsuNorm_(x.nom)] || "" }; }) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -637,6 +641,16 @@ function handleSaveRdvParams(p, ss) {
     if (p.rappelActif !== undefined) {
       var actif = !!p.rappelActif;
       if (actif !== _rdvRappelActif_()) { PropertiesService.getScriptProperties().setProperty("RDV_RAPPEL_ACTIF", actif ? "oui" : "non"); modifs.push("rappel J-3 aux étudiants " + (actif ? "activé" : "désactivé")); }
+    }
+    if (p.copies && typeof p.copies === "object") {
+      var avC = _rdvCopies_(), okM = function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); };
+      var nvC = { resp: p.copies.resp !== false, autres: (Array.isArray(p.copies.autres) ? p.copies.autres : []).map(function (m) { return String(m).trim().toLowerCase(); }).filter(okM)
+        .filter(function (m, k, a) { return a.indexOf(m) === k; }) };
+      if (JSON.stringify(avC) !== JSON.stringify(nvC)) {
+        PropertiesService.getScriptProperties().setProperty("RDV_MAIL_COPIES", JSON.stringify(nvC));
+        modifs.push("copies du mail : " + (nvC.resp ? "responsable visite" : "sans le responsable visite") + (nvC.autres.length ? " + " + nvC.autres.join(", ") : "")
+          + " (avant : " + (avC.resp ? "responsable visite" : "sans responsable") + (avC.autres.length ? " + " + avC.autres.join(", ") : "") + ")");
+      }
     }
     if (p.modele && p.modele.objet && p.modele.corps) {
       var avantM = _rdvModele_();
@@ -665,7 +679,7 @@ function _rdvPreparerMails_(ss, annee, etuIds, cible) {
   }
   var refs = _rdvReferents_(ss, annee), liens = {};
   _rdvResponsables_(ss).forEach(function (r) { if (r.email) liens[r.email] = r.lien; if (r.nom) liens["n:" + _vsuNorm_(r.nom)] = r.lien; });
-  var M = _rdvModele_(), out = [];
+  var M = _rdvModele_(), CP = _rdvCopies_(), out = [];
   var valide = function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); };
   etuIds.forEach(function (id) {
     var e = etus[id]; if (!e) return;
@@ -689,7 +703,7 @@ function _rdvPreparerMails_(ss, annee, etuIds, cible) {
       responsable: ref.nom, lien_rdv: lien, annee: annee };
     var rep = function (s) { return String(s).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (m, k) { return vars[k.toLowerCase()] !== undefined ? vars[k.toLowerCase()] : m; }); };
     it.objet = rep(M.objet); it.corps = rep(M.corps); it.lien = lien;
-    it.cc = [ref.email].concat(RDV_CC_FIXES).filter(function (m, k, a) { return m && a.indexOf(m) === k && !dest.some(function (c) { return c.email.toLowerCase() === String(m).toLowerCase(); }); });
+    it.cc = (CP.resp ? [ref.email] : []).concat(CP.autres).filter(function (m, k, a) { return m && a.indexOf(m) === k && !dest.some(function (c) { return c.email.toLowerCase() === String(m).toLowerCase(); }); });
     out.push(it);
   });
   return out;
@@ -718,8 +732,8 @@ function handleSendMailsRdv(p, ss) {
     var items = _rdvPreparerMails_(ss, annee, (p.etuIds || []).map(String), String(p.cible || "ma")).filter(function (x) { return !x.bloquant; })
       .map(function (x) { return _rdvAppliquerModif_(x, modifs[x.etuId]); });
     if (!items.length) return createJsonResponse({ success: false, message: "Aucun mail envoyable dans la sélection." });
-    if (p.test) {   // mail de test : le 1er mail de la sélection, envoyé uniquement au pôle pédagogique
-      var t = items[0], dest = "polepedagogique@hecg.fr";
+    if (p.test) {   // mail de test : le 1er mail de la sélection, envoyé uniquement à la personne connectée
+      var t = items[0], dest = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(p.emailAuteur || "")) ? String(p.emailAuteur) : "polepedagogique@hecg.fr";
       var avert = "[MAIL DE TEST — destinataire(s) réel(s) : " + t.destinataires.map(function (c) { return (c.nom ? c.nom + " " : "") + "<" + c.email + ">"; }).join(", ") + (t.cc.length ? " ; copie : " + t.cc.join(", ") : "") + (t.modifie ? " ; mail retouché à la main" : "") + "]\n\n";
       MailApp.sendEmail({ to: dest, subject: "[TEST] " + t.objet, body: avert + t.corps, htmlBody: _rdvHtml_(avert + t.corps), name: RDV_EXPEDITEUR });
       logAction(par, p.vieScRole || "", "Action", "Vie scolaire — Suivi des RDV", "RDV_ENVOIS", "Mail de test du lien de RDV envoyé à " + dest + " (exemple : " + t.etudiant + ", responsable " + t.responsable + ")");

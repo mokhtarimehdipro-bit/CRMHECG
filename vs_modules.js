@@ -2389,6 +2389,9 @@ async function rdvParams() {
       ${r.responsables.map((x, i) => `<tr><td class="vs2-n"><b>${esc(x.nom)}</b><small>${esc(x.role || '')} · ${esc(x.email)}</small></td><td><div style="display:flex;gap:6px"><input class="in" data-lien="${i}" value="${esc(x.lien)}" placeholder="https://…" style="margin:0">${x.lien ? `<a class="vx-btn ico sm" href="${esc(x.lien)}" target="_blank" rel="noopener" title="Tester le lien">${svg('ext', 13)}</a>` : ''}</div></td></tr>`).join('')}
     </tbody></table></div>
     <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px"><input type="checkbox" id="rpRappel" ${r.rappelActif !== false ? 'checked' : ''}> <span><b>Rappel automatique à l'étudiant 3 jours avant un RDV confirmé</b> — vouvoiement, la personne qui fait la visite en copie ; il l'invite à lui faire remonter ses éléments avant la visite.</span></label>
+    <label class="fl">Destinataires en copie du mail de prise de RDV</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0"><input type="checkbox" id="rpCcResp" ${!r.copies || r.copies.resp !== false ? 'checked' : ''}> <span><b>Le responsable visite</b> (celui qui fera la visite — il reçoit aussi les réponses)</span></label>
+    <input class="in" id="rpCcAutres" value="${esc(((r.copies && r.copies.autres) || []).join(', '))}" placeholder="Autres adresses en copie systématique, séparées par des virgules (laisser vide = aucune)">
     <label class="fl">Objet du mail de prise de RDV (entreprises)</label><input class="in" id="rpObj" value="${esc(r.modele.objet)}">
     <label class="fl">Corps du mail</label><textarea class="in" id="rpCorps" style="min-height:220px;font-family:inherit">${esc(r.modele.corps)}</textarea>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center"><span class="sub" style="margin:0">Insérer :</span>${r.variables.map(v => `<button type="button" class="vx-chip" style="cursor:pointer;border:1px solid #dfe6f0" data-var="${v}">{{${v}}}</button>`).join('')}
@@ -2407,7 +2410,9 @@ async function rdvParams() {
   $('rpDefaut').onclick = () => { $('rpObj').value = r.modeleDefaut.objet; $('rpCorps').value = r.modeleDefaut.corps; apercu(); };
   $('rpOk').onclick = async () => {
     const responsables = r.responsables.map((x, i) => ({ email: x.email, nom: x.nom, lien: dlg.querySelector(`[data-lien="${i}"]`).value.trim() }));
-    const o = await api('saveRdvParams', { responsables, modele: { objet: $('rpObj').value.trim(), corps: $('rpCorps').value }, rappelActif: $('rpRappel').checked });
+    const autres = $('rpCcAutres').value.split(/[,;\s]+/).map(e => e.trim()).filter(Boolean), bad = autres.filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+    if (bad.length) { toast('Adresse(s) en copie invalide(s) : ' + bad.join(', '), false); return; }
+    const o = await api('saveRdvParams', { responsables, modele: { objet: $('rpObj').value.trim(), corps: $('rpCorps').value }, rappelActif: $('rpRappel').checked, copies: { resp: $('rpCcResp').checked, autres } });
     if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); return; }
     dlg.remove(); toast('Paramètres enregistrés ✓');
   };
@@ -2474,7 +2479,7 @@ function rdvApercu(r, cible, resp) {
   let cur = 0, edition = false;
   const corpsHtml = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g, '<br>');
   const dlg = modal(`<h2>Aperçu avant envoi${resp ? ' — ' + esc(resp) : ''}</h2>
-    <p class="sub"><b>${ok.length}</b> mail(s) prêt(s)${ko.length ? ` · <b style="color:#c2410c">${ko.length}</b> impossible(s)` : ''}${r.quota != null ? ` · quota restant aujourd'hui : ${r.quota}` : ''} · <b>polepedagogique@hecg.fr</b> et <b>contact@hecg.fr</b> sont en copie de chaque mail. Chaque mail peut être retouché (✏️). Cliquez sur une ligne (ou ↑ ↓) pour lire le mail.</p>
+    <p class="sub"><b>${ok.length}</b> mail(s) prêt(s)${ko.length ? ` · <b style="color:#c2410c">${ko.length}</b> impossible(s)` : ''}${r.quota != null ? ` · quota restant aujourd'hui : ${r.quota}` : ''} · copies selon les paramètres (⚙️) — voir la ligne « Cc » de chaque mail. Chaque mail peut être retouché (✏️). Cliquez sur une ligne (ou ↑ ↓) pour lire le mail.</p>
     ${ko.length ? `<details class="vx-note" style="display:block;margin-bottom:10px"><summary><b>Non envoyables (${ko.length})</b> — à corriger avant</summary>${Object.keys(raisons).map(k => `<div style="margin-top:6px"><b>${esc(k)}</b> : ${raisons[k].map(esc).join(', ')}</div>`).join('')}</details>` : ''}
     ${ok.length ? `<div class="rmp">
       <div class="rmp-l">
@@ -2486,7 +2491,7 @@ function rdvApercu(r, cible, resp) {
       </div>
       <div class="rmp-r" id="rmVue"></div>
     </div>` : '<div class="vx-note">Aucun mail envoyable.</div>'}
-    <div class="mft"><button class="vx-btn" style="margin-right:auto" id="rmTest" ${ok.length ? '' : 'disabled'} title="Envoie le mail affiché, uniquement à polepedagogique@hecg.fr">${svg('mail', 14)} Mail de test à polepedagogique@hecg.fr</button><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn ora" id="rmSend" ${ok.length ? '' : 'disabled'}>${svg('mail', 14)} Envoyer ${ok.length} mail(s)</button></div>`, 1180);
+    <div class="mft"><button class="vx-btn" style="margin-right:auto" id="rmTest" ${ok.length ? '' : 'disabled'} title="Envoie le mail affiché, uniquement à vous-même">${svg('mail', 14)} M'envoyer un mail de test</button><button class="vx-btn" onclick="this.closest('.vx-modal').remove()">Annuler</button><button class="vx-btn ora" id="rmSend" ${ok.length ? '' : 'disabled'}>${svg('mail', 14)} Envoyer ${ok.length} mail(s)</button></div>`, 1180);
   const voir = i => {
     if (!ok.length) return;
     const nc = Math.max(0, Math.min(ok.length - 1, i)); if (nc !== cur) edition = false; cur = nc;
@@ -2497,7 +2502,7 @@ function rdvApercu(r, cible, resp) {
     if (edition) {
       $('rmVue').innerHTML = `<div class="rmp-edit">
         <label>À <small>(e-mails séparés par des virgules)</small></label><input class="in" id="reTo" value="${esc(x.destinataires.map(c => c.email).join(', '))}">
-        <label>Cc <small>(polepedagogique@hecg.fr et contact@hecg.fr sont toujours ajoutés)</small></label><input class="in" id="reCc" value="${esc((x.cc || []).join(', '))}">
+        <label>Cc <small>(e-mails séparés par des virgules, peut rester vide)</small></label><input class="in" id="reCc" value="${esc((x.cc || []).join(', '))}">
         <label>Objet</label><input class="in" id="reObj" value="${esc(x.objet)}">
         <label>Message</label><textarea class="in" id="reCorps">${esc(x.corps)}</textarea></div>
         <div class="rmp-nav"><button class="vx-btn sm" id="reAnnul">Annuler</button><span>Retouche du mail de <b>${esc(x0.etudiant)}</b></span><button class="vx-btn sm pri" id="reOk">✓ Valider la retouche</button></div>`;
@@ -2507,7 +2512,6 @@ function rdvApercu(r, cible, resp) {
         const to = liste($('reTo').value), cc = liste($('reCc').value), bad = to.concat(cc).filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
         if (!to.length) { toast('Indiquez au moins un destinataire', false); return; }
         if (bad.length) { toast('Adresse(s) invalide(s) : ' + bad.join(', '), false); return; }
-        ['polepedagogique@hecg.fr', 'contact@hecg.fr'].forEach(f => { if (!cc.includes(f) && !to.includes(f)) cc.push(f); });
         modifs[x0.etuId] = { to, cc, objet: $('reObj').value.trim() || x0.objet, corps: $('reCorps').value || x0.corps };
         edition = false; voir(cur); toast('Mail retouché ✓ (sera envoyé tel quel)');
       };
@@ -2545,7 +2549,7 @@ function rdvApercu(r, cible, resp) {
   };
   $('rmSend').onclick = async () => {
     const nm = [...sel].filter(id => modifs[id]).length;
-    if (!sel.size || !confirm('Envoyer ' + sel.size + ' mail(s) maintenant ?' + (nm ? ' (' + nm + ' retouché(s))' : '') + '\nCopie à polepedagogique@hecg.fr et contact@hecg.fr')) return;
+    if (!sel.size || !confirm('Envoyer ' + sel.size + ' mail(s) maintenant ?' + (nm ? ' (' + nm + ' retouché(s))' : '') + '\nCopies : voir la ligne « Cc » de chaque mail')) return;
     $('rmSend').disabled = true; $('rmSend').innerHTML = 'Envoi en cours…';
     const o = await api('sendMailsRdv', { annee: R.annee, etuIds: [...sel], cible, modifs: Object.fromEntries([...sel].filter(id => modifs[id]).map(id => [id, modifs[id]])) });
     if (!o.success) { toast('Erreur : ' + errTxt(o.message), false); maj(); return; }
