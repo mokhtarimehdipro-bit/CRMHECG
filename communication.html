@@ -57,6 +57,8 @@
                     <button id="sigBtn" onclick="sigApercu()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-black text-sm hover:scale-105 transition">👁 Aperçu sur ma signature</button>
                     <button id="sigExpBtn" onclick="sigMembres()" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black text-sm hover:scale-105 transition">📤 Exporter vers toutes les signatures du domaine</button>
                 </div>
+                <label class="text-[10px] font-black uppercase text-slate-400 mt-3 block">Lien au clic sur la bannière <span class="normal-case font-bold">(facultatif — vide = https://hecg.fr)</span></label>
+                <input id="sigCible" type="text" placeholder="https://hecg.fr (par défaut)" class="w-full mt-1 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
                 <div id="sigRes" class="mt-4"></div>
                 <div id="sigExp" class="mt-4"></div>
             </div>
@@ -1695,7 +1697,7 @@ window.addEventListener('load', () => { setTimeout(loadSuiviPostCom, 500); });
   const u = JSON.parse(localStorage.getItem('user') || '{}');
   if (String(u.email || '').toLowerCase() !== 'm.mokhtari@hecg.fr') return;
   document.getElementById('sigModule').classList.remove('hidden');
-  apiPost({ action: 'signatureHecg', op: 'etat' }).then(r => { if (r && r.success && r.banniere) { document.getElementById('sigLien').value = r.banniere; window.sigValide = r.banniere; } });
+  apiPost({ action: 'signatureHecg', op: 'etat' }).then(r => { if (r && r.success && r.banniere) { document.getElementById('sigLien').value = r.banniere; document.getElementById('sigCible').value = r.cible || ''; window.sigValide = r.banniere + '|' + (r.cible || ''); } });
 })();
 // ── Export vers toutes les signatures du domaine : sélection (tout inclus par défaut) + avancement ──
 let sigListe = [], sigStop = false, sigEnCours = false;
@@ -1705,7 +1707,7 @@ const SIG_COUL = { ok: 'text-emerald-700', 'inchangé': 'text-slate-500', 'ignor
 function sigGroupe(m) { const o = (m.ou || '/').replace(/^\//, ''); return o || 'Racine du domaine'; }
 async function sigMembres() {
   const lien = document.getElementById('sigLien').value.trim(), box = document.getElementById('sigExp');
-  if (!lien || lien !== window.sigValide) { box.innerHTML = '<p class="text-sm font-bold text-amber-700">Faites d\'abord l\'aperçu avec ce lien (👁), puis exportez.</p>'; return; }
+  if (!lien || lien + '|' + document.getElementById('sigCible').value.trim() !== window.sigValide) { box.innerHTML = '<p class="text-sm font-bold text-amber-700">Faites d\'abord l\'aperçu avec cette image et ce lien (👁), puis exportez.</p>'; return; }
   box.innerHTML = '<p class="text-sm text-slate-400 italic">Chargement des membres du domaine…</p>';
   const r = await apiPost({ action: 'signatureHecg', op: 'membres' });
   if (!r.success) { box.innerHTML = '<p class="text-sm font-bold text-red-500">' + sigEsc(r.message) + '</p>'; return; }
@@ -1774,11 +1776,11 @@ async function sigTraiter(idx) {
   document.getElementById('sigRelance').classList.add('hidden'); document.getElementById('sigProg').classList.remove('hidden');
   idx.forEach(i => { sigListe[i].statut = 'attente'; sigListe[i].detail = ''; });
   const t0 = Date.now(); sigDessiner(); sigProgres(idx, t0);
-  const lien = window.sigValide;
+  const [lien, ...rC] = window.sigValide.split('|'), cible = rC.join('|');
   for (let k = 0; k < idx.length; k += 6) {
     if (sigStop) { idx.slice(k).forEach(i => sigListe[i].statut = 'arret'); break; }
     const lot = idx.slice(k, k + 6); lot.forEach(i => sigListe[i].statut = 'cours'); sigDessiner();
-    let r; try { r = await apiPost({ action: 'signatureHecg', op: 'appliquer', lien, emails: lot.map(i => sigListe[i].email) }); } catch (e) { r = { success: false, message: 'erreur réseau' }; }
+    let r; try { r = await apiPost({ action: 'signatureHecg', op: 'appliquer', lien, cible, emails: lot.map(i => sigListe[i].email) }); } catch (e) { r = { success: false, message: 'erreur réseau' }; }
     if (!r || !r.success) lot.forEach(i => { sigListe[i].statut = 'erreur'; sigListe[i].detail = (r && r.message) || 'erreur'; });
     else { r.resultats.forEach(x => { const i = lot.find(j => sigListe[j].email === x.email); if (i !== undefined) { sigListe[i].statut = x.statut; sigListe[i].detail = x.detail; } });
       lot.forEach(i => { if (sigListe[i].statut === 'cours') { sigListe[i].statut = 'erreur'; sigListe[i].detail = 'pas de réponse'; } }); }
@@ -1815,16 +1817,17 @@ async function sigApercu() {
   if (!/^https?:\/\//i.test(lien)) { box.innerHTML = '<p class="text-sm font-bold text-red-500">Collez le lien complet de l\'image (https://…).</p>'; return; }
   btn.disabled = true; btn.innerText = '⏳ Lecture de votre signature…'; box.innerHTML = '';
   try {
-    const r = await apiPost({ action: 'signatureHecg', op: 'apercu', lien });
+    const cible = document.getElementById('sigCible').value.trim();
+    const r = await apiPost({ action: 'signatureHecg', op: 'apercu', lien, cible });
     if (!r.success) { box.innerHTML = '<p class="text-sm font-bold text-red-500">' + (r.message || 'Erreur') + '</p>'; return; }
     const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     box.innerHTML = (r.alertes || []).map(a => '<p class="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">⚠️ ' + esc(a) + '</p>').join('')
-      + '<p class="text-sm text-gray-600 mb-3">Signature lue : <b>' + esc(r.email) + '</b> · bannière à <b>' + r.largeur + ' px</b> de large (alignée sur le reste de la signature) · '
+      + '<p class="text-sm text-gray-600 mb-3">Signature lue : <b>' + esc(r.email) + '</b> · bannière à <b>' + r.largeur + ' px</b> de large (alignée sur le reste de la signature) · clic vers <b>' + esc(r.cible) + '</b> · '
       + (r.anciennes ? '<b>' + r.anciennes + '</b> ancienne bannière HECG remplacée' : 'aucune bannière HECG existante') + ' · <b>aucune modification n\'a été faite dans Gmail</b>.</p>'
       + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div><p class="text-[10px] font-black uppercase text-slate-400 mb-1">Signature actuelle</p><div id="sigA"></div></div>'
       + '<div><p class="text-[10px] font-black uppercase text-emerald-600 mb-1">Après ajout de la bannière</p><div id="sigB"></div></div></div>'
       + '<details class="mt-3 text-xs text-gray-500"><summary class="cursor-pointer font-bold">Voir le code HTML</summary><p class="font-bold mt-2">Actuel</p><pre class="whitespace-pre-wrap bg-gray-50 p-2 rounded">' + esc(r.actuelle) + '</pre><p class="font-bold mt-2">Proposé</p><pre class="whitespace-pre-wrap bg-gray-50 p-2 rounded">' + esc(r.nouvelle) + '</pre></details>';
-    window.sigValide = lien;
+    window.sigValide = lien + '|' + cible;
     document.getElementById('sigA').appendChild(sigCadre(r.actuelle));
     document.getElementById('sigB').appendChild(sigCadre(r.nouvelle));
   } catch (e) { box.innerHTML = '<p class="text-sm font-bold text-red-500">Erreur réseau, réessayez.</p>'; }

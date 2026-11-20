@@ -16,19 +16,29 @@ function _sigUrlImage_(lien) {
 }
 // Bannières HECG déjà présentes : <a href="hecg.fr"><img alt="HECG"|"Bannière HECG"|src Drive></a>, avec son <div> d'enveloppe s'il ne contient qu'elle
 var SIG_RE_BANNIERE = /(<div[^>]*>\s*)?<a[^>]*href=["']https?:\/\/(?:www\.)?hecg\.fr\/?["'][^>]*>\s*<img(?=[^>]*(?:alt=["'](?:HECG|Bannière HECG)["']|drive\.google\.com\/thumbnail))[^>]*>\s*<\/a>(\s*<\/div>)?/gi;
+// … et nos bannières posées avec un lien personnalisé (reconnues à leur texte alternatif « Bannière HECG »)
+var SIG_RE_BANNIERE_PERSO = /(<div[^>]*>\s*)?<a[^>]*href=["'][^"']*["'][^>]*>\s*<img(?=[^>]*alt=["']Banni(?:è|&egrave;|&#232;|&#xe8;)re HECG["'])[^>]*>\s*<\/a>(\s*<\/div>)?/gi;
+// Lien de destination de la bannière : personnalisé si rempli, sinon https://hecg.fr/
+function _sigCible_(x) {
+  var s = String(x || "").trim();
+  if (!s) return SIG_LIEN_SITE;
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  if (!/^https?:\/\/[^\s"'<>]+\.[^\s"'<>]+$/i.test(s)) throw new Error("Lien de destination invalide : " + x);
+  return s.replace(/&(?!amp;)/g, "&amp;");
+}
 
 function _sigAnalyser_(html) {
   var trouvees = [], largeurs = [];
-  String(html).replace(SIG_RE_BANNIERE, function (m) { trouvees.push(m); return m; });
-  var sans = String(html).replace(SIG_RE_BANNIERE, function (m, d, f) { return d && !f ? d : (!d && f ? f : ""); });
+  var oter = function (h, re) { h.replace(re, function (m) { trouvees.push(m); return m; }); return h.replace(re, function (m, d, f) { return d && !f ? d : (!d && f ? f : ""); }); };
+  var sans = oter(oter(String(html), SIG_RE_BANNIERE_PERSO), SIG_RE_BANNIERE);
   // largeur de référence : la plus grande image de la signature (icônes < 120 px ignorées), sinon les blocs
   sans.replace(/<img[^>]*>/gi, function (t) { var w = t.match(/\bwidth=["']?(\d+)/i) || t.match(/[;"'\s]width:\s*(\d+)px/i); if (w && +w[1] >= 120) largeurs.push(+w[1]); return t; });
   if (!largeurs.length) sans.replace(/max-width:\s*(\d+)px/gi, function (t, w) { if (+w >= 120) largeurs.push(+w); return t; });   // à défaut d'image : largeur des blocs
   var larg = largeurs.length ? Math.min(Math.max.apply(null, largeurs), 650) : SIG_LARGEUR_DEFAUT;
   return { anciennes: trouvees, sans: sans.replace(/(\s*<br\s*\/?>\s*)+$/i, ""), largeur: larg, largeurs: largeurs };
 }
-function _sigBloc_(url, larg) {
-  return '<div style="margin-top:12px"><a href="' + SIG_LIEN_SITE + '" target="_blank"><img src="' + url + '" alt="Bannière HECG" width="' + larg
+function _sigBloc_(url, larg, cible) {
+  return '<div style="margin-top:12px"><a href="' + (cible || SIG_LIEN_SITE) + '" target="_blank"><img src="' + url + '" alt="Bannière HECG" width="' + larg
     + '" style="display:block;width:' + larg + 'px;max-width:100%;height:auto;border:0"></a></div>';
 }
 // Jeton au nom d'un membre du domaine (compte de service robot-signature-hecg, délégation domaine)
@@ -119,7 +129,7 @@ function handleSignatureHecg(p, ss) {
       sc.forEach(function (x) { try { _sigJeton_(FP2_MAITRE, "https://www.googleapis.com/auth/" + x); out2[x] = "oui"; } catch (eX) { out2[x] = "non"; } });
       return createJsonResponse({ success: true, droits: out2 });
     }
-    if (op === "etat") return createJsonResponse({ success: true, banniere: props.getProperty("SIG_BANNIERE") || "" });
+    if (op === "etat") return createJsonResponse({ success: true, banniere: props.getProperty("SIG_BANNIERE") || "", cible: props.getProperty("SIG_CIBLE") || "" });
     if (op === "apercu") {
       var lien = String(p.lien || "").trim();
       if (!/^https?:\/\//i.test(lien)) return createJsonResponse({ success: false, message: "Collez le lien complet de l'image (https://…)." });
@@ -130,12 +140,12 @@ function handleSignatureHecg(p, ss) {
           if (acc !== DriveApp.Access.ANYONE && acc !== DriveApp.Access.ANYONE_WITH_LINK) alertes.push("L'image n'est pas partagée « Tous les utilisateurs disposant du lien » : vos destinataires extérieurs ne la verraient pas.");
         } catch (eD) { alertes.push("Fichier Drive non accessible avec le compte du CRM : vérifiez le lien et son partage."); }
       }
-      var moi = _sigLireMienne_(), A = _sigAnalyser_(moi.signature);
-      var nouvelle = A.sans + _sigBloc_(img.url, A.largeur);
-      props.setProperty("SIG_BANNIERE", lien);
+      var cible = _sigCible_(p.cible), moi = _sigLireMienne_(), A = _sigAnalyser_(moi.signature);
+      var nouvelle = A.sans + _sigBloc_(img.url, A.largeur, cible);
+      props.setProperty("SIG_BANNIERE", lien); props.setProperty("SIG_CIBLE", String(p.cible || "").trim());
       logAction(par, p.roleAuteur || "", "Consultation", "Communication — Signature HECG", moi.email,
-        "Aperçu de la bannière sur la signature de " + moi.email + " (aucune modification Gmail) — image : " + lien + " ; largeur " + A.largeur + " px ; " + A.anciennes.length + " ancienne(s) bannière(s) remplacée(s)");
-      return createJsonResponse({ success: true, email: moi.email, actuelle: moi.signature, nouvelle: nouvelle, imageUrl: img.url, largeur: A.largeur,
+        "Aperçu de la bannière sur la signature de " + moi.email + " (aucune modification Gmail) — image : " + lien + " ; lien de la bannière : " + cible + " ; largeur " + A.largeur + " px ; " + A.anciennes.length + " ancienne(s) bannière(s) remplacée(s)");
+      return createJsonResponse({ success: true, email: moi.email, actuelle: moi.signature, nouvelle: nouvelle, imageUrl: img.url, largeur: A.largeur, cible: cible,
         anciennes: A.anciennes.length, alertes: alertes, vide: !moi.signature });
     }
     if (op === "membres") {
@@ -147,13 +157,13 @@ function handleSignatureHecg(p, ss) {
     if (op === "appliquer") {   // par lots de quelques membres (limite de 6 min d'Apps Script)
       var lienA = String(p.lien || props.getProperty("SIG_BANNIERE") || "").trim();
       if (!/^https?:\/\//i.test(lienA)) return createJsonResponse({ success: false, message: "Aucune bannière définie : faites d'abord l'aperçu." });
-      var imgA = _sigUrlImage_(lienA), ws = _vsxSheet_(ss, "SIGNATURES_SAUVEGARDE", SIG_SAUV_HEADERS), res = [], lignes = [];
+      var cibleA = _sigCible_(p.cible), imgA = _sigUrlImage_(lienA), ws = _vsxSheet_(ss, "SIGNATURES_SAUVEGARDE", SIG_SAUV_HEADERS), res = [], lignes = [];
       (p.emails || []).slice(0, 8).forEach(function (em) {
         em = String(em).trim().toLowerCase();
         try {
           var S = _sigLire_(em);
           if (!String(S.signature).trim()) { res.push({ email: em, statut: "ignoré", detail: "signature vide — rien ajouté" }); return; }
-          var B = _sigAnalyser_(S.signature), nv = B.sans + _sigBloc_(imgA.url, B.largeur);
+          var B = _sigAnalyser_(S.signature), nv = B.sans + _sigBloc_(imgA.url, B.largeur, cibleA);
           if (nv === S.signature) { res.push({ email: em, statut: "inchangé", detail: "bannière déjà à jour" }); return; }
           _sigEcrire_(S, nv);
           lignes.push([new Date(), em, S.email, S.signature, nv, lienA, par, "Bannière appliquée"]);
@@ -163,7 +173,7 @@ function handleSignatureHecg(p, ss) {
       });
       if (lignes.length) ws.getRange(ws.getLastRow() + 1, 1, lignes.length, SIG_SAUV_HEADERS.length).setValues(lignes);
       logAction(par, p.roleAuteur || "", "Modification", "Communication — Signature HECG", lignes.length + " signature(s)",
-        "Bannière " + lienA + " — " + res.map(function (x) { return x.email + " : " + x.statut + (x.statut === "ok" ? "" : " (" + x.detail + ")"); }).join(" ; "));
+        "Bannière " + lienA + " (lien : " + cibleA + ") — " + res.map(function (x) { return x.email + " : " + x.statut + (x.statut === "ok" ? "" : " (" + x.detail + ")"); }).join(" ; "));
       return createJsonResponse({ success: true, resultats: res });
     }
     if (op === "restaurer") {   // remet la signature d'avant la DERNIÈRE application de la bannière
