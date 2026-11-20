@@ -247,7 +247,7 @@ function normaliser(o) {
 }
 async function nouveau() {
   try { await chargerRef(true); const l = await lire({ op: 'liste' }); X.ecriture = !!(l && l.ecriture); } catch (e) { toast(e.message, false); return; }
-  if (!X.ecriture) { toast('Création réservée aux profils Super-admin et Pédagogie.', false); return; }
+  if (!X.ecriture) { toast('Création réservée au personnel.', false); return; }
   X.id = null; X.version = ''; X.dirty = false; X.prmOptim = null; X.S = normaliser({ titre: 'Examens blancs — ' });
   ouvrirUI('params');
 }
@@ -315,7 +315,7 @@ function rendreCorps() {
   const b = $('exBody'); if (!b) return;
   const f = { params: vParams, surv: vSurv, classes: vClasses, salles: vSalles, edt: vEdt, globale: vGlobale, etats: vEtats, optim: vOptim }[X.onglet];
   b.innerHTML = (lecture() && ['params', 'surv', 'classes', 'salles', 'edt'].includes(X.onglet)
-    ? `<div class="ex-lock">${X.ecriture ? '🔒 La semaine est terminée : lecture seule. Cliquez sur « Rouvrir la semaine » pour la modifier' + (S().optim ? ' (l\'optimisation et les plans de classe seront alors effacés).' : '.') : '👁 Consultation seule (modification réservée aux profils Super-admin et Pédagogie).'}</div>` : '') + f();
+    ? `<div class="ex-lock">${X.ecriture ? '🔒 La semaine est terminée : lecture seule. Cliquez sur « Rouvrir la semaine » pour la modifier' + (S().optim ? ' (l\'optimisation et les plans de classe seront alors effacés).' : '.') : '👁 Consultation seule.'}</div>` : '') + f();
 }
 
 /* ---------- 1. Paramètres ---------- */

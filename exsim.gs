@@ -19,7 +19,8 @@ var EXSIM_HEADERS = ["ID", "Titre", "Lundi", "Statut", "Mis à jour le", "Par", 
 var EXSIM_TRANCHE = 45000;
 
 function _exsimSheet_(ss) { return _vsxSheet_(ss, "SIMULATIONS_EXAMENS", EXSIM_HEADERS); }
-function _exsimPeutEcrire_(p) { return ["Super-admin", "Pédagogie"].indexOf(String(p.vieScRole || "")) !== -1 || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr"; }
+// Ouvert à tout le personnel ayant accès à la Vie scolaire (demande direction 20/11/2026)
+function _exsimPeutEcrire_(p) { return _vsxCanUse_(p) || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr"; }
 function _exsimMin_(h) { var m = String(h || "").match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1]) * 60 + (+m[2]) : NaN; }
 function _exsimFmt_(d) { return d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d || ""); }
 
@@ -122,7 +123,7 @@ function handleExsim(p, ss) {
       return createJsonResponse({ success: false, message: "Simulation introuvable." });
     }
 
-    if (!_exsimPeutEcrire_(p)) return createJsonResponse({ success: false, message: "Accès refusé (Super-admin ou Pédagogie)." });
+    if (!_exsimPeutEcrire_(p)) return createJsonResponse({ success: false, message: "Accès refusé (réservé au personnel)." });
     var lock = LockService.getScriptLock(); lock.waitLock(20000);
     try {
       d = ws.getDataRange().getValues();
