@@ -222,7 +222,8 @@ function normaliser(o) {
   return s;
 }
 async function nouveau() {
-  try { await chargerRef(true); } catch (e) { toast(e.message, false); return; }
+  try { await chargerRef(true); const l = await lire({ op: 'liste' }); X.ecriture = !!(l && l.ecriture); } catch (e) { toast(e.message, false); return; }
+  if (!X.ecriture) { toast('Création réservée aux profils Super-admin et Pédagogie.', false); return; }
   X.id = null; X.version = ''; X.dirty = false; X.prmOptim = null; X.S = normaliser({ titre: 'Examens blancs — ' });
   ouvrirUI('params');
 }
