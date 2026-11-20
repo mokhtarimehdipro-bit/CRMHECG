@@ -577,6 +577,7 @@ function vForm() {
   }).join('');
   const ex = S().epreuves.some(e => e.id === D.id);
   return `<div class="ex-card" style="border-color:${couleur(D.classe)}"><h3>${ex ? 'Épreuve' : 'Nouvelle épreuve'} — ${esc(D.classe)}</h3>
+    <label class="l" style="margin-top:0">Classe</label><select ${dis} onchange="EXSIM.dSet('classe',this.value,true)">${S().classes.map(c => `<option value="${esc(c.classe)}" ${c.classe === D.classe ? 'selected' : ''}>${esc(c.classe)} · ${effectif(c.classe)} étu.</option>`).join('')}</select>
     <label class="l">Matière / épreuve</label><input type="text" ${dis} list="exMatList" value="${esc(D.matiere)}" oninput="EXSIM.dSet('matiere',this.value)" placeholder="ex : UE 4 — Droit fiscal">
     <datalist id="exMatList">${mats.map(m => `<option value="${esc(m)}">`).join('')}</datalist>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px">
@@ -589,8 +590,15 @@ function vForm() {
     ${err.length ? `<div class="ex-err">${err.map(esc).join('<br>')}</div>` : ''}
     ${!ro && manq.length ? `<div class="ex-warn">À compléter avant validation :<br>${manq.map(esc).join('<br>')}</div>` : ''}
     ${ro ? '' : `<div class="flex gap-2 flex-wrap mt-3"><button class="ex-b ora" ${err.length || manq.length ? 'disabled' : ''} onclick="EXSIM.dValider()">✔ ${ex ? 'Mettre à jour' : 'Ajouter l\'épreuve'}</button>
-      ${ex ? `<button class="ex-b" onclick="EXSIM.dDupliquer()">⧉ Dupliquer</button><button class="ex-b red" onclick="EXSIM.dSupprimer()">Supprimer</button>` : ''}
-      <button class="ex-b" onclick="EXSIM.dAnnuler()">Annuler</button></div>`}</div>`;
+      ${ex ? `<button class="ex-b red" onclick="EXSIM.dSupprimer()">Supprimer</button>` : ''}
+      <button class="ex-b" onclick="EXSIM.dAnnuler()">Annuler</button></div>
+    ${ex ? `<div style="margin-top:22px;padding:18px;border-radius:16px;background:#f8fafd;border:1px solid #e6ecf4">
+      <div class="ex-addt" style="font-size:14px">⧉ Dupliquer cette épreuve</div>
+      <p class="ex-aide" style="margin-bottom:10px">Même matière, mêmes horaires : choisissez la classe et le jour, puis affectez la salle et le surveillant.</p>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
+        <select id="exDupC">${S().classes.map(c => `<option value="${esc(c.classe)}" ${c.classe === dupClasseDefaut(D) ? 'selected' : ''}>${esc(c.classe)}</option>`).join('')}</select>
+        <select id="exDupJ">${Array.from({ length: S().nbJours }, (_, j) => `<option value="${j}" ${j === D.jour ? 'selected' : ''}>${esc(libJour(j))}</option>`).join('')}</select></div>
+      <button class="ex-b pri" style="margin-top:10px;width:100%;justify-content:center" onclick="EXSIM.dDupliquer()">⧉ Créer la copie</button></div>` : ''}`}</div>`;
 }
 function glisser(ev, id) {
   if (lecture() || ev.button !== 0) return;
@@ -645,6 +653,7 @@ function glisser(ev, id) {
 const majForm = () => { const f = $('exForm'); if (f) f.innerHTML = vForm(); };
 function dSet(k, v, rer) {
   X.draft[k] = v;
+  if (k === 'classe') X.classeSel = v;
   if (k === 'debut' && h2m(X.draft.fin) <= h2m(v)) X.draft.fin = m2h(Math.min(h1(), h2m(v) + X.derniereDuree));
   if (rer) rendreCorps();
 }
@@ -666,11 +675,20 @@ function dValider() {
 }
 function dSupprimer() { if (!confirm('Supprimer cette épreuve ?')) return; S().epreuves = S().epreuves.filter(e => e.id !== X.draft.id); X.draft = null; modifie(); rendreTabs(); rendreCorps(); }
 function dAnnuler() { X.draft = null; rendreCorps(); }
+// classe proposée pour la copie : la première classe qui n'a pas encore d'épreuve sur ce créneau
+function dupClasseDefaut(D) {
+  const a0 = h2m(D.debut), a1 = h2m(D.fin);
+  const libre = S().classes.find(c => c.classe !== D.classe && !S().epreuves.some(e => e.classe === c.classe && e.jour === D.jour && ov(a0, a1, h2m(e.debut), h2m(e.fin))));
+  return (libre || S().classes.find(c => c.classe !== D.classe) || { classe: D.classe }).classe;
+}
 function dDupliquer() {
-  const D = JSON.parse(JSON.stringify(X.draft)); D.id = uid('E'); D._nouveau = true;
-  D.jour = (D.jour + 1) % S().nbJours;
+  const src = S().epreuves.find(e => e.id === X.draft.id) || X.draft;
+  const D = JSON.parse(JSON.stringify(src)); D.id = uid('E'); D._nouveau = true;
+  D.classe = ($('exDupC') || {}).value || D.classe; D.jour = +(($('exDupJ') || {}).value ?? D.jour);
+  // on garde la salle et les surveillants seulement s'ils sont libres sur le nouveau créneau
   D.salles = D.salles.filter(sa => etatSalle(sa.id, D).ok).map(sa => ({ id: sa.id, surv: sa.surv.filter(v => etatSurv(v, D, sa.id).ok) }));
-  X.draft = D; rendreCorps(); msg('Copie préparée sur ' + JOURS[D.jour] + ' : ajustez puis validez.');
+  X.draft = D; X.classeSel = D.classe; rendreCorps();
+  msg(`Copie pour ${D.classe} (${libJour(D.jour)} ${D.debut}–${D.fin}) : choisissez la salle et le surveillant, puis validez.`);
 }
 
 /* ---------- 6. Vue globale ---------- */
