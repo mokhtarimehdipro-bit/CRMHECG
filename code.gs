@@ -456,6 +456,7 @@ function doPostInner_(e) {
       case 'fpInventaire':            return handleFpInventaire(params, ss);
       case 'fpEtudiants':             return handleFpEtudiants(params, ss);
       case 'fp2':                     return handleFp2(params, ss);
+      case 'signatureHecg':           return handleSignatureHecg(params, ss);
       case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
