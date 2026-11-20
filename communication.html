@@ -55,8 +55,10 @@
                 <div class="flex gap-3 mt-1 flex-wrap">
                     <input id="sigLien" type="text" placeholder="https://drive.google.com/file/d/…" class="flex-1 min-w-[260px] p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1A4E8A]">
                     <button id="sigBtn" onclick="sigApercu()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-black text-sm hover:scale-105 transition">👁 Aperçu sur ma signature</button>
+                    <button id="sigExpBtn" onclick="sigMembres()" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black text-sm hover:scale-105 transition">📤 Exporter vers toutes les signatures du domaine</button>
                 </div>
                 <div id="sigRes" class="mt-4"></div>
+                <div id="sigExp" class="mt-4"></div>
             </div>
         </div>
 
@@ -1693,8 +1695,66 @@ window.addEventListener('load', () => { setTimeout(loadSuiviPostCom, 500); });
   const u = JSON.parse(localStorage.getItem('user') || '{}');
   if (String(u.email || '').toLowerCase() !== 'm.mokhtari@hecg.fr') return;
   document.getElementById('sigModule').classList.remove('hidden');
-  apiPost({ action: 'signatureHecg', op: 'etat' }).then(r => { if (r && r.success && r.banniere) document.getElementById('sigLien').value = r.banniere; });
+  apiPost({ action: 'signatureHecg', op: 'etat' }).then(r => { if (r && r.success && r.banniere) { document.getElementById('sigLien').value = r.banniere; window.sigValide = r.banniere; } });
 })();
+// ── Export vers toutes les signatures du domaine (par lots de 5, sauvegarde + restauration) ──
+let sigListe = [];
+const sigEsc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const SIG_COUL = { ok: 'text-emerald-700', 'inchangé': 'text-slate-500', 'ignoré': 'text-amber-700', erreur: 'text-red-600', attente: 'text-slate-400', cours: 'text-[#1A4E8A]' };
+async function sigMembres() {
+  const lien = document.getElementById('sigLien').value.trim(), box = document.getElementById('sigExp');
+  if (!lien || lien !== window.sigValide) { box.innerHTML = '<p class="text-sm font-bold text-amber-700">Faites d\'abord l\'aperçu avec ce lien (👁), puis exportez.</p>'; return; }
+  box.innerHTML = '<p class="text-sm text-slate-400 italic">Chargement des membres du domaine…</p>';
+  const r = await apiPost({ action: 'signatureHecg', op: 'membres' });
+  if (!r.success) { box.innerHTML = '<p class="text-sm font-bold text-red-500">' + sigEsc(r.message) + '</p>'; return; }
+  sigListe = r.membres.map(m => Object.assign(m, { statut: '', detail: '' }));
+  const actifs = sigListe.filter(m => !m.suspendu).length;
+  box.innerHTML = `<div class="border-t border-gray-100 pt-4">
+    <p class="text-sm text-gray-600 mb-2"><b>${sigListe.length}</b> membre(s) — source : ${sigEsc(r.source)}. Les comptes suspendus sont décochés. Chaque signature est <b>sauvegardée</b> avant modification (onglet SIGNATURES_SAUVEGARDE) et peut être restaurée.</p>
+    <div class="flex gap-3 items-center mb-2 flex-wrap"><label class="text-sm font-bold"><input type="checkbox" id="sigTout" checked> Tout cocher</label><span id="sigNb" class="text-sm text-slate-500"></span>
+      <button id="sigGo" onclick="sigLancer()" class="ml-auto bg-[#F26522] text-white px-5 py-2 rounded-xl font-black text-sm">📤 Appliquer la bannière</button></div>
+    <div class="max-h-[420px] overflow-auto border border-gray-200 rounded-xl"><table class="w-full text-sm"><thead class="bg-gray-50 sticky top-0"><tr class="text-left text-[10px] uppercase text-slate-400"><th class="p-2"></th><th class="p-2">Membre</th><th class="p-2">Dernière action</th><th class="p-2">Résultat</th><th class="p-2"></th></tr></thead>
+    <tbody>${sigListe.map((m, i) => `<tr class="border-t border-gray-100 ${m.suspendu ? 'opacity-50' : ''}"><td class="p-2"><input type="checkbox" data-sig="${i}" ${m.suspendu ? '' : 'checked'}></td>
+      <td class="p-2"><b>${sigEsc(m.nom || m.email)}</b><br><span class="text-xs text-slate-400">${sigEsc(m.email)}${m.suspendu ? ' · suspendu' : ''}</span></td>
+      <td class="p-2 text-xs text-slate-500">${m.dernier ? sigEsc(m.dernier.action) + ' le ' + sigEsc(m.dernier.le) : '—'}</td>
+      <td class="p-2 text-xs font-bold" id="sigSt${i}"></td>
+      <td class="p-2 text-right"><button class="text-xs font-bold text-[#1A4E8A] underline ${m.dernier && m.dernier.action === 'Bannière appliquée' ? '' : 'hidden'}" id="sigRs${i}" onclick="sigRestaurer(${i})">↺ Restaurer</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  const nb = () => { document.getElementById('sigNb').textContent = document.querySelectorAll('[data-sig]:checked').length + ' / ' + sigListe.length + ' coché(s)'; };
+  document.querySelectorAll('[data-sig]').forEach(c => c.onchange = nb);
+  document.getElementById('sigTout').onchange = e => { document.querySelectorAll('[data-sig]').forEach(c => { c.checked = e.target.checked && !sigListe[+c.dataset.sig].suspendu; }); nb(); };
+  nb();
+}
+function sigStatut(i, st, det) {
+  sigListe[i].statut = st; const el = document.getElementById('sigSt' + i);
+  el.className = 'p-2 text-xs font-bold ' + (SIG_COUL[st] || '');
+  el.textContent = ({ ok: '✅ Appliquée', 'inchangé': '= Déjà à jour', 'ignoré': '⏭ Ignorée', erreur: '❌ Erreur', attente: '… En attente', cours: '⏳ En cours' }[st] || st) + (det ? ' — ' + det : '');
+  if (st === 'ok') document.getElementById('sigRs' + i).classList.remove('hidden');
+}
+async function sigLancer() {
+  const idx = [...document.querySelectorAll('[data-sig]:checked')].map(c => +c.dataset.sig);
+  if (!idx.length) return;
+  if (!confirm('Appliquer la bannière sous la signature Gmail de ' + idx.length + ' membre(s) ?\n\nLe reste de chaque signature n\'est pas modifié, une ancienne bannière HECG est remplacée, et chaque signature est sauvegardée (restaurable).')) return;
+  const go = document.getElementById('sigGo'); go.disabled = true;
+  idx.forEach(i => sigStatut(i, 'attente', ''));
+  const lien = window.sigValide;
+  for (let k = 0; k < idx.length; k += 5) {
+    const lot = idx.slice(k, k + 5); lot.forEach(i => sigStatut(i, 'cours', ''));
+    go.textContent = '⏳ ' + Math.min(k + 5, idx.length) + ' / ' + idx.length;
+    let r; try { r = await apiPost({ action: 'signatureHecg', op: 'appliquer', lien, emails: lot.map(i => sigListe[i].email) }); } catch (e) { r = { success: false, message: 'erreur réseau' }; }
+    if (!r || !r.success) { lot.forEach(i => sigStatut(i, 'erreur', (r && r.message) || 'erreur')); continue; }
+    r.resultats.forEach(x => { const i = lot.find(j => sigListe[j].email === x.email); if (i !== undefined) sigStatut(i, x.statut, x.detail); });
+  }
+  const c = st => idx.filter(i => sigListe[i].statut === st).length;
+  go.disabled = false; go.textContent = '📤 Appliquer la bannière';
+  alert('Terminé : ' + c('ok') + ' appliquée(s), ' + c('inchangé') + ' déjà à jour, ' + c('ignoré') + ' ignorée(s), ' + c('erreur') + ' erreur(s).');
+}
+async function sigRestaurer(i) {
+  const m = sigListe[i];
+  if (!confirm('Restaurer la signature de ' + m.email + ' telle qu\'elle était avant la dernière application de la bannière ?')) return;
+  const r = await apiPost({ action: 'signatureHecg', op: 'restaurer', email: m.email });
+  if (!r.success) { sigStatut(i, 'erreur', r.message); return; }
+  sigStatut(i, 'Restaurée', ''); document.getElementById('sigRs' + i).classList.add('hidden');
+}
 function sigCadre(html) {
   const f = document.createElement('iframe');
   f.setAttribute('sandbox', 'allow-same-origin');
@@ -1718,6 +1778,7 @@ async function sigApercu() {
       + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div><p class="text-[10px] font-black uppercase text-slate-400 mb-1">Signature actuelle</p><div id="sigA"></div></div>'
       + '<div><p class="text-[10px] font-black uppercase text-emerald-600 mb-1">Après ajout de la bannière</p><div id="sigB"></div></div></div>'
       + '<details class="mt-3 text-xs text-gray-500"><summary class="cursor-pointer font-bold">Voir le code HTML</summary><p class="font-bold mt-2">Actuel</p><pre class="whitespace-pre-wrap bg-gray-50 p-2 rounded">' + esc(r.actuelle) + '</pre><p class="font-bold mt-2">Proposé</p><pre class="whitespace-pre-wrap bg-gray-50 p-2 rounded">' + esc(r.nouvelle) + '</pre></details>';
+    window.sigValide = lien;
     document.getElementById('sigA').appendChild(sigCadre(r.actuelle));
     document.getElementById('sigB').appendChild(sigCadre(r.nouvelle));
   } catch (e) { box.innerHTML = '<p class="text-sm font-bold text-red-500">Erreur réseau, réessayez.</p>'; }
