@@ -59,7 +59,23 @@ function _sigEcrire_(S, html) {
   if (r.getResponseCode() !== 200) throw new Error("Écriture refusée (" + r.getResponseCode() + ") : " + r.getContentText().slice(0, 200));
 }
 // Membres du domaine : annuaire Workspace (délégation) ; à défaut, les adresses @hecg.fr de l'onglet PERSONNEL
+// 1) annuaire Admin avec le compte du CRM (m.mokhtari, administrateur) — droit admin.directory.user.readonly du manifeste
+function _sigAnnuaireAdmin_(tok) {
+  var out = [], page = "";
+  do {
+    var r = UrlFetchApp.fetch("https://admin.googleapis.com/admin/directory/v1/users?customer=my_customer&maxResults=500&orderBy=email&projection=basic" + (page ? "&pageToken=" + page : ""),
+      { headers: { Authorization: "Bearer " + tok }, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) throw new Error(r.getContentText().slice(0, 150));
+    var j = JSON.parse(r.getContentText());
+    (j.users || []).forEach(function (u) { out.push({ email: String(u.primaryEmail).toLowerCase(), nom: (u.name && u.name.fullName) || "", suspendu: !!(u.suspended || u.archived), ou: u.orgUnitPath || "" }); });
+    page = j.nextPageToken || "";
+  } while (page);
+  return out;
+}
+// À lancer UNE fois dans l'éditeur Apps Script : déclenche l'autorisation du droit « annuaire » et vérifie le résultat
+function autoriserAnnuaireSignature() { Logger.log(_sigAnnuaireAdmin_(ScriptApp.getOAuthToken()).length + " membres lus dans l'annuaire du domaine"); }
 function _sigMembres_(ss) {
+  try { return { source: "Annuaire Google Workspace (tous les comptes du domaine)", membres: _sigAnnuaireAdmin_(ScriptApp.getOAuthToken()) }; } catch (eA) {}
   try {
     var tok = _sigJeton_(FP2_MAITRE, "https://www.googleapis.com/auth/admin.directory.user.readonly"), out = [], page = "";
     do {
@@ -71,6 +87,19 @@ function _sigMembres_(ss) {
       page = j.nextPageToken || "";
     } while (page);
     return { source: "Annuaire Google Workspace", membres: out };
+  } catch (e0) {}
+  try {   // annuaire du domaine vu par Gmail / Contacts (People API, droit directory.readonly)
+    var tokP = _sigJeton_(FP2_MAITRE, "https://www.googleapis.com/auth/directory.readonly"), outP = [], pageP = "", vusP = {};
+    do {
+      var rP = UrlFetchApp.fetch("https://people.googleapis.com/v1/people:listDirectoryPeople?readMask=emailAddresses,names&sources=DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE&pageSize=1000" + (pageP ? "&pageToken=" + pageP : ""),
+        { headers: { Authorization: "Bearer " + tokP }, muteHttpExceptions: true });
+      if (rP.getResponseCode() !== 200) throw new Error(rP.getContentText().slice(0, 150));
+      var jP = JSON.parse(rP.getContentText());
+      (jP.people || []).forEach(function (x) { var em = ((x.emailAddresses || [])[0] || {}).value; em = String(em || "").toLowerCase();
+        if (/@hecg\.fr$/.test(em) && !vusP[em]) { vusP[em] = 1; outP.push({ email: em, nom: ((x.names || [])[0] || {}).displayName || "", suspendu: false }); } });
+      pageP = jP.nextPageToken || "";
+    } while (pageP);
+    return { source: "Annuaire du domaine hecg.fr", membres: outP.sort(function (a, b) { return a.email < b.email ? -1 : 1; }) };
   } catch (e) {
     var dP = getPersonnelDataCached_(ss), vus = {}, l = [];
     for (var i = 1; i < dP.length; i++) dP[i].forEach(function (v) { var m = String(v || "").trim().toLowerCase(); if (/^[^@\s]+@hecg\.fr$/.test(m) && !vus[m]) { vus[m] = 1; l.push({ email: m, nom: (String(dP[i][2] || "") + " " + String(dP[i][1] || "")).trim(), suspendu: false }); } });
@@ -85,6 +114,11 @@ function handleSignatureHecg(p, ss) {
   if (!_fp2Autorise_(p)) return createJsonResponse({ success: false, message: "Module réservé à m.mokhtari@hecg.fr." });
   try {
     var op = String(p.op || ""), props = PropertiesService.getScriptProperties(), par = String(p.nomAuteur || p.emailAuteur || "");
+    if (op === "droits") {   // diagnostic : droits délégués au compte de service
+      var sc = ["gmail.settings.basic", "gmail.settings.sharing", "contacts", "directory.readonly", "admin.directory.user.readonly", "admin.directory.user", "contacts.other.readonly"], out2 = {};
+      sc.forEach(function (x) { try { _sigJeton_(FP2_MAITRE, "https://www.googleapis.com/auth/" + x); out2[x] = "oui"; } catch (eX) { out2[x] = "non"; } });
+      return createJsonResponse({ success: true, droits: out2 });
+    }
     if (op === "etat") return createJsonResponse({ success: true, banniere: props.getProperty("SIG_BANNIERE") || "" });
     if (op === "apercu") {
       var lien = String(p.lien || "").trim();
