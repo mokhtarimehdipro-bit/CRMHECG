@@ -64,6 +64,18 @@
             </div>
         </div>
 
+        <!-- ===================== COMPTES WORKSPACE DES ÉTUDIANTS SORTIS (compte maître) ===================== -->
+        <div id="wsModule" class="mt-14 hidden">
+            <div class="mb-4">
+                <h2 class="text-2xl font-black text-[#1A4E8A]">🎓 Comptes Workspace des étudiants sortis</h2>
+                <p class="text-sm text-gray-400 mt-1">Rapproche les étudiants « sortis » du CRM de leur compte @hecg.fr. <b>Suspendre</b> est réversible (compte bloqué, données conservées, déplacé dans « Anciens étudiants ») ; <b>Supprimer</b> est définitif et ne vise que des comptes déjà suspendus.</p>
+            </div>
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <button id="wsBtn" onclick="wsCharger()" class="bg-[#1A4E8A] text-white px-5 py-2 rounded-xl font-black text-sm hover:scale-105 transition">🔎 Rapprocher CRM ↔ Workspace (aucune modification)</button>
+                <div id="wsRes" class="mt-4"></div>
+            </div>
+        </div>
+
         <!-- ===================== SUIVI DES POSTS ===================== -->
         <div class="mt-14">
             <div class="flex justify-between items-center mb-6">
@@ -1696,7 +1708,7 @@ window.addEventListener('load', () => { setTimeout(loadSuiviPostCom, 500); });
 (function () {
   const u = JSON.parse(localStorage.getItem('user') || '{}');
   if (String(u.email || '').toLowerCase() !== 'm.mokhtari@hecg.fr') return;
-  document.getElementById('sigModule').classList.remove('hidden');
+  document.getElementById('sigModule').classList.remove('hidden'); document.getElementById('wsModule').classList.remove('hidden');
   apiPost({ action: 'signatureHecg', op: 'etat' }).then(r => { if (r && r.success && r.banniere) { document.getElementById('sigLien').value = r.banniere; document.getElementById('sigCible').value = r.cible || ''; window.sigValide = r.banniere + '|' + (r.cible || ''); } });
 })();
 // ── Export vers toutes les signatures du domaine : sélection (tout inclus par défaut) + avancement ──
@@ -1818,6 +1830,93 @@ async function sigRestaurer(i) {
   m.statut = r.success ? 'restauree' : 'erreur'; m.detail = r.success ? '' : r.message; sigDessiner();
 }
 window.addEventListener('beforeunload', e => { if (sigEnCours) { e.preventDefault(); e.returnValue = ''; } });
+// ── Comptes Workspace des étudiants sortis ──
+let wsL = [], wsEnCours = false;
+const WS_ETAT = it => it.bloque ? 'bloque' : it.suspendu ? 'suspendu' : 'actif';
+async function wsCharger() {
+  const box = document.getElementById('wsRes'), b = document.getElementById('wsBtn');
+  b.disabled = true; b.textContent = '⏳ Lecture de l\'annuaire et du CRM…';
+  try {
+    const r = await apiPost({ action: 'workspaceComptes', op: 'apercu' });
+    if (!r.success) { box.innerHTML = '<p class="text-sm font-bold text-red-500">' + sigEsc(r.message) + '</p>'; return; }
+    wsL = r.items.map(x => Object.assign(x, { sel: !x.bloque && !x.suspendu && x.rappr === 'adresse', statut: '', detail: '' }));
+    const n = e => wsL.filter(x => WS_ETAT(x) === e).length;
+    box.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-center">
+        <div class="p-3 rounded-xl bg-red-50"><div class="text-2xl font-black text-red-600">${n('actif')}</div><div class="text-[10px] font-black uppercase text-slate-500">Sortis encore actifs</div></div>
+        <div class="p-3 rounded-xl bg-slate-50"><div class="text-2xl font-black text-slate-600">${n('suspendu')}</div><div class="text-[10px] font-black uppercase text-slate-500">Déjà suspendus</div></div>
+        <div class="p-3 rounded-xl bg-amber-50"><div class="text-2xl font-black text-amber-700">${n('bloque')}</div><div class="text-[10px] font-black uppercase text-slate-500">À vérifier (bloqués)</div></div>
+        <div class="p-3 rounded-xl bg-blue-50"><div class="text-2xl font-black text-[#1A4E8A]">${r.orphelins.length}</div><div class="text-[10px] font-black uppercase text-slate-500">Comptes étudiants sans fiche CRM</div></div></div>
+      <p class="text-xs text-slate-500 mb-2">${r.total} comptes dans le domaine. Cochés par défaut : les sortis encore actifs reliés <b>par leur adresse @hecg.fr</b> (sûr). Les rapprochements <b>par le nom</b> sont à cocher vous-même après vérification. Les comptes bloqués (fiche encore active, homonymes, hors unité étudiante) ne peuvent pas être traités ici.</p>
+      <div class="flex gap-2 flex-wrap items-center mb-2">
+        <input id="wsQ" type="search" placeholder="🔎 Nom, adresse, classe…" class="flex-1 min-w-[200px] p-2 border border-gray-200 rounded-xl text-sm">
+        <select id="wsF" class="p-2 border border-gray-200 rounded-xl text-sm"><option value="actif">Sortis encore actifs</option><option value="suspendu">Déjà suspendus</option><option value="bloque">À vérifier (bloqués)</option><option value="">Tous</option></select>
+        <button class="text-sm font-bold text-[#1A4E8A] underline" onclick="wsCocher(true)">✓ Cocher les affichés</button><button class="text-sm font-bold text-red-600 underline" onclick="wsCocher(false)">✗ Décocher les affichés</button>
+        <span id="wsNb" class="ml-auto text-sm font-bold text-slate-600"></span></div>
+      <div id="wsListe" class="max-h-[460px] overflow-auto border border-gray-200 rounded-xl"></div>
+      <div id="wsProg" class="hidden mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200"><div id="wsProgTxt" class="text-sm font-bold mb-2"></div>
+        <div class="h-3 bg-slate-200 rounded-full overflow-hidden"><div id="wsProgBar" class="h-3 bg-[#1A4E8A] transition-all" style="width:0%"></div></div>
+        <div id="wsFeed" class="mt-2 max-h-48 overflow-auto bg-white border border-slate-200 rounded-xl p-2 text-xs space-y-0.5"></div></div>
+      <div class="flex gap-3 mt-3 flex-wrap items-center">
+        <label class="text-sm"><input type="checkbox" id="wsDeplacer" checked> déplacer dans l'unité « ${sigEsc(r.ouAnciens.replace(/^\//, ''))} »</label>
+        <button id="wsSusp" onclick="wsAction('suspendre')" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black text-sm">⏸ Suspendre la sélection (réversible)</button>
+        <button id="wsSuppr" onclick="wsAction('supprimer')" class="px-5 py-2 rounded-xl font-black text-sm border-2 border-red-300 text-red-600">🗑 Supprimer définitivement (comptes suspendus cochés)</button></div>
+      ${r.orphelins.length ? `<details class="mt-4 text-sm"><summary class="cursor-pointer font-bold text-[#1A4E8A]">Comptes étudiants actifs sans aucune fiche dans le CRM (${r.orphelins.length}) — information, aucune action</summary>
+        <div class="max-h-64 overflow-auto mt-2 text-xs">${r.orphelins.map(o => `<div class="py-0.5">${sigEsc(o.nomWs)} <span class="text-slate-400">${sigEsc(o.email)} · ${sigEsc(o.ou)} · dernière connexion ${sigEsc(o.derniere || 'jamais')}</span></div>`).join('')}</div></details>` : ''}`;
+    ['wsQ', 'wsF'].forEach(id => document.getElementById(id).oninput = wsDessiner);
+    wsDessiner();
+  } catch (e) { box.innerHTML = '<p class="text-sm font-bold text-red-500">Erreur réseau, réessayez.</p>'; }
+  finally { b.disabled = false; b.textContent = '🔎 Rapprocher CRM ↔ Workspace (aucune modification)'; }
+}
+function wsVisibles() {
+  const q = (document.getElementById('wsQ').value || '').toLowerCase(), f = document.getElementById('wsF').value;
+  return wsL.map((x, i) => i).filter(i => { const x = wsL[i]; return (!f || WS_ETAT(x) === f) && (!q || [x.nomCrm, x.nomWs, x.email, x.classe, x.typo].join(' ').toLowerCase().includes(q)); });
+}
+function wsDessiner() {
+  const v = wsVisibles();
+  document.getElementById('wsListe').innerHTML = `<table class="w-full text-sm"><thead class="bg-gray-50 sticky top-0 z-10"><tr class="text-left text-[10px] uppercase text-slate-400"><th class="p-2"></th><th class="p-2">Étudiant (CRM)</th><th class="p-2">Compte Workspace</th><th class="p-2">Rapprochement</th><th class="p-2">État</th><th class="p-2"></th></tr></thead><tbody>
+    ${v.map(i => { const x = wsL[i], e = WS_ETAT(x); return `<tr class="border-t border-gray-100 ${x.bloque ? 'bg-amber-50/50' : ''}">
+      <td class="p-2"><input type="checkbox" ${x.sel ? 'checked' : ''} ${x.bloque || wsEnCours ? 'disabled' : ''} onchange="wsL[${i}].sel=this.checked;wsCompte()"></td>
+      <td class="p-2"><b>${sigEsc(x.nomCrm)}</b><br><span class="text-xs text-slate-400">${sigEsc(x.typo)}${x.classe ? ' · ' + sigEsc(x.classe) : ''} · ${sigEsc((x.fiches || [x.etuId]).join(', '))}</span></td>
+      <td class="p-2">${x.email ? sigEsc(x.email) + '<br><span class="text-xs text-slate-400">' + sigEsc(x.ou || '') + ' · dernière connexion ' + sigEsc(x.derniere || 'jamais') + '</span>' : '—'}</td>
+      <td class="p-2 text-xs ${x.rappr === 'adresse' ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}">${x.rappr === 'adresse' ? '✓ par l\'adresse' : x.rappr === 'nom' ? '⚠ par le nom' : '⛔ ' + sigEsc(x.rappr)}${x.doute ? '<br><span class="font-normal">' + sigEsc(x.doute) + '</span>' : ''}</td>
+      <td class="p-2 text-xs font-bold">${e === 'suspendu' ? '<span class="text-slate-500">⏸ Suspendu</span>' : e === 'bloque' ? '<span class="text-amber-700">Bloqué</span>' : '<span class="text-red-600">● Actif</span>'}${x.statut ? '<br><span class="' + (x.statut === 'ok' ? 'text-emerald-700' : 'text-red-600') + '">' + sigEsc(x.detail) + '</span>' : ''}</td>
+      <td class="p-2 text-right">${x.email && x.detail !== '🗑 supprimé' && (x.suspendu || x.statut === 'ok') ? `<button class="text-xs font-bold text-[#1A4E8A] underline" onclick="wsReactiver(${i})">▶ Réactiver</button>` : ''}</td></tr>`; }).join('')
+    || '<tr><td colspan="6" class="p-4 text-center text-slate-400">Aucun compte dans cette vue.</td></tr>'}</tbody></table>`;
+  wsCompte();
+}
+function wsCompte() { const s = wsL.filter(x => x.sel); document.getElementById('wsNb').textContent = s.filter(x => !x.suspendu).length + ' actif(s) coché(s) · ' + s.filter(x => x.suspendu).length + ' suspendu(s) coché(s)'; }
+function wsCocher(on) { if (wsEnCours) return; wsVisibles().forEach(i => { if (!wsL[i].bloque) wsL[i].sel = on; }); wsDessiner(); }
+async function wsTraiter(op, idx) {
+  wsEnCours = true; document.getElementById('wsProg').classList.remove('hidden'); const feed = document.getElementById('wsFeed'); feed.innerHTML = '';
+  let fait = 0;
+  for (let k = 0; k < idx.length; k += 10) {
+    const lot = idx.slice(k, k + 10);
+    document.getElementById('wsProgTxt').textContent = (op === 'suspendre' ? 'Suspension' : op === 'supprimer' ? 'Suppression' : 'Réactivation') + ' en cours : ' + fait + ' / ' + idx.length;
+    let r; try { r = await apiPost({ action: 'workspaceComptes', op, emails: lot.map(i => wsL[i].email), deplacer: document.getElementById('wsDeplacer') ? document.getElementById('wsDeplacer').checked : true, confirmation: op === 'supprimer' ? 'SUPPRIMER' : '' }); } catch (e) { r = { success: false, message: 'erreur réseau' }; }
+    const res = r && r.success ? r.resultats : lot.map(i => ({ email: wsL[i].email, statut: 'erreur', detail: (r && r.message) || 'erreur' }));
+    res.forEach(x => { const i = lot.find(j => wsL[j].email === x.email); if (i === undefined) return; const it = wsL[i]; it.statut = x.statut; it.detail = x.detail;
+      if (x.statut === 'ok') { it.suspendu = op === 'suspendre' ? true : op === 'reactiver' ? false : it.suspendu; it.sel = false; if (op === 'supprimer') it.detail = '🗑 supprimé'; }
+      const d = document.createElement('div'); d.className = x.statut === 'ok' ? 'text-emerald-700' : 'text-red-600';
+      d.innerHTML = `<b>${x.statut === 'ok' ? '✅' : '❌'}</b> ${sigEsc(it.nomCrm)} <span class="text-slate-400">${sigEsc(x.email)} — ${sigEsc(x.detail)}</span>`; feed.appendChild(d); feed.scrollTop = feed.scrollHeight; });
+    fait += lot.length; document.getElementById('wsProgBar').style.width = Math.round(fait * 100 / idx.length) + '%'; wsDessiner();
+  }
+  wsEnCours = false;
+  document.getElementById('wsProgTxt').textContent = 'Terminé : ' + idx.filter(i => wsL[i].statut === 'ok').length + ' / ' + idx.length + ' réussi(s)'; wsDessiner();
+}
+function wsAction(op) {
+  if (wsEnCours) return;
+  const idx = wsL.map((x, i) => i).filter(i => wsL[i].sel && !wsL[i].bloque && (op === 'suspendre' ? !wsL[i].suspendu : wsL[i].suspendu));
+  if (!idx.length) { alert(op === 'suspendre' ? 'Cochez au moins un compte actif.' : 'Cochez au moins un compte déjà suspendu (filtre « Déjà suspendus »).'); return; }
+  const noms = idx.slice(0, 15).map(i => '• ' + wsL[i].nomCrm + ' (' + wsL[i].email + ')').join('\n') + (idx.length > 15 ? '\n… et ' + (idx.length - 15) + ' autre(s)' : '');
+  if (op === 'suspendre') { if (!confirm('Suspendre ' + idx.length + ' compte(s) Workspace ?\n\n' + noms + '\n\nRéversible : bouton « Réactiver ».')) return; }
+  else {
+    const t = prompt('SUPPRESSION DÉFINITIVE de ' + idx.length + ' compte(s) (mails, Drive, documents).\nRécupérable 20 jours seulement depuis la console d\'administration Google.\n\n' + noms + '\n\nTapez SUPPRIMER pour confirmer :');
+    if (t !== 'SUPPRIMER') return;
+  }
+  wsTraiter(op, idx);
+}
+function wsReactiver(i) { if (!wsEnCours && confirm('Réactiver le compte ' + wsL[i].email + ' (et le remettre dans son unité d\'origine) ?')) wsTraiter('reactiver', [i]); }
+window.addEventListener('beforeunload', e => { if (wsEnCours) { e.preventDefault(); e.returnValue = ''; } });
 function sigCadre(html) {
   const f = document.createElement('iframe');
   f.setAttribute('sandbox', 'allow-same-origin');

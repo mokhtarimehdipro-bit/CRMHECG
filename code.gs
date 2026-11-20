@@ -457,6 +457,7 @@ function doPostInner_(e) {
       case 'fpEtudiants':             return handleFpEtudiants(params, ss);
       case 'fp2':                     return handleFp2(params, ss);
       case 'signatureHecg':           return handleSignatureHecg(params, ss);
+      case 'workspaceComptes':        return handleWorkspaceComptes(params, ss);
       case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);
@@ -569,6 +570,7 @@ function doPostInner_(e) {
       case 'getSimulations':    return handleGetSimulations(p, ss);
       case 'saveSimulation':    return handleSaveSimulation(p, ss);
       case 'deleteSimulation':  return handleDeleteSimulation(p, ss);
+      case 'exsim':             return handleExsim(p, ss);   // simulations d'examens blancs (exsim.gs)
 
       // --- ROUTES SUIVI EXB ---
       case 'getSuiviEXB':       return handleGetSuiviEXB(p, ss);

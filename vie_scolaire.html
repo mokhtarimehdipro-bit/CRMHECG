@@ -504,7 +504,7 @@
           <button onclick="openSalleModal(null)" id="btnAddSalle" class="btn-orange hidden">+ Ajouter</button>
         </div>
         <div id="simulationsActions" class="hidden">
-          <button onclick="openSimulationModal(null)" class="btn-orange">+ Nouvelle simulation</button>
+          <button onclick="EXSIM.nouveau()" id="btnExsimNew" class="btn-orange hidden">+ Nouvelle simulation d'examens</button>
         </div>
       </div>
 
@@ -520,7 +520,11 @@
 
       <!-- === SIMULATIONS VIEW === -->
       <div id="simulationsTabContent" class="hidden">
-        <div id="simulationsList"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+        <div id="exsimListe"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+        <details class="mt-6" id="simAnciennes"><summary class="text-sm font-bold text-gray-500 cursor-pointer">🗄 Anciennes simulations (ancien format, consultation)</summary>
+          <div class="mt-3 flex justify-end"><button onclick="openSimulationModal(null)" class="btn-ghost text-xs">+ Simulation ancien format</button></div>
+          <div id="simulationsList" class="mt-3"><p class="text-center text-gray-400 py-12">Chargement…</p></div>
+        </details>
       <!-- Vue lecture simulation avec filtres -->
       <div id="simViewPanel" class="hidden mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div class="flex justify-between items-center mb-4">
@@ -6863,7 +6867,7 @@ function sallesTab(tab){
   document.getElementById('simulationsActions').classList.toggle('hidden',tab!=='simulations');
   document.getElementById('sallesTabBtn').className=tab==='salles'?'btn-primary':'btn-ghost';
   document.getElementById('simulationsTabBtn').className=tab==='simulations'?'btn-primary':'btn-ghost';
-  if(tab==='simulations') loadSimulations();
+  if(tab==='simulations'){ if(window.EXSIM) EXSIM.liste(); loadSimulations(); }
 }
 
 // ── Simulations ──────────────────────────────────────────────────
@@ -8519,6 +8523,7 @@ async function importSuiviData(){
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=47"></script>
 <script src="salles_plan.js?v=1"></script>
+<script src="exsim.js?v=1"></script>
 <script src="vs_qualite.js?v=11"></script>
 </body>
 </html>
