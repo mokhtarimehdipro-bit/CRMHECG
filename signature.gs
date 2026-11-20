@@ -162,12 +162,12 @@ function handleSignatureHecg(p, ss) {
         em = String(em).trim().toLowerCase();
         try {
           var S = _sigLire_(em);
-          if (!String(S.signature).trim()) { res.push({ email: em, statut: "ignoré", detail: "signature vide — rien ajouté" }); return; }
+          var vide = !String(S.signature).trim();   // signature vide : la bannière seule est posée (demande direction)
           var B = _sigAnalyser_(S.signature), nv = B.sans + _sigBloc_(imgA.url, B.largeur, cibleA);
           if (nv === S.signature) { res.push({ email: em, statut: "inchangé", detail: "bannière déjà à jour" }); return; }
           _sigEcrire_(S, nv);
           lignes.push([new Date(), em, S.email, S.signature, nv, lienA, par, "Bannière appliquée"]);
-          res.push({ email: em, statut: "ok", detail: B.largeur + " px" + (B.anciennes.length ? " · ancienne bannière remplacée" : " · bannière ajoutée") });
+          res.push({ email: em, statut: "ok", detail: B.largeur + " px" + (vide ? " · signature vide : bannière seule" : B.anciennes.length ? " · ancienne bannière remplacée" : " · bannière ajoutée") });
         } catch (eU) { res.push({ email: em, statut: "erreur", detail: String(eU.message || eU).slice(0, 200) }); }
         Utilities.sleep(250);
       });

@@ -1718,7 +1718,7 @@ async function sigMembres() {
     <div class="flex gap-2 flex-wrap items-center mb-2">
       <input id="sigQ" type="search" placeholder="🔎 Rechercher un nom ou une adresse…" class="flex-1 min-w-[220px] p-2 border border-gray-200 rounded-xl text-sm">
       <select id="sigG" class="p-2 border border-gray-200 rounded-xl text-sm"><option value="">Tous les groupes (${groupes.length})</option>${groupes.map(g => `<option>${sigEsc(g)}</option>`).join('')}</select>
-      <select id="sigV" class="p-2 border border-gray-200 rounded-xl text-sm"><option value="">Inclus et exclus</option><option value="in">Inclus seulement</option><option value="out">Exclus seulement</option><option value="err">Erreurs seulement</option></select>
+      <select id="sigV" class="p-2 border border-gray-200 rounded-xl text-sm"><option value="">Inclus et exclus</option><option value="in">Inclus seulement</option><option value="out">Exclus seulement</option><option value="err">Erreurs seulement</option><option value="ign">Ignorées seulement</option><option value="jamais">Jamais traités (aucune bannière posée par le CRM)</option></select>
     </div>
     <div class="flex gap-3 flex-wrap items-center mb-2 text-sm">
       <button class="font-bold text-[#1A4E8A] underline" onclick="sigTousVisibles(true)">✓ Inclure les membres affichés</button>
@@ -1730,11 +1730,14 @@ async function sigMembres() {
       <div class="flex justify-between text-sm font-bold mb-2"><span id="sigProgTxt"></span><span id="sigProgEta" class="text-slate-500"></span></div>
       <div class="h-3 bg-slate-200 rounded-full overflow-hidden"><div id="sigProgBar" class="h-3 bg-[#F26522] transition-all" style="width:0%"></div></div>
       <div id="sigProgCpt" class="flex gap-4 flex-wrap text-xs font-bold mt-2"></div>
+      <p class="text-[10px] font-black uppercase text-slate-400 mt-3 mb-1">Défilement des personnes traitées</p>
+      <div id="sigFeed" class="max-h-56 overflow-auto bg-white border border-slate-200 rounded-xl p-2 text-xs space-y-0.5"></div>
+      <div id="sigFin" class="mt-3 text-xs"></div>
     </div>
     <div class="flex gap-3 mt-3 flex-wrap">
       <button id="sigGo" onclick="sigLancer()" class="bg-[#F26522] text-white px-5 py-2 rounded-xl font-black text-sm">📤 Appliquer la bannière aux membres inclus</button>
       <button id="sigArret" onclick="sigStop=true;this.disabled=true;this.textContent='⏸ Arrêt après le lot en cours…'" class="hidden px-5 py-2 rounded-xl font-black text-sm border-2 border-red-200 text-red-600">⏸ Arrêter</button>
-      <button id="sigRelance" onclick="sigRelancerErreurs()" class="hidden px-5 py-2 rounded-xl font-black text-sm border-2 border-gray-200 text-gray-600">↻ Relancer les erreurs</button>
+      <button id="sigRelance" onclick="sigRelancerErreurs()" class="hidden px-5 py-2 rounded-xl font-black text-sm border-2 border-gray-200 text-gray-600">↻ Relancer les erreurs et les ignorées</button>
     </div></div>`;
   ['sigQ', 'sigG', 'sigV'].forEach(id => document.getElementById(id).oninput = sigDessiner);
   sigDessiner();
@@ -1743,7 +1746,7 @@ function sigVisibles() {
   const q = (document.getElementById('sigQ').value || '').toLowerCase().trim(), g = document.getElementById('sigG').value, v = document.getElementById('sigV').value;
   return sigListe.map((m, i) => i).filter(i => { const m = sigListe[i];
     return (!q || (m.email + ' ' + m.nom).toLowerCase().includes(q)) && (!g || sigGroupe(m) === g)
-      && (!v || (v === 'in' && m.inclus) || (v === 'out' && !m.inclus) || (v === 'err' && m.statut === 'erreur')); });
+      && (!v || (v === 'in' && m.inclus) || (v === 'out' && !m.inclus) || (v === 'err' && m.statut === 'erreur') || (v === 'ign' && m.statut === 'ignoré') || (v === 'jamais' && !m.dernier && m.statut !== 'ok')); });
 }
 function sigDessiner() {
   const vis = sigVisibles();
@@ -1767,7 +1770,7 @@ function sigProgres(idx, t0) {
   const ms = Date.now() - t0, reste = fait ? Math.round(ms / fait * (tot - fait) / 1000) : 0;
   document.getElementById('sigProgEta').textContent = sigEnCours && fait ? 'reste environ ' + (reste >= 60 ? Math.round(reste / 60) + ' min' : reste + ' s') + ' — gardez cette page ouverte' : '';
   const c = st => idx.filter(i => sigListe[i].statut === st).length;
-  document.getElementById('sigProgCpt').innerHTML = [['ok', 'appliquée(s)'], ['inchangé', 'déjà à jour'], ['ignoré', 'ignorée(s) (signature vide)'], ['erreur', 'erreur(s)'], ['arret', 'non traitée(s)']]
+  document.getElementById('sigProgCpt').innerHTML = [['ok', 'appliquée(s)'], ['inchangé', 'déjà à jour'], ['ignoré', 'ignorée(s)'], ['erreur', 'erreur(s)'], ['arret', 'non traitée(s)']]
     .filter(x => c(x[0])).map(x => `<span class="${SIG_COUL[x[0]]}">${c(x[0])} ${x[1]}</span>`).join('');
 }
 async function sigTraiter(idx) {
@@ -1775,6 +1778,7 @@ async function sigTraiter(idx) {
   sigStop = false; sigEnCours = true; go.disabled = true; st.classList.remove('hidden'); st.disabled = false; st.textContent = '⏸ Arrêter';
   document.getElementById('sigRelance').classList.add('hidden'); document.getElementById('sigProg').classList.remove('hidden');
   idx.forEach(i => { sigListe[i].statut = 'attente'; sigListe[i].detail = ''; });
+  document.getElementById('sigFeed').innerHTML = ''; document.getElementById('sigFin').innerHTML = '';
   const t0 = Date.now(); sigDessiner(); sigProgres(idx, t0);
   const [lien, ...rC] = window.sigValide.split('|'), cible = rC.join('|');
   for (let k = 0; k < idx.length; k += 6) {
@@ -1784,10 +1788,15 @@ async function sigTraiter(idx) {
     if (!r || !r.success) lot.forEach(i => { sigListe[i].statut = 'erreur'; sigListe[i].detail = (r && r.message) || 'erreur'; });
     else { r.resultats.forEach(x => { const i = lot.find(j => sigListe[j].email === x.email); if (i !== undefined) { sigListe[i].statut = x.statut; sigListe[i].detail = x.detail; } });
       lot.forEach(i => { if (sigListe[i].statut === 'cours') { sigListe[i].statut = 'erreur'; sigListe[i].detail = 'pas de réponse'; } }); }
+    lot.forEach(sigFeed);
     sigDessiner(); sigProgres(idx, t0);
   }
   sigEnCours = false; go.disabled = false; st.classList.add('hidden'); sigDessiner(); sigProgres(idx, t0);
-  if (idx.some(i => sigListe[i].statut === 'erreur')) document.getElementById('sigRelance').classList.remove('hidden');
+  if (idx.some(i => ['erreur', 'ignoré'].includes(sigListe[i].statut))) document.getElementById('sigRelance').classList.remove('hidden');
+  // bilan nominatif de tout ce qui n'est pas « appliquée »
+  document.getElementById('sigFin').innerHTML = [['ignoré', 'Ignorées'], ['erreur', 'En erreur'], ['arret', 'Non traitées (arrêt)'], ['inchangé', 'Déjà à jour']].map(([st, lib]) => {
+    const l = idx.filter(i => sigListe[i].statut === st); if (!l.length) return '';
+    return `<p class="mt-1"><b class="${SIG_COUL[st]}">${lib} (${l.length}) :</b> ${l.map(i => sigEsc(sigListe[i].nom || sigListe[i].email) + (sigListe[i].detail && st !== 'inchangé' ? ' <span class="text-slate-400">(' + sigEsc(sigListe[i].detail) + ')</span>' : '')).join(', ')}</p>`; }).join('');
 }
 function sigLancer() {
   const idx = sigListe.map((m, i) => i).filter(i => sigListe[i].inclus);
@@ -1795,7 +1804,13 @@ function sigLancer() {
   if (!confirm('Appliquer la bannière sous la signature Gmail de ' + idx.length + ' membre(s) (' + (sigListe.length - idx.length) + ' exclu(s)) ?\n\nLe reste de chaque signature n\'est pas modifié, une ancienne bannière HECG est remplacée, et chaque signature est sauvegardée (restaurable).\nDurée estimée : ~' + Math.max(1, Math.round(idx.length * 2.5 / 60)) + ' min — gardez la page ouverte.')) return;
   sigTraiter(idx);
 }
-function sigRelancerErreurs() { const idx = sigListe.map((m, i) => i).filter(i => sigListe[i].statut === 'erreur'); if (idx.length) sigTraiter(idx); }
+function sigRelancerErreurs() { const idx = sigListe.map((m, i) => i).filter(i => ['erreur', 'ignoré'].includes(sigListe[i].statut)); if (idx.length) sigTraiter(idx); }
+function sigFeed(i) {
+  const m = sigListe[i], f = document.getElementById('sigFeed'), d = document.createElement('div');
+  d.className = SIG_COUL[m.statut] || '';
+  d.innerHTML = `<b>${SIG_LIB[m.statut] || sigEsc(m.statut)}</b> · ${sigEsc(m.nom || m.email)} <span class="text-slate-400">${sigEsc(m.email)}${m.detail ? ' — ' + sigEsc(m.detail) : ''}</span>`;
+  f.appendChild(d); f.scrollTop = f.scrollHeight;
+}
 async function sigRestaurer(i) {
   const m = sigListe[i];
   if (!confirm('Restaurer la signature de ' + m.email + ' telle qu\'elle était avant la dernière application de la bannière ?')) return;
