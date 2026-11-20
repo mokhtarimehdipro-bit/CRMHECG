@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 //  COMMUNICATION — SIGNATURE HECG (bannière sous les signatures Gmail)
-//  Étape 1 (actuelle) : APERÇU sur la signature de m.mokhtari@hecg.fr, lue avec le compte
-//  du CRM (droit gmail.readonly). Aucune écriture dans Gmail à ce stade.
+//  Étape 1 (actuelle) : APERÇU sur la signature de m.mokhtari@hecg.fr, lue via le compte
+//  de service robot-signature-hecg (clé dans _secrets.gs). Aucune écriture dans Gmail à ce stade.
 //  La bannière est ajoutée SOUS la signature existante, cliquable vers https://hecg.fr ;
 //  une bannière HECG déjà présente (ancien script) est remplacée, rien d'autre n'est touché.
 // ════════════════════════════════════════════════════════════════════════════
@@ -31,8 +31,19 @@ function _sigBloc_(url, larg) {
   return '<div style="margin-top:12px"><a href="' + SIG_LIEN_SITE + '" target="_blank"><img src="' + url + '" alt="Bannière HECG" width="' + larg
     + '" style="display:block;width:' + larg + 'px;max-width:100%;height:auto;border:0"></a></div>';
 }
+// Jeton Gmail « paramètres » au nom d'un membre du domaine (compte de service robot-signature-hecg, délégation domaine)
+function _sigJeton_(email) {
+  var b64 = function (x) { return Utilities.base64EncodeWebSafe(x).replace(/=+$/, ""); }, now = Math.floor(Date.now() / 1000);
+  var entree = b64(JSON.stringify({ alg: "RS256", typ: "JWT" })) + "." + b64(JSON.stringify({ iss: SIG_SA_EMAIL, sub: email, aud: "https://oauth2.googleapis.com/token",
+    scope: "https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing", iat: now, exp: now + 3600 }));
+  var r = UrlFetchApp.fetch("https://oauth2.googleapis.com/token", { method: "post", muteHttpExceptions: true,
+    payload: { grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: entree + "." + b64(Utilities.computeRsaSha256Signature(entree, SIG_SA_KEY)) } });
+  var j = JSON.parse(r.getContentText() || "{}");
+  if (!j.access_token) throw new Error("Autorisation Gmail refusée pour " + email + " : " + (j.error_description || j.error || r.getResponseCode()));
+  return j.access_token;
+}
 function _sigLireMienne_() {
-  var r = UrlFetchApp.fetch("https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs", { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  var r = UrlFetchApp.fetch("https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs", { headers: { Authorization: "Bearer " + _sigJeton_(FP2_MAITRE) }, muteHttpExceptions: true });
   if (r.getResponseCode() !== 200) throw new Error("Lecture de la signature impossible (" + r.getResponseCode() + ") : " + r.getContentText().slice(0, 200));
   var l = JSON.parse(r.getContentText()).sendAs || [], p = l.filter(function (a) { return a.isDefault; })[0] || l[0];
   if (!p) throw new Error("Aucune adresse d'envoi trouvée.");
