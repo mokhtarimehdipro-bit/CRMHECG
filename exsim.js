@@ -335,7 +335,7 @@ function vParams() {
   <div class="ex-card" style="max-width:1000px"><h3>Horaires des épreuves</h3>
     <p class="ex-aide">Le <b>pas</b> fixe la précision des heures de début et de fin proposées, ainsi que l'aimantation lors d'un clic ou d'un glisser-déposer dans le calendrier.</p>
     <div class="ex-pas">${PAS.map(([v, l]) => `<button class="ex-pill ${+s.pas === v ? 'on' : ''}" ${ro} onclick="EXSIM.set('pas',${v},true)">${l}</button>`).join('')}</div>
-    <div class="ex-grid" style="margin-top:6px"><div><label class="l">Durée proposée pour une nouvelle épreuve</label><select ${ro} onchange="EXSIM.set('dureeDefaut',+this.value)">${DUREES.map(d => `<option value="${d}" ${+s.dureeDefaut === d ? 'selected' : ''}>${m2h(d).replace(':', ' h ').replace(' h 00', ' h')}</option>`).join('')}</select></div></div></div>
+    <div class="ex-grid" style="margin-top:6px"><div><label class="l">Durée proposée pour une nouvelle épreuve</label><select ${ro} onchange="EXSIM.set('dureeDefaut',+this.value)">${DUREES.map(d => `<option value="${d}" ${+s.dureeDefaut === d ? 'selected' : ''}>${Math.floor(d / 60)} h${d % 60 ? ' ' + String(d % 60).padStart(2, '0') : ''}</option>`).join('')}</select></div></div></div>
   <div class="ex-card" style="max-width:1000px"><h3>Encadrement</h3>
     <p class="ex-aide" style="margin:0">Règle appliquée : <b>un surveillant par salle</b>. Une épreuve ne peut être validée que si elle a au moins une salle, et chaque salle au moins un surveillant (vous pouvez en ajouter plusieurs).</p></div>
   <div class="ex-card" style="max-width:1000px"><h3>Comment ça marche</h3><ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:2;color:#334155">
@@ -583,7 +583,7 @@ function vForm() {
       <div><label class="l">Jour</label><select ${dis} onchange="EXSIM.dSet('jour',+this.value,true)">${Array.from({ length: S().nbJours }, (_, j) => `<option value="${j}" ${j === D.jour ? 'selected' : ''}>${esc(libJour(j))}</option>`).join('')}</select></div>
       <div><label class="l">Début</label><select ${dis} onchange="EXSIM.dSet('debut',this.value,true)">${opts.map(h => `<option ${h === D.debut ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
       <div><label class="l">Fin</label><select ${dis} onchange="EXSIM.dSet('fin',this.value,true)">${opts.map(h => `<option ${h === D.fin ? 'selected' : ''}>${h}</option>`).join('')}</select></div></div>
-    <p class="text-xs text-gray-500 mt-1">Durée : ${h2m(D.fin) > h2m(D.debut) ? m2h(h2m(D.fin) - h2m(D.debut)).replace(':', ' h ') : '—'} · ${n} étudiant(s) · ${capTot} place(s) choisie(s) ${capTot && capTot < n ? '<b style="color:#b91c1c">— places insuffisantes</b>' : ''}</p>
+    <p class="text-xs text-gray-500 mt-1">Durée : ${h2m(D.fin) > h2m(D.debut) ? (x => Math.floor(x / 60) + ' h' + (x % 60 ? ' ' + String(x % 60).padStart(2, '0') : ''))(h2m(D.fin) - h2m(D.debut)) : '—'} · ${n} étudiant(s) · ${capTot} place(s) choisie(s) ${capTot && capTot < n ? '<b style="color:#b91c1c">— places insuffisantes</b>' : ''}</p>
     <label class="l">Salles (libres sur ce créneau)</label>${sallesHtml || '<p class="text-xs text-gray-400">Aucune salle cochée dans la simulation.</p>'}
     <label class="l">Remarque</label><input type="text" ${dis} value="${esc(D.note || '')}" oninput="EXSIM.dSet('note',this.value)" placeholder="facultatif (calculatrice autorisée, tiers-temps…)">
     ${err.length ? `<div class="ex-err">${err.map(esc).join('<br>')}</div>` : ''}
@@ -1165,7 +1165,7 @@ function pdfHabiller(doc, lg, titre) {
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
     let x = MX;
-    if (lg) { const h = 17, w = h / lg.r; doc.addImage(lg.url, 'PNG', MX, 6, w, h); x = MX + w + 6; }
+    if (lg) { const h = 17, w = h / lg.r; doc.addImage(lg.url, 'PNG', MX, 6, w, h, 'logoHECG'); x = MX + w + 6; }
     else { doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(26, 78, 138); doc.text('HECG', MX, 18); doc.setFillColor(242, 101, 34); doc.circle(MX + 27.5, 16.6, 1.7, 'F'); x = MX + 35; }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(26, 78, 138); doc.text(pdfT(titre), x, 14);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(100, 116, 139); doc.text(pdfT((S().titre || '') + '  ·  ' + semaineTxt()), x, 20.5);
