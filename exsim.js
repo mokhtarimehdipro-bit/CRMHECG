@@ -64,11 +64,19 @@ function partage(ep) { // répartition de l'effectif entre les salles de l'épre
   ss.forEach((sa, i) => { const n = i === ss.length - 1 ? rest : Math.min(rest, capSalle(sa.id)); out[sa.id] = n; rest -= n; });
   return out;
 }
+// Matières propres aux simulations (absentes du référentiel des notes)
+const MATIERES_SIM = {
+  GPME: ['CEJM', 'Anglais', 'CGE', 'GRH', 'GDR', 'SFDT', 'GRCF'],
+  BACHELOR: ['Bloc 1', 'Bloc 2', 'Bloc 3', 'Bloc 4']
+};
 function matieresDe(c) {
   const out = new Set((X.ref.matieresExb || {})[c] || []);
-  const ref = window.refMatieres || {}, nc = norm(c);
+  const ref = (typeof refMatieres !== 'undefined' && refMatieres) || window.refMatieres || {}, nc = norm(c);
+  const gpme = nc.includes('GPME'), bach = nc.includes('BACH');
+  if (gpme) MATIERES_SIM.GPME.forEach(m => out.add(m));
+  if (bach) MATIERES_SIM.BACHELOR.forEach(m => out.add(m));
   Object.keys(ref).forEach(k => {
-    const ok = (k === 'BTS CG' && nc.includes('BTS')) || (k === 'DSCG' && nc.includes('DSCG')) || (k === 'DCG' && nc.includes('DCG') && !nc.includes('DSCG')) || nc.includes(norm(k));
+    const ok = (k === 'BTS CG' && nc.includes('BTS') && !gpme) || (k === 'DSCG' && nc.includes('DSCG')) || (k === 'DCG' && nc.includes('DCG') && !nc.includes('DSCG')) || nc.includes(norm(k));
     if (ok) ref[k].forEach(m => out.add(m.matiere));
   });
   return [...out];
