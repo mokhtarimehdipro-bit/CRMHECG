@@ -340,6 +340,16 @@ html[data-skin="nuit"] body:not(.no-theme) :is(.border-lime-100, .border-lime-20
 html[data-skin="nuit"] body:not(.no-theme) .hover\:bg-lime-50:hover { background-color: rgba(132,204,22, .16) !important; }
 
 /* =============================================================================
+   HARMONISATION — fonds et textes écrits en dur (marqués par hecg-skins-harmonie.js)
+   ========================================================================== */
+html[data-skin] body:not(.no-theme) [data-sk-surf="g"] { background-color: var(--sk-glass-strong) !important; }
+html[data-skin="nuit"] body:not(.no-theme) [data-sk-surf="g"] { color: #E2E8F0; }
+html[data-skin="nuit"] body:not(.no-theme) [data-sk-surf="c"] { background-color: rgba(var(--sk-sbg), .14) !important; }
+html[data-skin="nuit"] body:not(.no-theme) [data-sk-line] { border-color: rgba(148, 163, 184, .18) !important; }
+html[data-skin="nuit"] body:not(.no-theme) [data-sk-ink="g"] { color: #E2E8F0 !important; }
+html[data-skin="nuit"] body:not(.no-theme) [data-sk-ink="c"] { color: color-mix(in srgb, rgb(var(--sk-ink)) 45%, #fff) !important; }
+
+/* =============================================================================
    Sélecteur de thème (bouton flottant + panneau) — toujours en verre
    ========================================================================== */
 .hsk-fab {
