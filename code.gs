@@ -231,7 +231,7 @@ function doPostInner_(e) {
     // Actions publiques (lecture / login) qui ne nécessitent pas de token
     // Actions accessibles sans connexion : uniquement la connexion et l'inscription publique.
     // (inscription.html / questionnaire_qualiopi.html passent par google.script.run, pas par doPost.)
-    var PUBLIC_ACTIONS = new Set(['login', 'publicRegister', 'formPublicGet', 'formPublicSubmit']);   // formulaires publiés (formulaires.gs)
+    var PUBLIC_ACTIONS = new Set(['login', 'publicRegister', 'formPublicGet', 'formPublicSubmit', 'charlAgent']);   // charlAgent : protégé par la clé de l'agent (comptes_etudiants.gs)   // formulaires publiés (formulaires.gs)
 
     var sessionToken = params.sessionToken || p.sessionToken || "";
     var session = null;
@@ -458,6 +458,9 @@ function doPostInner_(e) {
       case 'fp2':                     return handleFp2(params, ss);
       case 'signatureHecg':           return handleSignatureHecg(params, ss);
       case 'workspaceComptes':        return handleWorkspaceComptes(params, ss);
+      case 'getPresence':             return handleGetPresence(p, ss);       // présence du personnel (presence.gs)
+      case 'comptesEtudiant':         return handleComptesEtudiant(p, ss);   // comptes_etudiants.gs (Charlemagne / Workspace)
+      case 'charlAgent':              return handleCharlAgent(p, ss);        // agent Charlemagne du PC (clé)
       case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
       case 'saveExamen':              return handleSaveExamen(params, ss);
       case 'uploadExamDoc':           return handleUploadExamDoc(params, ss);

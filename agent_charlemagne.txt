@@ -1,0 +1,164 @@
+@echo off
+title Agent Charlemagne HECG
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((Get-Content -Raw -Encoding UTF8 '%~f0') -split '#PSSTART#',2)[1]"
+pause
+exit /b
+#PSSTART#
+# ═══════════════════════════════════════════════════════════════════════════
+#  AGENT CHARLEMAGNE — CRM HECG (généré par le CRM, ne pas partager : contient la clé de l'agent)
+#  Lit la file d'attente du CRM et crée les élèves dans Charlemagne par pilotage d'écran.
+#  À lancer d'un double-clic sur le PC où Charlemagne (Administratif) est ouvert, plein écran.
+#  Pendant une saisie (~1 min), NE PAS TOUCHER à la souris ni au clavier.
+#  Arrêt : fermer cette fenêtre.
+# ═══════════════════════════════════════════════════════════════════════════
+$API   = "__API__"
+$CLE   = "__CLE__"
+$POSTE = $env:COMPUTERNAME
+$ATTENTE_S = 20          # intervalle entre deux consultations de la file
+$PREAVIS_S = 10          # compte à rebours avant de prendre la main sur l'écran
+
+Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+if (-not ("CW" -as [type])) {
+Add-Type @"
+using System;using System.Text;using System.Collections.Generic;using System.Runtime.InteropServices;
+public class CW{
+ public delegate bool EP(IntPtr h,IntPtr l);
+ [DllImport("user32.dll")]public static extern bool EnumWindows(EP f,IntPtr l);
+ [DllImport("user32.dll")]public static extern bool EnumChildWindows(IntPtr p,EP f,IntPtr l);
+ [DllImport("user32.dll")]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);
+ [DllImport("user32.dll")]public static extern int GetClassName(IntPtr h,StringBuilder s,int n);
+ [DllImport("user32.dll")]public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out R r);
+ [DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
+ [DllImport("user32.dll")]public static extern bool SetProcessDPIAware();
+ [DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);
+ [DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")]public static extern void mouse_event(uint f,int x,int y,uint d,IntPtr e);
+ [DllImport("user32.dll")]public static extern void keybd_event(byte k,byte s,uint f,IntPtr e);
+ [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")]public static extern bool AttachThreadInput(uint a,uint b,bool f);
+ [DllImport("kernel32.dll")]public static extern uint GetCurrentThreadId();
+ [DllImport("user32.dll")]public static extern bool BringWindowToTop(IntPtr h);
+ [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);
+ public struct R{public int L,T,Rt,B;}
+ public static List<IntPtr> Tops(uint pid){var l=new List<IntPtr>();EnumWindows((h,x)=>{uint p;GetWindowThreadProcessId(h,out p);if(p==pid&&IsWindowVisible(h))l.Add(h);return true;},IntPtr.Zero);return l;}
+ public static List<IntPtr> Kids(IntPtr w){var l=new List<IntPtr>();EnumChildWindows(w,(h,x)=>{l.Add(h);return true;},IntPtr.Zero);return l;}
+ public static string Txt(IntPtr h){var s=new StringBuilder(512);GetWindowText(h,s,512);return s.ToString();}
+ public static string Cls(IntPtr h){var s=new StringBuilder(256);GetClassName(h,s,256);return s.ToString();}
+}
+"@
+}
+[CW]::SetProcessDPIAware() | Out-Null
+
+function Log($t, $c = "Gray") { Write-Host ("[" + (Get-Date -Format "HH:mm:ss") + "] " + $t) -ForegroundColor $c }
+function Api($corps) {
+  $corps.action = "charlAgent"; $corps.cle = $CLE; $corps.poste = $POSTE
+  $json = $corps | ConvertTo-Json -Depth 6 -Compress
+  $r = Invoke-WebRequest -Uri $API -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType "text/plain;charset=utf-8" -UseBasicParsing -TimeoutSec 60
+  return ($r.Content | ConvertFrom-Json)
+}
+function CPid { $p = Get-Process Administratif -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { return $p.Id } else { return 0 } }
+function Fenetres { $id = CPid; if (-not $id) { return @() }; [CW]::Tops($id) | ForEach-Object { $r = New-Object CW+R; [CW]::GetWindowRect($_, [ref]$r) | Out-Null; [pscustomobject]@{ H = $_; Titre = [CW]::Txt($_); X = $r.L; Y = $r.T; W = $r.Rt - $r.L; Ht = $r.B - $r.T } } }
+function Fen($titre, $attente = 8) { for ($i = 0; $i -lt ($attente * 4); $i++) { $f = Fenetres | Where-Object { $_.Titre -like $titre } | Select-Object -First 1; if ($f) { return $f }; Start-Sleep -Milliseconds 250 }; return $null }
+function Focus($h) {
+  $fg = [CW]::GetForegroundWindow(); $p = 0; $t1 = [CW]::GetWindowThreadProcessId($fg, [ref]$p); $t2 = [CW]::GetCurrentThreadId()
+  [CW]::AttachThreadInput($t2, $t1, $true) | Out-Null; [CW]::keybd_event(0x12, 0, 0, [IntPtr]::Zero); [CW]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
+  [CW]::BringWindowToTop($h) | Out-Null; [CW]::SetForegroundWindow($h) | Out-Null; [CW]::AttachThreadInput($t2, $t1, $false) | Out-Null; Start-Sleep -Milliseconds 300
+}
+# Toute action n'est faite que si Charlemagne est au premier plan (sinon arrêt : l'utilisateur a repris la main)
+function Garde($h) {
+  for ($i = 0; $i -lt 4; $i++) { $fg = [CW]::GetForegroundWindow(); $p = 0; [CW]::GetWindowThreadProcessId($fg, [ref]$p) | Out-Null; if ($p -eq (CPid)) { return }; Focus $h }
+  throw "Charlemagne n'est plus au premier plan (quelqu'un utilise le PC ?) - saisie interrompue."
+}
+function Clic($h, $x, $y, $ms = 600) { Garde $h; [CW]::SetCursorPos($x, $y) | Out-Null; Start-Sleep -Milliseconds 80; [CW]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); [CW]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds $ms }
+function DblClic($h, $x, $y, $ms = 900) { Clic $h $x $y 120; [CW]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); [CW]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds $ms }
+function Touches($h, $k, $ms = 400) { Garde $h; [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds $ms }
+function SK($t) { return ([string]$t -replace '([+^%~(){}\[\]])', '{$1}') }   # texte littéral pour SendKeys
+function Champ($h, $x, $y, $t, $suite = "") { Clic $h $x $y 250; Touches $h "{END}+{HOME}{BACKSPACE}" 150; Touches $h ((SK $t) + $suite) 450 }
+# Message d'une boîte de dialogue Windows / WinDev ouverte par Charlemagne (texte des contrôles)
+function MessageOuvert {
+  $mains = @("2026-2027*", "Création d'un élève", "Visualisation des familles", "Recherche d'une famille")
+  foreach ($f in Fenetres) {
+    if ($mains | Where-Object { $f.Titre -like $_ }) { continue }
+    if ($f.W -gt 900) { continue }
+    $t = ([CW]::Kids($f.H) | ForEach-Object { [CW]::Txt($_) } | Where-Object { $_ -and $_.Length -gt 3 }) -join " "
+    if (-not $t) { $t = $f.Titre }
+    return [pscustomobject]@{ H = $f.H; Texte = $t.Trim() }
+  }
+  return $null
+}
+function Preavis($j) {
+  $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true
+  $n.ShowBalloonTip(8000, "Agent Charlemagne", "Création de $($j.donnees.prenom) $($j.donnees.nom) dans $PREAVIS_S s : ne touchez plus à la souris ni au clavier.", "Warning")
+  for ($s = $PREAVIS_S; $s -gt 0; $s--) { Write-Host -NoNewline "`r   Saisie dans $s s... (ne touchez plus au PC)   " -ForegroundColor Yellow; Start-Sleep 1 }
+  Write-Host ""; $n.Dispose()
+}
+
+# ── Parcours validé le 23/11/2026 (Charlemagne plein écran 1904×1235, mise à l'échelle Windows 100 %) ──
+function Creer($D) {
+  $main = Fen "2026-2027*" 2
+  if (-not $main) { throw "Charlemagne n'est pas ouvert (fenêtre principale introuvable)." }
+  if ($main.W -lt 1800 -or $main.Ht -lt 1150) { throw "Charlemagne doit être en plein écran (taille actuelle $($main.W)x$($main.Ht))." }
+  Focus $main.H
+  # 1. Administration › Familles › Familles
+  Clic $main.H 264 64 900
+  [CW]::SetCursorPos(500, 138) | Out-Null; Start-Sleep -Milliseconds 400
+  Clic $main.H 545 140 2500
+  $rf = Fen "Recherche d'une famille" 10; if (-not $rf) { throw "Fenêtre « Recherche d'une famille » non ouverte." }
+  # 2. recherche par NOM (SANS pour « SANS ENTREPRISE », sinon nom du maître d'apprentissage)
+  Clic $rf.H ($rf.X + 600) ($rf.Y + 144) 300
+  Touches $rf.H "{END}+{HOME}{BACKSPACE}" 200
+  Touches $rf.H ((SK $D.famille.nom) + "{ENTER}") 3000
+  $m = MessageOuvert; if ($m) { Touches $m.H "{ENTER}" 500; throw "Recherche de la famille « $($D.famille.nom) » : $($m.Texte)" }
+  Clic $rf.H ($rf.X + 1405) ($rf.Y + 725) 3000     # ✓ : ouvre la famille sélectionnée (1re ligne)
+  $vf = Fen "Visualisation des familles" 10
+  if (-not $vf) { $m = MessageOuvert; if ($m) { Touches $m.H "{ENTER}" 500 }; Touches $rf.H "{ESC}" 500; throw "Fiche famille « $($D.famille.nom) » introuvable dans Charlemagne" + $(if ($D.alternant) { " : créez la fiche famille du maître d'apprentissage à la main, puis relancez depuis le CRM." } else { "." }) }
+  # 3. Créer un élève depuis la famille
+  Clic $vf.H 1683 258 4000
+  $ce = Fen "Création d'un élève" 10; if (-not $ce) { throw "Fenêtre « Création d'un élève » non ouverte." }
+  $h = $ce.H
+  Champ $h 443 249 $D.nom
+  Champ $h 443 323 $D.prenom
+  Champ $h 320 526 $D.naissanceDate "{TAB}"
+  if ($D.naissancePays) { Champ $h 330 560 $D.naissancePays "{TAB}"; Start-Sleep -Milliseconds 800 }
+  if ($D.naissanceLieu) { Champ $h 620 635 $D.naissanceLieu }
+  if ($D.tel) { Champ $h 403 811 $D.tel }
+  if ($D.mail) { Champ $h 488 848 $D.mail }
+  Champ $h 318 951 $D.dateEntree "{TAB}"; Start-Sleep -Milliseconds 800
+  Champ $h 317 986 $D.classe "{TAB}"; Start-Sleep -Milliseconds 1500
+  $m = MessageOuvert; if ($m) { Touches $m.H "{ENTER}" 600; throw "Saisie refusée par Charlemagne : $($m.Texte)" }
+  # 4. Liens avec les responsables : Lien = Entreprise, Nature = Responsable légal 1
+  Clic $h 1281 1026 1000; Clic $h 1166 949 900
+  DblClic $h 1400 1026 1200; Touches $h "{DOWN}" 700; Touches $h "{DOWN}" 700
+  # 5. Régime = EXT - Externe
+  Clic $h 430 1092 900; Touches $h "{DOWN}" 500; Touches $h "{DOWN}" 500; Touches $h "{ENTER}" 800
+  $m = MessageOuvert; if ($m) { Touches $m.H "{ENTER}" 600; throw "Charlemagne : $($m.Texte)" }
+  # 6. Validation (coche verte, deux fois si la 1re ne ferme pas la fenêtre)
+  Clic $h 1772 1036 4000
+  if (Fen "Création d'un élève" 1) { $m = MessageOuvert; if ($m) { Touches $m.H "{ENTER}" 800; throw "Validation refusée : $($m.Texte)" }; Clic $h 1772 1038 5000 }
+  if (Fen "Création d'un élève" 1) { $m = MessageOuvert; $t = if ($m) { $m.Texte } else { "la fenêtre de création est restée ouverte" }; throw "Élève non créé : $t (fiche laissée ouverte pour correction)." }
+  # 7. Fermer la fiche famille
+  $vf2 = Fen "Visualisation des familles" 2; if ($vf2) { Clic $vf2.H 1820 1175 1500 }
+}
+
+Clear-Host
+Log "Agent Charlemagne HECG démarré sur $POSTE" "Cyan"
+Log "Charlemagne doit être ouvert en plein écran. Fermez cette fenêtre pour arrêter l'agent." "Cyan"
+try { $p = Api @{ op = "ping" }; if (-not $p.success) { Log ("CRM : " + $p.message) "Red"; exit } ; Log "Connecté au CRM : $($p.enAttente) demande(s) en attente." "Green" } catch { Log ("CRM injoignable : " + $_.Exception.Message) "Red" }
+while ($true) {
+  try {
+    if (-not (CPid)) { Write-Host -NoNewline "`r   Charlemagne fermé : en attente de son ouverture...   "; Start-Sleep $ATTENTE_S; continue }
+    $r = Api @{ op = "suivant" }
+    if ($r.success -and $r.job) {
+      $j = $r.job; Write-Host ""; Log "Demande : $($j.donnees.prenom) $($j.donnees.nom) ($($j.donnees.classe))" "Yellow"
+      Preavis $j
+      $ok = $false; $msg = ""
+      try { Creer $j.donnees; $ok = $true; $msg = "Élève créé dans Charlemagne (famille " + $j.donnees.famille.nom + "). Photo et identifiant à compléter dans Charlemagne / le CRM." }
+      catch { $msg = $_.Exception.Message }
+      $rr = Api @{ op = "resultat"; jobId = $j.id; ok = $ok; message = $msg; photo = "" }
+      if ($ok) { Log "OK - $msg" "Green" } else { Log "ECHEC - $msg" "Red" }
+      [System.Media.SystemSounds]::Asterisk.Play()
+    } else { Write-Host -NoNewline ("`r   " + (Get-Date -Format "HH:mm:ss") + " - aucune demande en attente   ") }
+  } catch { Write-Host ""; Log ("Erreur : " + $_.Exception.Message) "Red" }
+  Start-Sleep $ATTENTE_S
+}

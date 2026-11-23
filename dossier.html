@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <script src="auth-fetch.js?v=2"></script><script src="hecg-skins.js?v=1"></script>
+    <script src="auth-fetch.js?v=2"></script><script src="hecg-skins.js?v=2"></script>
     <meta charset="UTF-8">
     <title>Dossier Étudiant - HECG</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -52,6 +52,10 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
                 <div class="space-y-6">
+                    <div id="cptCard" class="hidden bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
+                        <h3 class="font-black text-gray-800 mb-4 border-b pb-2">🪪 Comptes de l'étudiant</h3>
+                        <div id="cptCorps"></div>
+                    </div>
                     <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                         <h3 class="font-black text-gray-800 mb-6 border-b pb-2">📞 Coordonnées</h3>
                         <p class="text-sm font-bold text-gray-600 mb-2">✉️ <a href="" id="etuMail" class="font-normal text-blue-500 hover:underline">...</a></p>
@@ -412,6 +416,119 @@
 }
         let currentUser = null;
         let studentId = null;
+        // ══ Comptes du nouvel étudiant : Charlemagne / Google Workspace (comptes_etudiants.gs) ══
+        let _cpt = null, _cptTimer = null, _cptDonnees = null;
+        const cptEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        async function loadComptes(avecWs) {
+            if (!currentUser || currentUser.role === 'Etudiant' || !studentId) return;
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'etat', etuId: studentId, avecWs: avecWs !== false });
+            const box = document.getElementById('cptCard');
+            if (!r.success || !r.inscrit || (!r.peutCharl && !r.peutWs)) { box.classList.add('hidden'); return; }
+            _cpt = r; box.classList.remove('hidden'); renderComptes();
+            clearTimeout(_cptTimer);
+            if (r.charl && (r.charl.statut === 'En attente' || r.charl.statut === 'En cours')) _cptTimer = setTimeout(() => loadComptes(false), 15000);
+        }
+        function renderComptes() {
+            const r = _cpt; if (!r) return;
+            const c = r.charl, bloc = (t, corps) => `<div class="p-4 rounded-2xl border border-gray-100 bg-gray-50 mb-3"><h4 class="text-[11px] font-black text-[#1A4E8A] uppercase tracking-widest mb-2">${t}</h4>${corps}</div>`;
+            let ch = '';
+            if (r.peutCharl) {
+                let etat = '';
+                if (r.idEleve) etat = `<p class="text-sm font-bold text-green-700">✅ Présent dans Charlemagne · Identifiant ${cptEsc(r.idEleve)}</p>`;
+                else if (c && c.statut === 'En attente') etat = `<p class="text-sm font-bold text-amber-700">⏳ En attente${c.position > 1 ? ' (' + c.position + 'e dans la file)' : ''} — demandée le ${cptEsc(c.le)}</p><p class="text-xs text-gray-500 mt-1">L'agent Charlemagne doit tourner sur un PC où <b>Charlemagne est ouvert en plein écran</b>. La fiche se mettra à jour toute seule.</p><button onclick="cptAnnuler('${cptEsc(c.id)}')" class="mt-2 text-[11px] font-bold text-red-600 hover:underline">Annuler la demande</button>`;
+                else if (c && c.statut === 'En cours') etat = `<p class="text-sm font-bold text-blue-700">⚙️ Saisie en cours dans Charlemagne sur ${cptEsc(c.poste || 'le PC')}…</p>`;
+                else if (c && c.statut === 'Créé') etat = `<p class="text-sm font-bold text-green-700">✅ Créé dans Charlemagne le ${cptEsc(c.traite)}${c.idCharl ? ' · Id ' + cptEsc(c.idCharl) : ''}</p><p class="text-xs text-gray-500 mt-1">${cptEsc(c.message)}</p>`;
+                else if (c && c.statut === 'Échec') etat = `<p class="text-sm font-bold text-red-600">❌ Non créé (${cptEsc(c.traite)})</p><p class="text-xs text-red-600 mt-1">${cptEsc(c.message)}</p>`;
+                else etat = `<p class="text-sm text-gray-500">Pas encore créé dans Charlemagne.</p>`;
+                const peutDemander = !r.idEleve && !(c && (c.statut === 'En attente' || c.statut === 'En cours'));
+                ch = bloc('🏫 Charlemagne', etat + `<div class="flex flex-wrap gap-2 mt-3">
+                    ${peutDemander ? `<button onclick="cptCharlOuvrir()" class="bg-[#1A4E8A] text-white px-3 py-2 rounded-xl text-[11px] font-black uppercase hover:opacity-90">${c && c.statut === 'Échec' ? '↻ Relancer la création' : '➕ Créer dans Charlemagne'}</button>` : ''}
+                    ${!r.idEleve ? `<button onclick="cptIdManuel()" class="bg-white border border-gray-200 px-3 py-2 rounded-xl text-[11px] font-bold hover:bg-gray-100">✍️ Déjà créé : saisir l'Id</button>` : ''}
+                    <button onclick="cptAgent()" class="bg-white border border-gray-200 px-3 py-2 rounded-xl text-[11px] font-bold hover:bg-gray-100" title="Programme à lancer sur le PC où Charlemagne est ouvert">⬇ Agent Charlemagne</button></div>`);
+            }
+            let ws = '';
+            if (r.peutWs) {
+                const w = r.ws || {};
+                let etat = '';
+                if (!r.mailHecg) etat = `<p class="text-sm text-amber-700 font-bold">⚠ Adresse mail domaine non renseignée</p><p class="text-xs text-gray-500 mt-1">Renseignez d'abord l'adresse @hecg.fr de l'étudiant dans sa fiche.</p>`;
+                else if (w.statut === 'existe') etat = `<p class="text-sm font-bold text-green-700">✅ Compte actif : ${cptEsc(r.mailHecg)}</p><p class="text-xs text-gray-500">Unité ${cptEsc(w.ou)}${w.cree ? ' · créé le ' + cptEsc(w.cree.split('-').reverse().join('/')) : ''}</p>`;
+                else if (w.statut === 'suspendu') etat = `<p class="text-sm font-bold text-amber-700">⏸ Compte suspendu : ${cptEsc(r.mailHecg)}</p>`;
+                else if (w.statut === 'absent') etat = `<p class="text-sm text-gray-600">Aucun compte pour <b>${cptEsc(r.mailHecg)}</b>.</p><button onclick="cptWsCreer()" class="mt-3 bg-[#F26522] text-white px-3 py-2 rounded-xl text-[11px] font-black uppercase hover:opacity-90">➕ Créer le compte Google Workspace</button>`;
+                else if (w.statut === 'erreur') etat = `<p class="text-xs text-red-600">${cptEsc(w.message)}</p>`;
+                else etat = `<p class="text-xs text-gray-400">Vérification…</p>`;
+                ws = bloc('✉️ Google Workspace', etat + `<p class="text-[10px] text-gray-400 mt-2">Création directe par le CRM avec les droits d'administration Google Workspace de l'école : inutile d'ouvrir la console d'administration.</p><div id="cptMdp"></div>`);
+            }
+            document.getElementById('cptCorps').innerHTML = ch + ws;
+        }
+        async function cptCharlOuvrir() {
+            const m = document.getElementById('cptModal'); m.classList.remove('hidden');
+            document.getElementById('cptModalCorps').innerHTML = '<p class="text-center text-gray-400 py-8">Préparation des données (lecture du dossier de candidature)…</p>';
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'charlPreparer', etuId: studentId });
+            if (!r.success) { document.getElementById('cptModalCorps').innerHTML = `<p class="text-red-600 font-bold py-6">${cptEsc(r.message)}</p>`; return; }
+            const D = _cptDonnees = r.donnees;
+            const ch = (k, l, v, ph, w) => `<div style="${w ? 'grid-column:span ' + w : ''}"><label class="block text-[10px] uppercase font-black text-gray-400 mb-1">${l}</label><input id="cpt_${k}" value="${cptEsc(v)}" placeholder="${cptEsc(ph || '')}" class="w-full border border-gray-200 p-2 rounded-lg text-sm"></div>`;
+            document.getElementById('cptModalCorps').innerHTML = `
+                <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold mb-4">⚠ Charlemagne doit être <u>ouvert en plein écran</u> sur le PC où tourne l'agent Charlemagne. Pendant la saisie (~1 min), personne ne doit toucher à ce PC. Si Charlemagne est fermé, la demande attend et pourra être traitée plus tard.</div>
+                ${r.doublon ? `<div class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold mb-4">${cptEsc(r.doublon)}</div>` : ''}
+                <div class="grid grid-cols-2 gap-3">
+                  ${ch('nom', 'Nom', D.nom)}${ch('prenom', 'Prénom', D.prenom)}
+                  ${ch('tel', 'Téléphone', D.tel)}${ch('mail', 'Mail personnel', D.mail)}
+                  ${ch('classe', 'Classe Charlemagne', D.classe)}${ch('dateEntree', "Date d'entrée", D.dateEntree, 'jj/mm/aaaa')}
+                  ${ch('naissanceDate', 'Date de naissance', D.naissanceDate, 'jj/mm/aaaa')}${ch('naissanceLieu', 'Lieu de naissance', D.naissanceLieu)}
+                  ${ch('naissancePays', 'Pays de naissance (code INSEE, vide = France)', D.naissancePays, 'ex : 350 = Maroc', 2)}
+                </div>
+                <p class="text-[11px] text-gray-500 mt-2">Naissance : ${cptEsc(D.naissanceSource || '')}</p>
+                <div class="mt-4 p-3 rounded-xl bg-blue-50 border border-blue-100 text-sm">
+                  <b class="text-[#1A4E8A]">Fiche famille :</b> ${D.alternant ? `alternant chez <b>${cptEsc(D.entreprise)}</b> — famille au nom du maître d'apprentissage :` : 'pas d\'alternance — rattachement à <b>SANS ENTREPRISE</b>.'}
+                  ${D.alternant ? `<div class="grid grid-cols-2 gap-3 mt-2">${ch('famNom', 'Nom du MA', D.famille ? D.famille.nom : '')}${ch('famPrenom', 'Prénom du MA', D.famille ? D.famille.prenom : '')}</div><p class="text-[11px] text-gray-500 mt-1">La fiche famille du MA doit exister dans Charlemagne (sinon l'agent s'arrête et le signale).</p>` : ''}
+                  <p class="text-[11px] text-gray-500 mt-2">Lien : Entreprise · Nature : Responsable légal 1 · Régime : Externe</p>
+                </div>
+                <div class="flex justify-end gap-2 mt-5"><button onclick="document.getElementById('cptModal').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-gray-100 font-bold text-sm">Annuler</button>
+                  <button onclick="cptCharlEnvoyer()" class="px-4 py-2 rounded-xl bg-[#1A4E8A] text-white font-black text-sm">Envoyer à Charlemagne</button></div>`;
+        }
+        async function cptCharlEnvoyer() {
+            const v = k => (document.getElementById('cpt_' + k) || {}).value || '';
+            const D = Object.assign({}, _cptDonnees);
+            ['nom', 'prenom', 'tel', 'mail', 'classe', 'dateEntree', 'naissanceDate', 'naissanceLieu', 'naissancePays'].forEach(k => D[k] = v(k).trim());
+            D.nom = D.nom.toUpperCase(); D.naissanceLieu = D.naissanceLieu.toUpperCase();
+            if (D.alternant) D.famille = { nom: v('famNom').trim().toUpperCase(), prenom: v('famPrenom').trim() };
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'charlDemander', etuId: studentId, donnees: JSON.stringify(D) });
+            if (!r.success) return alert(r.message);
+            document.getElementById('cptModal').classList.add('hidden');
+            loadComptes(false);
+        }
+        async function cptAnnuler(id) {
+            if (!confirm('Annuler la demande de création dans Charlemagne ?')) return;
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'charlAnnuler', etuId: studentId, jobId: id });
+            if (!r.success) alert(r.message); loadComptes(false);
+        }
+        async function cptIdManuel() {
+            const id = prompt("Identifiant Charlemagne de l'élève (fiche élève › Id) :"); if (!id) return;
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'charlIdManuel', etuId: studentId, idCharl: id });
+            if (!r.success) return alert(r.message); loadComptes(false);
+        }
+        async function cptAgent() {
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'agentTelecharger', etuId: studentId });
+            if (!r.success) return alert(r.message);
+            const t = await (await fetch('agent_charlemagne.txt?v=' + Date.now())).text();
+            const contenu = t.replace('__API__', API_URL).replace('__CLE__', r.cle).replace(/\r?\n/g, '\r\n');
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([contenu], { type: 'application/octet-stream' }));
+            a.download = 'Agent Charlemagne HECG.cmd'; a.click();
+            alert("Agent téléchargé.\n\n1. Placez « Agent Charlemagne HECG.cmd » sur le bureau du PC où Charlemagne est installé.\n2. Ouvrez Charlemagne en plein écran, puis double-cliquez sur l'agent (si Windows affiche un avertissement : « Informations complémentaires » › « Exécuter quand même »).\n3. Laissez sa fenêtre ouverte : il traite les demandes en attente toutes les 20 s.\n\nCe fichier contient la clé d'accès de l'agent : ne le partagez pas.");
+        }
+        async function cptWsCreer() {
+            if (!_cpt || !_cpt.mailHecg) return;
+            if (!confirm(`Créer le compte Google Workspace ${_cpt.mailHecg} ?`)) return;
+            const r = await apiPost({ action: 'comptesEtudiant', op: 'wsCreer', etuId: studentId });
+            if (!r.success) return alert(r.message);
+            _cpt.ws = { statut: 'existe', ou: r.ou, cree: new Date().toISOString().slice(0, 10) }; renderComptes();
+            document.getElementById('cptMdp').innerHTML = `<div class="mt-3 p-3 rounded-xl bg-green-50 border border-green-200 text-sm">
+                <p class="font-black text-green-800">Compte créé : ${cptEsc(r.email)}</p>
+                <p class="mt-1">Mot de passe provisoire : <code id="cptMdpVal" class="font-black text-base bg-white px-2 py-0.5 rounded border">${cptEsc(r.motDePasse)}</code>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('cptMdpVal').innerText);this.innerText='Copié ✓'" class="ml-2 text-[11px] font-bold text-[#1A4E8A] hover:underline">Copier</button></p>
+                <p class="text-[11px] text-green-800 mt-1">À transmettre à l'étudiant : il devra le changer à sa 1re connexion. Ce mot de passe ne sera plus affiché.</p></div>`;
+        }
+
 
         // --- GESTION DE LA SÉCURITÉ ---
        window.onload = () => {
@@ -546,6 +663,7 @@
                     }
 
                     renderCvSite(p.cvSite);
+                    if (!silencieux) loadComptes();
                     if(p.cv && p.cv.startsWith('http')) {
                         document.getElementById('etuCV').href = p.cv;
                         document.getElementById('etuCV').classList.remove('hidden');
@@ -1536,5 +1654,11 @@
         }
     </script>
 <script>(function(){var SIX_H=6*60*60*1000;function touch(){localStorage.setItem('_lastAct',Date.now());}function check(){var t=parseInt(localStorage.getItem('_lastAct')||'0',10);if(t&&Date.now()-t>SIX_H){localStorage.clear();window.location.href='index.html';}}touch();['click','keydown','mousemove','touchstart'].forEach(function(e){document.addEventListener(e,touch,true);});setInterval(check,60000);})();</script>
+<div id="cptModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+    <h3 class="font-black text-[#1A4E8A] text-lg mb-4">🏫 Création dans Charlemagne</h3>
+    <div id="cptModalCorps"></div>
+  </div>
+</div>
 </body>
 </html>

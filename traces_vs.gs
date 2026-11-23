@@ -70,7 +70,7 @@ function _vsTraceCible_(params) {
 function _vsTracer_(params, out, ms) {
   try {
     var action = String(params.action || ""), page = String(params._page || "");
-    if (!action || action === "login") return;
+    if (!action || action === "login" || action === "getPresence") return;
     var vs = /^vie_scolaire/i.test(page) || /rdv|visiteur/i.test(action);
     if (!vs) return;
     var S = __TRACE_SESSION__ || {}, auteur = S.nom || S.email || params.nomAuteur || params.emailAuteur || "Inconnu";
