@@ -27,14 +27,14 @@
   function rendre() {
     if (!box) {
       box = document.createElement("div"); box.id = "hecgPresence";
-      box.style.cssText = "position:fixed;left:76px;bottom:18px;z-index:9980;font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif";
+      box.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:45;font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif";
       document.body.appendChild(box);
     }
     var n = liste.length;
-    if (!n) { box.innerHTML = ""; return; }
     var pastille = '<button onclick="window.__presBascule()" style="display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #dfe6f0;background:#fff;box-shadow:0 8px 22px -12px rgba(14,26,43,.45);font-weight:800;font-size:12.5px;color:#1A4E8A;cursor:pointer">'
-      + '<span style="width:9px;height:9px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px #d1fae5"></span>👥 ' + n + ' collègue' + (n > 1 ? 's' : '') + ' en ligne</button>';
-    var panneau = ouvert ? '<div style="position:absolute;bottom:48px;left:0;width:330px;max-height:60vh;overflow:auto;background:#fff;border:1px solid #e6ecf4;border-radius:16px;box-shadow:0 18px 40px -18px rgba(14,26,43,.5);padding:12px">'
+      + (n ? '<span style="width:9px;height:9px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px #d1fae5"></span>👥 ' + n + ' collègue' + (n > 1 ? 's' : '') + ' en ligne'
+         : '<span style="width:9px;height:9px;border-radius:50%;background:#94a3b8;box-shadow:0 0 0 3px #e2e8f0"></span><span style="color:#64748b">👤 Personne d’autre en ligne</span>') + '</button>';
+    var panneau = ouvert ? '<div style="position:absolute;bottom:48px;right:0;width:330px;max-height:60vh;overflow:auto;background:#fff;border:1px solid #e6ecf4;border-radius:16px;box-shadow:0 18px 40px -18px rgba(14,26,43,.5);padding:12px">'
       + '<div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#7d8a9c;margin:0 4px 8px">Actuellement connectés</div>'
       + liste.map(function (x) {
           var ini = String(x.nom || "?").split(/\s+/).map(function (w) { return w.charAt(0); }).join("").slice(0, 2).toUpperCase();
@@ -45,7 +45,7 @@
             + '<div style="font-size:12px;color:#334155">' + esc(x.page) + (x.module ? ' › <b>' + esc(x.module) + '</b>' : '') + '</div>'
             + (x.detail ? '<div style="font-size:11.5px;color:#64748b">' + esc(x.detail) + '</div>' : '')
             + '<div style="font-size:10.5px;color:#94a3b8">' + (x.il < 60 ? "à l'instant" : "il y a " + Math.round(x.il / 60) + " min") + (memeEndroit ? ' · <b style="color:#c2410c">même écran que vous</b>' : '') + '</div></div></div>';
-        }).join("") + '</div>' : "";
+        }).join("") + (n ? '' : '<div style="padding:10px 8px;font-size:12.5px;color:#64748b">Vous êtes seul(e) connecté(e) au CRM pour le moment.</div>') + '</div>' : "";
     box.innerHTML = '<div style="position:relative">' + panneau + pastille + '</div>';
   }
   window.__presBascule = function () { ouvert = !ouvert; rendre(); };

@@ -9,7 +9,7 @@
 (function () {
   if (window.HECG_SKINS) return;
   // présence du personnel (qui est connecté, sur quel module) — presence.js
-  try { if (!document.getElementById("hecgPresenceJs")) { var sp = document.createElement("script"); sp.id = "hecgPresenceJs"; sp.src = "presence.js?v=1"; sp.defer = true; (document.head || document.documentElement).appendChild(sp); } } catch (eP) {}
+  try { if (!document.getElementById("hecgPresenceJs")) { var sp = document.createElement("script"); sp.id = "hecgPresenceJs"; sp.src = "presence.js?v=2"; sp.defer = true; (document.head || document.documentElement).appendChild(sp); } } catch (eP) {}
   var API = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
   var K_SKIN = "hecg_skin", K_ELIG = "hecg_skin_elig", TTL = 6 * 3600 * 1000;
   var THEMES = [
