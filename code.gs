@@ -1761,7 +1761,7 @@ function calculerScoreQuotidienEntreprises() {
   const tz = Session.getScriptTimeZone();
   const todayStr = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(20000)) return;
+  if (!lock.tryLock(20000)) throw new Error("score entreprises : verrou occupé, nouvel essai au prochain passage");
   try {
     const ws = _getOrCreateScoreEntreprisesSheet(ss);
     const lastRow = ws.getLastRow();
@@ -1822,9 +1822,9 @@ function _scoreEntreprisesAuto_() {
   const tz = Session.getScriptTimeZone(), now = new Date();
   if (Number(Utilities.formatDate(now, tz, "H")) < 5) return;
   const jour = Utilities.formatDate(now, tz, "yyyy-MM-dd"), props = PropertiesService.getScriptProperties();
-  if (props.getProperty("SCORE_ENT_JOUR") === jour) return;
-  props.setProperty("SCORE_ENT_JOUR", jour);
+  if (props.getProperty("SCORE_ENT_JOUR_V2") === jour) return;
   calculerScoreQuotidienEntreprises();
+  props.setProperty("SCORE_ENT_JOUR_V2", jour);   // seulement après un calcul réussi
 }
 
 /**
