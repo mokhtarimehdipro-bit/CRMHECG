@@ -46,6 +46,17 @@
       if (sat(c) < 0.06) el.setAttribute("data-sk-surf", "g");
       else { el.style.setProperty("--sk-sbg", Math.round(c.r) + "," + Math.round(c.g) + "," + Math.round(c.b)); el.setAttribute("data-sk-surf", "c"); }
     }
+    // fonds en dégradé clair (blanc → gris perle, pastels) : tous les points de couleur clairs
+    var img = cs.backgroundImage;
+    if (!el.hasAttribute("data-sk-surf") && img && img !== "none" && img.indexOf("gradient") > -1 && img.indexOf("url(") === -1 && !petit) {
+      var stops = img.match(/rgba?\([^)]+\)/g) || [], ok = stops.length > 0, r = 0, g = 0, bb = 0, n = 0, satMax = 0;
+      stops.forEach(function (x) { var k = rgba(x); if (!k) return; if (k.a < 0.05) return; if (lum(k) < 0.86) ok = false; satMax = Math.max(satMax, sat(k)); r += k.r; g += k.g; bb += k.b; n++; });
+      if (ok && n) {
+        el.setAttribute("data-sk-grad", "");
+        if (satMax < 0.06) el.setAttribute("data-sk-surf", "g");
+        else { el.style.setProperty("--sk-sbg", Math.round(r / n) + "," + Math.round(g / n) + "," + Math.round(bb / n)); el.setAttribute("data-sk-surf", "c"); }
+      }
+    }
     if (skin() === "nuit" && !el.hasAttribute("data-sk-line")) {
       var w = parseFloat(cs.borderTopWidth) || parseFloat(cs.borderLeftWidth) || parseFloat(cs.borderBottomWidth) || 0;
       if (w > 0) {

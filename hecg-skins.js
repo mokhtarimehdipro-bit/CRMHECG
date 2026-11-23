@@ -11,7 +11,7 @@
   // présence du personnel (qui est connecté, sur quel module) — presence.js
   try { if (!document.getElementById("hecgPresenceJs")) { var sp = document.createElement("script"); sp.id = "hecgPresenceJs"; sp.src = "presence.js?v=4"; sp.defer = true; (document.head || document.documentElement).appendChild(sp); } } catch (eP) {}
   // harmonisation des fonds / textes écrits en dur — hecg-skins-harmonie.js
-  try { if (!document.getElementById("hecgHarmonieJs")) { var sh = document.createElement("script"); sh.id = "hecgHarmonieJs"; sh.src = "hecg-skins-harmonie.js?v=1"; sh.defer = true; (document.head || document.documentElement).appendChild(sh); } } catch (eH) {}
+  try { if (!document.getElementById("hecgHarmonieJs")) { var sh = document.createElement("script"); sh.id = "hecgHarmonieJs"; sh.src = "hecg-skins-harmonie.js?v=2"; sh.defer = true; (document.head || document.documentElement).appendChild(sh); } } catch (eH) {}
   var API = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
   var K_SKIN = "hecg_skin", K_ELIG = "hecg_skin_elig", TTL = 6 * 3600 * 1000;
   var THEMES = [
@@ -53,7 +53,7 @@
     var s = lsGet(K_SKIN), u = user();
     if (u.role === "Etudiant") s = "classique";
     if (s && s !== "classique" && ids.indexOf(s) !== -1) document.documentElement.setAttribute("data-skin", s);
-    var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "hecg-skins.css?v=2";
+    var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "hecg-skins.css?v=3";
     document.head.appendChild(l);
   })();
 

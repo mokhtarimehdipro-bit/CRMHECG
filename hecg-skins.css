@@ -343,6 +343,8 @@ html[data-skin="nuit"] body:not(.no-theme) .hover\:bg-lime-50:hover { background
    HARMONISATION — fonds et textes écrits en dur (marqués par hecg-skins-harmonie.js)
    ========================================================================== */
 html[data-skin] body:not(.no-theme) [data-sk-surf="g"] { background-color: var(--sk-glass-strong) !important; }
+html[data-skin] body:not(.no-theme) [data-sk-grad] { background-image: none !important; }
+html[data-skin]:not([data-skin="nuit"]) body:not(.no-theme) [data-sk-grad][data-sk-surf="c"] { background-color: rgba(var(--sk-sbg), .85) !important; }
 html[data-skin="nuit"] body:not(.no-theme) [data-sk-surf="g"] { color: #E2E8F0; }
 html[data-skin="nuit"] body:not(.no-theme) [data-sk-surf="c"] { background-color: rgba(var(--sk-sbg), .14) !important; }
 html[data-skin="nuit"] body:not(.no-theme) [data-sk-line] { border-color: rgba(148, 163, 184, .18) !important; }
