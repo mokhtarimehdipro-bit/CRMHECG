@@ -187,7 +187,7 @@ function css() {
   .ex-dc.sel{outline:2px solid #F26522;outline-offset:1px}
   .ex-lock{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:14px 18px;font-size:13.5px;font-weight:600;margin-bottom:24px}
   .ex-edt{display:flex;gap:24px;align-items:flex-start}
-  .ex-cls{width:250px;flex-shrink:0}.ex-cls .it{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid transparent;margin-bottom:6px;transition:background .15s}
+  .ex-cls{width:190px;flex-shrink:0}.ex-cls .it{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid transparent;margin-bottom:6px;transition:background .15s}
   .ex-cls .it:hover{background:#fff}.ex-cls .it.on{background:#fff;border-color:#dfe6f0;box-shadow:0 8px 20px -14px rgba(14,26,43,.45)}
   .ex-dot{width:11px;height:11px;border-radius:4px;flex-shrink:0;display:inline-block}
   .ex-cal{flex:1;min-width:0;background:#fff;border:1px solid #e6ecf4;border-radius:20px;padding:22px 20px;overflow-x:auto;box-shadow:0 14px 34px -26px rgba(14,26,43,.35)}
@@ -201,7 +201,8 @@ function css() {
   .ex-blk.ghost{opacity:.45;pointer-events:none;border-left-style:dashed}.ex-blk.dragging{opacity:.3}
   .ex-ghost{position:fixed!important;z-index:10002;pointer-events:none;box-shadow:0 22px 44px -14px rgba(14,26,43,.55);opacity:.95;cursor:grabbing}
   .ex-gt{font-size:10.5px;font-weight:800;color:#F26522;margin-bottom:2px}
-  .ex-form{width:420px;flex-shrink:0;position:sticky;top:0}
+  .ex-form{position:fixed;top:0;right:0;bottom:0;width:460px;max-width:94vw;overflow-y:auto;z-index:9995;background:#f3f6fb;padding:16px;box-shadow:-24px 0 48px -24px rgba(14,26,43,.45);border-left:1px solid #e6ecf4}.ex-form:empty{display:none}
+  .ex-dupb{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:7px;border:1px solid #dfe6f0;background:#fff;font-size:12px;line-height:1;cursor:pointer;opacity:0;transition:opacity .15s;padding:0}.ex-blk:hover .ex-dupb{opacity:1}
   .ex-srow{border:1px solid #e6ecf4;border-radius:14px;padding:12px 14px;margin-bottom:10px;font-size:13px}
   .ex-srow.off{opacity:.55;background:#f8fafc}.ex-srow.bad{border-color:#fca5a5;background:#fef2f2}
   .ex-err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:12px;padding:12px 14px;font-size:12.5px;font-weight:600;margin:14px 0;line-height:1.6}
@@ -545,7 +546,7 @@ function vEdt() {
       const p = an.parEp[e.id] || {}, col = couleur(c), top = (h2m(e.debut) - h0()) * PPM, h = (h2m(e.fin) - h2m(e.debut)) * PPM;
       const nv = nbV[e.id] || 1, lr = nv > 1 ? `left:calc(${voie[e.id] * 100 / nv}% + 2px);right:auto;width:calc(${100 / nv}% - 4px);` : '';
       return `<div class="ex-blk ${p.c ? 'err' : p.a ? 'warn' : ''} ${X.draft && X.draft.id === e.id ? 'sel' : ''}" style="${lr}top:${top}px;height:${Math.max(h, 18)}px;background:${col}1a;border-left-color:${col}" ${ro ? `onclick="event.stopPropagation();EXSIM.editer('${e.id}')"` : `onpointerdown="EXSIM.glisser(event,'${e.id}')" onclick="event.stopPropagation()"`} title="${esc(e.matiere)} ${e.debut}–${e.fin}">
-        <b>${esc(e.matiere || 'Épreuve')}</b>${e.debut}–${e.fin}<br>${e.salles.map(sa => '🏫 ' + esc(salle(sa.id).num) + (sa.surv.length ? ' · ' + sa.surv.map(x => esc((surv(x) || { nom: '?' }).nom)).join(', ') : ' · <span style="color:#b45309">sans surveillant</span>')).join('<br>') || '<span style="color:#b45309">aucune salle</span>'}</div>`;
+        ${ro ? '' : `<button class="ex-dupb" title="Dupliquer cette épreuve" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();EXSIM.dupRapide('${e.id}')">⧉</button>`}<b>${esc(e.matiere || 'Épreuve')}</b>${e.debut}–${e.fin}<br>${e.salles.map(sa => '🏫 ' + esc(salle(sa.id).num) + (sa.surv.length ? ' · ' + sa.surv.map(x => esc((surv(x) || { nom: '?' }).nom)).join(', ') : ' · <span style="color:#b45309">sans surveillant</span>')).join('<br>') || '<span style="color:#b45309">aucune salle</span>'}</div>`;
     }).join('');
     const sv = X.draft && s.epreuves.find(e => e.id === X.draft.id);
     const ghost = X.draft && X.draft.classe === c && X.draft.jour === j && (!sv || sv.jour !== X.draft.jour || sv.debut !== X.draft.debut || sv.fin !== X.draft.fin)
@@ -573,8 +574,7 @@ function clicCal(ev, j) {
 function editer(id) { const e = S().epreuves.find(x => x.id === id); if (!e) return; X.draft = JSON.parse(JSON.stringify(e)); X.onglet = 'edt'; X.classeSel = e.classe; rendreTabs(); rendreCorps(); }
 function vForm() {
   const D = X.draft, ro = lecture();
-  if (!D) return `<div class="ex-card"><h3>Épreuve</h3><p class="text-sm text-gray-500">${ro ? 'Cliquez sur une épreuve pour voir son détail.' : 'Cliquez dans le calendrier pour créer une épreuve, ou sur une épreuve existante pour la modifier.'}</p>
-    <p class="text-xs text-gray-400 mt-2">Seules les salles libres sur le créneau et les surveillants disponibles et non affectés ailleurs peuvent être choisis.</p></div>`;
+  if (!D) return '';
   const pas = +S().pas || 15, opts = []; for (let m = h0(); m <= h1(); m += pas) opts.push(m2h(m));
   [D.debut, D.fin].forEach(h => { if (!opts.includes(h)) opts.push(h); }); opts.sort((a, b) => h2m(a) - h2m(b));
   const dis = ro ? 'disabled' : '', n = effectif(D.classe), err = erreursEpreuve(D), part = partage(D);
@@ -595,7 +595,7 @@ function vForm() {
       ${ro ? '' : `<select style="margin-top:4px;height:32px;font-size:12px" onchange="if(this.value)EXSIM.dSurv('${esc(x.id)}',this.value,true)"><option value="">+ Ajouter un surveillant (${nbOk} disponible(s))</option>${options.join('')}</select>`}</div>`;
   }).join('');
   const ex = S().epreuves.some(e => e.id === D.id);
-  return `<div class="ex-card" style="border-color:${couleur(D.classe)}"><h3>${ex ? 'Épreuve' : 'Nouvelle épreuve'} — ${esc(D.classe)}</h3>
+  return `<div class="ex-card" style="border-color:${couleur(D.classe)}"><h3 style="display:flex;align-items:center;gap:8px"><span style="flex:1">${ex ? 'Épreuve' : 'Nouvelle épreuve'} — ${esc(D.classe)}</span>${ex && !ro ? `<button class="ex-b sm" title="Dupliquer" onclick="document.getElementById('exDupBloc').scrollIntoView({behavior:'smooth'})">⧉ Dupliquer</button>` : ''}<button class="ex-b sm" title="Fermer" onclick="EXSIM.dAnnuler()">✕</button></h3>
     <label class="l" style="margin-top:0">Classe</label><select ${dis} onchange="EXSIM.dSet('classe',this.value,true)">${S().classes.map(c => `<option value="${esc(c.classe)}" ${c.classe === D.classe ? 'selected' : ''}>${esc(c.classe)} · ${effectif(c.classe)} étu.</option>`).join('')}</select>
     <label class="l">Matière / épreuve</label><input type="text" ${dis} list="exMatList" value="${esc(D.matiere)}" oninput="EXSIM.dSet('matiere',this.value)" placeholder="ex : UE 4 — Droit fiscal">
     <datalist id="exMatList">${mats.map(m => `<option value="${esc(m)}">`).join('')}</datalist>
@@ -612,12 +612,13 @@ function vForm() {
     ${ro ? '' : `<div class="flex gap-2 flex-wrap mt-3"><button class="ex-b ora" ${err.length || manq.length ? 'disabled' : ''} onclick="EXSIM.dValider()">✔ ${ex ? 'Mettre à jour' : 'Ajouter l\'épreuve'}</button>
       ${ex ? `<button class="ex-b red" onclick="EXSIM.dSupprimer()">Supprimer</button>` : ''}
       <button class="ex-b" onclick="EXSIM.dAnnuler()">Annuler</button></div>
-    ${ex ? `<div style="margin-top:22px;padding:18px;border-radius:16px;background:#f8fafd;border:1px solid #e6ecf4">
+    ${ex ? `<div id="exDupBloc" style="margin-top:22px;padding:18px;border-radius:16px;background:#f8fafd;border:1px solid #e6ecf4">
       <div class="ex-addt" style="font-size:14px">⧉ Dupliquer cette épreuve</div>
-      <p class="ex-aide" style="margin-bottom:10px">Même matière, mêmes horaires : choisissez la classe et le jour, puis affectez la salle et le surveillant.</p>
-      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
+      <p class="ex-aide" style="margin-bottom:10px">Même matière et même durée : choisissez la classe, le jour et l'heure de début, puis affectez la salle et le surveillant.</p>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 0.8fr;gap:10px">
         <select id="exDupC">${S().classes.map(c => `<option value="${esc(c.classe)}" ${c.classe === dupClasseDefaut(D) ? 'selected' : ''}>${esc(c.classe)}</option>`).join('')}</select>
-        <select id="exDupJ">${Array.from({ length: S().nbJours }, (_, j) => `<option value="${j}" ${j === D.jour ? 'selected' : ''}>${esc(libJour(j))}</option>`).join('')}</select></div>
+        <select id="exDupJ">${Array.from({ length: S().nbJours }, (_, j) => `<option value="${j}" ${j === D.jour ? 'selected' : ''}>${esc(libJour(j))}</option>`).join('')}</select>
+        <select id="exDupH">${opts.filter(h => h2m(h) + h2m(D.fin) - h2m(D.debut) <= h1()).map(h => `<option ${h === D.debut ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
       <button class="ex-b pri" style="margin-top:10px;width:100%;justify-content:center" onclick="EXSIM.dDupliquer()">⧉ Créer la copie</button></div>` : ''}`}</div>`;
 }
 function glisser(ev, id) {
@@ -705,9 +706,22 @@ function dDupliquer() {
   const src = S().epreuves.find(e => e.id === X.draft.id) || X.draft;
   const D = JSON.parse(JSON.stringify(src)); D.id = uid('E'); D._nouveau = true;
   D.classe = ($('exDupC') || {}).value || D.classe; D.jour = +(($('exDupJ') || {}).value ?? D.jour);
+  const hd = ($('exDupH') || {}).value; if (hd) { const du = h2m(D.fin) - h2m(D.debut); D.debut = hd; D.fin = m2h(h2m(hd) + du); }
+  ouvrirCopie(D);
+}
+// Copie rapide depuis le calendrier : même classe, même jour, juste après l'original (ou même horaire si la journée est finie)
+function dupRapide(id) {
+  if (lecture()) return;
+  const src = S().epreuves.find(e => e.id === id); if (!src) return;
+  const D = JSON.parse(JSON.stringify(src)); D.id = uid('E'); D._nouveau = true;
+  const du = h2m(src.fin) - h2m(src.debut);
+  if (h2m(src.fin) + du <= h1()) { D.debut = src.fin; D.fin = m2h(h2m(src.fin) + du); }
+  ouvrirCopie(D);
+}
+function ouvrirCopie(D) {
   // on garde la salle et les surveillants seulement s'ils sont libres sur le nouveau créneau
   D.salles = D.salles.filter(sa => etatSalle(sa.id, D).ok).map(sa => ({ id: sa.id, surv: sa.surv.filter(v => etatSurv(v, D, sa.id).ok) }));
-  X.draft = D; X.classeSel = D.classe; rendreCorps();
+  X.draft = D; X.classeSel = D.classe; X.onglet = 'edt'; rendreTabs(); rendreCorps();
   msg(`Copie pour ${D.classe} (${libJour(D.jour)} ${D.debut}–${D.fin}) : choisissez la salle et le surveillant, puis validez.`);
 }
 
@@ -1317,7 +1331,7 @@ async function pdfEmargement() {
 
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
   set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispo, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
-  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer,
+  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide,
   jourVue: k => { X.jourVue = k; rendreCorps(); }, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
   prm, calculer, abandonProp, appliquer, retirerOptim, voirPlan, exportExcel, pdfEtat, pdfPlans, pdfRepartition, pdfEmargement };
