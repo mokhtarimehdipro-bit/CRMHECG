@@ -100,7 +100,6 @@ function erreursEpreuve(D) {
   if (!(a1 > a0)) err.push('L\'heure de fin doit être après l\'heure de début.');
   if (a0 < h0() || a1 > h1()) err.push(`L'épreuve sort de la plage horaire de la simulation (${S().hDebut}–${S().hFin}).`);
   if (D.jour >= S().nbJours) err.push('Jour hors de la semaine.');
-  for (const e of S().epreuves) if (e.id !== D.id && e.classe === D.classe && e.jour === D.jour && ov(a0, a1, h2m(e.debut), h2m(e.fin))) err.push(`La classe a déjà « ${e.matiere || 'une épreuve'} » de ${e.debut} à ${e.fin}.`);
   D.salles.forEach(sa => {
     if (!S().salles.some(s => s.id === sa.id)) err.push(`Salle ${salle(sa.id).num} : retirée de la simulation.`);
     const st = etatSalle(sa.id, D); if (!st.ok) err.push(`Salle ${salle(sa.id).num} : ${st.r}.`);
@@ -108,6 +107,9 @@ function erreursEpreuve(D) {
   });
   return err;
 }
+// Même classe sur deux épreuves en même temps : autorisé (oraux sur plusieurs créneaux) mais signalé
+function simultanees(D) { const a0 = h2m(D.debut), a1 = h2m(D.fin); return S().epreuves.filter(e => e.id !== D.id && e.classe === D.classe && e.jour === D.jour && ov(a0, a1, h2m(e.debut), h2m(e.fin))); }
+function alertesClasse(D) { return simultanees(D).map(e => `La classe a déjà « ${e.matiere || 'une épreuve'} » de ${e.debut} à ${e.fin} : deux épreuves en même temps (normal pour des oraux en plusieurs créneaux, sinon à corriger).`); }
 function analyse() {
   const C = [], A = [], parEp = {};
   const add = (L, txt, ids, type) => { L.push({ txt, ids: ids || [], type }); (ids || []).forEach(i => { (parEp[i] = parEp[i] || { c: 0, a: 0 })[L === C ? 'c' : 'a']++; }); };
@@ -119,6 +121,7 @@ function analyse() {
     ep.salles.forEach(sa => { if (!sa.surv.length) add(A, `${lab} — salle ${salle(sa.id).num} sans surveillant`, [ep.id], 'sansSurv'); });
     const cap = ep.salles.reduce((t, sa) => t + capSalle(sa.id), 0), n = effectif(ep.classe);
     if (ep.salles.length && cap < n) add(A, `${lab} — ${n} étudiants pour ${cap} places`, [ep.id], 'capacite');
+    simultanees(ep).filter(e => e.id > ep.id).forEach(e => add(A, `${ep.classe} — deux épreuves en même temps le ${libJour(ep.jour)} : « ${ep.matiere || 'épreuve'} » ${ep.debut}–${ep.fin} et « ${e.matiere || 'épreuve'} » ${e.debut}–${e.fin}`, [ep.id, e.id], 'classeSimult'));
   });
   // dédoublonnage des conflits vus des deux côtés
   const vus = new Set(), CC = C.filter(c => { if (vus.has(c.txt)) return false; vus.add(c.txt); return true; });
@@ -523,9 +526,17 @@ function vEdt() {
   }).join('');
   const heures = []; for (let m = Math.ceil(h0() / 60) * 60; m <= h1(); m += 60) heures.push(m);
   const cols = Array.from({ length: s.nbJours }, (_, j) => {
-    const blocs = s.epreuves.filter(e => e.classe === c && e.jour === j).map(e => {
+    const EJ = s.epreuves.filter(e => e.classe === c && e.jour === j).sort((a, b) => h2m(a.debut) - h2m(b.debut) || h2m(b.fin) - h2m(a.fin));
+    const voie = {}, nbV = {}; // répartition en colonnes des épreuves qui se chevauchent
+    { let grp = [], finG = -1, fins = []; const clore = () => { const n = fins.length || 1; grp.forEach(id => nbV[id] = n); grp = []; fins = []; };
+      EJ.forEach(e => { const a0 = h2m(e.debut), a1 = h2m(e.fin); if (grp.length && a0 >= finG) clore();
+        let v = fins.findIndex(f => f <= a0); if (v < 0) { v = fins.length; fins.push(a1); } else fins[v] = a1;
+        voie[e.id] = v; grp.push(e.id); finG = Math.max(grp.length > 1 ? finG : -1, a1); });
+      clore(); }
+    const blocs = EJ.map(e => {
       const p = an.parEp[e.id] || {}, col = couleur(c), top = (h2m(e.debut) - h0()) * PPM, h = (h2m(e.fin) - h2m(e.debut)) * PPM;
-      return `<div class="ex-blk ${p.c ? 'err' : p.a ? 'warn' : ''} ${X.draft && X.draft.id === e.id ? 'sel' : ''}" style="top:${top}px;height:${Math.max(h, 18)}px;background:${col}1a;border-left-color:${col}" ${ro ? `onclick="event.stopPropagation();EXSIM.editer('${e.id}')"` : `onpointerdown="EXSIM.glisser(event,'${e.id}')" onclick="event.stopPropagation()"`} title="${esc(e.matiere)} ${e.debut}–${e.fin}">
+      const nv = nbV[e.id] || 1, lr = nv > 1 ? `left:calc(${voie[e.id] * 100 / nv}% + 2px);right:auto;width:calc(${100 / nv}% - 4px);` : '';
+      return `<div class="ex-blk ${p.c ? 'err' : p.a ? 'warn' : ''} ${X.draft && X.draft.id === e.id ? 'sel' : ''}" style="${lr}top:${top}px;height:${Math.max(h, 18)}px;background:${col}1a;border-left-color:${col}" ${ro ? `onclick="event.stopPropagation();EXSIM.editer('${e.id}')"` : `onpointerdown="EXSIM.glisser(event,'${e.id}')" onclick="event.stopPropagation()"`} title="${esc(e.matiere)} ${e.debut}–${e.fin}">
         <b>${esc(e.matiere || 'Épreuve')}</b>${e.debut}–${e.fin}<br>${e.salles.map(sa => '🏫 ' + esc(salle(sa.id).num) + (sa.surv.length ? ' · ' + sa.surv.map(x => esc((surv(x) || { nom: '?' }).nom)).join(', ') : ' · <span style="color:#b45309">sans surveillant</span>')).join('<br>') || '<span style="color:#b45309">aucune salle</span>'}</div>`;
     }).join('');
     const sv = X.draft && s.epreuves.find(e => e.id === X.draft.id);
@@ -588,6 +599,7 @@ function vForm() {
     <label class="l">Salles (libres sur ce créneau)</label>${sallesHtml || '<p class="text-xs text-gray-400">Aucune salle cochée dans la simulation.</p>'}
     <label class="l">Remarque</label><input type="text" ${dis} value="${esc(D.note || '')}" oninput="EXSIM.dSet('note',this.value)" placeholder="facultatif (calculatrice autorisée, tiers-temps…)">
     ${err.length ? `<div class="ex-err">${err.map(esc).join('<br>')}</div>` : ''}
+    ${alertesClasse(D).length ? `<div class="ex-warn">⚠ ${alertesClasse(D).map(esc).join('<br>⚠ ')}</div>` : ''}
     ${!ro && manq.length ? `<div class="ex-warn">À compléter avant validation :<br>${manq.map(esc).join('<br>')}</div>` : ''}
     ${ro ? '' : `<div class="flex gap-2 flex-wrap mt-3"><button class="ex-b ora" ${err.length || manq.length ? 'disabled' : ''} onclick="EXSIM.dValider()">✔ ${ex ? 'Mettre à jour' : 'Ajouter l\'épreuve'}</button>
       ${ex ? `<button class="ex-b red" onclick="EXSIM.dSupprimer()">Supprimer</button>` : ''}
