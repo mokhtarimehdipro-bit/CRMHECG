@@ -9,7 +9,7 @@
 (function () {
   if (window.HECG_SKINS) return;
   // présence du personnel (qui est connecté, sur quel module) — presence.js
-  try { if (!document.getElementById("hecgPresenceJs")) { var sp = document.createElement("script"); sp.id = "hecgPresenceJs"; sp.src = "presence.js?v=3"; sp.defer = true; (document.head || document.documentElement).appendChild(sp); } } catch (eP) {}
+  try { if (!document.getElementById("hecgPresenceJs")) { var sp = document.createElement("script"); sp.id = "hecgPresenceJs"; sp.src = "presence.js?v=4"; sp.defer = true; (document.head || document.documentElement).appendChild(sp); } } catch (eP) {}
   // harmonisation des fonds / textes écrits en dur — hecg-skins-harmonie.js
   try { if (!document.getElementById("hecgHarmonieJs")) { var sh = document.createElement("script"); sh.id = "hecgHarmonieJs"; sh.src = "hecg-skins-harmonie.js?v=1"; sh.defer = true; (document.head || document.documentElement).appendChild(sh); } } catch (eH) {}
   var API = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";

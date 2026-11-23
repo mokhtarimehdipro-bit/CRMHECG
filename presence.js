@@ -39,14 +39,16 @@
   function court(iso) { if (!iso) return ""; var d = new Date(iso); return jour(d) === "Aujourd'hui" ? hm(d) : jour(d).replace(/\/\d{4}$/, "") + " " + hm(d); }
 
   // ---------- état ----------
-  var liste = [], convs = [], nonLus = 0, ouvert = false, box = null, chat = null; // chat = { email, nom, messages, charge }
+  var liste = [], annuaire = [], filtre = "", convs = [], nonLus = 0, ouvert = false, box = null, chat = null; // chat = { email, nom, messages, charge }
   var CSS = "#hecgPresence{position:fixed;right:18px;bottom:18px;z-index:45;font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif}"
     + "#hecgPresence *{box-sizing:border-box}"
     + ".hp-pill{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #dfe6f0;background:#fff;box-shadow:0 8px 22px -12px rgba(14,26,43,.45);font-weight:800;font-size:12.5px;color:#1A4E8A;cursor:pointer;position:relative;margin-left:auto}"
     + ".hp-dot{width:9px;height:9px;border-radius:50%}"
     + ".hp-badge{position:absolute;top:-7px;right:-6px;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#ef4444;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #fff;animation:hpPulse 1.6s infinite}"
     + "@keyframes hpPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}"
-    + ".hp-panel{position:absolute;bottom:48px;right:0;width:340px;max-height:66vh;overflow:auto;background:#fff;border:1px solid #e6ecf4;border-radius:16px;box-shadow:0 18px 40px -18px rgba(14,26,43,.5);padding:12px;color:#0f172a}"
+    + ".hp-panel{position:absolute;bottom:48px;right:0;width:350px;max-width:calc(100vw - 36px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e6ecf4;border-radius:16px;box-shadow:0 18px 40px -18px rgba(14,26,43,.5);padding:12px;color:#0f172a}"
+    + ".hp-rech{width:100%;border:1px solid #dfe6f0;border-radius:10px;padding:8px 10px;font:inherit;font-size:12.5px;margin:0 0 8px;outline:none;background:#fff;color:#0f172a}"
+    + "html[data-skin=nuit] .hp-rech{background:#0a0f1e;color:#e2e8f0;border-color:rgba(148,163,184,.2)}"
     + ".hp-h{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#7d8a9c;margin:4px 4px 8px}"
     + ".hp-row{display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:12px;cursor:pointer;width:100%;border:0;background:transparent;text-align:left;font:inherit;color:inherit}"
     + ".hp-row:hover{background:#f1f5fb}"
@@ -72,6 +74,18 @@
     + "html[data-skin=nuit] .hp-fil{background:#0a0f1e}html[data-skin=nuit] .hp-b{background:#1e293b;color:#e2e8f0;border-color:#1e293b}html[data-skin=nuit] .hp-row:hover{background:rgba(255,255,255,.05)}";
   var st = document.createElement("style"); st.textContent = CSS; (document.head || document.documentElement).appendChild(st);
 
+  function norm(x) { return String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  function vuLe(v) {
+    if (!v) return "jamais connecté(e)";
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v));
+    if (m) return "dernière connexion le " + m[1] + "/" + m[2] + "/" + m[3];
+    var d = new Date(v); if (isNaN(d)) return "dernière connexion : " + v;
+    return "vu(e) " + (jour(d) === "Aujourd'hui" ? "aujourd'hui" : jour(d) === "Hier" ? "hier" : "le " + jour(d)) + " à " + hm(d);
+  }
+  window.__presFiltre = function (v) {
+    filtre = v; rendre();
+    var i = box && box.querySelector(".hp-rech"); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); }
+  };
   function enLigne(email) { return liste.some(function (x) { return x.email === email; }); }
   function lien(email, nom) { return 'onclick="window.__presChat(\'' + esc(email) + '\',\'' + esc(String(nom).replace(/'/g, "’")) + '\')"'; }
   function rendre() {
@@ -85,27 +99,41 @@
     var corps = "";
     if (chat) corps = rendreChat();
     else if (ouvert) {
-      var hors = convs.filter(function (c) { return !enLigne(c.email); });
-      corps = '<div class="hp-panel"><div class="hp-h">En ligne · cliquez pour discuter</div>'
-        + (n ? liste.map(function (x) {
-            var c = convs.filter(function (k) { return k.email === x.email; })[0], nl = c ? c.nonLus : 0;
-            var meme = x.page === ou().page && (!x.module || x.module === ou().module);
-            return '<button class="hp-row" ' + lien(x.email, x.nom) + '>'
-              + '<div class="hp-av">' + esc(ini(x.nom)) + '<i></i></div>'
-              + '<div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13px">' + esc(x.nom) + (x.role ? ' <span style="font-weight:600;color:#94a3b8;font-size:11px">· ' + esc(x.role) + '</span>' : '') + '</div>'
-              + '<div style="font-size:12px;opacity:.8">' + esc(x.page) + (x.module ? ' › <b>' + esc(x.module) + '</b>' : '') + '</div>'
-              + (x.detail ? '<div style="font-size:11.5px;color:#64748b">' + esc(x.detail) + '</div>' : '')
-              + '<div style="font-size:10.5px;color:#94a3b8">' + (x.il < 60 ? "à l'instant" : "il y a " + Math.round(x.il / 60) + " min") + (meme ? ' · <b style="color:#c2410c">même écran que vous</b>' : '') + '</div></div>'
-              + (nl ? '<span class="hp-nl">' + nl + '</span>' : '<span style="margin-left:auto;align-self:center;font-size:16px" title="Écrire">💬</span>') + '</button>';
-          }).join("") : '<div style="padding:6px 8px 10px;font-size:12.5px;color:#64748b">Vous êtes seul(e) connecté(e) au CRM pour le moment.</div>')
-        + (hors.length ? '<div class="hp-h" style="margin-top:10px">Conversations récentes</div>' + hors.map(function (c) {
-            return '<button class="hp-row" ' + lien(c.email, c.nom) + '>'
-              + '<div class="hp-av" style="background:#94a3b8">' + esc(ini(c.nom)) + '</div>'
-              + '<div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13px">' + esc(c.nom) + ' <span style="font-weight:600;color:#94a3b8;font-size:11px">· hors ligne</span></div>'
-              + '<div style="font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (c.dernier && c.dernier.moi ? 'Vous : ' : '') + esc(c.dernier ? c.dernier.texte : '') + '</div>'
-              + '<div style="font-size:10.5px;color:#94a3b8">' + esc(court(c.dernier && c.dernier.quand)) + '</div></div>'
-              + (c.nonLus ? '<span class="hp-nl">' + c.nonLus + '</span>' : '') + '</button>';
-          }).join("") : '')
+      var parMail = {}; convs.forEach(function (k) { parMail[k.email] = k; });
+      var detail = {}; liste.forEach(function (x) { detail[x.email] = x; });
+      // tout le personnel : en ligne d'abord, puis hors ligne (dernière activité la plus récente en premier)
+      var tous = annuaire.slice(), connus = {};
+      tous.forEach(function (x) { connus[x.email] = 1; x.enLigne = !!detail[x.email]; });
+      liste.forEach(function (x) { if (!connus[x.email]) { connus[x.email] = 1; tous.push({ email: x.email, nom: x.nom, enLigne: true }); } });
+      convs.forEach(function (k) { if (!connus[k.email]) { connus[k.email] = 1; tous.push({ email: k.email, nom: k.nom, enLigne: false }); } });
+      tous.sort(function (x, y) {
+        if (x.enLigne !== y.enLigne) return x.enLigne ? -1 : 1;
+        var nx = (parMail[x.email] || {}).nonLus || 0, ny = (parMail[y.email] || {}).nonLus || 0;
+        if (nx !== ny) return ny - nx;
+        return String(x.nom).localeCompare(String(y.nom));
+      });
+      var nOn = tous.filter(function (x) { return x.enLigne; }).length;
+      corps = '<div class="hp-panel"><div class="hp-h">Mes collègues · ' + nOn + ' en ligne / ' + tous.length + '</div>'
+        + '<input class="hp-rech" placeholder="🔍 Rechercher un collègue…" oninput="window.__presFiltre(this.value)" value="' + esc(filtre) + '">'
+        + tous.filter(function (x) { return !filtre || norm(x.nom + " " + (x.fonction || "")).indexOf(norm(filtre)) > -1; }).map(function (x) {
+            var c = parMail[x.email], nl = c ? c.nonLus : 0, d = detail[x.email];
+            var ligne2 = "", ligne3 = "";
+            if (x.enLigne && d) {
+              var meme = d.page === ou().page && (!d.module || d.module === ou().module);
+              ligne2 = esc(d.page) + (d.module ? ' › <b>' + esc(d.module) + '</b>' : '') + (d.detail ? ' · ' + esc(d.detail) : '');
+              ligne3 = '<span style="color:#10b981;font-weight:800">● En ligne</span>' + (meme ? ' · <b style="color:#c2410c">même écran que vous</b>' : '');
+            } else {
+              ligne2 = c && c.dernier ? (c.dernier.moi ? 'Vous : ' : '') + esc(c.dernier.texte) : esc(x.fonction || "");
+              ligne3 = '<span style="color:#ef4444;font-weight:800">● Hors ligne</span> · ' + esc(vuLe(x.vuLe));
+            }
+            return '<button class="hp-row" ' + lien(x.email, x.nom) + ' title="Écrire à ' + esc(x.nom) + '">'
+              + '<div class="hp-av" style="background:' + (x.enLigne ? '#1A4E8A' : '#94a3b8') + '">' + esc(ini(x.nom)) + '<i style="background:' + (x.enLigne ? '#10b981' : '#ef4444') + '"></i></div>'
+              + '<div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13px">' + esc(x.nom) + '</div>'
+              + (ligne2 ? '<div style="font-size:12px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ligne2 + '</div>' : '')
+              + '<div style="font-size:10.5px;color:#94a3b8">' + ligne3 + '</div></div>'
+              + (nl ? '<span class="hp-nl">' + nl + '</span>' : '<span style="margin-left:auto;align-self:center;font-size:16px;opacity:.7">💬</span>') + '</button>';
+          }).join("")
+        + (tous.length ? '' : '<div style="padding:6px 8px 10px;font-size:12.5px;color:#64748b">Chargement de l’annuaire…</div>')
         + '</div>';
     }
     var fil0 = box.querySelector(".hp-fil"), basAvant = !fil0 || fil0.scrollHeight - fil0.scrollTop - fil0.clientHeight < 40, posAvant = fil0 ? fil0.scrollTop : 0;
@@ -147,7 +175,7 @@
   }
 
   // ---------- actions ----------
-  window.__presBascule = function () { if (chat) { chat = null; ouvert = false; } else ouvert = !ouvert; rendre(); if (ouvert) boite(); };
+  window.__presBascule = function () { if (chat) { chat = null; ouvert = false; } else ouvert = !ouvert; filtre = ""; rendre(); if (ouvert) { boite(); signal(true); } };
   window.__presRetour = function () { chat = null; ouvert = true; rendre(); };
   window.__presFermer = function () { chat = null; ouvert = false; rendre(); };
   window.__presChat = function (email, nom) { chat = { email: String(email).toLowerCase(), nom: nom, messages: [], charge: false }; rendre(); fil(); };
@@ -228,12 +256,12 @@
 
   // ---------- présence ----------
   var enCours = false;
-  function signal() {
-    if (enCours || document.visibilityState !== "visible") return;
+  function signal(force) {
+    if (enCours || (!force && document.visibilityState !== "visible")) return;
     enCours = true;
     var o = ou();
     post({ action: "getPresence", page: o.page, module: o.module, detail: o.detail })
-      .then(function (r) { if (r && r.success) { liste = r.autres || []; rendre(); } })
+      .then(function (r) { if (r && r.success) { liste = r.autres || []; if (r.annuaire) annuaire = r.annuaire; if (!(ouvert && box && document.activeElement && document.activeElement.classList.contains("hp-rech"))) rendre(); } })
       .catch(function () {})
       .then(function () { enCours = false; });
   }
