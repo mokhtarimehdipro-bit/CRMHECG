@@ -752,13 +752,14 @@ function celluleEp(classe, jour, demi, R) {
 function grille(mode) {
   const s = S(), R = affectations(s.optim ? X.etatVersion : 'init'), J = Array.from({ length: s.nbJours }, (_, j) => j);
   if (mode === 'cj') return { cols: J.map(libJour), groupes: DEMI.map((d, k) => ({ titre: d,
-    lignes: s.classes.map(c => ({ lab: c.classe, coul: couleur(c.classe), cells: J.map(j => celluleEp(c.classe, j, k, R)) })) })) };
+    lignes: s.classes.map(c => ({ lab: c.classe, coul: couleur(c.classe), cells: J.map(j => celluleEp(c.classe, j, k, R)) }))
+      .filter(l => l.cells.some(L => L.length)) })).filter(g => g.lignes.length) }; // classes sans épreuve sur la demi-journée masquées
   return { cols: s.classes.map(c => c.classe), colCoul: s.classes.map(c => couleur(c.classe)), groupes: J.map(j => ({ titre: libJour(j),
     lignes: DEMI.map((d, k) => ({ lab: d, cells: s.classes.map(c => celluleEp(c.classe, j, k, R)) })) })) };
 }
 function vGrille(mode) {
   const G = grille(mode), n = G.cols.length;
-  if (!n || !G.groupes.length || !G.groupes[0].lignes.length) return '<div class="ex-card">Rien à afficher : ajoutez des classes et des épreuves.</div>';
+  if (!n || !G.groupes.length) return '<div class="ex-card">Rien à afficher : ajoutez des classes et des épreuves.</div>';
   const th = G.cols.map((c, i) => `<th style="min-width:130px">${G.colCoul ? `<span class="ex-dot" style="display:inline-block;background:${G.colCoul[i]}"></span> ` : ''}${esc(c)}</th>`).join('');
   const corps = G.groupes.map(g => `<tr><td colspan="${n + 1}" style="background:#1A4E8A;color:#fff;font-weight:800;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:7px 12px">${esc(g.titre)}</td></tr>` +
     g.lignes.map(l => `<tr><td style="font-weight:800;white-space:nowrap;border-left:4px solid ${l.coul || '#F26522'}">${esc(l.lab)}</td>${l.cells.map(L => `<td style="vertical-align:top">${L.map(x => {
