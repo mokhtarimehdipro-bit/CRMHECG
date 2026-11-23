@@ -1092,7 +1092,7 @@ function optimiser(prm) {
   const items = [], fixes = [];
   s.epreuves.forEach(e => {
     const a0 = h2m(e.debut), a1 = h2m(e.fin);
-    if (selC.has(e.classe) && e.salles.length && e.salles.every(sa => selS.has(sa.id))) {
+    if (selC.has(e.classe) && e.salles.every(sa => selS.has(sa.id))) {
       const etus = etudiants(e.classe).map(x => ({ id: x.id, nom: x.nom })).sort((a, b) => nomTri(a.nom).localeCompare(nomTri(b.nom), 'fr'));
       const n = effectif(e.classe); while (etus.length < n) etus.push({ id: '', nom: 'Étudiant ' + (etus.length + 1) });
       items.push({ e, a0, a1, jour: e.jour, etus, n: etus.length });
@@ -1178,16 +1178,17 @@ function optimiser(prm) {
     liberes: [...initial].filter(x => !gardes.has(x)), avant, apres, sansPlace };
 }
 function vOptim() {
-  const s = S();
-  if (s.statut !== 'terminee') {
+  const s = S(), pre = s.statut !== 'terminee';
+  let verrou = '';
+  if (pre) {
     const { L } = bloquants();
-    return `<div class="ex-card" style="max-width:820px"><h3>🔒 Optimisation verrouillée</h3><p style="font-size:13px;line-height:1.7">L'optimisation se débloque lorsque la semaine est <b>terminée</b> : toutes les épreuves placées, chacune avec sa ou ses salles et au moins un surveillant par salle, sans aucun conflit.</p>
-      <ul style="font-size:13px;line-height:1.8;margin:8px 0;padding-left:18px"><li>${s.epreuves.length ? '✅' : '⬜'} ${s.epreuves.length} épreuve(s) planifiée(s)</li><li>${L.length ? '⬜' : '✅'} ${L.length ? L.length + ' point(s) bloquant(s) à corriger (voir la vue globale)' : 'Aucun point bloquant'}</li></ul>
+    verrou = `<div class="ex-card" style="max-width:1000px"><h3>🔒 Optimisation définitive verrouillée — pré-audit disponible</h3><p style="font-size:13px;line-height:1.7">L'application de l'optimisation et les plans de classe se débloquent lorsque la semaine est <b>terminée</b>. En attendant, le <b>pré-audit</b> ci-dessous calcule la meilleure répartition des salles sur le planning actuel, sans rien modifier ni valider : il montre les salles et surveillants qu'on pourrait libérer et les épreuves encore sans place.</p>
+      <ul style="font-size:13px;line-height:1.8;margin:8px 0;padding-left:18px"><li>${s.epreuves.length ? '✅' : '⬜'} ${s.epreuves.length} épreuve(s) planifiée(s)</li><li>${L.length ? '⬜' : '✅'} ${L.length ? L.length + ' point(s) bloquant(s) à corriger avant de terminer (voir la vue globale)' : 'Aucun point bloquant'}</li></ul>
       ${X.ecriture ? `<button class="ex-b" style="color:#047857" onclick="EXSIM.terminer()">✅ Terminer la semaine</button>` : ''}</div>`;
   }
   const P = X.prmOptim = X.prmOptim || { salles: s.salles.map(x => x.id), classes: s.classes.map(c => c.classe), ratio: +s.ratio || 25, melanger: true, unSurDeux: true };
-  const ro = !X.ecriture;
-  const choix = s.optim ? '' : `<div class="ex-card"><h3>Périmètre de l'optimisation (toute la semaine)</h3>
+  const ro = !X.ecriture && !pre;
+  const choix = verrou + (s.optim ? '' : `<div class="ex-card"><h3>${pre ? '🔍 Pré-audit des salles — périmètre (toute la semaine)' : 'Périmètre de l’optimisation (toute la semaine)'}</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
       <div><label class="l">Salles à optimiser</label>${s.salles.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:3px 0"><input type="checkbox" style="width:auto" ${P.salles.includes(x.id) ? 'checked' : ''} onchange="EXSIM.prm('salles','${esc(x.id)}',this.checked)"> Salle ${esc(x.num)} <span class="text-gray-400">· ${capSalle(x.id)} pl.</span></label>`).join('')}</div>
       <div><label class="l">Classes à optimiser</label>${s.classes.map(c => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:3px 0"><input type="checkbox" style="width:auto" ${P.classes.includes(c.classe) ? 'checked' : ''} onchange="EXSIM.prm('classes','${esc(c.classe)}',this.checked)"><span class="ex-dot" style="background:${couleur(c.classe)}"></span> ${esc(c.classe)} <span class="text-gray-400">· ${effectif(c.classe)}</span></label>`).join('')}</div></div>
@@ -1196,7 +1197,8 @@ function vOptim() {
       <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" ${P.unSurDeux ? 'checked' : ''} onchange="EXSIM.prm('unSurDeux',null,this.checked)"> Une place sur deux quand la salle le permet</label>
       <span class="text-xs text-gray-500">Encadrement : 1 surveillant par salle</span></div>
     <p class="text-xs text-gray-400 mt-2">Seules les épreuves dont la classe et toutes les salles sont cochées sont optimisées ; les autres restent telles quelles et leurs salles restent bloquées sur leurs créneaux. Les étudiants d'une classe ne sont jamais mis côte à côte quand une autre classe partage la salle.</p>
-    ${ro ? '' : `<button class="ex-b vio mt-3" onclick="EXSIM.calculer()">✨ Calculer l'optimisation</button>`}</div>`;
+    ${pre ? '<p class="text-xs text-gray-500 mt-2">Pré-audit : les épreuves sans salle sont aussi prises en compte (on leur cherche une salle libre). Rien n’est enregistré.</p>' : ''}
+    ${ro ? '' : `<button class="ex-b vio mt-3" onclick="EXSIM.calculer()">${pre ? '🔍 Lancer le pré-audit' : '✨ Calculer l’optimisation'}</button>`}</div>`);
   const R = s.optim || X.prop;
   if (!R) return choix;
   const H = m => (m / 60).toFixed(1).replace('.', ',') + ' h';
@@ -1208,10 +1210,11 @@ function vOptim() {
     <td>${g.parts.map(p => `<span class="ex-dot" style="display:inline-block;background:${couleur(p.classe)}"></span> ${esc(p.classe)} (${p.n}) · ${esc(p.matiere || '')} <span class="text-gray-400">${m2h(p.a0)}–${m2h(p.a1)}</span>`).join('<br>')}</td>
     <td>${g.pic} / ${capSalle(g.salleId)}</td><td>${g.surv.map(x => esc((surv(x) || { nom: '?' }).nom)).join(', ')}${g.manque > 0 ? ` <b style="color:#dc2626">(manque ${g.manque})</b>` : ''}</td>
     <td>${s.optim ? `<button class="ex-b sm" onclick="EXSIM.voirPlan(${k})">🪑 Plan</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
-  if (!s.optim) return choix + `<div class="ex-card" style="border-color:#6d28d9"><h3 style="color:#6d28d9">Proposition d'optimisation</h3>${kpi}
+  if (!s.optim) return choix + `<div class="ex-card" style="border-color:#6d28d9"><h3 style="color:#6d28d9">${pre ? '🔍 Résultat du pré-audit <span class="normal-case font-semibold text-gray-400">— simulation non appliquée, calculée sur le planning actuel</span>' : 'Proposition d’optimisation'}</h3>${kpi}
     ${alertes.length ? `<div class="ex-err">${alertes.map(esc).join('<br>')}</div>` : ''}
     ${R.liberes.length ? `<p class="text-sm mb-2"><b>Surveillants libérés :</b> ${R.liberes.map(x => esc((surv(x) || { nom: x }).nom)).join(', ')}</p>` : ''}${tableau}
-    ${ro ? '' : `<div class="flex gap-2 mt-3"><button class="ex-b vio" onclick="EXSIM.appliquer()">✔ Appliquer et générer les plans de classe</button><button class="ex-b" onclick="EXSIM.abandonProp()">Abandonner</button></div>`}</div>`;
+    ${pre ? `<div class="flex gap-2 mt-3 items-center flex-wrap"><button class="ex-b" onclick="EXSIM.abandonProp()">Effacer le pré-audit</button><span class="text-xs text-gray-500">Pour appliquer cette répartition et générer les plans de classe : terminez la semaine, puis relancez le calcul.</span></div>`
+      : ro ? '' : `<div class="flex gap-2 mt-3"><button class="ex-b vio" onclick="EXSIM.appliquer()">✔ Appliquer et générer les plans de classe</button><button class="ex-b" onclick="EXSIM.abandonProp()">Abandonner</button></div>`}</div>`;
   const pl = X.planSel != null && s.optim.groupes[X.planSel] ? vPlan(s.optim.groupes[X.planSel]) : '';
   return `<div class="ex-card" style="border-color:#6d28d9"><h3 style="color:#6d28d9">✨ Optimisation appliquée <span class="normal-case font-semibold text-gray-400">— le ${esc(new Date(s.optim.date).toLocaleString('fr-FR'))}</span></h3>${kpi}
     ${alertes.length ? `<div class="ex-err">${alertes.map(esc).join('<br>')}</div>` : ''}
@@ -1231,7 +1234,7 @@ function calculer() {
 }
 function abandonProp() { X.prop = null; rendreCorps(); }
 async function appliquer() {
-  if (!X.prop) return; S().optim = X.prop; X.prop = null; X.dirty = true;
+  if (!X.prop || S().statut !== 'terminee') return; S().optim = X.prop; X.prop = null; X.dirty = true;
   if (!(await enregistrer())) { S().optim = null; rendreCorps(); return; }
   X.etatVersion = 'optim'; rendre();
 }
