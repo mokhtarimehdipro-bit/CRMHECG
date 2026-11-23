@@ -53,7 +53,7 @@
     var s = lsGet(K_SKIN), u = user();
     if (u.role === "Etudiant") s = "classique";
     if (s && s !== "classique" && ids.indexOf(s) !== -1) document.documentElement.setAttribute("data-skin", s);
-    var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "hecg-skins.css?v=3";
+    var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "hecg-skins.css?v=4";
     document.head.appendChild(l);
   })();
 

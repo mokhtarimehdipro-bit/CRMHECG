@@ -236,6 +236,7 @@ html[data-skin="nuit"] body:not(.no-theme) input:not([type="checkbox"]):not([typ
 html[data-skin="nuit"] body:not(.no-theme) select,
 html[data-skin="nuit"] body:not(.no-theme) textarea {
   background-color: rgba(2, 6, 23, .55) !important;
+  background-image: none !important;
   color: #E2E8F0 !important;
   border-color: rgba(148, 163, 184, .2) !important;
 }
