@@ -11,8 +11,8 @@
 //   epreuves:[{id, classe, jour, debut, fin, matiere, note, salles:[{id, surv:[idSurv…]}]}],
 //   optim:{ params, groupes:[…], placements… } }
 // Règles dures (rappelées ici et revérifiées pour passer au statut « terminée ») :
-//  - une salle n'accueille jamais deux classes différentes en même temps ;
-//  - un surveillant n'est jamais dans deux salles en même temps ;
+//  - une salle n'accueille jamais deux épreuves en même temps (même classe ou non) ;
+//  - un surveillant n'est jamais sur deux épreuves en même temps ;
 //  - un surveillant n'est affecté que sur un créneau couvert par ses disponibilités.
 
 var EXSIM_HEADERS = ["ID", "Titre", "Lundi", "Statut", "Mis à jour le", "Par", "Version", "JSON (tranches →)"];
@@ -51,8 +51,9 @@ function _exsimConflits_(S) {
       if (b.jour !== a.jour || !(_exsimMin_(b.debut) < a1 && _exsimMin_(b.fin) > a0)) continue;
       (a.salles || []).forEach(function (sa) {
         (b.salles || []).forEach(function (sb) {
-          if (sa.id === sb.id && a.classe !== b.classe) out.push("Salle " + sa.id.split("||")[1] + " : " + a.classe + " et " + b.classe + " en même temps");
-          (sa.surv || []).forEach(function (x) { if (sa.id !== sb.id && (sb.surv || []).indexOf(x) !== -1) out.push((surv[x] ? surv[x].nom : x) + " dans deux salles en même temps (" + a.classe + " / " + b.classe + ")"); });
+          var lib = a.classe === b.classe ? a.classe + " (" + (a.matiere || "épreuve") + " / " + (b.matiere || "épreuve") + ")" : a.classe + " et " + b.classe;
+          if (sa.id === sb.id) out.push("Salle " + sa.id.split("||")[1] + " : deux épreuves en même temps — " + lib);
+          (sa.surv || []).forEach(function (x) { if ((sb.surv || []).indexOf(x) !== -1) out.push((surv[x] ? surv[x].nom : x) + " sur deux épreuves en même temps — " + lib); });
         });
       });
     }

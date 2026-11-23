@@ -99,7 +99,7 @@ function etatSurv(sid, D, salleId) {
   for (const e of S().epreuves) {
     if (e.id === D.id || e.jour !== D.jour || !ov(a0, a1, h2m(e.debut), h2m(e.fin))) continue;
     const sa = e.salles.find(x => x.surv.includes(sid));
-    if (sa && sa.id !== salleId) return { ok: false, r: `déjà en salle ${salle(sa.id).num} (${e.classe} ${e.debut}–${e.fin})` };
+    if (sa) return { ok: false, r: `déjà en salle ${salle(sa.id).num} (${e.classe} ${e.debut}–${e.fin})` };
   }
   return { ok: true };
 }
@@ -902,6 +902,8 @@ function optimiser(prm) {
       const libre = (id, a0, a1) => !fixes.some(f => f.jour === j && f.salleId === id && ov(f.a0, f.a1, a0, a1));
       const libreCap = (r, it) => {
         if (!libre(r.id, it.a0, it.a1)) return 0;
+        // jamais deux épreuves de la même classe dans la même salle en même temps (oraux simultanés)
+        if (r.parts.some(p => p.epId !== it.e.id && p.classe === it.e.classe && ov(p.a0, p.a1, it.a0, it.a1))) return 0;
         if (!prm.melanger && r.parts.some(p => p.classe !== it.e.classe && ov(p.a0, p.a1, it.a0, it.a1))) return 0;
         return r.cap - pic(r.parts.filter(p => ov(p.a0, p.a1, it.a0, it.a1)), it.a0, it.a1);
       };
