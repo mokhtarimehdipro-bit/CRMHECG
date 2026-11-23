@@ -19,7 +19,7 @@ const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpp
 const PPM = 1.35; // pixels par minute dans l'EDT
 
 const X = { ref: null, id: null, version: '', S: null, ecriture: false, dirty: false, onglet: 'params', classeSel: null, draft: null,
-  dispoEdit: null, jourVue: 'tous', etatVue: 'salle', etatFiltre: '', etatVersion: 'optim', prop: null, planSel: null, derniereDuree: 120 };
+  dispoEdit: null, jourVue: 'tous', gVue: 'chrono', etatVue: 'salle', etatFiltre: '', etatVersion: 'optim', prop: null, planSel: null, derniereDuree: 120 };
 
 /* ---------- appels serveur ---------- */
 const lire = extra => _apiFresh('exsim', extra, null);
@@ -737,7 +737,89 @@ function affectations(version) { // lignes {jour,a0,a1,salleId,parts:[{classe,ma
   if (opt) s.optim.groupes.forEach(g => R.push({ jour: g.jour, a0: g.a0, a1: g.a1, salleId: g.salleId, parts: g.parts, surv: g.surv, groupe: g.id }));
   return R.sort((a, b) => a.jour - b.jour || a.a0 - b.a0);
 }
+/* ---------- grilles demi-journées (classes × jours / jours × classes) ---------- */
+const MIDI = 12 * 60; // une épreuve qui commence avant 12 h est « matin »
+const DEMI = ['Matin', 'Après-midi'];
+function celluleEp(classe, jour, demi, R) {
+  return S().epreuves.filter(e => e.classe === classe && e.jour === jour && (h2m(e.debut) < MIDI ? 0 : 1) === demi)
+    .sort((a, b) => h2m(a.debut) - h2m(b.debut))
+    .map(e => { const L = R.filter(r => r.parts.some(p => p.epId === e.id));
+      const lieux = L.map(r => 'Salle ' + salle(r.salleId).num + (r.surv.length ? ' (' + nomsSurv(r.surv) + ')' : '')).join(', ');
+      return { e, txt: `${e.matiere || 'Épreuve'}\n${e.debut} – ${e.fin}${lieux ? '\n' + lieux : ''}` }; });
+}
+// mode 'cj' : lignes = classes (bloc matin puis bloc après-midi), colonnes = jours
+// mode 'jc' : lignes = jours (matin / après-midi), colonnes = classes
+function grille(mode) {
+  const s = S(), R = affectations(s.optim ? X.etatVersion : 'init'), J = Array.from({ length: s.nbJours }, (_, j) => j);
+  if (mode === 'cj') return { cols: J.map(libJour), groupes: DEMI.map((d, k) => ({ titre: d,
+    lignes: s.classes.map(c => ({ lab: c.classe, coul: couleur(c.classe), cells: J.map(j => celluleEp(c.classe, j, k, R)) })) })) };
+  return { cols: s.classes.map(c => c.classe), colCoul: s.classes.map(c => couleur(c.classe)), groupes: J.map(j => ({ titre: libJour(j),
+    lignes: DEMI.map((d, k) => ({ lab: d, cells: s.classes.map(c => celluleEp(c.classe, j, k, R)) })) })) };
+}
+function vGrille(mode) {
+  const G = grille(mode), n = G.cols.length;
+  if (!n || !G.groupes.length || !G.groupes[0].lignes.length) return '<div class="ex-card">Rien à afficher : ajoutez des classes et des épreuves.</div>';
+  const th = G.cols.map((c, i) => `<th style="min-width:130px">${G.colCoul ? `<span class="ex-dot" style="display:inline-block;background:${G.colCoul[i]}"></span> ` : ''}${esc(c)}</th>`).join('');
+  const corps = G.groupes.map(g => `<tr><td colspan="${n + 1}" style="background:#1A4E8A;color:#fff;font-weight:800;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:7px 12px">${esc(g.titre)}</td></tr>` +
+    g.lignes.map(l => `<tr><td style="font-weight:800;white-space:nowrap;border-left:4px solid ${l.coul || '#F26522'}">${esc(l.lab)}</td>${l.cells.map(L => `<td style="vertical-align:top">${L.map(x => {
+      const c = couleur(x.e.classe), t = x.txt.split('\n');
+      return `<div onclick="EXSIM.editer('${x.e.id}')" style="cursor:pointer;margin-bottom:4px;padding:5px 7px;border-radius:8px;background:${c}1a;border-left:3px solid ${c};font-size:12px;line-height:1.35"><b>${esc(t[0])}</b><br>${t.slice(1).map(esc).join('<br>')}</div>`; }).join('')}</td>`).join('')}</tr>`).join('')).join('');
+  return `<div class="ex-card" style="overflow-x:auto"><table class="ex-tbl" style="min-width:${180 + n * 140}px"><thead><tr><th>${mode === 'cj' ? 'Classe' : 'Jour'}</th>${th}</tr></thead><tbody>${corps}</tbody></table>
+    <p class="text-xs text-gray-400 mt-2">Matin = épreuve qui commence avant 12 h. Cliquez sur une épreuve pour l'ouvrir.</p></div>`;
+}
+const LIBG = { cj: 'Classes par jour (matin - après-midi)', jc: 'Jours par classe (matin - après-midi)' };
+async function exportGrille(mode, format) {
+  const G = grille(mode), n = G.cols.length, titre = LIBG[mode];
+  if (!n) { msg('Rien à exporter.', false); return; }
+  const tete = [mode === 'cj' ? 'Demi-journée' : 'Jour', mode === 'cj' ? 'Classe' : 'Demi-journée'].concat(G.cols);
+  const lignes = []; G.groupes.forEach(g => g.lignes.forEach((l, i) => lignes.push({ g: g.titre, prem: i === 0, nb: g.lignes.length, l })));
+  const val = L => L.map(x => x.txt).join('\n\n');
+  try {
+    if (format === 'xlsx') {
+      msg('Préparation du fichier Excel…'); await libExcel();
+      const aoa = [[`${S().titre || 'Simulation'} — ${titre}`], [`HECG · ${semaineTxt()} · exporté le ${new Date().toLocaleString('fr-FR')}`], [], tete];
+      lignes.forEach(x => aoa.push([x.prem ? x.g : '', x.l.lab].concat(x.l.cells.map(val))));
+      const ws = XS.utils.aoa_to_sheet(aoa), nc = n + 2, rows = [{ hpt: 30 }, { hpt: 18 }, { hpt: 6 }, { hpt: 24 }];
+      const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: nc - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: nc - 1 } }];
+      let r0 = 4; G.groupes.forEach(g => { if (g.lignes.length > 1) merges.push({ s: { r: r0, c: 0 }, e: { r: r0 + g.lignes.length - 1, c: 0 } }); r0 += g.lignes.length; });
+      for (let R = 0; R < aoa.length; R++) for (let c = 0; c < nc; c++) {
+        const a = XS.utils.encode_cell({ r: R, c }); if (!ws[a]) ws[a] = { t: 's', v: '' };
+        let st;
+        if (R === 0) st = XST.T; else if (R === 1) st = XST.ST; else if (R === 2) st = {}; else if (R === 3) st = XST.H;
+        else {
+          const i = R - 4, x = lignes[i];
+          st = JSON.parse(JSON.stringify(c === 0 ? XST.H : (i % 2 ? XST.D2 : XST.D1)));
+          if (c === 0) st.alignment = { vertical: 'center', horizontal: 'center', wrapText: true };
+          if (c === 1) { st.font = Object.assign({}, st.font, { bold: true }); if (x.l.coul) st.border = Object.assign({}, st.border, { left: { style: 'thick', color: { rgb: x.l.coul.slice(1).toUpperCase() } } }); }
+        }
+        ws[a].s = JSON.parse(JSON.stringify(st));
+      }
+      lignes.forEach(x => { const nl = Math.max(1, ...x.l.cells.map(L => val(L).split('\n').length)); rows.push({ hpt: 15 * nl + 6 }); });
+      ws['!merges'] = merges; ws['!rows'] = rows; ws['!cols'] = [{ wch: 14 }, { wch: 18 }].concat(G.cols.map(() => ({ wch: 26 })));
+      ws['!ref'] = XS.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: nc - 1 } });
+      const wb = XS.utils.book_new(); XS.utils.book_append_sheet(wb, ws, mode === 'cj' ? 'Classes x jours' : 'Jours x classes');
+      XS.writeFile(wb, nomFichier(titre, 'xlsx')); msg('Fichier Excel téléchargé ✓');
+    } else {
+      const { doc, lg } = await pdfNouveau(), fs = n > 8 ? 6.6 : n > 5 ? 7.6 : 8.6;
+      const body = lignes.map(x => (x.prem ? [{ content: pdfT(x.g), rowSpan: x.nb, styles: { fillColor: [26, 78, 138], textColor: 255, fontStyle: 'bold', valign: 'middle', halign: 'center' } }] : [])
+        .concat([pdfT(x.l.lab)], x.l.cells.map(L => pdfT(val(L)))));
+      doc.autoTable({ startY: TOP + 2, head: [tete.map(pdfT)], body, theme: 'grid', margin: { left: MX, right: MX, top: TOP, bottom: 17 },
+        styles: { font: 'helvetica', fontSize: fs, cellPadding: 1.8, lineColor: [221, 228, 238], lineWidth: 0.2, textColor: [14, 26, 43], valign: 'top', overflow: 'linebreak' },
+        headStyles: { fillColor: [26, 78, 138], textColor: 255, fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: mode === 'cj' ? 26 : 20, fontStyle: 'bold' } },
+        didDrawCell: d => { if (d.section === 'body' && d.column.index === 1) { const x = lignes[d.row.index]; if (x && x.l.coul) { doc.setFillColor(...RGB(x.l.coul)); doc.rect(d.cell.x, d.cell.y, 1.4, d.cell.height, 'F'); } } } });
+      pdfHabiller(doc, lg, titre); doc.save(nomFichier(titre, 'pdf')); msg('PDF téléchargé ✓');
+    }
+  } catch (e) { msg('Export impossible : ' + e.message, false); }
+}
 function vGlobale() {
+  const s = S();
+  const choix = `<div class="flex gap-2 flex-wrap items-center mb-3"><span class="text-xs font-black uppercase text-gray-400">Vue</span>${[['chrono', 'Chronologie salles / surveillants'], ['cj', 'Classes × jours'], ['jc', 'Jours × classes']].map(([k, l]) => `<button class="ex-b sm ${X.gVue === k ? 'pri' : ''}" onclick="EXSIM.gVue('${k}')">${l}</button>`).join('')}
+    ${X.gVue !== 'chrono' ? `<span style="flex:1"></span>${s.optim ? `<button class="ex-b sm ${X.etatVersion === 'init' ? 'pri' : ''}" onclick="EXSIM.version('init')">Avant optimisation</button><button class="ex-b sm ${X.etatVersion === 'optim' ? 'vio' : ''}" onclick="EXSIM.version('optim')">Après optimisation</button>` : ''}
+      <button class="ex-b sm" onclick="EXSIM.exportGrille('${X.gVue}','xlsx')">⬇ Excel</button><button class="ex-b sm ora" onclick="EXSIM.exportGrille('${X.gVue}','pdf')">⬇ PDF</button>` : ''}</div>`;
+  return choix + (X.gVue === 'chrono' ? vChrono() : vGrille(X.gVue));
+}
+function vChrono() {
   const s = S(), an = analyse(), D0 = h0(), D1 = h1(), span = D1 - D0, pct = m => ((m - D0) / span * 100).toFixed(3) + '%';
   const version = s.optim ? X.etatVersion : 'init', rows = affectations(version);
   const jours = X.jourVue === 'tous' ? Array.from({ length: s.nbJours }, (_, j) => j) : [+X.jourVue];
@@ -1334,7 +1416,7 @@ async function pdfEmargement() {
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
   set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispo, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
   choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide,
-  jourVue: k => { X.jourVue = k; rendreCorps(); }, version: v => { X.etatVersion = v; rendreCorps(); },
+  jourVue: k => { X.jourVue = k; rendreCorps(); }, gVue: k => { X.gVue = k; rendreCorps(); }, exportGrille, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
   prm, calculer, abandonProp, appliquer, retirerOptim, voirPlan, exportExcel, pdfEtat, pdfPlans, pdfRepartition, pdfEmargement };
 })();
