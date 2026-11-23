@@ -2381,7 +2381,7 @@ async function init(){
   show('mainLayout');
   if(user.email){var _tn=document.getElementById('navTrophees');if(_tn){_tn.classList.remove('hidden');if(localStorage.getItem('hecg_trophees_new')){var _bn=document.getElementById('navTropheesBadge');if(_bn)_bn.style.display='inline-block';}}}
   document.getElementById('roleTag').textContent = '🎓 ' + vieScRole;
-  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','suiviexb','mmok','suivis','memoires','frises','charlemagne','rdv','directeurs','examens','pc','maintenance','formulaires','recruteurs'];
+  const ALL_MODULES = ['notes','delegues','formateurs','planning','inscription','ged','qualiopi','mails','salles','mmok','suivis','memoires','frises','charlemagne','rdv','directeurs','examens','pc','maintenance','formulaires','recruteurs'];
   ALL_MODULES.forEach(m => { if (canAccess(m)) show('nav-'+m); });
   if (String(user.email||'').trim().toLowerCase()==='m.mokhtari@hecg.fr') show('nav-fp2');   // compte maître uniquement
   const first = ALL_MODULES.find(m=>canAccess(m));
@@ -8523,7 +8523,7 @@ async function importSuiviData(){
 <script src="cube.js?v=2"></script>
 <script src="vs_modules.js?v=47"></script>
 <script src="salles_plan.js?v=1"></script>
-<script src="exsim.js?v=12"></script>
+<script src="exsim.js?v=13"></script>
 <script src="vs_qualite.js?v=11"></script>
 </body>
 </html>

@@ -94,7 +94,10 @@ function _exsimRef_(ss) {
       if (cl && mt) { exb[cl] = exb[cl] || []; if (exb[cl].indexOf(mt) === -1) exb[cl].push(mt); }
     }
   } catch (e) {}
-  return { classes: classes, etudiants: parClasse, salles: salles, plans: plans, personnes: personnes, matieresExb: exb };
+  var formateurs = [];
+  try { var FF = _exsuiviFormateurs_(ss); Object.keys(FF).forEach(function (k) { if (!FF[k].sorti) formateurs.push({ id: k, nom: FF[k].nom, email: FF[k].email, matieres: FF[k].matieres, classes: FF[k].classes }); }); } catch (eF) {}
+  formateurs.sort(function (a, b) { return a.nom.localeCompare(b.nom); });
+  return { classes: classes, etudiants: parClasse, salles: salles, plans: plans, personnes: personnes, matieresExb: exb, formateurs: formateurs };
 }
 
 function handleExsim(p, ss) {
@@ -103,6 +106,11 @@ function handleExsim(p, ss) {
   var auteur = p.nomAuteur || p.emailAuteur || "";
   try {
     if (op === "ref") { var R = _exsimRef_(ss); R.success = true; return createJsonResponse(R); }
+    if (["suivi", "docDeposer", "docRetirer", "imprime", "relancer"].indexOf(op) !== -1) {   // suivi des sujets (exsim_suivi.gs)
+      if (op === "suivi") return createJsonResponse(_exsuiviOp_(p, ss, op, auteur));
+      var lk = LockService.getScriptLock(); lk.waitLock(20000);
+      try { return createJsonResponse(_exsuiviOp_(p, ss, op, auteur)); } finally { try { lk.releaseLock(); } catch (eL2) {} }
+    }
 
     var ws = _exsimSheet_(ss), d = ws.getDataRange().getValues();
     if (op === "liste") {
