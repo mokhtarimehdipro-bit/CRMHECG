@@ -746,6 +746,22 @@ function dForm(id, on) {
   if (lecture()) { const e = S().epreuves.find(x => x.id === D.id); if (e) { e.formateurs = JSON.parse(JSON.stringify(D.formateurs)); modifie(); } }
   majForm();
 }
+// affectation directe depuis l'onglet Suivi (plusieurs formateurs possibles)
+function suiviForm(epId, fid, on) {
+  if (!peutSuivre() || !fid) return;
+  const e = S().epreuves.find(x => x.id === epId), f = (X.ref.formateurs || []).find(x => x.id === fid); if (!e) return;
+  e.formateurs = (e.formateurs || []).filter(x => x.id !== fid);
+  if (on && f) e.formateurs.push({ id: f.id, nom: f.nom, email: f.email || '' });
+  if (X.draft && X.draft.id === epId) X.draft.formateurs = JSON.parse(JSON.stringify(e.formateurs));
+  modifie(); rendreTabs(); rendreCorps();
+}
+function selectFormateurs(classe, matiere, deja, onchange) {
+  const tous = X.ref.formateurs || [], nc = norm(classe), nm = norm(matiere || '');
+  const pres = f => norm(f.classes || '').split(',').some(c => c.trim() && c.trim() === nc) || (nm && norm(f.matieres || '').includes(nm));
+  const dispo = tous.filter(f => !deja.some(x => x.id === f.id)), A = dispo.filter(pres), B = dispo.filter(f => !pres(f));
+  const opt = f => `<option value="${esc(f.id)}">${esc(f.nom)}${f.email ? '' : ' — sans e-mail'}</option>`;
+  return `<select style="margin-top:4px;height:30px;font-size:12px;min-width:170px" onchange="${onchange}"><option value="">+ ${deja.length ? 'Ajouter' : 'Affecter'} un formateur</option>${A.length ? `<optgroup label="Intervient dans cette classe / matière">${A.map(opt).join('')}</optgroup>` : ''}<optgroup label="${A.length ? 'Autres formateurs' : 'Formateurs'}">${B.map(opt).join('')}</optgroup></select>`;
+}
 function blocFormateurs(D) {
   const ok = peutSuivre(), L = D.formateurs || [], tous = X.ref.formateurs || [], nc = norm(D.classe), nm = norm(D.matiere || '');
   const pres = f => norm(f.classes || '').split(',').some(c => c.trim() && c.trim() === nc) || (nm && norm(f.matieres || '').includes(nm));
@@ -839,7 +855,8 @@ function vSuivi() {
       ${L.map(e => { const k = controles(e), su = suiviDe(e.id);
         return `<tr><td><a href="#" onclick="event.preventDefault();EXSIM.editer('${e.id}')" style="color:#1A4E8A;font-weight:800">${esc(e.matiere || 'Épreuve')}</a></td>
           <td style="white-space:nowrap">${esc(libJour(e.jour))}<br><span class="text-xs text-gray-500">${e.debut}–${e.fin}</span></td>
-          <td>${k[0][2] ? (e.formateurs || []).map(f => esc(f.nom) + (f.email ? '' : ' <span title="sans e-mail" style="color:#b45309">⚠</span>')).join('<br>') : '<b style="color:#b91c1c">✗ À affecter</b>'}</td>
+          <td style="min-width:190px">${(e.formateurs || []).map(f => `<span class="ex-chip ${f.email ? '' : 'bad'}" title="${esc(f.email || 'Aucune adresse e-mail : pas de relance possible')}">🎓 ${esc(f.nom)}${f.email ? '' : ' ⚠'}${ok ? `<button onclick="EXSIM.suiviForm('${e.id}','${esc(f.id)}',false)">×</button>` : ''}</span>`).join('') || '<b style="color:#b91c1c">✗ À affecter</b>'}
+            ${ok ? '<br>' + selectFormateurs(e.classe, e.matiere, e.formateurs || [], `EXSIM.suiviForm('${e.id}',this.value,true)`) : ''}</td>
           <td>${k[1][2] ? e.salles.map(sa => esc(salle(sa.id).num)).join(', ') : ic(false)}</td><td>${ic(k[2][2])}</td>
           <td>${X.id && !X.dirty ? ligneDoc(e, 'sujet', true) : ic(k[3][2])}</td><td>${X.id && !X.dirty ? ligneDoc(e, 'corrige', true) : ic(k[4][2])}</td>
           <td><input type="checkbox" style="width:auto" ${su.imprime ? 'checked' : ''} ${ok && X.id && !X.dirty ? '' : 'disabled'} onchange="EXSIM.docImprime('${e.id}',this.checked)"></td>
@@ -1542,7 +1559,7 @@ async function pdfEmargement() {
 
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
   set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispo, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
-  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, docChoisir, docRetirer, docImprime, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
+  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, suiviForm, docChoisir, docRetirer, docImprime, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
   jourVue: k => { X.jourVue = k; rendreCorps(); }, gVue: k => { X.gVue = k; rendreCorps(); }, exportGrille, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
   prm, calculer, abandonProp, appliquer, retirerOptim, voirPlan, exportExcel, pdfEtat, pdfPlans, pdfRepartition, pdfEmargement };
