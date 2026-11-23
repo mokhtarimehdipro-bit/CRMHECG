@@ -786,16 +786,20 @@ function blocDocs(D) {
     <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;align-items:center;font-size:13px">
       <b>Sujet</b><div>${ligneDoc(D, 'sujet')}</div><b>Corrigé</b><div>${ligneDoc(D, 'corrige')}</div>
       <b>Impression</b><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" ${su.imprime ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="EXSIM.docImprime('${D.id}',this.checked)"> Copies imprimées</label>
+      <b>Validation</b><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" ${su.valide ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="EXSIM.valider('${D.id}',this.checked)"> Épreuve validée${su.validePar ? ` <span class="text-xs text-gray-400">(${esc(su.validePar)})</span>` : ''}</label>
       <b>Relances</b><div class="text-xs text-gray-500">${esc(txtRelances(su))}${su.sujet ? ' · terminées (sujet reçu)' : ''}${ok && !su.sujet && (D.formateurs || []).length ? ` <button class="ex-b sm" style="height:26px;margin-left:6px" onclick="EXSIM.relancer('${D.id}')">✉ Relancer maintenant</button>` : ''}</div></div></div>`;
 }
+// enregistre la simulation si besoin (le serveur doit connaître l épreuve)
+async function avantSuivi() { if (!X.dirty && X.id) return true; return await enregistrer(); }
 function docChoisir(epId, type) {
-  if (X.dirty) { msg('Enregistrez d\'abord la simulation.', false); return; }
+  // le sélecteur s ouvre tout de suite (sinon le navigateur le bloque après un appel réseau) ; enregistrement au moment de l envoi
   const i = document.createElement('input'); i.type = 'file'; i.accept = '.pdf,.doc,.docx,.odt,.xls,.xlsx,.ods,.ppt,.pptx,.zip,image/*';
   i.onchange = () => docEnvoyer(epId, type, i.files[0]); i.click();
 }
 async function docEnvoyer(epId, type, f) {
   if (!f) return;
   if (f.size > 25 * 1024 * 1024) { msg('Fichier trop volumineux (25 Mo maximum).', false); return; }
+  if (!(await avantSuivi())) return;
   msg(`Envoi du ${type === 'sujet' ? 'sujet' : 'corrigé'} vers la GED…`);
   try {
     const b64 = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => ko(new Error('lecture du fichier impossible')); r.readAsDataURL(f); });
@@ -809,12 +813,18 @@ async function docRetirer(epId, type) {
   const r = await api('exsim', { op: 'docRetirer', id: X.id, epId, type }); if (!r.success) { msg(r.message, false); return; }
   X.suivi[epId] = r.data; msg('Document retiré ✓'); rafraichirSuivi();
 }
+async function valider(epId, v) {
+  if (!(await avantSuivi())) { rafraichirSuivi(); return; }
+  const r = await api('exsim', { op: 'valider', id: X.id, epId, valeur: v ? 'true' : 'false' }); if (!r.success) { msg(r.message, false); rafraichirSuivi(); return; }
+  X.suivi[epId] = r.data; msg(v ? 'Épreuve validée ✓' : 'Épreuve remise à valider'); rafraichirSuivi();
+}
 async function docImprime(epId, v) {
+  if (!(await avantSuivi())) { rafraichirSuivi(); return; }
   const r = await api('exsim', { op: 'imprime', id: X.id, epId, valeur: v ? 'true' : 'false' }); if (!r.success) { msg(r.message, false); rafraichirSuivi(); return; }
   X.suivi[epId] = r.data; rafraichirSuivi();
 }
 async function relancer(epId) {
-  if (X.dirty) { msg('Enregistrez d\'abord la simulation (les formateurs doivent être enregistrés).', false); return; }
+  if (!(await avantSuivi())) return;
   if (!confirm('Envoyer maintenant le mail de demande de sujet et corrigé au(x) formateur(s) de cette épreuve ?')) return;
   const r = await api('exsim', { op: 'relancer', id: X.id, epId }); if (!r.success) { msg(r.message, false); return; }
   X.suivi[epId] = r.data; msg('Mail envoyé au(x) formateur(s) ✓'); rafraichirSuivi();
@@ -824,14 +834,14 @@ function setRelances(v) { if (!X.ecriture) return; S().relances = !!v; modifie()
 function controles(e) {
   const su = suiviDe(e.id);
   return [['form', 'Formateur', (e.formateurs || []).length > 0], ['salle', 'Salle', e.salles.length > 0], ['surv', 'Surveillant', e.salles.length > 0 && e.salles.every(sa => sa.surv.length)],
-    ['sujet', 'Sujet', !!su.sujet], ['corrige', 'Corrigé', !!su.corrige], ['imprime', 'Impression', !!su.imprime]];
+    ['sujet', 'Sujet', !!su.sujet], ['corrige', 'Corrigé', !!su.corrige], ['imprime', 'Impression', !!su.imprime], ['valide', 'Validation', !!su.valide]];
 }
 const nbManquants = () => S().epreuves.reduce((t, e) => t + controles(e).filter(c => !c[2]).length, 0);
 function vSuivi() {
   const s = S(), ok = peutSuivre(), seul = !!X.suiviManq;
   const C = s.classes.map(c => ({ c, E: s.epreuves.filter(e => e.classe === c.classe).sort((a, b) => a.jour - b.jour || h2m(a.debut) - h2m(b.debut)) })).filter(x => x.E.length);
-  const tot = s.epreuves.length * 6, manq = nbManquants(), pct = tot ? Math.round((tot - manq) / tot * 100) : 0;
-  const parType = ['form', 'salle', 'surv', 'sujet', 'corrige', 'imprime'].map((k, i) => [['Formateurs', 'Salles', 'Surveillants', 'Sujets', 'Corrigés', 'Impressions'][i], s.epreuves.filter(e => !controles(e)[i][2]).length]);
+  const NB = 7, tot = s.epreuves.length * NB, manq = nbManquants(), pct = tot ? Math.round((tot - manq) / tot * 100) : 0;
+  const parType = ['form', 'salle', 'surv', 'sujet', 'corrige', 'imprime', 'valide'].map((k, i) => [['Formateurs', 'Salles', 'Surveillants', 'Sujets', 'Corrigés', 'Impressions', 'Validations'][i], s.epreuves.filter(e => !controles(e)[i][2]).length]);
   const ic = b => b ? '<span style="color:#047857;font-weight:900">✓</span>' : '<span style="color:#b91c1c;font-weight:900">✗</span>';
   const barre = p => `<div style="height:8px;border-radius:99px;background:#eef2f7;overflow:hidden"><div style="height:100%;width:${p}%;background:${p === 100 ? '#059669' : p >= 60 ? '#F26522' : '#dc2626'}"></div></div>`;
   const tete = `<div class="ex-card"><div class="flex flex-wrap gap-4 items-center">
@@ -841,26 +851,27 @@ function vSuivi() {
         <label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" style="width:auto" ${s.relances !== false ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="EXSIM.setRelances(this.checked)"> Relances automatiques des formateurs</label>
         <p class="text-xs text-gray-500 mt-1" style="line-height:1.5">Mail à J-30, J-14 puis chaque jour jusqu'à la veille (« Pour rappel »), envoyé à 8 h tant que le sujet n'est pas déposé. Plusieurs formateurs = un seul mail commun.</p>
         <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${seul ? 'checked' : ''} onchange="EXSIM.suiviManq(this.checked)"> Afficher seulement les épreuves incomplètes</label></div></div>
-      ${!X.id || X.dirty ? '<div class="ex-warn" style="margin-bottom:0">Enregistrez la simulation pour déposer les sujets et pour que les relances tiennent compte des derniers changements.</div>' : ''}
+      ${!X.id || X.dirty ? '<div class="ex-warn" style="margin-bottom:0">Modifications non enregistrées : elles seront enregistrées automatiquement au prochain dépôt, validation ou relance (ou avec 💾 Enregistrer) — les relances automatiques ne voient que la version enregistrée.</div>' : ''}
       ${!s.lundi ? '<div class="ex-warn" style="margin-bottom:0">Semaine non renseignée (onglet Paramètres) : aucune relance ne peut être datée.</div>' : ''}</div>`;
   if (!C.length) return tete + '<div class="ex-card">Aucune épreuve planifiée.</div>';
   return tete + C.map(({ c, E }) => {
-    const m = E.reduce((t, e) => t + controles(e).filter(x => !x[2]).length, 0), p = Math.round((E.length * 6 - m) / (E.length * 6) * 100);
+    const m = E.reduce((t, e) => t + controles(e).filter(x => !x[2]).length, 0), p = Math.round((E.length * NB - m) / (E.length * NB) * 100);
     const L = seul ? E.filter(e => controles(e).some(x => !x[2])) : E;
     if (seul && !L.length) return '';
     return `<div class="ex-card"><div class="flex items-center gap-3 flex-wrap mb-2"><span class="ex-dot" style="background:${couleur(c.classe)}"></span><b style="font-size:15px;color:#1A4E8A">${esc(c.classe)}</b>
         <span class="text-xs text-gray-500 font-bold">${E.length} épreuve(s)</span><span class="ex-badge" style="background:${m ? '#fef2f2' : '#ecfdf5'};color:${m ? '#b91c1c' : '#047857'}">${m ? m + ' élément(s) manquant(s)' : '✓ Complet'}</span>
         <div style="flex:1;min-width:120px">${barre(p)}</div><b style="font-size:13px">${p} %</b></div>
-      <div style="overflow-x:auto"><table class="ex-tbl"><thead><tr><th>Épreuve</th><th>Date</th><th>Formateur(s)</th><th>Salle</th><th>Surv.</th><th>Sujet</th><th>Corrigé</th><th>Imprimé</th><th>Relances</th></tr></thead><tbody>
+      <div style="overflow-x:auto"><table class="ex-tbl"><thead><tr><th>Épreuve</th><th>Date</th><th>Formateur(s)</th><th>Salle</th><th>Surv.</th><th>Sujet</th><th>Corrigé</th><th>Imprimé</th><th>Validé</th><th>Relances</th></tr></thead><tbody>
       ${L.map(e => { const k = controles(e), su = suiviDe(e.id);
         return `<tr><td><a href="#" onclick="event.preventDefault();EXSIM.editer('${e.id}')" style="color:#1A4E8A;font-weight:800">${esc(e.matiere || 'Épreuve')}</a></td>
           <td style="white-space:nowrap">${esc(libJour(e.jour))}<br><span class="text-xs text-gray-500">${e.debut}–${e.fin}</span></td>
           <td style="min-width:190px">${(e.formateurs || []).map(f => `<span class="ex-chip ${f.email ? '' : 'bad'}" title="${esc(f.email || 'Aucune adresse e-mail : pas de relance possible')}">🎓 ${esc(f.nom)}${f.email ? '' : ' ⚠'}${ok ? `<button onclick="EXSIM.suiviForm('${e.id}','${esc(f.id)}',false)">×</button>` : ''}</span>`).join('') || '<b style="color:#b91c1c">✗ À affecter</b>'}
             ${ok ? '<br>' + selectFormateurs(e.classe, e.matiere, e.formateurs || [], `EXSIM.suiviForm('${e.id}',this.value,true)`) : ''}</td>
           <td>${k[1][2] ? e.salles.map(sa => esc(salle(sa.id).num)).join(', ') : ic(false)}</td><td>${ic(k[2][2])}</td>
-          <td>${X.id && !X.dirty ? ligneDoc(e, 'sujet', true) : ic(k[3][2])}</td><td>${X.id && !X.dirty ? ligneDoc(e, 'corrige', true) : ic(k[4][2])}</td>
-          <td><input type="checkbox" style="width:auto" ${su.imprime ? 'checked' : ''} ${ok && X.id && !X.dirty ? '' : 'disabled'} onchange="EXSIM.docImprime('${e.id}',this.checked)"></td>
-          <td class="text-xs text-gray-500" style="white-space:nowrap">${esc(txtRelances(su))}${ok && X.id && !X.dirty && !su.sujet && k[0][2] ? `<br><button class="ex-b sm" style="height:24px;margin-top:3px" onclick="EXSIM.relancer('${e.id}')">✉ Relancer</button>` : ''}</td></tr>`; }).join('')}
+          <td>${ligneDoc(e, 'sujet', true)}</td><td>${ligneDoc(e, 'corrige', true)}</td>
+          <td><input type="checkbox" style="width:auto" ${su.imprime ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="EXSIM.docImprime('${e.id}',this.checked)"></td>
+          <td style="white-space:nowrap"><label style="display:flex;gap:5px;align-items:center;font-size:12px;font-weight:800;color:${su.valide ? '#047857' : '#94a3b8'}" title="${esc(su.validePar || '')}"><input type="checkbox" style="width:auto" ${su.valide ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="EXSIM.valider('${e.id}',this.checked)"> ${su.valide ? 'Validé' : 'À valider'}</label></td>
+          <td class="text-xs text-gray-500" style="white-space:nowrap">${esc(txtRelances(su))}${ok && !su.sujet && k[0][2] ? `<br><button class="ex-b sm" style="height:24px;margin-top:3px" onclick="EXSIM.relancer('${e.id}')">✉ Relancer</button>` : ''}</td></tr>`; }).join('')}
       </tbody></table></div></div>`;
   }).join('');
 }
@@ -1559,7 +1570,7 @@ async function pdfEmargement() {
 
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
   set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispo, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
-  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, suiviForm, docChoisir, docRetirer, docImprime, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
+  choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, suiviForm, docChoisir, docRetirer, docImprime, valider, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
   jourVue: k => { X.jourVue = k; rendreCorps(); }, gVue: k => { X.gVue = k; rendreCorps(); }, exportGrille, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
   prm, calculer, abandonProp, appliquer, retirerOptim, voirPlan, exportExcel, pdfEtat, pdfPlans, pdfRepartition, pdfEmargement };

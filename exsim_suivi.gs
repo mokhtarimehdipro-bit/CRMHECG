@@ -11,11 +11,15 @@
 //   Un seul mail par épreuve, tous les formateurs de l'épreuve en destinataires.
 
 var EXSUIVI_HEADERS = ["Clé", "Simulation", "Épreuve", "Classe", "Matière", "Sujet ID", "Sujet URL", "Sujet nom",
-  "Corrigé ID", "Corrigé URL", "Corrigé nom", "Imprimé", "Relances (JSON)", "Mis à jour le", "Par"];
+  "Corrigé ID", "Corrigé URL", "Corrigé nom", "Imprimé", "Relances (JSON)", "Mis à jour le", "Par", "Validé", "Validé par / le"];
 var EXSUIVI_EXPEDITEUR = "HECG — Équipe pédagogique";
 var EXSUIVI_CAT = "Vie scolaire — Simulations d'examens";
 
-function _exsuiviSheet_(ss) { return _vsxSheet_(ss, "EXSIM_SUIVI", EXSUIVI_HEADERS); }
+function _exsuiviSheet_(ss) {
+  var ws = _vsxSheet_(ss, "EXSIM_SUIVI", EXSUIVI_HEADERS);
+  if (ws.getLastColumn() < EXSUIVI_HEADERS.length) ws.getRange(1, 1, 1, EXSUIVI_HEADERS.length).setValues([EXSUIVI_HEADERS]).setFontWeight("bold").setBackground("#1A4E8A").setFontColor("#ffffff");
+  return ws;
+}
 
 function _exsuiviLire_(ss, simId) {
   var d = _exsuiviSheet_(ss).getDataRange().getValues(), out = {};
@@ -27,7 +31,7 @@ function _exsuiviLire_(ss, simId) {
       sujet: d[i][5] ? { id: String(d[i][5]), url: String(d[i][6]), nom: String(d[i][7]) } : null,
       corrige: d[i][8] ? { id: String(d[i][8]), url: String(d[i][9]), nom: String(d[i][10]) } : null,
       imprime: d[i][11] === true || String(d[i][11]).toUpperCase() === "TRUE" || String(d[i][11]) === "1",
-      relances: rel };
+      relances: rel, valide: String(d[i][15] || "").toUpperCase() === "TRUE", validePar: String(d[i][16] || "") };
   }
   return out;
 }
@@ -39,7 +43,7 @@ function _exsuiviMaj_(ss, sim, simId, ep, f, auteur) {
   var row = [cle, simId, ep.id, ep.classe || "", ep.matiere || "",
     o.sujet ? o.sujet.id : "", o.sujet ? o.sujet.url : "", o.sujet ? o.sujet.nom : "",
     o.corrige ? o.corrige.id : "", o.corrige ? o.corrige.url : "", o.corrige ? o.corrige.nom : "",
-    o.imprime ? "TRUE" : "", JSON.stringify((o.relances || []).slice(-60)), new Date(), auteur || ""];
+    o.imprime ? "TRUE" : "", JSON.stringify((o.relances || []).slice(-60)), new Date(), auteur || "", o.valide ? "TRUE" : "", o.validePar || ""];
   if (o.row) ws.getRange(o.row, 1, 1, row.length).setValues([row]);
   else ws.appendRow(row);
   return o;
@@ -189,7 +193,7 @@ function _exsuiviOp_(p, ss, op, auteur) {
   var simId = String(p.id || "");
   if (op === "suivi") {
     var all = _exsuiviLire_(ss, simId), out = {};
-    Object.keys(all).forEach(function (k) { var o = all[k]; out[o.epId] = { sujet: o.sujet, corrige: o.corrige, imprime: o.imprime, relances: o.relances }; });
+    Object.keys(all).forEach(function (k) { var o = all[k]; out[o.epId] = _exsuiviPub_(o); });
     return { success: true, data: out };
   }
   if (!_exsimPeutEcrire_(p)) return { success: false, message: "Accès refusé (réservé au personnel)." };
@@ -209,18 +213,24 @@ function _exsuiviOp_(p, ss, op, auteur) {
       x[type] = { id: fichier.getId(), url: fichier.getUrl(), nom: nom };
     }, auteur);
     logAction(auteur, p.vieScRole || "", "Ajout", EXSUIVI_CAT + " — Sujets", simId, (type === "sujet" ? "Sujet" : "Corrigé") + " déposé : " + lib + " (« " + sim.titre + " ») → GED « " + nom + " »");
-    return { success: true, data: { sujet: o.sujet, corrige: o.corrige, imprime: o.imprime, relances: o.relances } };
+    return { success: true, data: _exsuiviPub_(o) };
   }
   if (op === "docRetirer") {
     var t2 = p.type === "corrige" ? "corrige" : "sujet";
     var o2 = _exsuiviMaj_(ss, sim, simId, ep, function (x) { if (x[t2] && x[t2].id) { try { DriveApp.getFileById(x[t2].id).setTrashed(true); } catch (eT) {} } x[t2] = null; }, auteur);
     logAction(auteur, p.vieScRole || "", "Suppression", EXSUIVI_CAT + " — Sujets", simId, (t2 === "sujet" ? "Sujet" : "Corrigé") + " retiré : " + lib);
-    return { success: true, data: { sujet: o2.sujet, corrige: o2.corrige, imprime: o2.imprime, relances: o2.relances } };
+    return { success: true, data: _exsuiviPub_(o2) };
   }
   if (op === "imprime") {
     var o3 = _exsuiviMaj_(ss, sim, simId, ep, function (x) { x.imprime = String(p.valeur) === "true" || p.valeur === true; }, auteur);
     logAction(auteur, p.vieScRole || "", "Modification", EXSUIVI_CAT + " — Sujets", simId, "Impression " + (o3.imprime ? "faite" : "à faire") + " : " + lib);
-    return { success: true, data: { sujet: o3.sujet, corrige: o3.corrige, imprime: o3.imprime, relances: o3.relances } };
+    return { success: true, data: _exsuiviPub_(o3) };
+  }
+  if (op === "valider") {
+    var v = String(p.valeur) === "true" || p.valeur === true;
+    var o5 = _exsuiviMaj_(ss, sim, simId, ep, function (x) { x.valide = v; x.validePar = v ? (auteur || "") + " · " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm") : ""; }, auteur);
+    logAction(auteur, p.vieScRole || "", "Modification", EXSUIVI_CAT + " — Sujets", simId, "Épreuve " + (v ? "validée" : "remise à valider") + " : " + lib);
+    return { success: true, data: _exsuiviPub_(o5) };
   }
   if (op === "relancer") {
     var prev = _exsuiviLire_(ss, simId)[simId + "|" + ep.id] || { relances: [] };
@@ -228,7 +238,9 @@ function _exsuiviOp_(p, ss, op, auteur) {
     if (err) return { success: false, message: "Relance non envoyée : " + err + "." };
     logAction(auteur, p.vieScRole || "", "Envoi", EXSUIVI_CAT + " — Relances sujets", simId, "Relance manuelle aux formateurs : " + lib);
     var o4 = _exsuiviLire_(ss, simId)[simId + "|" + ep.id];
-    return { success: true, data: { sujet: o4.sujet, corrige: o4.corrige, imprime: o4.imprime, relances: o4.relances } };
+    return { success: true, data: _exsuiviPub_(o4) };
   }
   return { success: false, message: "Opération inconnue : " + op };
 }
+
+function _exsuiviPub_(o) { return { sujet: o.sujet || null, corrige: o.corrige || null, imprime: !!o.imprime, relances: o.relances || [], valide: !!o.valide, validePar: o.validePar || "" }; }

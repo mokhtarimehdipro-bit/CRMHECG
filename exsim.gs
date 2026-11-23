@@ -106,7 +106,7 @@ function handleExsim(p, ss) {
   var auteur = p.nomAuteur || p.emailAuteur || "";
   try {
     if (op === "ref") { var R = _exsimRef_(ss); R.success = true; return createJsonResponse(R); }
-    if (["suivi", "docDeposer", "docRetirer", "imprime", "relancer"].indexOf(op) !== -1) {   // suivi des sujets (exsim_suivi.gs)
+    if (["suivi", "docDeposer", "docRetirer", "imprime", "valider", "relancer"].indexOf(op) !== -1) {   // suivi des sujets (exsim_suivi.gs)
       if (op === "suivi") return createJsonResponse(_exsuiviOp_(p, ss, op, auteur));
       var lk = LockService.getScriptLock(); lk.waitLock(20000);
       try { return createJsonResponse(_exsuiviOp_(p, ss, op, auteur)); } finally { try { lk.releaseLock(); } catch (eL2) {} }
