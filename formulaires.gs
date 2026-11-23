@@ -76,7 +76,7 @@ function _maintJson_(v, def) { try { var x = JSON.parse(String(v || "")); return
 // Équipe pouvant être désignée responsable (nom + mail) — sert à la relance par mail
 function _maintEquipe_(ss) {
   var out = [];
-  try { var d = getPersonnelDataCached_(ss); for (var i = 1; i < d.length; i++) { var nom = (String(d[i][2] || "") + " " + String(d[i][1] || "").toUpperCase()).trim(), mail = String(d[i][6] || "").trim(); if (nom) out.push({ nom: nom, mail: mail }); } } catch (e) {}
+  try { var d = getPersonnelDataCached_(ss); for (var i = 1; i < d.length; i++) { if (_persoRevoque_(d, i)) continue; var nom = (String(d[i][2] || "") + " " + String(d[i][1] || "").toUpperCase()).trim(), mail = String(d[i][6] || "").trim(); if (nom) out.push({ nom: nom, mail: mail }); } } catch (e) {}
   return out;
 }
 // Contacts externes (prestataires, propriétaire, informaticien…) créés depuis les tickets

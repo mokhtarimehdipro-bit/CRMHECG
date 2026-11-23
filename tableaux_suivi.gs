@@ -148,7 +148,7 @@ function handleGetSuiviImportOptions(p, ss) {
     const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues().slice(1);
     const dP = getPersonnelDataCached_(ss);
     const referents = [];
-    for (let r = 1; r < dP.length; r++) if (dP[r][0]) referents.push({ ref: String(dP[r][0]), nom: (dP[r][2] + " " + dP[r][1]).trim() });
+    for (let r = 1; r < dP.length; r++) if (dP[r][0] && !_persoRevoque_(dP, r)) referents.push({ ref: String(dP[r][0]), nom: (dP[r][2] + " " + dP[r][1]).trim() });
     const dPart = getSheetSafe(ss, "PARTENARIAT").getDataRange().getValues().slice(1);
     const dO = getSheetSafe(ss, "OFFRES").getDataRange().getValues().slice(1);
     let dC = [];

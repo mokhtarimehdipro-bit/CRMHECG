@@ -489,7 +489,7 @@
                 else if(ent.alerte === "PROGRAMMÉE") alertClass = "bg-blue-500";
 
                 const score = ent.score || 0;
-                const scoreColor = score >= 200 ? 'bg-amber-100 text-amber-700' : score >= 50 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400';
+                const scoreColor = score >= 2000 ? 'bg-amber-100 text-amber-700' : score >= 300 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400';
                 return `
                 <div class="bg-white rounded-[2.2rem] p-8 border border-slate-100 flex flex-col justify-between hover:shadow-2xl transition-all duration-500 relative group">
                     ${alertClass ? `<div class="absolute -top-1 -right-1 w-6 h-6 ${alertClass} rounded-full border-4 border-white shadow-lg"></div>` : ''}

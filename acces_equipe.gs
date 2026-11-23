@@ -43,7 +43,7 @@ function _paramPersonnel_(ss) {
 }
 
 function _paramInvalidatePersonnel_() {
-  try { CacheService.getScriptCache().remove('personnel_data_v1'); } catch (e) {}
+  try { CacheService.getScriptCache().removeAll(['personnel_data_v1', 'presence_annuaire_v2']); } catch (e) {}
   try { _invalidatePersonnelExtCache_(); } catch (e2) {}
 }
 

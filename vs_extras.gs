@@ -31,7 +31,7 @@ function _vsxRef_(ss) {
   }
   const dP = getPersonnelDataCached_(ss);
   const personnel = [];
-  for (let r = 1; r < dP.length; r++) if (dP[r][0]) personnel.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), role: String(dP[r][5] || ""), email: String(dP[r][6] || "").trim().toLowerCase() });
+  for (let r = 1; r < dP.length; r++) if (dP[r][0] && !_persoRevoque_(dP, r)) personnel.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), role: String(dP[r][5] || ""), email: String(dP[r][6] || "").trim().toLowerCase() });
   // Formateurs actifs : feuille « Adultes » (ou FORMATEURS), état formateur = OUI, pas sorti
   const formateurs = [];
   try {

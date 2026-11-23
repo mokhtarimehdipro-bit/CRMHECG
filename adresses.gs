@@ -892,6 +892,7 @@ function auditAdressesTick() {
   try { _rcAuto_(); } catch (eR) { console.error('audit recruteurs : ' + eR); }   // audit espace recruteurs, chaque nuit (recruteurs.gs)
   try { if (typeof _frisesAuto_ === 'function') _frisesAuto_(); } catch (eF) { console.error('rappels frises : ' + eF); }   // rappels d'échéances des frises (vs_extras.gs)
   try { if (typeof _altAuto_ === 'function') _altAuto_(); } catch (eA) { console.error('relevé alternance : ' + eA); }   // mouvements d'alternance, 1 relevé/jour (vs_suivi.gs)
+  try { if (typeof _scoreEntreprisesAuto_ === 'function') _scoreEntreprisesAuto_(); } catch (eS) { console.error('score entreprises : ' + eS); }   // bonus d'accueil + points/jour/alternant (code.gs)
   try { if (typeof _msgRelances_ === 'function') _msgRelances_(); } catch (eM) { console.error('relances messagerie : ' + eM); }   // messages non vus > 10 min (messagerie.gs)
   try { if (typeof _exsuiviAuto_ === 'function') _exsuiviAuto_(); } catch (eX) { console.error('relances sujets examens blancs : ' + eX); }   // J-30, J-14 puis chaque jour (exsim_suivi.gs)
   try { if (typeof _rdvRappelsAuto_ === 'function') _rdvRappelsAuto_(); } catch (eR2) { console.error('rappels RDV J-3 : ' + eR2); }   // rappel étudiant 3 jours avant le RDV (vs_suivi.gs)

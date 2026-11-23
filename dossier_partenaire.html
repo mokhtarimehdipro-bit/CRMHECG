@@ -371,13 +371,16 @@
                     elDateCrea.innerText = d.info.dateCreation ? '🗓️ Entreprise créée le ' + d.info.dateCreation : '';
                     elDateCrea.classList.toggle('hidden', !d.info.dateCreation);
 
-                    // Badge score — +1 pt/jour tant que l'entreprise a un étudiant Inscrit/Préinscrit
-                    const score = d.score || 0;
-                    const scoreCol = score >= 200 ? 'text-amber-600' : score >= 50 ? 'text-blue-600' : 'text-slate-400';
+                    // Badge score (règle nov. 2026, code.gs calculerScoreQuotidienEntreprises) :
+                    // 100 pts d'office au 1er alternant puis chaque jour n × 5 × (1 + 0,25 × (n − 1))
+                    const score = Math.round(d.score || 0);
+                    const nAlt = d.scoreNbAlt || 0;
+                    const ptsJour = d.scorePtsJour || 0;
+                    const scoreCol = score >= 2000 ? 'text-amber-600' : score >= 300 ? 'text-blue-600' : 'text-slate-400';
                     document.getElementById('scoreBadge').innerHTML = `
                       <div class="flex items-center gap-3 flex-wrap py-2">
                         <span class="text-2xl font-black ${scoreCol}">⭐ ${score} pts</span>
-                        <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-black">+1 pt/jour avec un étudiant Inscrit ou Préinscrit actif</span>
+                        <span class="text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-black" title="100 points d'office dès le premier alternant, puis chaque jour 5 points par alternant (Inscrit ou Préinscrit en alternance), avec un bonus de +25 % par alternant supplémentaire">${nAlt ? '+' + String(ptsJour).replace('.', ',') + ' pts/jour · ' + nAlt + ' alternant' + (nAlt > 1 ? 's' : '') + (nAlt > 1 ? ' (coef. ×' + String(1 + 0.25 * (nAlt - 1)).replace('.', ',') + ')' : '') : 'Aucun alternant : score figé'}</span>
                       </div>`;
 
                     // Bouton supprimer entreprise (RP uniquement)

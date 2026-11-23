@@ -96,13 +96,13 @@ function handleGetTaches(p, ss) {
 // Référentiels : équipe, catégories, paramètres + index des « mandats » (admin)
 function handleGetTachesRef(p, ss) {
   const isAdmin = _tacheIsAdmin_(p);
-  return getCachedJsonResponse_('taches_ref_v1_' + (isAdmin ? 'a' : 'u'), 300, function() {
+  return getCachedJsonResponse_('taches_ref_v2_' + (isAdmin ? 'a' : 'u'), 300, function() {
     try {
       const dP = getPersonnelDataCached_(ss);
       const equipe = [];
       for (let r = 1; r < dP.length; r++) {
         const email = String(dP[r][6] || "").trim().toLowerCase();
-        if (!dP[r][0]) continue;
+        if (!dP[r][0] || _persoRevoque_(dP, r)) continue;   // comptes révoqués : non assignables
         equipe.push({ ref: String(dP[r][0]), nom: (String(dP[r][2] || "") + " " + String(dP[r][1] || "")).trim(), email: email || ("ref:" + String(dP[r][0]).toLowerCase()), role: String(dP[r][5] || ""), sansEmail: !email });
       }
       const cd = _tacheCatSheet_(ss).getDataRange().getValues();

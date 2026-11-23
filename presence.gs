@@ -12,7 +12,7 @@ var PRESENCE_TTL_S = 180;
 function _presVuLire_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("PRESENCE_VU") || "{}") || {}; } catch (e) { return {}; } }
 
 function _presAnnuaire_(ss) {
-  var c = CacheService.getScriptCache(), hit = c.get("presence_annuaire_v1");
+  var c = CacheService.getScriptCache(), hit = c.get("presence_annuaire_v2");
   if (hit) { try { return JSON.parse(hit); } catch (e) {} }
   var d = getPersonnelDataCached_(ss), h = (d[0] || []).map(function (x) { return String(x).trim().toLowerCase(); });
   var ix = function (re) { for (var i = 0; i < h.length; i++) if (re.test(h[i])) return i; return -1; };
@@ -21,6 +21,7 @@ function _presAnnuaire_(ss) {
   for (var r = 1; r < d.length; r++) {
     var em = String(d[r][iMail] || "").trim().toLowerCase();
     if (!em || em.indexOf("@") < 1 || vus[em]) continue;
+    if (_persoRevoque_(d, r)) continue;   // compte révoqué : n'apparaît plus
     if (/etudiant/i.test(String(d[r][iRole] || ""))) continue;
     vus[em] = 1;
     var der = iDer > -1 ? d[r][iDer] : "";
@@ -28,7 +29,7 @@ function _presAnnuaire_(ss) {
                fonction: String(d[r][iFct] || ""), derniere: der instanceof Date ? der.toISOString() : String(der || "") });
   }
   out.sort(function (a, b) { return a.nom.localeCompare(b.nom); });
-  try { c.put("presence_annuaire_v1", JSON.stringify(out), 600); } catch (e) {}
+  try { c.put("presence_annuaire_v2", JSON.stringify(out), 600); } catch (e) {}
   return out;
 }
 

@@ -79,7 +79,7 @@ function _exsimRef_(ss) {
   var personnes = [];
   try {
     var pd = getPersonnelDataCached_(ss);
-    for (var a = 1; a < pd.length; a++) if (pd[a][0]) personnes.push({ id: "P-" + pd[a][0], nom: (String(pd[a][2] || "") + " " + String(pd[a][1] || "")).trim(), source: "Personnel" + (pd[a][5] ? " · " + pd[a][5] : "") });
+    for (var a = 1; a < pd.length; a++) if (pd[a][0] && !_persoRevoque_(pd, a)) personnes.push({ id: "P-" + pd[a][0], nom: (String(pd[a][2] || "") + " " + String(pd[a][1] || "")).trim(), source: "Personnel" + (pd[a][5] ? " · " + pd[a][5] : "") });
   } catch (e) {}
   try {
     var ws; try { ws = getSheetSafe(ss, "Adultes"); } catch (e1) { ws = getSheetSafe(ss, "FORMATEURS"); }

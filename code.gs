@@ -1714,18 +1714,29 @@ function handleGetPartners(params, ss) {
 }
 
 // ==========================================
-// SCORE QUOTIDIEN DES ENTREPRISES
-// Toute entreprise ayant au moins un étudiant Inscrit ou Préinscrit gagne 1 point par
-// jour. Le score est stocké (pas recalculé à la volée) et incrémenté une fois par jour
-// par un trigger automatique — voir creerTriggerScoreEntreprises() à exécuter une fois
-// depuis l'éditeur pour l'installer.
+// SCORE DES ENTREPRISES (règle nov. 2026)
+//  1. Bonus d'office : SCORE_BONUS_ACCUEIL points, une seule fois, dès qu'une entreprise
+//     accueille au moins un alternant.
+//  2. Chaque jour : SCORE_PTS_JOUR points par alternant présent, multipliés par un coefficient
+//     de pondération qui augmente avec le nombre d'alternants :
+//        points du jour = n × SCORE_PTS_JOUR × (1 + SCORE_COEF_SUPP × (n − 1))
+//     ex. 1 alternant = 5/j · 2 = 12,5/j · 3 = 22,5/j · 5 = 50/j
+//  « Alternant » = étudiant Inscrit ou Préinscrit (typologie, col U) dont le statut (col N)
+//  est en alternance / apprentissage, rattaché à l'entreprise (col L).
+//  Jours manqués (exécution interrompue) rattrapés, 7 jours maximum.
+//  Exécution : auditAdressesTick (une fois par jour, après 5 h) + l'ancien déclencheur s'il existe.
 // ==========================================
+var SCORE_BONUS_ACCUEIL = 100, SCORE_PTS_JOUR = 5, SCORE_COEF_SUPP = 0.25, SCORE_RATTRAPAGE_MAX = 7;
+var SCORE_HEADERS = ["ID_Entreprise", "Score", "DernierCalcul", "Bonus accueil le", "Alternants (dernier calcul)", "Points du dernier jour"];
+
 function _getOrCreateScoreEntreprisesSheet(ss) {
   let s = ss.getSheetByName("SCORE_ENTREPRISES");
   if (!s) {
     s = ss.insertSheet("SCORE_ENTREPRISES");
-    s.appendRow(["ID_Entreprise", "Score", "DernierCalcul"]);
+    s.appendRow(SCORE_HEADERS);
     s.setFrozenRows(1);
+  } else if (s.getLastColumn() < SCORE_HEADERS.length) {
+    s.getRange(1, 1, 1, SCORE_HEADERS.length).setValues([SCORE_HEADERS]);
   }
   return s;
 }
@@ -1737,56 +1748,83 @@ function _getScoreEntreprisesMap_(ss) {
   const map = {};
   for (let i = 1; i < data.length; i++) {
     const id = String(data[i][0] || "").trim().toUpperCase();
-    if (id) map[id] = Number(data[i][1]) || 0;
+    if (id) map[id] = Math.round(Number(data[i][1]) || 0);
   }
   return map;
 }
 
-/**
- * Calcul quotidien : +1 point pour chaque entreprise ayant au moins un étudiant dont la
- * typologie contient "inscrit" (couvre "Inscrit" ET "Préinscrit", "préinscrit" se
- * terminant par "inscrit"). Protégé contre les doubles incréments le même jour via la
- * colonne DernierCalcul. Appelé une fois par jour par le trigger installé via
- * creerTriggerScoreEntreprises().
- */
+function _scorePointsJour_(n) { return n > 0 ? n * SCORE_PTS_JOUR * (1 + SCORE_COEF_SUPP * (n - 1)) : 0; }
+
+/** Calcul quotidien (idempotent : une seule fois par jour et par entreprise via DernierCalcul). */
 function calculerScoreQuotidienEntreprises() {
   const ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
-  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const tz = Session.getScriptTimeZone();
+  const todayStr = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;
+  try {
+    const ws = _getOrCreateScoreEntreprisesSheet(ss);
+    const lastRow = ws.getLastRow();
+    const rows = lastRow > 1 ? ws.getRange(2, 1, lastRow - 1, SCORE_HEADERS.length).getValues() : [];
+    const idx = {};
+    rows.forEach(function (r, i) {
+      const id = String(r[0] || "").trim().toUpperCase(); if (id) idx[id] = i;
+      if (r[2] instanceof Date) r[2] = Utilities.formatDate(r[2], tz, "yyyy-MM-dd");   // anciennes lignes : date convertie par Sheets
+      if (r[3] instanceof Date) r[3] = Utilities.formatDate(r[3], tz, "yyyy-MM-dd");
+    });
 
-  const wsScore = _getOrCreateScoreEntreprisesSheet(ss);
-  const dataScore = wsScore.getDataRange().getValues();
-  const scoreMap = {}; // idEnt (majuscules) -> { row1Based, score, dernierCalcul }
-  for (let i = 1; i < dataScore.length; i++) {
-    const id = String(dataScore[i][0] || "").trim().toUpperCase();
-    if (id) scoreMap[id] = { row: i + 1, score: Number(dataScore[i][1]) || 0, dernierCalcul: String(dataScore[i][2] || "") };
-  }
-
-  // Entreprises éligibles aujourd'hui : au moins un étudiant Inscrit/Préinscrit
-  const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-  const eligibles = new Set();
-  for (let j = 1; j < dE.length; j++) {
-    const idEnt = String(dE[j][11] || "").trim();
-    if (!idEnt) continue;
-    const typo = String(dE[j][20] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    if (typo.includes("inscrit")) eligibles.add(idEnt.toUpperCase());
-  }
-
-  let nbMisAJour = 0;
-  eligibles.forEach(function(idEntUpper) {
-    const entry = scoreMap[idEntUpper];
-    if (entry) {
-      if (entry.dernierCalcul !== todayStr) {
-        wsScore.getRange(entry.row, 1, 1, 3).setValues([[idEntUpper, entry.score + 1, todayStr]]);
-        nbMisAJour++;
-      }
-    } else {
-      wsScore.appendRow([idEntUpper, 1, todayStr]);
-      nbMisAJour++;
+    // alternants par entreprise
+    const dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
+    const nb = {};
+    for (let j = 1; j < dE.length; j++) {
+      const idEnt = String(dE[j][11] || "").trim().toUpperCase();
+      if (!idEnt) continue;
+      const typo = String(dE[j][20] || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const statut = String(dE[j][13] || "").toLowerCase();
+      if (typo.includes("inscrit") && (statut.includes("altern") || statut.includes("apprenti"))) nb[idEnt] = (nb[idEnt] || 0) + 1;
     }
-  });
 
-  _invalidatePartnersCache_();
-  Logger.log('Score entreprises : ' + nbMisAJour + ' entreprise(s) incrémentée(s) pour le ' + todayStr);
+    let maj = 0, bonus = 0, total = 0;
+    Object.keys(nb).forEach(function (id) {
+      const n = nb[id];
+      let i = idx[id];
+      if (i === undefined) { rows.push([id, 0, "", "", 0, 0]); i = idx[id] = rows.length - 1; }
+      const r = rows[i];
+      if (String(r[2] || "") === todayStr && r[5] !== "" && r[5] !== null) return; // déjà compté aujourd'hui (nouvelle règle)
+      const ancienneRegleAujourdhui = String(r[2] || "") === todayStr; // +1 de l'ancienne règle déjà donné ce matin
+      let score = Number(r[1]) || 0;
+      if (!r[3]) { score += SCORE_BONUS_ACCUEIL; r[3] = todayStr; bonus++; }
+      // jours écoulés depuis le dernier calcul (rattrapage limité)
+      let jours = 1;
+      if (ancienneRegleAujourdhui) score -= 1;
+      const der = String(r[2] || "") && !ancienneRegleAujourdhui ? new Date(String(r[2]) + "T12:00:00") : null;
+      if (der && !isNaN(der)) jours = Math.min(SCORE_RATTRAPAGE_MAX, Math.max(1, Math.round((new Date(todayStr + "T12:00:00") - der) / 86400000)));
+      const pts = _scorePointsJour_(n);
+      score += pts * jours;
+      r[1] = Math.round(score * 10) / 10; r[2] = todayStr; r[4] = n; r[5] = pts;
+      maj++; total += pts * jours;
+    });
+    // entreprises sans alternant aujourd'hui : le score est conservé, plus de points
+    rows.forEach(function (r) { const id = String(r[0] || "").trim().toUpperCase(); if (id && !nb[id] && String(r[2] || "") !== todayStr) { r[4] = 0; r[5] = 0; } });
+    if (rows.length) {
+      // DernierCalcul en texte (évite la conversion automatique en date)
+      ws.getRange(2, 3, rows.length, 2).setNumberFormat("@");
+      ws.getRange(2, 1, rows.length, SCORE_HEADERS.length).setValues(rows.map(function (r) { return [r[0], r[1], String(r[2] instanceof Date ? Utilities.formatDate(r[2], tz, "yyyy-MM-dd") : (r[2] || "")), String(r[3] instanceof Date ? Utilities.formatDate(r[3], tz, "yyyy-MM-dd") : (r[3] || "")), r[4], r[5]]; }));
+    }
+    _invalidatePartnersCache_();
+    try { logAction("Système", "", "Calcul", "Entreprises — Score", "-", maj + " entreprise(s) créditée(s), " + bonus + " bonus d'accueil, " + Math.round(total) + " points distribués (" + todayStr + ")"); } catch (eL) {}
+    Logger.log("Score entreprises : " + maj + " entreprise(s), " + bonus + " bonus, " + total + " pts — " + todayStr);
+  } finally { lock.releaseLock(); }
+}
+
+// Appelé par auditAdressesTick (toutes les 5 min) : une seule exécution par jour, après 5 h.
+function _scoreEntreprisesAuto_() {
+  const tz = Session.getScriptTimeZone(), now = new Date();
+  if (Number(Utilities.formatDate(now, tz, "H")) < 5) return;
+  const jour = Utilities.formatDate(now, tz, "yyyy-MM-dd"), props = PropertiesService.getScriptProperties();
+  if (props.getProperty("SCORE_ENT_JOUR") === jour) return;
+  props.setProperty("SCORE_ENT_JOUR", jour);
+  calculerScoreQuotidienEntreprises();
 }
 
 /**
@@ -5121,9 +5159,13 @@ function handleGetPartnerDetails(params, ss) {
     // Score quotidien (identique à handleGetPartners) : +1 point/jour tant que
     // l'entreprise a au moins un étudiant Inscrit/Préinscrit, calculé une fois par jour
     // par calculerScoreQuotidienEntreprises(). On se contente ici de le lire.
-    const score = _getScoreEntreprisesMap_(ss)[id] || 0;
+    let score = 0, scoreNbAlt = 0, scorePtsJour = 0;
+    try {
+      const dS = _getOrCreateScoreEntreprisesSheet(ss).getDataRange().getValues();
+      for (let i = 1; i < dS.length; i++) if (String(dS[i][0] || "").trim().toUpperCase() === id) { score = Math.round(Number(dS[i][1]) || 0); scoreNbAlt = Number(dS[i][4]) || 0; scorePtsJour = Number(dS[i][5]) || 0; break; }
+    } catch (eS) {}
 
-    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants, score } });
+    return createJsonResponse({ success: true, data: { info, contacts, alternants, suivi, alertes, offres, anciensAlternants, score, scoreNbAlt, scorePtsJour } });
   } catch (e) {
     return createJsonResponse({ success: false, message: e.toString() });
   }
@@ -10986,6 +11028,7 @@ function handleGetPersonnelList(p, ss) {
     const list = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
+      if (!p.inclureRevoques && _persoRevoque_(data, i)) continue;   // comptes révoqués : hors des listes
       const email = String(data[i][6]||"").trim().toLowerCase();
       const nom   = String(data[i][2]||"")+" "+String(data[i][1]||"");
       list.push({ ref: String(data[i][0]), nom: nom.trim(), email: email, role: String(data[i][5]||"") });
