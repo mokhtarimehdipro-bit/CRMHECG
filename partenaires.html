@@ -411,6 +411,8 @@
         window.onload = () => {
             const userName = localStorage.getItem('user_nom');
             if(userName) document.getElementById('userNameDisplay').innerText = userName;
+            // Arrivée depuis un lien (ex. nom d'entreprise dans la liste étudiants du dashboard) : recherche pré-remplie
+            try { const q = new URLSearchParams(window.location.search).get('q'); if (q) document.getElementById('searchInput').value = q; } catch(eQ) {}
             loadPartners();
         };
 

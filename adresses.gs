@@ -886,6 +886,7 @@ function _adrTickInstaller_() {
 }
 function auditAdressesTick() {
   var t0 = Date.now();
+  try { if (typeof _importLeadsSalon2111Auto_ === 'function') _importLeadsSalon2111Auto_(); } catch (eIL) { console.error('import leads salon 21/11 : ' + eIL); }   // import ponctuel (import_leads_2111.gs)
   try { _qualiopiPackAuto_(); } catch (eQ) { console.error('pack Qualiopi : ' + eQ); }   // import unique (qualiopi.gs)
   try { if (typeof _initSecrets_ === 'function') _initSecrets_(); } catch (eS) {}   // paramètres sensibles posés une fois (fichier hors dépôt)
   try { _rcAuto_(); } catch (eR) { console.error('audit recruteurs : ' + eR); }   // audit espace recruteurs, chaque nuit (recruteurs.gs)

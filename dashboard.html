@@ -881,7 +881,7 @@ async function apiPost(payload) {
                 <tr class="hover:bg-blue-50/30 transition group border-b">
                     <td class="p-5">
                         <div class="font-black text-slate-800 text-sm">${e.nom} ${e.prenom}</div>
-                        <div class="text-[10px] font-bold mt-1 text-orange-500">${e.entreprise || '<span class="text-slate-300 italic font-medium">Sans entreprise</span>'}</div>
+                        <div class="text-[10px] font-bold mt-1 text-orange-500">${e.entreprise ? `<a href="${lienEntrepriseEtu(e)}" class="hover:underline hover:text-[#F26522] cursor-pointer" title="Ouvrir la fiche entreprise" onclick="event.stopPropagation()">🏢 ${e.entreprise}</a>` : '<span class="text-slate-300 italic font-medium">Sans entreprise</span>'}</div>
                         <div class="text-[9px] font-black mt-1 uppercase tracking-widest ${e.campus === 'HECG_AIX' ? 'text-purple-600' : 'text-[#1A4E8A]'}">${e.campus === 'HECG_AIX' ? '📍 Aix-en-Provence' : (e.campus === 'HECG' ? '📍 Marseille' : '')}</div>
                     </td>
                     <td class="p-5">
@@ -1077,6 +1077,17 @@ async function apiPost(payload) {
         }
 
        // ==============================================================
+// Lien du nom d'entreprise (liste étudiants) → fiche entreprise ; sans identifiant connu → page Entreprises filtrée sur le nom
+function lienEntrepriseEtu(e) {
+    let id = e.id_ent || '';
+    if (!id && typeof catalogueTuteurs !== 'undefined' && Array.isArray(catalogueTuteurs)) {
+        const n = String(e.entreprise || '').trim().toLowerCase();
+        const t = catalogueTuteurs.find(x => String(x.nom || x.entreprise || '').trim().toLowerCase() === n);
+        if (t) id = t.id || t.id_ent || '';
+    }
+    return id ? 'dossier_partenaire.html?id=' + encodeURIComponent(id) : 'partenaires.html?q=' + encodeURIComponent(e.entreprise || '');
+}
+
 // BLOC DE SAUVEGARDE ETUDIANT (CORRIGÉ POUR L'ENTREPRISE)
 // ==============================================================
 // ==============================================================
