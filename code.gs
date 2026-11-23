@@ -459,6 +459,7 @@ function doPostInner_(e) {
       case 'signatureHecg':           return handleSignatureHecg(params, ss);
       case 'workspaceComptes':        return handleWorkspaceComptes(params, ss);
       case 'getPresence':             return handleGetPresence(p, ss);       // présence du personnel (presence.gs)
+      case 'getMessagerie':           return handleGetMessagerie(p, ss);     // messagerie instantanée (messagerie.gs)
       case 'comptesEtudiant':         return handleComptesEtudiant(p, ss);   // comptes_etudiants.gs (Charlemagne / Workspace)
       case 'charlAgent':              return handleCharlAgent(p, ss);        // agent Charlemagne du PC (clé)
       case 'savePcInventaire':        return handleSavePcInventaire(params, ss);
