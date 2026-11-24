@@ -35,7 +35,10 @@ function _campNormFiltres_(f) {
     referent: str(f.referent), atelier: str(f.atelier), cvtheque: str(f.cvtheque),
     creaDu: dt(f.creaDu), creaAu: dt(f.creaAu), echange: str(f.echange),
     motifSortie: (str(f.motifSortie) && str(f.motifSortie) !== "Tous") ? str(f.motifSortie) : "",
-    entCreaDu: dt(f.entCreaDu), entCreaAu: dt(f.entCreaAu), maSeulement: f.maSeulement === true || f.maSeulement === "true"
+    entCreaDu: dt(f.entCreaDu), entCreaAu: dt(f.entCreaAu), maSeulement: f.maSeulement === true || f.maSeulement === "true",
+    evenements: arr(f.evenements),                                   // prospects : venus à tel salon / événement
+    vivier: f.vivier === true || f.vivier === "true",                // + vivier de l'onglet PROSPECTS (page Prospects)
+    vivierSources: arr(f.vivierSources)
   };
   // Supprime les clés vides pour un stockage compact
   Object.keys(out).forEach(function(k) {
@@ -68,6 +71,8 @@ function _campFiltresResume_(f) {
   if (n.motifSortie) parts.push("motif « " + n.motifSortie + " »");
   if (n.entCreaDu || n.entCreaAu) parts.push("entreprise créée du " + fr(n.entCreaDu) + " au " + fr(n.entCreaAu));
   if (n.maSeulement) parts.push("maîtres d'apprentissage seulement");
+  if (n.evenements) parts.push("venus à : " + n.evenements.join(", "));
+  if (n.vivier) parts.push("+ vivier prospects" + (n.vivierSources ? " (" + n.vivierSources.join(", ") + ")" : ""));
   return parts.join(" · ");
 }
 
@@ -89,6 +94,7 @@ function _campCiblerContacts_(ss, cnf, filtres) {
   if (wantEtu) {
     dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
     var colCrea = (dE[0] || []).findIndex(function(h) { return String(h || "").trim().toLowerCase() === DATE_CREATION_HEADER.toLowerCase(); });
+    var colEvts = _campColEvenements_(dE[0]);
     var dernierEch = null;
     if (f.echange) {
       dernierEch = {};
@@ -153,7 +159,11 @@ function _campCiblerContacts_(ss, cnf, filtres) {
           if (f.echange === "30" && !(j >= 30)) continue;
         }
       }
-      out.push({ email: mail, nom: String((row[3] || "") + " " + (row[2] || "")).trim(), prenom: String(row[3] || "").trim(), source: "Étudiant" });
+      if (f.evenements) {
+        var evts = colEvts >= 0 ? String(row[colEvts] || "").split(" | ").map(function(x) { return x.trim(); }) : [];
+        if (!evts.some(function(x) { return f.evenements.indexOf(x) !== -1; })) continue;
+      }
+      out.push({ email: mail, nom: String((row[3] || "") + " " + (row[2] || "")).trim(), prenom: String(row[3] || "").trim(), source: typo.indexOf("prospect") !== -1 ? "Prospect" : "Étudiant" });
     }
   }
 
@@ -197,22 +207,44 @@ function _campCiblerContacts_(ss, cnf, filtres) {
       out.push({ email: mailP, nom: (nomC ? nomC + " — " : "") + String(rp[2] || "Entreprise").trim(), prenom: String(rp[4] || "").trim(), source: "Entreprise" });
     }
   }
+  // Vivier de l'onglet PROSPECTS (inscriptions ateliers / JPO — page Prospects) : A id | B nom | C prénom | D email | F source
+  if (f.vivier && !cibleSortis) {
+    var wsV = ss.getSheetByName("PROSPECTS");
+    var dV = wsV ? wsV.getDataRange().getValues() : [];
+    for (var v = 1; v < dV.length; v++) {
+      var mailV = String(dV[v][3] || "").trim().toLowerCase();
+      if (mailV.indexOf("@") === -1) continue;
+      if (f.vivierSources && f.vivierSources.indexOf(String(dV[v][5] || "").trim()) === -1) continue;
+      out.push({ email: mailV, nom: String((dV[v][2] || "") + " " + (dV[v][1] || "")).trim(), prenom: String(dV[v][2] || "").trim(), source: "Vivier prospects" });
+    }
+  }
   return out;
+}
+
+function _campColEvenements_(entete) {
+  return (entete || []).findIndex(function(h) {
+    return String(h || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() === "evenements";
+  });
 }
 
 // Options des listes de filtres (classes, référents, campus présents dans la base)
 function handleCampagneFiltresOptions(p, ss) {
   try {
     var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-    var classes = {}, refs = {}, campus = {};
+    var classes = {}, refs = {}, campus = {}, evts = {}, colEvts = _campColEvenements_(dE[0]);
     for (var i = 1; i < dE.length; i++) {
       var typo = String(dE[i][20] || "").toLowerCase();
       var c = String(dE[i][14] || "").trim(); if (c) classes[c] = true;
       var r = String(dE[i][7] || "").trim(); if (r && typo.indexOf("refus") === -1) refs[r] = true;
       var ca = String(dE[i][22] || "").trim(); if (ca) campus[ca] = true;
+      if (colEvts >= 0) String(dE[i][colEvts] || "").split(" | ").forEach(function(x) { x = x.trim(); if (x) evts[x] = (evts[x] || 0) + 1; });
     }
+    var sources = {};
+    var wsV = ss.getSheetByName("PROSPECTS");
+    if (wsV) wsV.getDataRange().getValues().slice(1).forEach(function(r) { var s = String(r[5] || "").trim(); if (s && String(r[3] || "").indexOf("@") !== -1) sources[s] = (sources[s] || 0) + 1; });
+    function compte(o) { return tri(o).map(function(k) { return { v: k, n: o[k] }; }); }
     function tri(o) { return Object.keys(o).sort(function(a, b) { return a.localeCompare(b, "fr"); }); }
-    return createJsonResponse({ success: true, classes: tri(classes), referents: tri(refs), campus: tri(campus) });
+    return createJsonResponse({ success: true, classes: tri(classes), referents: tri(refs), campus: tri(campus), evenements: compte(evts), vivierSources: compte(sources) });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
 

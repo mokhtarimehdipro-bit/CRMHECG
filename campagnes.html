@@ -177,6 +177,17 @@
                                     </div>
                                 </div>
                                 <label class="flex items-center gap-2 font-bold text-gray-700"><input type="checkbox" id="afMaSeulement"> Seulement les maîtres d'apprentissage</label>
+                                <div class="text-[10px] font-black uppercase text-purple-500 tracking-widest pt-2 border-t border-blue-50">🎯 Prospects</div>
+                                <p class="text-[10px] text-gray-400 font-bold">Avec la cible « Étudiants Prospects » cochée, les filtres étudiants ci-dessus (campus, date de création…) s'appliquent aussi aux prospects.</p>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Venus à l'événement / salon <span class="normal-case font-bold text-gray-300">(aucun coché = tous)</span></label>
+                                    <div id="afEvenements" class="grid grid-cols-1 gap-1 max-h-32 overflow-y-auto custom-scrollbar font-bold text-gray-700 bg-gray-50 rounded-lg p-2"><span class="text-gray-300 italic">Chargement…</span></div>
+                                </div>
+                                <label class="flex items-center gap-2 font-bold text-gray-700"><input type="checkbox" id="afVivier" onchange="document.getElementById('afVivierBox').classList.toggle('hidden', !this.checked)"> Ajouter le vivier de la page « Prospects » (inscriptions ateliers / JPO)</label>
+                                <div id="afVivierBox" class="hidden ml-6">
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Sources <span class="normal-case font-bold text-gray-300">(aucune cochée = toutes)</span></label>
+                                    <div id="afVivierSources" class="grid grid-cols-1 gap-1 max-h-28 overflow-y-auto custom-scrollbar font-bold text-gray-700 bg-gray-50 rounded-lg p-2"><span class="text-gray-300 italic">Chargement…</span></div>
+                                </div>
                                 <div class="flex justify-end">
                                     <button type="button" onclick="resetAdvFiltres(); updateLivePreview();" class="text-[10px] font-black uppercase text-gray-400 hover:text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">🔄 Effacer les filtres</button>
                                 </div>
@@ -501,7 +512,7 @@
 
                 if (!corps.trim()) throw new Error("Le message de la campagne est vide.");
                 if (cibles.length === 0 && emailsManuels.trim() === "") {
-                    throw new Error("Veuillez choisir au moins une cible ou ajouter des emails manuels.");
+                    if (!getAdvFiltres().vivier) throw new Error("Veuillez choisir au moins une cible ou ajouter des emails manuels.");
                 }
 
                 let pjUrl = "";
@@ -754,6 +765,11 @@
                     || '<span class="text-gray-300 italic">Aucune classe</span>';
                 const sel = document.getElementById('afReferent');
                 sel.innerHTML = '<option value="">Tous les référents</option>' + (d.referents || []).map(r => `<option value="${_afEsc(r)}">${_afEsc(r)}</option>`).join('');
+                const listeCompte = (items, vide) => (items || []).map(o =>
+                    `<label class="flex items-center gap-1 min-w-0"><input type="checkbox" value="${_afEsc(o.v)}"> <span class="truncate">${_afEsc(o.v)}</span> <span class="text-gray-300 shrink-0">(${o.n})</span></label>`).join('')
+                    || `<span class="text-gray-300 italic">${vide}</span>`;
+                document.getElementById('afEvenements').innerHTML = listeCompte(d.evenements, 'Aucun événement enregistré');
+                document.getElementById('afVivierSources').innerHTML = listeCompte(d.vivierSources, 'Vivier vide');
                 _afOptionsCharges = true;
                 if (_afEnAttente) { const f = _afEnAttente; _afEnAttente = null; setAdvFiltres(f); updateLivePreview(); }
             } catch (e) {
@@ -771,8 +787,11 @@
                 referent: _afVal('afReferent'), atelier: _afVal('afAtelier'), cvtheque: _afVal('afCvtheque'),
                 creaDu: _afVal('afCreaDu'), creaAu: _afVal('afCreaAu'), echange: _afVal('afEchange'),
                 entCreaDu: _afVal('afEntCreaDu'), entCreaAu: _afVal('afEntCreaAu'),
-                maSeulement: !!document.getElementById('afMaSeulement')?.checked
+                maSeulement: !!document.getElementById('afMaSeulement')?.checked,
+                evenements: _afChecked('afEvenements'),
+                vivier: !!document.getElementById('afVivier')?.checked
             };
+            if (f.vivier) f.vivierSources = _afChecked('afVivierSources');
             // Motif de sortie : n'a de sens qu'avec la cible « Sortis »
             if (document.getElementById('cbSortis')?.checked) {
                 const m = _afVal('selectMotif');
@@ -787,6 +806,9 @@
             if (!_afOptionsCharges) _afEnAttente = f; // classes/référents pas encore chargés
             const coche = (zoneId, vals) => document.querySelectorAll('#' + zoneId + ' input[type=checkbox]').forEach(cb => { cb.checked = (vals || []).includes(cb.value); });
             coche('afCampus', f.campus); coche('afClasses', f.classes); coche('afStatuts', f.statuts);
+            coche('afEvenements', f.evenements); coche('afVivierSources', f.vivierSources);
+            const vv = document.getElementById('afVivier'); if (vv) vv.checked = !!f.vivier;
+            document.getElementById('afVivierBox')?.classList.toggle('hidden', !f.vivier);
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
             set('afReferent', f.referent); set('afAtelier', f.atelier); set('afCvtheque', f.cvtheque);
             set('afCreaDu', f.creaDu); set('afCreaAu', f.creaAu); set('afEchange', f.echange);
@@ -803,6 +825,7 @@
             _afEnAttente = null;
             document.querySelectorAll('#afBody input[type=checkbox]').forEach(cb => cb.checked = false);
             document.querySelectorAll('#afBody select, #afBody input[type=date]').forEach(el => el.value = '');
+            document.getElementById('afVivierBox')?.classList.add('hidden');
             majBadgeAdvFiltres();
         }
 
