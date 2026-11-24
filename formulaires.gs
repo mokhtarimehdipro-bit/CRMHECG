@@ -12,7 +12,7 @@
 var MAINT_SHEET_ID = "1lcRRUQ84nC-SVjPfe2sKTbU6KNBZRvTrMh28eYCo_fs";
 var SATISF_ENT_SHEET_ID = "1vfzvdf5S8-ZyQiAa5QRaOsSL4vpsMfvm4Z1nhNMv8kg";
 var FORM_PAGE_URL = "https://mokhtarimehdipro-bit.github.io/CRMHECG/formulaire.html";
-var F_ENTETES = ["ID", "Titre", "Description", "Statut", "Type", "Questions_JSON", "Theme_JSON", "URL_externe", "Sheet_externe", "Créé par", "Créé le", "Modifié le", "Indicateur Qualiopi", "Message de fin"];
+var F_ENTETES = ["ID", "Titre", "Description", "Statut", "Type", "Questions_JSON", "Theme_JSON", "URL_externe", "Sheet_externe", "Créé par", "Créé le", "Modifié le", "Indicateur Qualiopi", "Message de fin", "Notifier (e-mails)"];
 var F_TYPES = { texte: 1, paragraphe: 1, choix: 1, cases: 1, liste: 1, echelle: 1, etoiles: 1, nps: 1, oui_non: 1, date: 1, email: 1, tel: 1, nombre: 1, section: 1 };
 
 function _fRole_(p) { return String(p.vieScRole || "").trim(); }
@@ -356,7 +356,7 @@ function _fFeuille_(ss) {
     ws.getRange(1, 1, 1, F_ENTETES.length).setValues([F_ENTETES]).setFontWeight("bold");
     ws.setFrozenRows(1);
     var d = _fDate_();
-    ws.getRange(2, 1, 3, F_ENTETES.length).setValues([
+    ws.getRange(2, 1, 3, 14).setValues([
       ["F-SATISF-ENT", "Questionnaire de satisfaction entreprise", "Formulaire Google existant (indicateur 30) : appréciation des entreprises d'accueil.", "publié", "externe", "[]",
         JSON.stringify({ couleur: "#5B3F86", accent: "#F26522" }), "https://docs.google.com/forms/d/1RBV2Gfg6OxkA8zf3mqLtlnF41NtqXm_LWSUx_B-FM_M/viewform", SATISF_ENT_SHEET_ID, "Import", d, d, "30", ""],
       ["F-MAINT", "Tickets de maintenance", "Formulaire Google de signalement des problèmes techniques et matériels (suivi dans l'onglet Maintenance).", "publié", "externe", "[]",
@@ -398,7 +398,7 @@ function _fLire_(ss) {
     try { th = JSON.parse(r[6] || "{}"); } catch (e2) {}
     out.push({ ligne: i + 1, id: String(r[0]), titre: String(r[1] || ""), description: String(r[2] || ""), statut: String(r[3] || "brouillon"), type: String(r[4] || "interne"),
       questions: q, theme: th, urlExterne: String(r[7] || ""), sheetExterne: String(r[8] || ""), creePar: String(r[9] || ""), creeLe: String(r[10] || ""), modifieLe: String(r[11] || ""),
-      indicateur: String(r[12] || ""), messageFin: String(r[13] || "") });
+      indicateur: String(r[12] || ""), messageFin: String(r[13] || ""), notifier: String(r[14] || "") });
   }
   return out;
 }
@@ -452,8 +452,15 @@ function handleSaveFormulaire(p, ss) {
     var id = exist ? exist.id : "F-" + Date.now().toString(36).toUpperCase();
     var ligne = [id, titre, String(f.description || "").slice(0, 2000), statut, type, JSON.stringify(qs), JSON.stringify(theme),
       String(f.urlExterne || "").slice(0, 500), sheetExt ? sheetExt[0] : "", exist ? exist.creePar : par, exist ? exist.creeLe : d, d,
-      String(f.indicateur || "").slice(0, 10), String(f.messageFin || "").slice(0, 600)];
+      String(f.indicateur || "").slice(0, 10), String(f.messageFin || "").slice(0, 600),
+      f.notifier !== undefined ? _fNotifNormaliser_(f.notifier).join(", ") : (exist ? exist.notifier : "")];
+    _fNotifEntete_(ws);
     if (exist) ws.getRange(exist.ligne, 1, 1, F_ENTETES.length).setValues([ligne]); else ws.appendRow(ligne);
+    if (f.notifier !== undefined && (!exist || exist.notifier !== ligne[14])) {
+      logAction(par, p.vieScRole || "", "Modification", "Vie scolaire — Formulaires — notifications", id,
+        "Destinataires des alertes « nouvelle réponse » pour « " + titre + " » : " + (ligne[14] || "aucun (alertes coupées)"));
+      if (type === "externe") _fNotifBaseExterne_(id, ligne[8]);
+    }
     logAction(par, p.vieScRole || "", exist ? "Modification" : "Création", "Vie scolaire — Formulaires", id,
       (exist ? "Formulaire modifié : " : "Formulaire créé : ") + titre + " (" + type + ", " + statut + ", " + qs.length + " question(s))");
     return createJsonResponse({ success: true, id: id, lienPublic: type === "interne" ? FORM_PAGE_URL + "?f=" + encodeURIComponent(id) : ligne[7] });
@@ -530,6 +537,122 @@ function handleFormPublicSubmit(params, ss) {
     });
     if (manquantes.length) return createJsonResponse({ success: false, message: "Merci de compléter : " + manquantes.slice(0, 5).join(", ") });
     _fReponsesFeuille_(ss).appendRow([f.id, new Date(), JSON.stringify(propre), duree, "R-" + Date.now().toString(36)]);
+    try { _fNotifInterne_(ss, f, propre); } catch (eN) { console.warn("notification formulaire : " + eN); }   // ne bloque jamais la réponse
     return createJsonResponse({ success: true, messageFin: f.messageFin || "Merci, votre réponse a bien été enregistrée !" });
   } catch (e) { return createJsonResponse({ success: false, message: "Envoi impossible : " + e }); }
+}
+
+// ── 3. NOTIFICATIONS « NOUVELLE RÉPONSE » (demande 2026-11-24) ─────────────────
+//  Colonne O « Notifier (e-mails) » de FORMULAIRES : une ou plusieurs adresses.
+//  • Formulaire HECG (interne) : mail envoyé dès l'enregistrement de la réponse (handleFormPublicSubmit).
+//  • Formulaire Google référencé (externe) : le classeur des réponses est relu toutes les 5 min
+//    (auditAdressesTick → _fNotifAuto_) ; repère « nb de lignes déjà signalées » en propriété
+//    FNOTIF_<id>. À l'activation, les réponses déjà présentes ne sont pas signalées.
+function _fNotifNormaliser_(v) {
+  var vus = {}, out = [];
+  (Array.isArray(v) ? v.join(",") : String(v || "")).split(/[\s,;]+/).forEach(function (m) {
+    m = String(m || "").trim().toLowerCase();
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) && !vus[m]) { vus[m] = true; out.push(m); }
+  });
+  return out.slice(0, 20);
+}
+function _fNotifEntete_(ws) {
+  try {
+    if (ws.getMaxColumns() < F_ENTETES.length) ws.insertColumnsAfter(ws.getMaxColumns(), F_ENTETES.length - ws.getMaxColumns());
+    var h = ws.getRange(1, F_ENTETES.length);
+    if (!String(h.getValue() || "").trim()) h.setValue(F_ENTETES[F_ENTETES.length - 1]).setFontWeight("bold");
+  } catch (e) {}
+}
+// Repère de départ d'un formulaire Google : seules les réponses arrivées APRÈS l'activation sont signalées
+function _fNotifBaseExterne_(id, sheetId) {
+  var props = PropertiesService.getScriptProperties();
+  try {
+    if (!sheetId) { props.deleteProperty("FNOTIF_" + id); return; }
+    var w = _maintOngletReponses_(SpreadsheetApp.openById(sheetId));
+    props.setProperty("FNOTIF_" + id, String(w.getLastRow()));
+  } catch (e) { props.deleteProperty("FNOTIF_" + id); }   // pas d'accès : le repère sera posé au 1er passage réussi
+}
+function _fNotifEsc_(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+// paires : [[question, réponse], …]
+function _fNotifEnvoyer_(f, dests, paires, quand, nbTotal) {
+  var th = f.theme || {}, coul = /^#[0-9a-f]{6}$/i.test(th.couleur || "") ? th.couleur : "#1A4E8A";
+  var lignes = paires.map(function (x) {
+    return '<tr><td style="padding:8px 10px;border-bottom:1px solid #eef2f7;color:#64748b;font-size:13px;vertical-align:top;width:40%">' + _fNotifEsc_(x[0]) +
+      '</td><td style="padding:8px 10px;border-bottom:1px solid #eef2f7;color:#111827;font-size:13px;font-weight:600;white-space:pre-wrap">' + (_fNotifEsc_(x[1]) || '<span style="color:#cbd5e1">—</span>') + "</td></tr>";
+  }).join("");
+  var html = '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden">' +
+    '<div style="background:' + coul + ';color:#fff;padding:16px 20px"><div style="font-size:11px;text-transform:uppercase;opacity:.85;font-weight:bold">Nouvelle réponse au formulaire</div>' +
+    '<div style="font-size:18px;font-weight:bold;margin-top:4px">' + _fNotifEsc_(f.titre) + "</div></div>" +
+    '<div style="padding:16px 20px"><p style="font-size:13px;color:#374151;margin:0 0 12px">Réponse reçue le <b>' + _fNotifEsc_(quand) + "</b>" +
+    (nbTotal ? " — " + nbTotal + " réponse(s) au total." : ".") + "</p>" +
+    '<table style="width:100%;border-collapse:collapse">' + lignes + "</table>" +
+    '<p style="font-size:12px;color:#64748b;margin-top:16px">Toutes les réponses et leur analyse : CRM HECG › Vie scolaire › Centre des formulaires › 📊 Réponses.' +
+    (f.type === "externe" && f.sheetExterne ? '<br><a href="https://docs.google.com/spreadsheets/d/' + f.sheetExterne + '/edit">Ouvrir le classeur des réponses</a>' : "") + "</p>" +
+    '<p style="font-size:11px;color:#94a3b8;margin-top:8px">Vous recevez ce message car votre adresse est inscrite dans les alertes de ce formulaire.</p></div></div>';
+  MailApp.sendEmail({ to: dests.join(","), subject: "📝 Nouvelle réponse — " + String(f.titre || "Formulaire").slice(0, 120), htmlBody: html, name: "HECG — Formulaires" });
+}
+function _fNotifInterne_(ss, f, propre) {
+  var dests = _fNotifNormaliser_(f.notifier);
+  if (!dests.length) return;
+  var paires = [];
+  (f.questions || []).forEach(function (q) {
+    if (q.type === "section") return;
+    var v = propre[q.id];
+    paires.push([q.label, Array.isArray(v) ? v.join(", ") : (v == null ? "" : v)]);
+  });
+  var nb = 0;
+  try { var dR = _fReponsesFeuille_(ss).getRange("A:A").getValues(); for (var i = 1; i < dR.length; i++) if (String(dR[i][0]) === f.id) nb++; } catch (eN) {}
+  _fNotifEnvoyer_(f, dests, paires, Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy 'à' HH:mm"), nb);
+  logAction("Système", "", "Envoi mail", "Vie scolaire — Formulaires — notifications", f.id,
+    "Alerte « nouvelle réponse » au formulaire « " + f.titre + " » envoyée à " + dests.join(", "));
+}
+// Formulaires Google référencés : relecture périodique (appelée par auditAdressesTick, toutes les 5 min)
+function _fNotifAuto_() {
+  var ss = SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ");
+  var props = PropertiesService.getScriptProperties();
+  _fLire_(ss).forEach(function (f) {
+    if (f.type !== "externe" || f.statut === "archivé" || !f.sheetExterne) return;
+    var dests = _fNotifNormaliser_(f.notifier);
+    if (!dests.length) return;
+    try {
+      var w = _maintOngletReponses_(SpreadsheetApp.openById(f.sheetExterne));
+      var n = w.getLastRow(), cle = "FNOTIF_" + f.id, deja = props.getProperty(cle);
+      if (deja === null || Number(deja) > n) { props.setProperty(cle, String(n)); return; }   // 1er passage ou lignes supprimées : nouveau repère
+      deja = Number(deja);
+      if (n <= deja) return;
+      var nc = w.getLastColumn(), entetes = w.getRange(1, 1, 1, nc).getDisplayValues()[0];
+      var debut = Math.max(deja + 1, n - 9);   // au plus 10 réponses signalées par passage
+      var lignes = w.getRange(debut, 1, n - debut + 1, nc).getDisplayValues(), envoyees = 0;
+      lignes.forEach(function (r) {
+        if (!r.join("").trim()) return;
+        var paires = [];
+        entetes.forEach(function (h, j) { if (String(h || "").trim() && String(r[j] || "").trim()) paires.push([h, r[j]]); });
+        _fNotifEnvoyer_(f, dests, paires, String(r[0] || "") || Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"), Math.max(0, n - 1));
+        envoyees++;
+      });
+      props.setProperty(cle, String(n));
+      if (envoyees) logAction("Système", "", "Envoi mail", "Vie scolaire — Formulaires — notifications", f.id,
+        envoyees + " alerte(s) « nouvelle réponse » (formulaire Google « " + f.titre + " ») envoyée(s) à " + dests.join(", ") +
+        (debut > deja + 1 ? " — " + (debut - deja - 1) + " réponse(s) plus ancienne(s) non détaillée(s)" : ""));
+    } catch (e) { console.warn("notif formulaire " + f.id + " : " + e); }
+  });
+}
+// Mise à jour des seuls destinataires (bouton 🔔 des cartes — formulaires HECG et Google)
+function handleSetFormulaireNotif(p, ss) {
+  if (!_fPeutGerer_(p)) return createJsonResponse({ success: false, message: "Accès réservé à l'équipe Vie scolaire." });
+  try {
+    var f = _fLire_(ss).filter(function (x) { return x.id === String(p.id || ""); })[0];
+    if (!f) return createJsonResponse({ success: false, message: "Formulaire introuvable." });
+    var brut = String(p.notifier || "");
+    var dests = _fNotifNormaliser_(brut);
+    var rejetes = brut.split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && dests.indexOf(x.toLowerCase()) === -1; });
+    if (rejetes.length) return createJsonResponse({ success: false, message: "Adresse(s) invalide(s) : " + rejetes.slice(0, 5).join(", ") });
+    var ws = _fFeuille_(ss);
+    _fNotifEntete_(ws);
+    ws.getRange(f.ligne, F_ENTETES.length).setValue(dests.join(", "));
+    if (f.type === "externe") _fNotifBaseExterne_(f.id, f.sheetExterne);
+    logAction(p.nomAuteur || p.emailAuteur || "", p.vieScRole || "", "Modification", "Vie scolaire — Formulaires — notifications", f.id,
+      "Destinataires des alertes « nouvelle réponse » pour « " + f.titre + " » : " + (dests.join(", ") || "aucun (alertes coupées)"));
+    return createJsonResponse({ success: true, notifier: dests.join(", ") });
+  } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }

@@ -370,6 +370,7 @@ function doPostInner_(e) {
       case "saveComEvent": return handleSaveComEvent(params, ss);
       case "deleteComEvent": return handleDeleteComEvent(params, ss);
       case "previewComMail": return handlePreviewComMail(params, ss);
+      case "campagneFiltresOptions": return handleCampagneFiltresOptions(params, ss);
       case "sendComMail": return handleSendComMail(params, ss);
       case "getClassesList": return handleGetClassesList(ss);
       case "getMailsLog":   return handleGetMailsLog(params, ss);
@@ -524,6 +525,7 @@ function doPostInner_(e) {
       case 'getFormulaires':             return handleGetFormulaires(p, ss);
       case 'saveFormulaire':             return handleSaveFormulaire(p, ss);
       case 'deleteFormulaire':           return handleDeleteFormulaire(p, ss);
+      case 'setFormulaireNotif':         return handleSetFormulaireNotif(p, ss);
       case 'getFormulaireReponses':      return handleGetFormulaireReponses(p, ss);
       case 'getAuditRecruteurs':         return handleGetAuditRecruteurs(p, ss);
       case 'lancerAuditRecruteurs':      return handleLancerAuditRecruteurs(p, ss);
@@ -2170,7 +2172,7 @@ function _invalidateCampagnesCache_() {
 // Schéma de l'onglet CAMPAGNES (aligné sur les libellés d'en-tête) :
 // A(0) ID | B(1) Nom | C(2) Objet | D(3) Corps/message | E(4) Cible | F(5) Fréquence
 //  | G(6) DernierEnvoi | H(7) Statut | I(8) PJ_URL | J(9) EmailsManuels | K(10) EmailsExclus
-var CAMP_COL = { ID:0, NOM:1, OBJET:2, CORPS:3, CIBLE:4, FREQ:5, DERNIER:6, STATUT:7, PJ:8, MANUELS:9, EXCLUS:10 };
+var CAMP_COL = { ID:0, NOM:1, OBJET:2, CORPS:3, CIBLE:4, FREQ:5, DERNIER:6, STATUT:7, PJ:8, MANUELS:9, EXCLUS:10, FILTRES:11 }; // L(11) Filtres avancés JSON (campagnes_filtres.gs)
 
 function handleGetCampagnes(ss) {
   // Mise en cache 20s : évite de relire toute la feuille CAMPAGNES à chaque ouverture.
@@ -2187,7 +2189,8 @@ function handleGetCampagnes(ss) {
         cibles: data[i][CAMP_COL.CIBLE], frequence: data[i][CAMP_COL.FREQ],
         dernierEnvoi: data[i][CAMP_COL.DERNIER], statut: data[i][CAMP_COL.STATUT],
         pjUrl: data[i][CAMP_COL.PJ] || "",
-        emailsManuels: data[i][CAMP_COL.MANUELS] || "", emailsExclus: data[i][CAMP_COL.EXCLUS] || ""
+        emailsManuels: data[i][CAMP_COL.MANUELS] || "", emailsExclus: data[i][CAMP_COL.EXCLUS] || "",
+        filtres: _campNormFiltres_(data[i][CAMP_COL.FILTRES]), filtresResume: _campFiltresResume_(data[i][CAMP_COL.FILTRES])
       });
     }
     return createJsonResponse({ success: true, data: campaigns });
@@ -4001,7 +4004,6 @@ function handleAttachStudentToEnterprise(p, ss) {
 function handlePreviewComMail(p, ss) {
   try {
     const wsEtu = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-    const wsPart = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
     let contactsList = [];
 
     let cnf = p.cible || {};
@@ -4054,81 +4056,10 @@ function handlePreviewComMail(p, ss) {
       return createJsonResponse({ success: true, data: unique });
     }
 
-    const cibleSortis = cnf.b2c_sortis === true;
-    const motifSelectionne = String(cnf.motif_sortie || "Tous").trim();
+    // 1-2. ÉTUDIANTS + ENTREPRISES : même moteur que l'envoi des campagnes (campagnes_filtres.gs),
+    // avec les filtres avancés éventuels (p.filtres). Communication.html n'en envoie pas → inchangé.
+    contactsList = _campCiblerContacts_(ss, cnf, p.filtres);
 
-    // 1. FILTRAGE ETUDIANTS
-    for(let i = 1; i < wsEtu.length; i++) {
-      const row = wsEtu[i];
-      let mail = String(row[4] || "").trim().toLowerCase();
-      if(!mail.includes('@')) continue;
-
-      let status = String(row[13] || "").toLowerCase(); // Colonne N (Statut)
-      let motifEtu = String(row[19] || "").trim();      // Colonne T (Motif sortie)
-      let typo = String(row[20] || "").toLowerCase();   // Colonne U (Typologie)
-      
-      let ok = false;
-
-      if (cibleSortis) {
-        // --- MODE RÉCUPÉRATION (SORTIS) ---
-        if (typo.includes("sorti")) {
-          if (motifSelectionne === "Tous" || motifEtu === motifSelectionne) ok = true;
-        }
-      } else {
-        // --- MODE CLASSIQUE (On exclut d'office les sortis et refusés) ---
-        if (!typo.includes("sorti") && !typo.includes("refus")) {
-
-          // "PRÉINSCRIT" contient "inscrit" : on distingue explicitement les deux typologies.
-          const estPreinscrit    = typo.includes("préin") || typo.includes("prein");
-          const estInscritStrict = typo.includes("inscrit") && !estPreinscrit;
-          const estProspect      = typo.includes("prospect");
-
-          // 1. Étudiants en recherche : statut "en recherche" ET (Inscrit OU Préinscrit).
-          //    Jamais les prospects.
-          if (cnf.target_recherche && status.includes("recherche") && (estInscritStrict || estPreinscrit)) {
-            ok = true;
-          }
-
-          // 2. Étudiants préinscrits uniquement (en alternance ou non, peu importe le statut).
-          if (cnf.b2c_preinscrits && estPreinscrit) {
-            ok = true;
-          }
-
-          // 3. Étudiants prospects uniquement.
-          if (cnf.b2c_prospects && estProspect) {
-            ok = true;
-          }
-
-          // 4. Étudiants inscrits uniquement (jamais les préinscrits, peu importe le statut).
-          if (cnf.b2c_inscrits && estInscritStrict) {
-            ok = true;
-          }
-        }
-      }
-
-      if (ok) contactsList.push({ email: mail, nom: (row[3] || "") + " " + (row[2] || ""), source: "Étudiant" });
-    }
-
-    // 2. FILTRAGE ENTREPRISES
-    // --- FILTRAGE ENTREPRISES ---
-    if (!cibleSortis) {
-  for(let j = 1; j < wsPart.length; j++) {
-    let rowP = wsPart[j];
-    let mailP = String(rowP[3] || "").trim(); // Colonne D
-    if(!mailP.includes('@')) continue;
-
-    // On vérifie si la colonne J (index 9) n'est pas vide
-    let cellAlt = String(rowP[9] || "").trim();
-    let nbAlt = (cellAlt === "" || cellAlt === "0") ? 0 : 1; 
-
-    let okP = false;
-    if (cnf.b2b_avec && nbAlt > 0) okP = true;
-    if (cnf.b2b_sans && nbAlt === 0) okP = true;
-
-    if (okP) contactsList.push({ email: mailP.toLowerCase(), nom: rowP[1] || "Entreprise", source: "Entreprise" });
-  }
-}
-    
     // 3. EMAILS AJOUTÉS MANUELLEMENT (au cas par cas depuis le formulaire)
     if (p.emailsLibres) {
       String(p.emailsLibres).split(/[\s,;]+/).forEach(function(raw) {
@@ -4301,9 +4232,16 @@ function handleCreateCampaign(p, ss) {
     newRow[CAMP_COL.PJ]      = String(p.pjUrl || "");
     newRow[CAMP_COL.MANUELS] = emailsManuelsStr;
     newRow[CAMP_COL.EXCLUS]  = emailsExclusStr;
+    newRow[CAMP_COL.FILTRES] = _campFiltresJson_(p.filtres);
     for (var k = 0; k < newRow.length; k++) if (newRow[k] === undefined) newRow[k] = "";
+    _campEnteteFiltres_(sheet);
     sheet.appendRow(newRow);
     _invalidateCampagnesCache_();
+    try {
+      var resumeF = _campFiltresResume_(p.filtres);
+      logAction(p.idAuteur, p.roleAuteur, "Création", "Campagnes — ciblage", newId,
+        "Campagne « " + (p.nom || "Sans nom") + " » créée — cibles : " + (cibleStr || "aucune") + (resumeF ? " · filtres : " + resumeF : ""));
+    } catch (eL) {}
     return createJsonResponse({ success: true, message: "Campagne créée !", id: newId });
   } catch (e) { return createJsonResponse({ success: false, message: e.toString() }); }
 }
@@ -4318,7 +4256,7 @@ function handleUpdateCampaign(p, ss) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][CAMP_COL.ID]) === String(p.id)) {
         const row = data[i].slice();
-        while (row.length <= CAMP_COL.EXCLUS) row.push("");
+        while (row.length <= CAMP_COL.FILTRES) row.push("");
         if (p.nom       !== undefined) row[CAMP_COL.NOM]   = p.nom;
         if (p.frequence !== undefined) row[CAMP_COL.FREQ]  = p.frequence;
         if (p.objet     !== undefined) row[CAMP_COL.OBJET] = p.objet;
@@ -4337,6 +4275,15 @@ function handleUpdateCampaign(p, ss) {
         if (p.emailsManuels !== undefined) row[CAMP_COL.MANUELS] = String(p.emailsManuels || "");
         if (p.emailsExclus  !== undefined) row[CAMP_COL.EXCLUS]  = Array.isArray(p.emailsExclus) ? p.emailsExclus.join(", ") : String(p.emailsExclus || "");
         if (p.pjUrl         !== undefined) row[CAMP_COL.PJ]      = String(p.pjUrl || "");
+        if (p.filtres       !== undefined) {
+          row[CAMP_COL.FILTRES] = _campFiltresJson_(p.filtres);
+          _campEnteteFiltres_(sheet);
+          try {
+            var resumeU = _campFiltresResume_(p.filtres);
+            logAction(p.idAuteur, p.roleAuteur, "Modification", "Campagnes — ciblage", String(p.id),
+              "Campagne « " + row[CAMP_COL.NOM] + " » modifiée — cibles : " + (row[CAMP_COL.CIBLE] || "aucune") + " · filtres : " + (resumeU || "aucun"));
+          } catch (eL) {}
+        }
         for (var k = 0; k < row.length; k++) if (row[k] === undefined) row[k] = "";
         if (sheet.getMaxColumns() < row.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), row.length - sheet.getMaxColumns());
         sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
@@ -4375,7 +4322,7 @@ function _campagneCibleToCnf_(cibleStr) {
 }
 
 // Liste finale : cibles prédéfinies + emails manuels − emails exclus. → [{email, nom, prenom}]
-function _resolveCampagneRecipients_(ss, cibleStr, emailsManuels, emailsExclus) {
+function _resolveCampagneRecipients_(ss, cibleStr, emailsManuels, emailsExclus, filtres) {
   var cnf = _campagneCibleToCnf_(cibleStr);
   var out = [], seen = {};
   function add(email, nom, prenom) {
@@ -4385,45 +4332,8 @@ function _resolveCampagneRecipients_(ss, cibleStr, emailsManuels, emailsExclus) 
     out.push({ email: e, nom: String(nom || e).trim(), prenom: String(prenom || "").trim() });
   }
 
-  var wantEtu = cnf.target_recherche || cnf.b2c_preinscrits || cnf.b2c_prospects || cnf.b2c_inscrits || cnf.b2c_sortis;
-  var wantEnt = cnf.b2b_avec || cnf.b2b_sans;
-
-  if (wantEtu) {
-    var dE = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues();
-    var cibleSortis = cnf.b2c_sortis === true;
-    for (var i = 1; i < dE.length; i++) {
-      var row = dE[i];
-      var mail = String(row[4] || "").trim().toLowerCase();
-      if (mail.indexOf('@') === -1) continue;
-      var statut = String(row[13] || "").toLowerCase();
-      var typo   = String(row[20] || "").toLowerCase();
-      var ok = false;
-      if (cibleSortis) {
-        if (typo.indexOf("sorti") !== -1) ok = true;
-      } else if (typo.indexOf("sorti") === -1 && typo.indexOf("refus") === -1) {
-        var estPre = typo.indexOf("préin") !== -1 || typo.indexOf("prein") !== -1;
-        var estInscritStrict = typo.indexOf("inscrit") !== -1 && !estPre;
-        var estProspect = typo.indexOf("prospect") !== -1;
-        if (cnf.target_recherche && statut.indexOf("recherche") !== -1 && (estInscritStrict || estPre)) ok = true;
-        if (cnf.b2c_preinscrits && estPre) ok = true;
-        if (cnf.b2c_prospects && estProspect) ok = true;
-        if (cnf.b2c_inscrits && estInscritStrict) ok = true;
-      }
-      if (ok) add(mail, (row[3] || "") + " " + (row[2] || ""), row[3] || "");
-    }
-  }
-
-  if (wantEnt) {
-    var dP = getSheetSafe(ss, "Partenariat").getDataRange().getValues();
-    for (var j = 1; j < dP.length; j++) {
-      var rowP = dP[j];
-      var mailP = String(rowP[3] || "").trim().toLowerCase();
-      if (mailP.indexOf('@') === -1) continue;
-      var cellAlt = String(rowP[9] || "").trim();
-      var nbAlt = (cellAlt === "" || cellAlt === "0") ? 0 : 1;
-      if ((cnf.b2b_avec && nbAlt > 0) || (cnf.b2b_sans && nbAlt === 0)) add(mailP, rowP[1] || "Entreprise", "");
-    }
-  }
+  // Même moteur que l'aperçu (campagnes_filtres.gs) : cibles cochées + filtres avancés
+  _campCiblerContacts_(ss, cnf, filtres).forEach(function(c) { add(c.email, c.nom, c.prenom); });
 
   String(emailsManuels || "").split(/[\s,;]+/).forEach(function(raw) { add(raw, raw, ""); });
 
@@ -4443,7 +4353,8 @@ function _envoyerCampagne_(ss, camp, overrideRecipients) {
   if (!corps) throw new Error("Le message de cette campagne est vide (colonne D « Corps » de l'onglet CAMPAGNES). Ouvrez-la avec ✏️, saisissez le texte de l'email et enregistrez, puis relancez.");
 
   var recipients = overrideRecipients || _resolveCampagneRecipients_(
-    ss, String(camp[CAMP_COL.CIBLE] || ""), String(camp[CAMP_COL.MANUELS] || ""), String(camp[CAMP_COL.EXCLUS] || "")
+    ss, String(camp[CAMP_COL.CIBLE] || ""), String(camp[CAMP_COL.MANUELS] || ""), String(camp[CAMP_COL.EXCLUS] || ""),
+    camp[CAMP_COL.FILTRES]
   );
   if (!recipients.length) return { sent: 0, errors: 0, recipients: [], reason: "Aucun destinataire pour cette campagne." };
 
@@ -4507,7 +4418,8 @@ function handleRunCampagneManual(p, ss) {
     sheet.getRange(rowIdx + 1, CAMP_COL.STATUT + 1).setValue(freq === "Une fois" ? "Terminée" : "Active"); // H : statut
     _invalidateCampagnesCache_();
     logAction(p.idAuteur, p.roleAuteur, "Envoi", "Campagnes", campId,
-      "Campagne « " + camp[CAMP_COL.NOM] + " » lancée — " + res.sent + " envoi(s)" + (res.errors ? ", " + res.errors + " échec(s)" : ""));
+      "Campagne « " + camp[CAMP_COL.NOM] + " » lancée — " + res.sent + " envoi(s)" + (res.errors ? ", " + res.errors + " échec(s)" : "")
+      + (_campFiltresResume_(camp[CAMP_COL.FILTRES]) ? " · filtres : " + _campFiltresResume_(camp[CAMP_COL.FILTRES]) : ""));
 
     return createJsonResponse({
       success: true,

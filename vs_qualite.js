@@ -832,9 +832,11 @@ function renderFormulaires() {
             <span class="mt-chip" style="background:#f1f5f9;font-size:.66rem;font-weight:700;padding:.15rem .5rem;border-radius:.5rem">${f.type === 'externe' ? 'Google Forms' : 'Formulaire HECG'}</span>
             ${f.indicateur ? `<span style="background:#eef2ff;color:#3730a3;font-size:.66rem;font-weight:800;padding:.15rem .5rem;border-radius:.5rem">Qualiopi ${vxEsc(f.indicateur)}</span>` : ''}
             <span style="background:#ecfdf5;color:#047857;font-size:.66rem;font-weight:800;padding:.15rem .5rem;border-radius:.5rem">${f.nbReponses == null ? (f.accesRefuse ? '🔒 accès à partager' : '—') : f.nbReponses + ' réponse(s)'}</span>
+            ${fmNotifListe(f.notifier).length ? `<span title="Alertes à chaque nouvelle réponse : ${vxEsc(fmNotifListe(f.notifier).join(', '))}" style="background:#fff7ed;color:#c2410c;font-size:.66rem;font-weight:800;padding:.15rem .5rem;border-radius:.5rem">🔔 ${fmNotifListe(f.notifier).length} alerte(s)</span>` : ''}
           </div></div>
         <div class="fm-btns">
           <button onclick="fmReponses('${f.id}')">📊 Réponses</button>
+          <button onclick="fmNotif('${f.id}')" title="Adresses prévenues à chaque nouvelle réponse">🔔 Alertes</button>
           ${f.type === 'interne' ? `<button onclick="fmEditer('${f.id}')">✏️ Modifier</button>` : `<button onclick="fmExterne('${f.id}')">✏️ Modifier</button>`}
           ${f.lienPublic ? `<a href="${vxEsc(f.lienPublic)}" target="_blank">👁 Ouvrir</a><button onclick="navigator.clipboard.writeText('${vxEsc(f.lienPublic)}');toast('Lien copié ✓')">📋 Lien</button><button onclick="fmQr('${f.id}')">🔳 QR code</button>` : ''}
           <button onclick="fmArchiver('${f.id}')" style="background:#fef2f2;color:#dc2626">🗑</button>
@@ -864,6 +866,44 @@ function fmExterne(id) {
     .then(r => { if (!r.success) toast(r.message, false); else { toast('Formulaire référencé ✓'); loadFormulaires(); } });
 }
 
+// ── 🔔 Alertes « nouvelle réponse » (formulaires HECG et formulaires Google référencés) ──
+function fmNotifListe(v) { const vus = new Set(); return String(v || '').split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x) && !vus.has(x) && vus.add(x)); }
+function fmNotifInvalides(v) { return String(v || '').split(/[\s,;]+/).map(x => x.trim()).filter(x => x && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)); }
+function fmNotif(id) {
+  const f = formsData.find(x => x.id === id); if (!f) return;
+  let m = document.getElementById('fmNotifModal');
+  if (!m) { m = document.createElement('div'); m.id = 'fmNotifModal'; m.className = 'modal-overlay'; document.body.appendChild(m); }
+  m.classList.remove('hidden');
+  const externe = f.type === 'externe';
+  m.innerHTML = `<div class="modal-box" style="max-width:520px;width:94vw">
+    <h3 class="text-lg font-black text-[#1A4E8A]">🔔 Alertes — ${vxEsc(f.titre)}</h3>
+    <p class="text-xs text-gray-500 mt-1">Chaque adresse ci-dessous reçoit un e-mail avec le détail de la réponse dès qu'une nouvelle réponse est ajoutée${externe ? ' (formulaire Google : vérification toutes les 5 minutes ; les réponses déjà présentes ne sont pas signalées)' : ''}.</p>
+    ${externe && !f.sheetExterne ? `<p class="text-xs font-bold text-red-600 mt-2">⚠️ Aucun classeur de réponses n'est relié à ce formulaire : renseignez-le via ✏️ Modifier, sinon les alertes ne peuvent pas partir.</p>` : ''}
+    ${externe && f.accesRefuse ? `<p class="text-xs font-bold text-red-600 mt-2">🔒 Le CRM n'a pas accès au classeur des réponses : partagez-le avec m.mokhtari@hecg.fr.</p>` : ''}
+    <label class="block mt-3 text-xs font-black text-gray-400 uppercase">Adresses à prévenir</label>
+    <textarea id="fmNotifTxt" rows="4" placeholder="une adresse par ligne, ou séparées par des virgules">${vxEsc(fmNotifListe(f.notifier).join('\n'))}</textarea>
+    <p class="text-[11px] text-gray-400 mt-1">Laisser vide pour couper les alertes. 20 adresses maximum.</p>
+    <div class="flex justify-end gap-2 mt-4">
+      <button class="btn-ghost text-sm" onclick="document.getElementById('fmNotifModal').classList.add('hidden')">Annuler</button>
+      <button class="btn-orange text-sm" id="fmNotifBtn" onclick="fmNotifSauver('${f.id}')">💾 Enregistrer</button></div></div>`;
+  setTimeout(() => { const t = document.getElementById('fmNotifTxt'); if (t) t.focus(); }, 50);
+}
+async function fmNotifSauver(id) {
+  const txt = document.getElementById('fmNotifTxt').value;
+  const ko = fmNotifInvalides(txt);
+  if (ko.length) { toast('Adresse(s) invalide(s) : ' + ko.join(', '), false); return; }
+  const liste = fmNotifListe(txt);
+  if (liste.length > 20) { toast('20 adresses maximum.', false); return; }
+  const b = document.getElementById('fmNotifBtn'); b.disabled = true; b.textContent = 'Enregistrement…';
+  const r = await api('setFormulaireNotif', { id, notifier: liste.join(', ') });
+  b.disabled = false; b.textContent = '💾 Enregistrer';
+  if (!r.success) { toast(r.message, false); return; }
+  const f = formsData.find(x => x.id === id); if (f) f.notifier = r.notifier;
+  document.getElementById('fmNotifModal').classList.add('hidden');
+  toast(liste.length ? 'Alertes activées pour ' + liste.length + ' adresse(s) ✓' : 'Alertes coupées');
+  renderFormulaires();
+}
+
 // ── Éditeur de formulaire ──
 function fmEditer(id) {
   const f = id ? JSON.parse(JSON.stringify(formsData.find(x => x.id === id))) : null;
@@ -890,6 +930,8 @@ function fmRendreEditeur() {
         <label class="mt-2 block">Description / consignes</label><textarea id="fmDesc" rows="3" oninput="fEd.description=this.value">${vxEsc(f.description)}</textarea>
         <label class="mt-2 block">Message de remerciement</label><textarea rows="2" oninput="fEd.messageFin=this.value" placeholder="Merci pour votre réponse !">${vxEsc(f.messageFin)}</textarea>
         <label class="mt-2 block">Indicateur Qualiopi (facultatif)</label><input value="${vxEsc(f.indicateur)}" oninput="fEd.indicateur=this.value" placeholder="ex. 30, 33">
+        <label class="mt-2 block">🔔 Prévenir à chaque réponse</label><textarea rows="2" oninput="fEd.notifier=this.value" placeholder="adresse1@hecg.fr, adresse2@hecg.fr">${vxEsc(f.notifier || '')}</textarea>
+        <p style="font-size:.66rem;color:#94a3b8;margin-top:.2rem">Une ou plusieurs adresses (virgule, point-virgule ou retour à la ligne) : un e-mail avec le détail de la réponse part à chaque envoi.</p>
         <p class="text-xs font-black text-gray-400 uppercase mt-4 mb-2">Apparence</p>
         <div style="display:flex;flex-wrap:wrap;gap:.4rem">${FM_PALETTES.map(p => `<button title="Palette" onclick="fEd.theme.couleur='${p[0]}';fEd.theme.accent='${p[1]}';fmRendreEditeur()" style="width:34px;height:34px;border-radius:50%;border:${th.couleur === p[0] ? '3px solid #111' : '2px solid #fff'};box-shadow:0 2px 6px rgba(0,0,0,.2);background:linear-gradient(135deg,${p[0]} 50%,${p[1]} 50%);cursor:pointer"></button>`).join('')}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem">
@@ -956,6 +998,9 @@ async function fmSauver() {
   if (!fEd.titre.trim()) { toast('Donnez un titre au formulaire.', false); return; }
   const vides = fEd.questions.filter(q => q.type !== 'section' && !String(q.label || '').trim());
   if (vides.length) { toast(vides.length + ' question(s) sans intitulé.', false); return; }
+  const notifKo = fmNotifInvalides(fEd.notifier);
+  if (notifKo.length) { toast('Adresse(s) d\'alerte invalide(s) : ' + notifKo.join(', '), false); return; }
+  if (fEd.notifier !== undefined) fEd.notifier = fmNotifListe(fEd.notifier).join(', ');
   const r = await api('saveFormulaire', { formulaire: JSON.stringify(fEd) });
   if (!r.success) { toast(r.message, false); return; }
   fEd.id = r.id; toast(fEd.statut === 'publié' ? 'Formulaire publié ✓ — lien copié' : 'Formulaire enregistré ✓');

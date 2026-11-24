@@ -97,6 +97,92 @@
 </div>
                         </div>
                         
+                        <!-- 🎛️ FILTRES AVANCÉS (comme le tableau de bord) — hors #audienceChecks -->
+                        <div id="advFiltres" class="mt-4 bg-white rounded-2xl border border-blue-100">
+                            <button type="button" onclick="toggleAdvFiltres()" class="w-full flex justify-between items-center px-4 py-3 text-left">
+                                <span class="text-[10px] font-black uppercase text-blue-600">🎛️ Filtres avancés <span id="afBadge" class="hidden ml-1 bg-[#F26522] text-white px-2 py-0.5 rounded-full text-[9px]">0</span></span>
+                                <span id="afChevron" class="text-blue-400 text-xs">▾</span>
+                            </button>
+                            <div id="afBody" class="hidden px-4 pb-4 space-y-3 text-xs">
+                                <p class="text-[10px] text-gray-400 font-bold">Les filtres s'ajoutent aux cibles cochées (tous doivent être respectés). Les emails ajoutés à la main ne sont jamais filtrés.</p>
+                                <div class="text-[10px] font-black uppercase text-slate-400 tracking-widest pt-1">👩‍🎓 Étudiants</div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Campus</label>
+                                    <div id="afCampus" class="flex flex-wrap gap-3 font-bold text-gray-700"></div>
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Classes <span class="normal-case font-bold text-gray-300">(aucune cochée = toutes)</span></label>
+                                    <div id="afClasses" class="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto custom-scrollbar font-bold text-gray-700 bg-gray-50 rounded-lg p-2"><span class="text-gray-300 italic">Chargement…</span></div>
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Statut</label>
+                                    <div id="afStatuts" class="flex flex-wrap gap-3 font-bold text-gray-700">
+                                        <label class="flex items-center gap-1"><input type="checkbox" value="recherche"> 🔍 En recherche</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" value="initial"> 🎒 En initial</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" value="alternance"> 🏢 En alternance</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" value="contrat"> 💼 En contrat</label>
+                                        <label class="flex items-center gap-1"><input type="checkbox" value="non su"> ❓ Non su</label>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Référent HECG</label>
+                                        <select id="afReferent" class="w-full p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none"><option value="">Tous les référents</option></select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Dernier échange</label>
+                                        <select id="afEchange" class="w-full p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                            <option value="">Peu importe</option>
+                                            <option value="7">🟢 &lt; 7 jours</option>
+                                            <option value="7-30">🟡 Entre 7 et 30 jours</option>
+                                            <option value="30">🔴 &gt; 30 jours</option>
+                                            <option value="NEVER">⚪ Jamais</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Ateliers</label>
+                                        <select id="afAtelier" class="w-full p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                            <option value="">Peu importe</option>
+                                            <option value="CV">✅ CV fait</option>
+                                            <option value="CV_NON">❌ CV non fait</option>
+                                            <option value="LI">✅ LinkedIn fait</option>
+                                            <option value="LI_NON">❌ LinkedIn non fait</option>
+                                            <option value="BOTH">⭐ Les deux faits</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">CVthèque</label>
+                                        <select id="afCvtheque" class="w-full p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                            <option value="">Peu importe</option>
+                                            <option value="OUI">✅ Oui</option>
+                                            <option value="NON">❌ Non</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1" title="Les fiches sans date de création (antérieures à la fonctionnalité) sont exclues dès qu'une période est choisie">🗓️ Fiche créée du … au …</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="date" id="afCreaDu" class="flex-1 p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                        <span class="font-black text-gray-300">→</span>
+                                        <input type="date" id="afCreaAu" class="flex-1 p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-black uppercase text-orange-400 tracking-widest pt-2 border-t border-blue-50">🏢 Entreprises</div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1" title="Date de création = plus ancienne date de ses contacts (entreprises dont tous les contacts sont datés)">🗓️ Entreprise créée du … au …</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="date" id="afEntCreaDu" class="flex-1 p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                        <span class="font-black text-gray-300">→</span>
+                                        <input type="date" id="afEntCreaAu" class="flex-1 p-2 border border-gray-200 rounded-lg font-bold bg-white outline-none">
+                                    </div>
+                                </div>
+                                <label class="flex items-center gap-2 font-bold text-gray-700"><input type="checkbox" id="afMaSeulement"> Seulement les maîtres d'apprentissage</label>
+                                <div class="flex justify-end">
+                                    <button type="button" onclick="resetAdvFiltres(); updateLivePreview();" class="text-[10px] font-black uppercase text-gray-400 hover:text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">🔄 Effacer les filtres</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mt-4 p-4 bg-blue-50/80 rounded-2xl border-2 border-dashed border-blue-200">
                             <div class="flex justify-between items-center mb-3">
                                 <h4 class="text-[10px] font-black uppercase text-blue-600">👥 Aperçu des destinataires</h4>
@@ -305,6 +391,7 @@
                         </div>
                         <h3 class="text-xl font-black text-[#1A4E8A] leading-tight mb-2">${c.nom || "Campagne sans nom"}</h3>
                         <p class="text-[10px] text-gray-400 font-bold uppercase truncate">Cibles : ${c.cibles || 'Manuelle'}</p>
+                        ${c.filtresResume ? `<p class="text-[10px] text-blue-500 font-bold mt-1 line-clamp-2" title="${String(c.filtresResume).replace(/"/g, '&quot;')}">🎛️ ${c.filtresResume}</p>` : ''}
                     </div>
 
                     <div class="mt-6 flex flex-wrap gap-2 border-t pt-4">
@@ -352,6 +439,8 @@
                 if (cb) cb.checked = (cbId === 'cbRecherche' || cbId === 'cbPreinscrit');
             });
             const dm = document.getElementById('divMotifSortie'); if (dm) dm.classList.add('hidden');
+            const sm = document.getElementById('selectMotif'); if (sm) sm.value = 'Tous';
+            resetAdvFiltres();
             toggleCountdown();
         }
 
@@ -371,6 +460,7 @@
             // Pré-remplit les emails déjà retirés à la main
             _removedEmails.clear();
             String(c.emailsExclus || '').split(/[\s,;]+/).forEach(e => { e = e.trim().toLowerCase(); if (e) _removedEmails.add(e); });
+            setAdvFiltres(c.filtres || {});
             toggleCountdown();
         }
 
@@ -439,6 +529,7 @@
                     nbJours: document.getElementById('nbJours')?.value || 0,
                     emailsManuels: emailsManuels,
                     emailsExclus: getExcludedEmails(),
+                    filtres: getAdvFiltres(),
                     objet: document.getElementById('cmpObjet')?.value || "Sans objet",
                     corps: corps,
                     message: corps
@@ -530,7 +621,7 @@
             try {
                 // apiPost() ajoute l'authentification (previewComMail n'est pas une action publique) :
                 // un fetch() brut renvoyait "Accès refusé" et la liste restait vide.
-                const d = await apiPost({ action: 'previewComMail', cible: ciblesSelectionnees, emailsLibres: emailsManuels });
+                const d = await apiPost({ action: 'previewComMail', cible: ciblesSelectionnees, emailsLibres: emailsManuels, filtres: getAdvFiltres() });
 
                 if (!d || !d.success) {
                     _previewContacts = [];
@@ -640,6 +731,106 @@
 
         // (openModal / openEditModal gèrent eux-mêmes le reset + le calcul de l'aperçu)
 
+        // ==========================================
+        // 🎛️ FILTRES AVANCÉS (campus, classes, statut, référent, ateliers,
+        //    CVthèque, date de création, dernier échange, entreprises)
+        //    Enregistrés avec la campagne et appliqués à l'aperçu ET à l'envoi.
+        // ==========================================
+        const AF_CAMPUS_LIB = { 'HECG': '📍 Marseille', 'HECG_AIX': '📍 Aix-en-Provence' };
+        let _afOptionsCharges = false;
+        let _afEnAttente = null; // filtres à réappliquer une fois les listes chargées
+
+        function _afEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        async function loadAdvFiltresOptions() {
+            try {
+                const d = await apiPost({ action: 'campagneFiltresOptions' });
+                if (!d || !d.success) throw new Error((d && d.message) || 'Erreur');
+                const campus = (d.campus && d.campus.length) ? d.campus : ['HECG', 'HECG_AIX'];
+                document.getElementById('afCampus').innerHTML = campus.map(c =>
+                    `<label class="flex items-center gap-1"><input type="checkbox" value="${_afEsc(c)}"> ${_afEsc(AF_CAMPUS_LIB[c] || c)}</label>`).join('');
+                document.getElementById('afClasses').innerHTML = (d.classes || []).map(c =>
+                    `<label class="flex items-center gap-1 truncate"><input type="checkbox" value="${_afEsc(c)}"> <span class="truncate">${_afEsc(c)}</span></label>`).join('')
+                    || '<span class="text-gray-300 italic">Aucune classe</span>';
+                const sel = document.getElementById('afReferent');
+                sel.innerHTML = '<option value="">Tous les référents</option>' + (d.referents || []).map(r => `<option value="${_afEsc(r)}">${_afEsc(r)}</option>`).join('');
+                _afOptionsCharges = true;
+                if (_afEnAttente) { const f = _afEnAttente; _afEnAttente = null; setAdvFiltres(f); updateLivePreview(); }
+            } catch (e) {
+                console.error('Options des filtres :', e);
+                document.getElementById('afClasses').innerHTML = "<span class='text-red-400 italic'>⚠️ Listes indisponibles</span>";
+            }
+        }
+
+        function _afChecked(zoneId) { return Array.from(document.querySelectorAll('#' + zoneId + ' input[type=checkbox]:checked')).map(i => i.value); }
+        function _afVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+        function getAdvFiltres() {
+            const f = {
+                campus: _afChecked('afCampus'), classes: _afChecked('afClasses'), statuts: _afChecked('afStatuts'),
+                referent: _afVal('afReferent'), atelier: _afVal('afAtelier'), cvtheque: _afVal('afCvtheque'),
+                creaDu: _afVal('afCreaDu'), creaAu: _afVal('afCreaAu'), echange: _afVal('afEchange'),
+                entCreaDu: _afVal('afEntCreaDu'), entCreaAu: _afVal('afEntCreaAu'),
+                maSeulement: !!document.getElementById('afMaSeulement')?.checked
+            };
+            // Motif de sortie : n'a de sens qu'avec la cible « Sortis »
+            if (document.getElementById('cbSortis')?.checked) {
+                const m = _afVal('selectMotif');
+                if (m && m !== 'Tous') f.motifSortie = m;
+            }
+            Object.keys(f).forEach(k => { const v = f[k]; if (v === '' || v === false || (Array.isArray(v) && !v.length)) delete f[k]; });
+            return f;
+        }
+
+        function setAdvFiltres(f) {
+            f = f || {};
+            if (!_afOptionsCharges) _afEnAttente = f; // classes/référents pas encore chargés
+            const coche = (zoneId, vals) => document.querySelectorAll('#' + zoneId + ' input[type=checkbox]').forEach(cb => { cb.checked = (vals || []).includes(cb.value); });
+            coche('afCampus', f.campus); coche('afClasses', f.classes); coche('afStatuts', f.statuts);
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+            set('afReferent', f.referent); set('afAtelier', f.atelier); set('afCvtheque', f.cvtheque);
+            set('afCreaDu', f.creaDu); set('afCreaAu', f.creaAu); set('afEchange', f.echange);
+            set('afEntCreaDu', f.entCreaDu); set('afEntCreaAu', f.entCreaAu);
+            const ma = document.getElementById('afMaSeulement'); if (ma) ma.checked = !!f.maSeulement;
+            const sm = document.getElementById('selectMotif'); if (sm) sm.value = f.motifSortie || 'Tous';
+            const dm = document.getElementById('divMotifSortie'); if (dm) dm.classList.toggle('hidden', !document.getElementById('cbSortis')?.checked);
+            majBadgeAdvFiltres();
+            // Des filtres déjà enregistrés → on ouvre le panneau pour qu'ils soient visibles
+            if (Object.keys(getAdvFiltres()).filter(k => k !== 'motifSortie').length) _ouvrirAdvFiltres(true);
+        }
+
+        function resetAdvFiltres() {
+            _afEnAttente = null;
+            document.querySelectorAll('#afBody input[type=checkbox]').forEach(cb => cb.checked = false);
+            document.querySelectorAll('#afBody select, #afBody input[type=date]').forEach(el => el.value = '');
+            majBadgeAdvFiltres();
+        }
+
+        function majBadgeAdvFiltres() {
+            const n = Object.keys(getAdvFiltres()).filter(k => k !== 'motifSortie').length;
+            const b = document.getElementById('afBadge');
+            if (!b) return;
+            b.textContent = n;
+            b.classList.toggle('hidden', n === 0);
+        }
+
+        function _ouvrirAdvFiltres(ouvrir) {
+            document.getElementById('afBody').classList.toggle('hidden', !ouvrir);
+            document.getElementById('afChevron').textContent = ouvrir ? '▴' : '▾';
+        }
+        function toggleAdvFiltres() { _ouvrirAdvFiltres(document.getElementById('afBody').classList.contains('hidden')); }
+
+        // Toute modification d'un filtre → badge + recalcul de l'aperçu (anti-rebond 400 ms)
+        let _afTimer = null;
+        document.getElementById('afBody')?.addEventListener('change', () => {
+            majBadgeAdvFiltres();
+            clearTimeout(_afTimer);
+            _afTimer = setTimeout(updateLivePreview, 400);
+        });
+
+        loadAdvFiltresOptions();
+
+
 
 // ==========================================
         // GESTION DU TEMPLATE RELANCE HEBDO
@@ -689,7 +880,7 @@
             document.getElementById('divMotifSortie').classList.toggle('hidden', !isChecked);
             // On décoche les autres cases si on choisit "Sortis" (pour éviter les mélanges)
             if (isChecked) {
-                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                document.querySelectorAll('#audienceChecks input[type="checkbox"]').forEach(cb => {
                     if (cb.id !== 'cbSortis') cb.checked = false;
                 });
             }
