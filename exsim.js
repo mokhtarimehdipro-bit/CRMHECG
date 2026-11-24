@@ -58,7 +58,7 @@ function dispoTexte(s, jour) {
   if (!pl.length) return 'Absent';
   const ab = s.abs && s.abs[String(jour)];
   if (ab && ab.length) return 'Absent ' + ab.map(p => p[0] + '–' + p[1]).join(', ');
-  return pl.map(p => p[0] + '–' + p[1]).join(', ');
+  return 'Présent ' + pl.map(p => p[0] + '–' + p[1]).join(', ');
 }
 function partage(ep) { // répartition de l'effectif entre les salles de l'épreuve
   let rest = effectif(ep.classe); const out = {};
@@ -187,6 +187,14 @@ function css() {
   .ex-dc:hover{transform:translateY(-1px)}
   .ex-dc.full{background:#ecfdf5;color:#047857}.ex-dc.part{background:#fffbeb;color:#b45309}.ex-dc.abs{background:#f1f5f9;color:#94a3b8;text-decoration:line-through}
   .ex-dc.sel{outline:2px solid #F26522;outline-offset:1px}
+  .ex-q{font-size:12px;font-weight:800;color:#1A4E8A;margin:14px 0 8px}.ex-q span{font-weight:600;color:#64748b}
+  .ex-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+  .ex-opt{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:10px 12px;border:2px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
+  .ex-opt:hover{border-color:#cbd5e1}.ex-opt.on{border-color:#F26522;background:#fff7ed}
+  .ex-opt .ico{font-size:20px;line-height:1}.ex-opt b{display:block;font-size:13px;color:#1e293b}.ex-opt small{display:block;font-size:11px;color:#64748b;margin-top:2px}
+  .ex-plage{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#334155;margin-top:6px;padding:6px 10px;border-radius:10px}
+  .ex-plage.pres{background:#ecfdf5}.ex-plage.abs{background:#fef2f2}.ex-plage .lbl{min-width:84px}.ex-plage input{width:120px;height:34px}
+  .ex-res{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:13px;color:#334155}.ex-res.warn{background:#fffbeb;border-color:#fde68a;color:#b45309;font-weight:700}
   .ex-lock{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:14px 18px;font-size:13.5px;font-weight:600;margin-bottom:24px}
   .ex-edt{display:flex;gap:24px;align-items:flex-start}
   .ex-cls{width:190px;flex-shrink:0}.ex-cls .it{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid transparent;margin-bottom:6px;transition:background .15s}
@@ -375,28 +383,31 @@ function vSurv() {
   const dispoListe = (X.ref.personnes || []).filter(p => !pris.has(p.id));
   const heuresAff = sid => s.epreuves.reduce((t, e) => t + (e.salles.some(sa => sa.surv.includes(sid)) ? h2m(e.fin) - h2m(e.debut) : 0), 0);
   let ed = '';
-  if (X.dispoEdit && !ro) {
-    const v = surv(X.dispoEdit.sid), j = X.dispoEdit.jour;
-    if (v) {
-      const pl = v.dispo[String(j)], ab = (v.abs || {})[String(j)];
-      const modeAbs = X.dispoMode ? X.dispoMode === 'abs' : !!(ab && ab.length);
-      const valPres = pl && pl.length ? pl.map(p => p[0] + '-' + p[1]).join(', ') : '';
-      const valAbs = ab && ab.length ? ab.map(p => p[0] + '-' + p[1]).join(', ') : (pl && pl.length ? absDe(pl).map(p => p[0] + '-' + p[1]).join(', ') : '');
-      ed = `<div class="ex-card" style="border-color:#F26522"><h3>Disponibilité — ${esc(v.nom)} · ${esc(libJour(j))}</h3>
-        <div class="flex flex-wrap gap-2 items-center">
-          <button class="ex-b sm ${!pl ? 'pri' : ''}" onclick="EXSIM.dispo('plein')">Toute la journée</button>
-          <button class="ex-b sm ${pl && !pl.length ? 'pri' : ''}" onclick="EXSIM.dispo('absent')">Absent</button>
-          <span class="text-xs font-bold text-gray-500 ml-2">Saisir les heures</span>
-          <span class="inline-flex rounded-lg overflow-hidden border border-gray-200">
-            <button class="ex-b sm ${!modeAbs ? 'pri' : ''}" style="border-radius:0" onclick="EXSIM.dispoMode('pres')" title="Plages pendant lesquelles le surveillant est présent">de présence</button>
-            <button class="ex-b sm ${modeAbs ? 'pri' : ''}" style="border-radius:0" onclick="EXSIM.dispoMode('abs')" title="Plages pendant lesquelles le surveillant est absent : il est présent le reste de la journée">d'absence</button></span>
-          <input type="text" id="exPlages" style="width:260px" placeholder="${modeAbs ? 'ex. 10:00-12:00 (absent)' : '08:00-12:00, 13:30-17:00'}" value="${esc(modeAbs ? valAbs : valPres)}">
-          <button class="ex-b sm ora" onclick="EXSIM.dispo('plages')">Appliquer</button>
-          <span style="flex:1"></span>
-          <button class="ex-b sm" onclick="EXSIM.dispo('semaine')" title="Copie la disponibilité de ce jour sur tous les jours">↔ Appliquer à toute la semaine</button>
-          <button class="ex-b sm" onclick="EXSIM.dispoEdit(null)">Fermer</button></div>
-        <p class="text-xs text-gray-400 mt-2">${modeAbs ? '<b>Heures d&#39;absence</b> : le surveillant est présent toute la journée <b>sauf</b> sur ces plages (ex. « 10:00-12:00, 16:30-19:00 »).' : '<b>Heures de présence</b> : le surveillant n&#39;est disponible <b>que</b> sur ces plages.'} Si une épreuve déjà planifiée devient incompatible, elle apparaît en conflit dans la vue globale.</p></div>`;
-    }
+  if (X.dispoEdit && !ro && surv(X.dispoEdit.sid)) {
+    const v = surv(X.dispoEdit.sid), j = X.dispoEdit.jour, E = X.dispoEdit, md = E.mode;
+    const tuile = (m, ico, t, d) => `<button type="button" class="ex-opt ${md === m ? 'on' : ''}" onclick="EXSIM.dispoMode('${m}')"><span class="ico">${ico}</span><span><b>${t}</b><small>${d}</small></span></button>`;
+    const plages = md === 'pres' || md === 'abs' ? `
+      <div class="ex-q">2. ${md === 'pres' ? 'Ses heures de <u>présence</u> <span>— il ne pourra surveiller <b>que</b> sur ces créneaux</span>' : 'Ses heures d’<u>absence</u> <span>— il est présent le reste de la journée, mais ne pourra <b>pas</b> surveiller sur ces créneaux</span>'}</div>
+      ${E.rows.map((r, i) => `<div class="ex-plage ${md}"><span class="lbl">${md === 'pres' ? '✅ Présent' : '🚫 Absent'}</span> de <input type="time" step="300" value="${esc(r[0])}" oninput="EXSIM.dPlage(${i},0,this.value)"> à <input type="time" step="300" value="${esc(r[1])}" oninput="EXSIM.dPlage(${i},1,this.value)">
+        ${E.rows.length > 1 ? `<button type="button" class="ex-b sm red" onclick="EXSIM.dPlageSuppr(${i})" title="Supprimer ce créneau">✕</button>` : ''}</div>`).join('')}
+      <button type="button" class="ex-b sm" style="margin-top:6px" onclick="EXSIM.dPlageAjout()">+ Ajouter un créneau ${md === 'pres' ? 'de présence' : 'd’absence'}</button>` : '';
+    ed = `<div class="ex-card" style="border-color:#F26522;border-width:2px">
+      <h3>🗓️ Disponibilité de <span style="color:#F26522">${esc(v.nom)}</span> — ${esc(libJour(j))}</h3>
+      <div class="ex-q">1. Ce jour-là, ce surveillant est…</div>
+      <div class="ex-opts">
+        ${tuile('plein', '✅', 'Présent toute la journée', 'Peut surveiller à n’importe quelle heure')}
+        ${tuile('absent', '⛔', 'Absent toute la journée', 'Ne peut surveiller aucune épreuve ce jour')}
+        ${tuile('pres', '🕘', 'Présent seulement sur certaines heures', 'Je saisis ses heures de PRÉSENCE')}
+        ${tuile('abs', '🚫', 'Absent sur certaines heures', 'Je saisis ses heures d’ABSENCE')}
+      </div>
+      ${plages}
+      <div id="exDispoRes">${dispoApercu()}</div>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button class="ex-b ora" onclick="EXSIM.dispoSauver(false)">✓ Enregistrer pour ${esc(libJour(j))}</button>
+        <button class="ex-b" onclick="EXSIM.dispoSauver(true)" title="Même disponibilité pour chaque jour de la simulation">↔ Enregistrer pour toute la semaine</button>
+        <span style="flex:1"></span>
+        <button class="ex-b" onclick="EXSIM.dispoEdit(null)">Annuler</button></div>
+      <p class="text-xs text-gray-400 mt-2">Si une épreuve déjà planifiée devient incompatible, elle apparaît en conflit dans la vue globale.</p></div>`;
   }
   return `${ro ? '' : `<div class="ex-card"><h3>Ajouter des surveillants</h3>
     <div class="ex-add">
@@ -406,7 +417,7 @@ function vSurv() {
         <div class="ex-row"><input type="text" list="exPersList" id="exAddSurv" placeholder="Rechercher…" onkeydown="if(event.key==='Enter')EXSIM.ajoutSurv()"><button class="ex-b" onclick="EXSIM.ajoutSurv()">+ Ajouter</button></div>
         <datalist id="exPersList">${dispoListe.map(p => `<option value="${esc(p.nom)}">${esc(p.source)}</option>`).join('')}</datalist></div>
     </div>
-    <p class="ex-aide" style="margin:18px 0 0">Tout surveillant ajouté est disponible toute la semaine ; ajustez ensuite ses disponibilités dans le tableau ci-dessous.</p></div>`}
+    <p class="ex-aide" style="margin:18px 0 0">Tout surveillant ajouté est disponible toute la semaine ; ajustez ensuite ses disponibilités dans le tableau ci-dessous (heures de présence ou heures d’absence).</p></div>`}
     ${ed}
     <div class="ex-card"><h3>Disponibilités de la semaine ${ro ? '' : '<span class="normal-case font-semibold text-gray-400">— cliquez sur une case pour la modifier</span>'}</h3>
     ${s.surveillants.length ? `<div style="overflow-x:auto"><table class="ex-tbl"><thead><tr><th>Surveillant</th>${Array.from({ length: s.nbJours }, (_, j) => `<th style="text-align:center">${esc(libJour(j))}</th>`).join('')}<th>Affecté</th><th></th></tr></thead><tbody>
@@ -442,41 +453,93 @@ function retirerSurv(id) {
   S().epreuves.forEach(e => e.salles.forEach(sa => { sa.surv = sa.surv.filter(x => x !== id); }));
   S().surveillants = S().surveillants.filter(v => v.id !== id); modifie(); rendreTabs(); rendreCorps();
 }
-function dispoEdit(sid, jour) { X.dispoEdit = sid ? { sid, jour } : null; X.dispoMode = null; rendreCorps(); }
-function dispoMode(m) { X.dispoMode = m; rendreCorps(); setTimeout(() => $('exPlages') && $('exPlages').focus(), 0); }
+// Éditeur de disponibilité : 4 choix explicites (présent / absent toute la journée, heures de présence, heures d'absence)
+function dispoEdit(sid, jour) {
+  const v = sid && surv(sid);
+  if (!v) { X.dispoEdit = null; rendreCorps(); return; }
+  const pl = v.dispo[String(jour)], ab = (v.abs || {})[String(jour)];
+  let mode = 'plein', rows = [['', '']];
+  if (pl && !pl.length) mode = 'absent';
+  else if (ab && ab.length) { mode = 'abs'; rows = ab.map(p => [p[0], p[1]]); }
+  else if (pl) { mode = 'pres'; rows = pl.map(p => [p[0], p[1] === '24:00' ? '23:55' : p[1]]); }
+  X.dispoEdit = { sid, jour, mode, rows };
+  rendreCorps();
+}
+function dispoMode(m) {
+  const E = X.dispoEdit; if (!E) return;
+  if ((m === 'pres' || m === 'abs') && m !== E.mode) {
+    const cur = (E.mode === 'pres' || E.mode === 'abs') ? dispoLire(true) : null;   // conversion présence ↔ absence de ce qui est déjà saisi
+    if (cur && cur.length) {
+      E.rows = absDe(cur).filter(p => !(p[0] === '00:00' && h2m(p[1]) <= h0()) && !(p[1] === '24:00' && h2m(p[0]) >= h1()))
+        .map(p => [p[0] === '00:00' ? m2h(h0()) : p[0], p[1] === '24:00' ? m2h(h1()) : p[1]]);
+      if (!E.rows.length) E.rows = [['', '']];
+    } else E.rows = [m === 'pres' ? [m2h(h0()), m2h(h1())] : ['', '']];
+  }
+  E.mode = m; rendreCorps();
+}
+function dPlage(i, k, val) { const E = X.dispoEdit; if (!E || !E.rows[i]) return; E.rows[i][k] = val; const r = $('exDispoRes'); if (r) r.innerHTML = dispoApercu(); }
+function dPlageAjout() { X.dispoEdit.rows.push(['', '']); rendreCorps(); }
+function dPlageSuppr(i) { X.dispoEdit.rows.splice(i, 1); rendreCorps(); }
+// Créneaux saisis, triés et fusionnés ; null si incomplet (message sauf silencieux)
+function dispoLire(silencieux) {
+  const E = X.dispoEdit, pl = [];
+  for (const r of E.rows) {
+    if (!r[0] && !r[1]) continue;
+    const a = h2m(r[0]), b = h2m(r[1]);
+    if (isNaN(a) || isNaN(b)) { if (!silencieux) msg('Créneau incomplet : indiquez l’heure de début et l’heure de fin.', false); return null; }
+    if (b <= a) { if (!silencieux) msg('Créneau incohérent : ' + r[0] + ' → ' + r[1] + ' (la fin doit être après le début).', false); return null; }
+    pl.push([r[0], r[1]]);
+  }
+  pl.sort((x, y) => h2m(x[0]) - h2m(y[0]));
+  const fus = [];
+  pl.forEach(p => { const d = fus[fus.length - 1]; if (d && h2m(p[0]) <= h2m(d[1])) { if (h2m(p[1]) > h2m(d[1])) d[1] = p[1]; } else fus.push([p[0], p[1]]); });
+  return fus;
+}
+// Aperçu lisible + frise de la journée
+function dispoApercu() {
+  const E = X.dispoEdit; if (!E) return '';
+  let pres, txt;
+  if (E.mode === 'plein') { pres = [['00:00', '24:00']]; txt = 'Peut surveiller <b>toute la journée</b>.'; }
+  else if (E.mode === 'absent') { pres = []; txt = 'Ne peut surveiller <b>aucune épreuve</b> ce jour.'; }
+  else {
+    const pl = dispoLire(true);
+    if (!pl) return `<div class="ex-res warn">⚠️ Complétez les heures (début et fin de chaque créneau).</div>`;
+    if (!pl.length) return `<div class="ex-res warn">⚠️ Saisissez au moins un créneau ${E.mode === 'pres' ? 'de présence' : 'd’absence'}.</div>`;
+    pres = E.mode === 'pres' ? pl : absDe(pl);
+    const lib = L => L.map(p => p[0] + '–' + p[1]).join(', ');
+    txt = E.mode === 'pres' ? 'Peut surveiller <b>uniquement</b> : ' + lib(pl) + '.' : 'Peut surveiller toute la journée <b>sauf</b> : ' + lib(pl) + '.';
+  }
+  const D0 = h0(), D1 = h1(), span = Math.max(1, D1 - D0), pc = m => ((Math.min(D1, Math.max(D0, m)) - D0) / span * 100);
+  const segs = pres.map(p => [h2m(p[0]), h2m(p[1])]).filter(z => z[1] > D0 && z[0] < D1)
+    .map(z => `<div style="position:absolute;top:0;bottom:0;left:${pc(z[0]).toFixed(2)}%;width:${(pc(z[1]) - pc(z[0])).toFixed(2)}%;background:#10b981"></div>`).join('');
+  return `<div class="ex-res">➜ <b>Résultat :</b> ${txt}
+    <div style="position:relative;height:14px;border-radius:7px;background:repeating-linear-gradient(45deg,#e2e8f0 0 6px,#f1f5f9 6px 12px);overflow:hidden;margin-top:8px">${segs}</div>
+    <div class="flex justify-between text-[10px] text-gray-400 font-bold mt-1"><span>${m2h(D0)}</span><span>🟩 disponible · ▨ non disponible</span><span>${m2h(D1)}</span></div></div>`;
+}
+function dispoSauver(semaine) {
+  const E = X.dispoEdit, v = E && surv(E.sid); if (!v) return;
+  v.abs = v.abs || {};
+  let pres = null, abs = null;
+  if (E.mode === 'absent') pres = [];
+  else if (E.mode === 'pres' || E.mode === 'abs') {
+    const pl = dispoLire(false); if (!pl) return;
+    if (!pl.length) { msg('Saisissez au moins un créneau ' + (E.mode === 'pres' ? 'de présence' : 'd’absence') + ', ou choisissez « toute la journée ».', false); return; }
+    if (E.mode === 'pres') pres = pl; else { abs = pl; pres = absDe(pl); }
+  }
+  const jours = semaine ? Array.from({ length: S().nbJours }, (_, k) => String(k)) : [String(E.jour)];
+  jours.forEach(k => {
+    if (pres === null) delete v.dispo[k]; else v.dispo[k] = JSON.parse(JSON.stringify(pres));
+    if (abs) v.abs[k] = JSON.parse(JSON.stringify(abs)); else delete v.abs[k];
+  });
+  msg(v.nom + ' : disponibilité enregistrée ' + (semaine ? 'pour toute la semaine' : 'pour ' + libJour(E.jour)) + ' ✓ — pensez à 💾 Enregistrer la simulation');
+  X.dispoEdit = null; modifie(); rendreCorps();
+}
 // Complément de plages sur la journée entière (00:00–24:00) : présence ↔ absence
 function absDe(pl) {
   const out = []; let t = 0;
   pl.slice().sort((a, b) => h2m(a[0]) - h2m(b[0])).forEach(p => { const a = h2m(p[0]), b = h2m(p[1]); if (a > t) out.push([m2h(t), m2h(a)]); t = Math.max(t, b); });
   if (t < 1440) out.push([m2h(t), '24:00']);
   return out;
-}
-function dispo(mode) {
-  const v = surv(X.dispoEdit.sid), j = String(X.dispoEdit.jour); if (!v) return;
-  v.abs = v.abs || {};
-  if (mode === 'plein') { delete v.dispo[j]; delete v.abs[j]; }
-  else if (mode === 'absent') { v.dispo[j] = []; delete v.abs[j]; }
-  else if (mode === 'semaine') { const cur = v.dispo[j], ca = v.abs[j]; for (let k = 0; k < S().nbJours; k++) { if (cur) v.dispo[String(k)] = JSON.parse(JSON.stringify(cur)); else delete v.dispo[String(k)]; if (ca) v.abs[String(k)] = JSON.parse(JSON.stringify(ca)); else delete v.abs[String(k)]; } }
-  else {
-    const txt = $('exPlages').value, pl = [];
-    for (const morceau of txt.split(/[,;]+/)) {
-      const m = morceau.trim().replace(/h/gi, ':').match(/^(\d{1,2}):?(\d{2})?\s*[-–à]\s*(\d{1,2}):?(\d{2})?$/i);
-      if (!morceau.trim()) continue;
-      if (!m) { msg('Plage illisible : « ' + morceau.trim() + ' » (format 08:00-12:00)', false); return; }
-      const a = m2h(+m[1] * 60 + (+m[2] || 0)), b = m2h(+m[3] * 60 + (+m[4] || 0));
-      if (h2m(b) <= h2m(a)) { msg('Plage incohérente : ' + a + '–' + b, false); return; }
-      pl.push([a, b]);
-    }
-    const modeAbs = X.dispoMode ? X.dispoMode === 'abs' : !!(v.abs[j] && v.abs[j].length);
-    if (!pl.length) { msg(modeAbs ? 'Indiquez au moins une plage d’absence, ou choisissez « Toute la journée ».' : 'Indiquez au moins une plage, ou choisissez « Absent ».', false); return; }
-    pl.sort((x, y) => h2m(x[0]) - h2m(y[0]));
-    if (modeAbs) {
-      const fus = [];   // fusion des absences qui se chevauchent
-      pl.forEach(p => { const d = fus[fus.length - 1]; if (d && h2m(p[0]) <= h2m(d[1])) { if (h2m(p[1]) > h2m(d[1])) d[1] = p[1]; } else fus.push([p[0], p[1]]); });
-      v.dispo[j] = absDe(fus); v.abs[j] = fus;   // présence = journée sauf absences (ce que vérifient les règles)
-    } else { v.dispo[j] = pl; delete v.abs[j]; }
-  }
-  modifie(); rendreCorps();
 }
 
 /* ---------- 3. Classes ---------- */
@@ -1592,7 +1655,7 @@ async function pdfEmargement() {
 }
 
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
-  set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispo, dispoMode, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
+  set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispoMode, dispoSauver, dPlage, dPlageAjout, dPlageSuppr, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
   choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, suiviForm, docChoisir, docRetirer, docImprime, valider, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
   jourVue: k => { X.jourVue = k; rendreCorps(); }, gVue: k => { X.gVue = k; rendreCorps(); }, exportGrille, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
