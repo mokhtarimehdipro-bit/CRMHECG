@@ -8,7 +8,7 @@
 // { titre, lundi:"yyyy-MM-dd", nbJours:5|6, hDebut:"08:00", hFin:"19:00", statut:"brouillon"|"terminee",
 //   surveillants:[{id, nom, source, dispo:{ "0":[["08:00","12:00"],…] | absent → toute la journée }}],
 //   classes:[{classe, effectif}], salles:[{id:"campus||num", campus, num, capacite}],
-//   epreuves:[{id, classe, jour, debut, fin, matiere, note, salles:[{id, surv:[idSurv…]}]}],
+//   epreuves:[{id, classe, jour, debut, fin, matiere, note, salles:[{id, surv:[idSurv…], cren?:{idSurv:["16:30","17:30"]} (relais)}]}],
 //   optim:{ params, groupes:[…], placements… } }
 // Règles dures (rappelées ici et revérifiées pour passer au statut « terminée ») :
 //  - une salle n'accueille jamais deux épreuves en même temps (même classe ou non) ;
@@ -22,6 +22,12 @@ function _exsimSheet_(ss) { return _vsxSheet_(ss, "SIMULATIONS_EXAMENS", EXSIM_H
 // Ouvert à tout le personnel ayant accès à la Vie scolaire (demande direction 20/11/2026)
 function _exsimPeutEcrire_(p) { return _vsxCanUse_(p) || String(p.emailAuteur || "").toLowerCase() === "m.mokhtari@hecg.fr"; }
 function _exsimMin_(h) { var m = String(h || "").match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1]) * 60 + (+m[2]) : NaN; }
+// Créneau réellement surveillé (relais : sa.cren[sid] = ["16:30","17:30"])
+function _exsimFen_(sa, sid, e) {
+  var a0 = _exsimMin_(e.debut), a1 = _exsimMin_(e.fin), c = sa.cren && sa.cren[sid];
+  return c ? [Math.max(a0, _exsimMin_(c[0])), Math.min(a1, _exsimMin_(c[1]))] : [a0, a1];
+}
+function _exsimHm_(m) { return ("0" + Math.floor(m / 60)).slice(-2) + ":" + ("0" + (m % 60)).slice(-2); }
 function _exsimFmt_(d) { return d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d || ""); }
 
 function _exsimLireLigne_(r) {
@@ -41,9 +47,23 @@ function _exsimConflits_(S) {
     (a.salles || []).forEach(function (sa) {
       (sa.surv || []).forEach(function (sid) {
         var s = surv[sid]; if (!s) { out.push("Surveillant inconnu sur " + a.classe); return; }
-        var pl = s.dispo && s.dispo[String(a.jour)];
-        if (pl && !pl.some(function (p) { return _exsimMin_(p[0]) <= a0 && _exsimMin_(p[1]) >= a1; }))
-          out.push(s.nom + " n'est pas disponible le jour " + (a.jour + 1) + " de " + a.debut + " à " + a.fin);
+        var w = _exsimFen_(sa, sid, a), pl = s.dispo && s.dispo[String(a.jour)];
+        if (!(w[1] > w[0])) { out.push(s.nom + " : relais en dehors de l'épreuve " + a.classe); return; }
+        if (pl && !pl.some(function (p) { return _exsimMin_(p[0]) <= w[0] && _exsimMin_(p[1]) >= w[1]; }))
+          out.push(s.nom + " n'est pas disponible le jour " + (a.jour + 1) + " de " + _exsimHm_(w[0]) + " à " + _exsimHm_(w[1]));
+      });
+      // couverture : la salle doit être surveillée sur toute la durée (relais compris)
+      var W = (sa.surv || []).map(function (sid) { return _exsimFen_(sa, sid, a); }).sort(function (x, y) { return x[0] - y[0]; }), t = a0;
+      W.forEach(function (w) { if (w[0] <= t) t = Math.max(t, w[1]); });
+      if ((sa.surv || []).length && t < a1) out.push(a.classe + " — " + (a.matiere || "épreuve") + " : salle " + String(sa.id).split("||")[1] + " non surveillée à partir de " + _exsimHm_(t));
+      // un surveillant sur deux salles de la même épreuve en même temps
+      (a.salles || []).forEach(function (sb) {
+        if (sb.id <= sa.id) return;
+        (sa.surv || []).forEach(function (x) {
+          if ((sb.surv || []).indexOf(x) === -1) return;
+          var p = _exsimFen_(sa, x, a), q = _exsimFen_(sb, x, a);
+          if (p[0] < q[1] && q[0] < p[1]) out.push((surv[x] ? surv[x].nom : x) + " dans deux salles en même temps — " + a.classe);
+        });
       });
     });
     for (var j = i + 1; j < ep.length; j++) {
@@ -53,7 +73,11 @@ function _exsimConflits_(S) {
         (b.salles || []).forEach(function (sb) {
           var lib = a.classe === b.classe ? a.classe + " (" + (a.matiere || "épreuve") + " / " + (b.matiere || "épreuve") + ")" : a.classe + " et " + b.classe;
           if (sa.id === sb.id) out.push("Salle " + sa.id.split("||")[1] + " : deux épreuves en même temps — " + lib);
-          (sa.surv || []).forEach(function (x) { if ((sb.surv || []).indexOf(x) !== -1) out.push((surv[x] ? surv[x].nom : x) + " sur deux épreuves en même temps — " + lib); });
+          (sa.surv || []).forEach(function (x) {
+            if ((sb.surv || []).indexOf(x) === -1) return;
+            var p = _exsimFen_(sa, x, a), q = _exsimFen_(sb, x, b);   // relais : seuls les créneaux réellement surveillés comptent
+            if (p[0] < q[1] && q[0] < p[1]) out.push((surv[x] ? surv[x].nom : x) + " sur deux épreuves en même temps — " + lib);
+          });
         });
       });
     }

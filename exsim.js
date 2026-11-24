@@ -84,6 +84,54 @@ function matieresDe(c) {
   return [...out];
 }
 
+/* ---------- relais de surveillance ----------
+   sa.cren = { idSurv: ["16:30","17:30"] } : ce surveillant ne couvre qu'une partie de l'épreuve (relais).
+   Sans entrée dans cren → il couvre toute l'épreuve. Une salle est « couverte » quand l'union des créneaux = toute l'épreuve. */
+function fen(sa, sid, e) {
+  const a0 = h2m(e.debut), a1 = h2m(e.fin), c = sa.cren && sa.cren[sid];
+  return c ? [Math.max(a0, h2m(c[0])), Math.min(a1, h2m(c[1]))] : [a0, a1];
+}
+const fenR = (r, sid) => { const c = r.cren && r.cren[sid]; return c ? [Math.max(r.a0, h2m(c[0])), Math.min(r.a1, h2m(c[1]))] : [r.a0, r.a1]; };
+function trous(sa, e) { // créneaux de l'épreuve où personne ne surveille la salle
+  const a0 = h2m(e.debut), a1 = h2m(e.fin), out = []; let t = a0;
+  sa.surv.map(sid => fen(sa, sid, e)).filter(w => w[1] > w[0]).sort((x, y) => x[0] - y[0])
+    .forEach(w => { if (w[0] > t) out.push([t, Math.min(w[0], a1)]); t = Math.max(t, w[1]); });
+  if (t < a1) out.push([t, a1]);
+  return out.filter(z => z[1] > z[0]);
+}
+const libZ = L => L.map(z => m2h(z[0]) + '–' + m2h(z[1])).join(', ');
+function interZ(A, B) { const out = []; A.forEach(a => B.forEach(b => { const x = Math.max(a[0], b[0]), y = Math.min(a[1], b[1]); if (y > x) out.push([x, y]); })); return out.sort((p, q) => p[0] - q[0]); }
+function moinsZ(A, o) { const out = []; A.forEach(a => { if (!ov(a[0], a[1], o[0], o[1])) { out.push(a); return; } if (o[0] > a[0]) out.push([a[0], o[0]]); if (o[1] < a[1]) out.push([o[1], a[1]]); }); return out; }
+// Créneaux de l'épreuve D pendant lesquels ce surveillant est libre (dispos − autres surveillances)
+function libres(sid, D, salleId) {
+  const s = surv(sid); if (!s) return [];
+  let L = [[h2m(D.debut), h2m(D.fin)]];
+  const pl = s.dispo && s.dispo[String(D.jour)];
+  if (pl) L = interZ(L, pl.map(p => [h2m(p[0]), h2m(p[1])]));
+  D.salles.forEach(sa => { if (sa.id !== salleId && sa.surv.includes(sid)) L = moinsZ(L, fen(sa, sid, D)); });
+  S().epreuves.forEach(e => { if (e.id !== D.id && e.jour === D.jour) e.salles.forEach(sa => { if (sa.surv.includes(sid)) L = moinsZ(L, fen(sa, sid, e)); }); });
+  return L.filter(z => z[1] - z[0] >= 5);
+}
+// Mini-analyse : pour chaque trou de surveillance de la salle, qui peut le couvrir (seul, ou par relais successifs)
+function suggestions(D, sa) {
+  const T = trous(sa, D); if (!T.length) return [];
+  const cands = S().surveillants.filter(v => !sa.surv.includes(v.id)).map(v => ({ id: v.id, L: libres(v.id, D, sa.id) })).filter(c => c.L.length);
+  return T.map(z => {
+    const entiers = cands.filter(c => c.L.some(w => w[0] <= z[0] && w[1] >= z[1])).map(c => [{ sid: c.id, a0: z[0], a1: z[1] }]);
+    if (entiers.length) return { trou: z, plans: entiers.slice(0, 4), manque: [] };
+    const plan = [], manque = []; let t = z[0];
+    while (t < z[1]) {
+      let best = null;
+      cands.forEach(c => { if (plan.some(p => p.sid === c.id)) return; c.L.forEach(w => { if (w[0] <= t && w[1] > t && (!best || w[1] > best.fin)) best = { sid: c.id, fin: Math.min(w[1], z[1]) }; }); });
+      if (best) { plan.push({ sid: best.sid, a0: t, a1: best.fin }); t = best.fin; continue; }
+      let prochain = z[1];   // personne à partir de t : on saute jusqu'au prochain surveillant libre
+      cands.forEach(c => { if (!plan.some(p => p.sid === c.id)) c.L.forEach(w => { if (w[0] > t && w[0] < prochain) prochain = w[0]; }); });
+      manque.push([t, prochain]); t = prochain;
+    }
+    return { trou: z, plans: plan.length ? [plan] : [], manque };
+  });
+}
+
 /* ---------- contrôles ---------- */
 function etatSalle(id, D) {
   const a0 = h2m(D.debut), a1 = h2m(D.fin);
@@ -93,15 +141,19 @@ function etatSalle(id, D) {
   }
   return { ok: true };
 }
-function etatSurv(sid, D, salleId) {
+function etatSurv(sid, D, salleId, win) {
   const s = surv(sid); if (!s) return { ok: false, r: 'surveillant retiré de la simulation' };
-  const a0 = h2m(D.debut), a1 = h2m(D.fin);
-  if (!dispoOk(s, D.jour, a0, a1)) return { ok: false, r: 'non disponible (' + dispoTexte(s, D.jour) + ')' };
-  if (D.salles.some(sa => sa.id !== salleId && sa.surv.includes(sid))) return { ok: false, r: 'déjà dans une autre salle de cette épreuve' };
+  const sa0 = D.salles.find(x => x.id === salleId);
+  const [a0, a1] = win || (sa0 ? fen(sa0, sid, D) : [h2m(D.debut), h2m(D.fin)]);
+  if (!(a1 > a0)) return { ok: false, r: 'horaires de relais en dehors de l\'épreuve' };
+  const lib = win || (sa0 && sa0.cren && sa0.cren[sid]) ? ' sur ' + m2h(a0) + '–' + m2h(a1) : '';
+  if (!dispoOk(s, D.jour, a0, a1)) return { ok: false, r: 'non disponible' + lib + ' (' + dispoTexte(s, D.jour) + ')' };
+  const autre = D.salles.find(sa => sa.id !== salleId && sa.surv.includes(sid) && ov(a0, a1, ...fen(sa, sid, D)));
+  if (autre) return { ok: false, r: 'déjà en salle ' + salle(autre.id).num + ' sur ce créneau' };
   for (const e of S().epreuves) {
-    if (e.id === D.id || e.jour !== D.jour || !ov(a0, a1, h2m(e.debut), h2m(e.fin))) continue;
-    const sa = e.salles.find(x => x.surv.includes(sid));
-    if (sa) return { ok: false, r: `déjà en salle ${salle(sa.id).num} (${e.classe} ${e.debut}–${e.fin})` };
+    if (e.id === D.id || e.jour !== D.jour) continue;
+    const sa = e.salles.find(x => x.surv.includes(sid) && ov(a0, a1, ...fen(x, sid, e)));
+    if (sa) { const w = fen(sa, sid, e); return { ok: false, r: `déjà en salle ${salle(sa.id).num} (${e.classe} ${m2h(w[0])}–${m2h(w[1])})` }; }
   }
   return { ok: true };
 }
@@ -128,7 +180,8 @@ function analyse() {
     const lab = `${ep.classe} · ${ep.matiere || 'épreuve'} (${libJour(ep.jour)} ${ep.debut}–${ep.fin})`;
     erreursEpreuve(ep).forEach(t => add(C, lab + ' — ' + t, [ep.id], 'conflit'));
     if (!ep.salles.length) add(A, lab + ' — aucune salle', [ep.id], 'sansSalle');
-    ep.salles.forEach(sa => { if (!sa.surv.length) add(A, `${lab} — salle ${salle(sa.id).num} sans surveillant`, [ep.id], 'sansSurv'); });
+    ep.salles.forEach(sa => { const T = trous(sa, ep); if (!sa.surv.length) add(A, `${lab} — salle ${salle(sa.id).num} sans surveillant`, [ep.id], 'sansSurv');
+      else if (T.length) add(A, `${lab} — salle ${salle(sa.id).num} non surveillée de ${libZ(T)}`, [ep.id], 'sansSurv'); });
     const cap = ep.salles.reduce((t, sa) => t + capSalle(sa.id), 0), n = effectif(ep.classe);
     if (ep.salles.length && cap < n) add(A, `${lab} — ${n} étudiants pour ${cap} places`, [ep.id], 'capacite');
     simultanees(ep).filter(e => e.id > ep.id).forEach(e => add(A, `${ep.classe} — deux épreuves en même temps le ${libJour(ep.jour)} : « ${ep.matiere || 'épreuve'} » ${ep.debut}–${ep.fin} et « ${e.matiere || 'épreuve'} » ${e.debut}–${e.fin}`, [ep.id, e.id], 'classeSimult'));
@@ -177,7 +230,11 @@ function css() {
   .ex-row{display:flex;gap:10px;align-items:center}.ex-row input{flex:1;min-width:0}
   .ex-sect{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px}
   .ex-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#eef2f8;color:#334155;margin:3px 4px 3px 0}
-  .ex-chip.bad{background:#fee2e2;color:#b91c1c}.ex-chip button{border:0;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;font-size:14px}
+  .ex-chip.bad{background:#fee2e2;color:#b91c1c}.ex-rel{display:inline-flex;align-items:center;gap:4px;background:#fff7ed;color:#c2410c;border-radius:999px;padding:1px 8px;font-size:11px}
+  .ex-hsel{height:24px!important;width:auto!important;padding:0 4px!important;font-size:11px!important;border-radius:6px!important}
+  .ex-sug{margin-top:6px;padding:8px 10px;border-radius:10px;background:#fffbeb;border:1px solid #fde68a;font-size:12px}.ex-sug .t{font-weight:800;color:#92400e;margin-bottom:2px}
+  .ex-sug .z{margin-top:4px;color:#334155}.ex-sug .p{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-top:4px;padding:4px 6px;background:#fff;border-radius:8px}.ex-sug .p.ko{color:#b91c1c;font-weight:700;background:#fef2f2}
+  .ex-sug .ex-b.sm{height:26px}.ex-chip button{border:0;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;font-size:14px}
   .ex-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
   .ex-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#7d8a9c;padding:12px 14px;border-bottom:1px solid #e6ecf4;background:#f8fafd}
   .ex-tbl th:first-child{border-top-left-radius:12px}.ex-tbl th:last-child{border-top-right-radius:12px}
@@ -263,7 +320,7 @@ async function liste() {
 function lundiProchain() { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d.toISOString().slice(0, 10); }
 function normaliser(o) {
   const s = Object.assign({ titre: '', lundi: lundiProchain(), nbJours: 5, hDebut: '08:00', hFin: '18:00', pas: 15, dureeDefaut: 120, statut: 'brouillon', surveillants: [], classes: [], salles: [], epreuves: [], optim: null }, o || {});
-  s.epreuves.forEach(e => { e.salles = (e.salles || []).map(sa => ({ id: sa.id, surv: sa.surv || [] })); e.jour = +e.jour || 0; });
+  s.epreuves.forEach(e => { e.salles = (e.salles || []).map(sa => Object.assign({ id: sa.id, surv: sa.surv || [] }, sa.cren && Object.keys(sa.cren).length ? { cren: sa.cren } : {})); e.jour = +e.jour || 0; });
   s.surveillants.forEach(v => { v.dispo = v.dispo || {}; });
   return s;
 }
@@ -381,7 +438,7 @@ function setJours(n) {
 function vSurv() {
   const s = S(), ro = lecture(), pris = new Set(s.surveillants.map(v => v.id));
   const dispoListe = (X.ref.personnes || []).filter(p => !pris.has(p.id));
-  const heuresAff = sid => s.epreuves.reduce((t, e) => t + (e.salles.some(sa => sa.surv.includes(sid)) ? h2m(e.fin) - h2m(e.debut) : 0), 0);
+  const heuresAff = sid => s.epreuves.reduce((t, e) => t + e.salles.reduce((u, sa) => { if (!sa.surv.includes(sid)) return u; const w = fen(sa, sid, e); return u + Math.max(0, w[1] - w[0]); }, 0), 0);
   let ed = '';
   if (X.dispoEdit && !ro && surv(X.dispoEdit.sid)) {
     const v = surv(X.dispoEdit.sid), j = X.dispoEdit.jour, E = X.dispoEdit, md = E.mode;
@@ -450,7 +507,7 @@ function ajoutLibre() {
 function retirerSurv(id) {
   const n = S().epreuves.filter(e => e.salles.some(sa => sa.surv.includes(id))).length;
   if (n && !confirm(`Ce surveillant est affecté à ${n} épreuve(s). Le retirer de la simulation et de ces épreuves ?`)) return;
-  S().epreuves.forEach(e => e.salles.forEach(sa => { sa.surv = sa.surv.filter(x => x !== id); }));
+  S().epreuves.forEach(e => e.salles.forEach(sa => { sa.surv = sa.surv.filter(x => x !== id); if (sa.cren) delete sa.cren[id]; }));
   S().surveillants = S().surveillants.filter(v => v.id !== id); modifie(); rendreTabs(); rendreCorps();
 }
 // Éditeur de disponibilité : 4 choix explicites (présent / absent toute la journée, heures de présence, heures d'absence)
@@ -672,15 +729,37 @@ function vForm() {
     const on = D.salles.find(sa => sa.id === x.id), st = etatSalle(x.id, D);
     if (!on) return `<div class="ex-srow ${st.ok ? '' : 'off'}"><label style="display:flex;gap:8px;align-items:center;${st.ok && !ro ? 'cursor:pointer' : ''}"><input type="checkbox" ${st.ok && !ro ? '' : 'disabled'} onchange="EXSIM.dSalle('${esc(x.id)}',true)" style="width:auto">
       <span><b>Salle ${esc(x.num)}</b> <span class="text-gray-400">· ${capSalle(x.id)} pl. · ${esc(x.campus)}</span>${st.ok ? '' : `<br><span class="text-xs" style="color:#b91c1c">⛔ ${esc(st.r)}</span>`}</span></label></div>`;
-    const options = S().surveillants.filter(v => !on.surv.includes(v.id)).map(v => { const t = etatSurv(v.id, D, x.id); return `<option value="${esc(v.id)}" ${t.ok ? '' : 'disabled'}>${esc(v.nom)}${t.ok ? '' : ' — ' + esc(t.r)}</option>`; });
-    const nbOk = S().surveillants.filter(v => !on.surv.includes(v.id) && etatSurv(v.id, D, x.id).ok).length;
+    const optH = (sel, k, sid) => { const o = []; for (let m = h2m(D.debut); m <= h2m(D.fin); m += pas) o.push(m); if (!o.includes(sel)) o.push(sel); o.sort((a, b) => a - b);
+      return `<select class="ex-hsel" ${dis} onchange="EXSIM.dCren('${esc(x.id)}','${esc(sid)}',${k},this.value)">${o.map(m => `<option value="${m2h(m)}" ${m === sel ? 'selected' : ''}>${m2h(m)}</option>`).join('')}</select>`; };
+    const opts1 = [], opts2 = [], opts3 = [];
+    S().surveillants.filter(v => !on.surv.includes(v.id)).forEach(v => {
+      const t = etatSurv(v.id, D, x.id, [h2m(D.debut), h2m(D.fin)]);
+      if (t.ok) { opts1.push(`<option value="${esc(v.id)}">${esc(v.nom)} — toute l'épreuve</option>`); return; }
+      const L = libres(v.id, D, x.id), T = trous(on, D);
+      const w = L.map(z => [z, interZ([z], T.length ? T : [z]).reduce((s, y) => s + y[1] - y[0], 0)]).sort((p, q) => q[1] - p[1] || (q[0][1] - q[0][0]) - (p[0][1] - p[0][0]))[0];
+      if (w) opts2.push(`<option value="${esc(v.id)}|${w[0][0]}|${w[0][1]}">${esc(v.nom)} — relais possible ${m2h(w[0][0])}–${m2h(w[0][1])}</option>`);
+      else opts3.push(`<option disabled>${esc(v.nom)} — ${esc(t.r)}</option>`);
+    });
+    const T = trous(on, D), sug = ro ? [] : suggestions(D, on);
+    const planTxt = P => P.map(p => `<b>${esc((surv(p.sid) || { nom: p.sid }).nom)}</b> ${m2h(p.a0)}–${m2h(p.a1)}`).join(' → ');
+    const planCode = P => P.map(p => p.sid + '|' + p.a0 + '|' + p.a1).join(';');
+    const analyseHtml = !sug.length ? '' : `<div class="ex-sug"><div class="t">💡 Analyse automatique</div>${sug.map(g => `
+        <div class="z">Non surveillé de <b>${m2h(g.trou[0])} à ${m2h(g.trou[1])}</b> :</div>
+        ${g.plans.map(P => `<div class="p"><span>${P.length > 1 ? 'Relais successifs : ' : P[0].a0 === h2m(D.debut) && P[0].a1 === h2m(D.fin) ? 'Libre toute l\'épreuve : ' : 'Peut prendre le relais : '}${planTxt(P)}</span>
+          <button class="ex-b sm ora" onclick="EXSIM.dSugg('${esc(x.id)}','${esc(planCode(P))}')">${P.length > 1 ? 'Appliquer' : 'Ajouter'}</button></div>`).join('')}
+        ${g.manque.length ? `<div class="p ko">⛔ Aucun surveillant libre de ${esc(libZ(g.manque))}${g.plans.length ? ' (même avec les relais ci-dessus)' : ''} : ajoutez un surveillant ou ajustez les disponibilités.</div>` : ''}`).join('')}</div>`;
     return `<div class="ex-srow ${st.ok ? '' : 'bad'}" style="border-color:${st.ok ? '#93c5fd' : ''};background:${st.ok ? '#f5f9ff' : ''}">
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" checked ${dis} onchange="EXSIM.dSalle('${esc(x.id)}',false)" style="width:auto">
       <span style="flex:1"><b>Salle ${esc(x.num)}</b> <span class="text-gray-500">· ${part[x.id] || 0} étu. / ${capSalle(x.id)} pl.</span></span></label>
       ${st.ok ? '' : `<div class="text-xs" style="color:#b91c1c">⛔ ${esc(st.r)}</div>`}
-      <div style="margin-top:4px">${on.surv.map(sid => { const t = etatSurv(sid, D, x.id); return `<span class="ex-chip ${t.ok ? '' : 'bad'}" title="${esc(t.r || '')}">👁 ${esc((surv(sid) || { nom: sid }).nom)}${t.ok ? '' : ' ⛔'}${ro ? '' : `<button onclick="EXSIM.dSurv('${esc(x.id)}','${esc(sid)}',false)">×</button>`}</span>`; }).join('')}
-      ${on.surv.length ? '' : `<span class="text-xs" style="color:#b45309;font-weight:700">⚠ Un surveillant est requis pour cette salle</span>`}</div>
-      ${ro ? '' : `<select style="margin-top:4px;height:32px;font-size:12px" onchange="if(this.value)EXSIM.dSurv('${esc(x.id)}',this.value,true)"><option value="">+ Ajouter un surveillant (${nbOk} disponible(s))</option>${options.join('')}</select>`}</div>`;
+      <div style="margin-top:4px">${on.surv.map(sid => { const t = etatSurv(sid, D, x.id), w = fen(on, sid, D), rel = !!(on.cren && on.cren[sid]);
+        return `<span class="ex-chip ${t.ok ? '' : 'bad'}" title="${esc(t.r || '')}">👁 ${esc((surv(sid) || { nom: sid }).nom)}
+          ${rel ? `<span class="ex-rel">relais ${ro ? m2h(w[0]) + '–' + m2h(w[1]) : optH(w[0], 0, sid) + ' à ' + optH(w[1], 1, sid)}</span>` : `<span class="text-gray-400 font-semibold">toute l'épreuve</span>${ro ? '' : `<button title="Ne surveiller qu'une partie de l'épreuve (relais)" onclick="EXSIM.dCren('${esc(x.id)}','${esc(sid)}',-1)">⏱</button>`}`}
+          ${t.ok ? '' : ' ⛔'}${ro ? '' : `<button onclick="EXSIM.dSurv('${esc(x.id)}','${esc(sid)}',false)">×</button>`}</span>`; }).join('')}
+      ${!on.surv.length ? `<span class="text-xs" style="color:#b45309;font-weight:700">⚠ Un surveillant est requis pour cette salle</span>` : T.length ? `<span class="text-xs" style="color:#b45309;font-weight:700">⚠ Salle non surveillée de ${esc(libZ(T))}</span>` : `<span class="text-xs" style="color:#047857;font-weight:700">✓ Surveillance couverte ${D.debut}–${D.fin}</span>`}</div>
+      ${analyseHtml}
+      ${ro ? '' : `<select style="margin-top:4px;height:32px;font-size:12px" onchange="if(this.value)EXSIM.dSurv('${esc(x.id)}',this.value,true)"><option value="">+ Ajouter un surveillant (${opts1.length} libre(s) toute l'épreuve${opts2.length ? ', ' + opts2.length + ' en relais' : ''})</option>
+        ${opts1.length ? `<optgroup label="Libres toute l'épreuve">${opts1.join('')}</optgroup>` : ''}${opts2.length ? `<optgroup label="Libres sur une partie (relais)">${opts2.join('')}</optgroup>` : ''}${opts3.length ? `<optgroup label="Indisponibles">${opts3.join('')}</optgroup>` : ''}</select>`}</div>`;
   }).join('');
   const ex = S().epreuves.some(e => e.id === D.id);
   return `<div class="ex-card" style="border-color:${couleur(D.classe)}"><h3 style="display:flex;align-items:center;gap:8px"><span style="flex:1">${ex ? 'Épreuve' : 'Nouvelle épreuve'} — ${esc(D.classe)}</span>${ex && !ro ? `<button class="ex-b sm" title="Dupliquer" onclick="document.getElementById('exDupBloc').scrollIntoView({behavior:'smooth'})">⧉ Dupliquer</button>` : ''}<button class="ex-b sm" title="Fermer" onclick="EXSIM.dAnnuler()">✕</button></h3>
@@ -769,11 +848,49 @@ function dSet(k, v, rer) {
   if (rer) rendreCorps();
 }
 function dSalle(id, on) { const D = X.draft; if (on) D.salles.push({ id, surv: [] }); else D.salles = D.salles.filter(sa => sa.id !== id); majForm(); }
-function dSurv(sid, v, on) { const sa = X.draft.salles.find(x => x.id === sid); if (!sa) return; if (on) { if (!sa.surv.includes(v)) sa.surv.push(v); } else sa.surv = sa.surv.filter(x => x !== v); majForm(); }
+function dSurv(sid, v, on) {
+  const sa = X.draft.salles.find(x => x.id === sid); if (!sa) return;
+  const [id, a0, a1] = String(v).split('|');
+  if (on) {
+    if (!sa.surv.includes(id)) sa.surv.push(id);
+    if (a0 !== undefined && !(+a0 <= h2m(X.draft.debut) && +a1 >= h2m(X.draft.fin))) { sa.cren = sa.cren || {}; sa.cren[id] = [m2h(+a0), m2h(+a1)]; }
+  } else { sa.surv = sa.surv.filter(x => x !== id); if (sa.cren) delete sa.cren[id]; }
+  majForm();
+}
+// k = 0/1 : début/fin du relais ; k = -1 : passer un surveillant « toute l'épreuve » en relais (créneau libre le plus utile)
+function dCren(salleId, sid, k, val) {
+  const D = X.draft, sa = D.salles.find(x => x.id === salleId); if (!sa) return;
+  sa.cren = sa.cren || {};
+  if (k === -1) {
+    const autres = Object.assign({}, sa, { surv: sa.surv.filter(x => x !== sid) }), T = trous(autres, D);
+    const z = T[0] || [h2m(D.debut), h2m(D.fin)];
+    sa.cren[sid] = [m2h(z[0]), m2h(z[1])];
+    majForm(); return;   // reste affiché en relais pour qu'on règle les heures
+  } else {
+    const w = (sa.cren[sid] || [D.debut, D.fin]).slice(); w[k] = val;
+    if (h2m(w[1]) <= h2m(w[0])) { msg('Relais : l\'heure de fin doit être après l\'heure de début.', false); majForm(); return; }
+    sa.cren[sid] = w;
+  }
+  const w = sa.cren[sid];
+  if (h2m(w[0]) <= h2m(D.debut) && h2m(w[1]) >= h2m(D.fin)) delete sa.cren[sid];   // toute l'épreuve → plus un relais
+  majForm();
+}
+function dSugg(salleId, code) {
+  const sa = X.draft.salles.find(x => x.id === salleId); if (!sa) return;
+  code.split(';').forEach(c => dSurvSilencieux(sa, c));
+  majForm(); msg('Surveillance ajoutée ✓ — vérifiez puis validez l\'épreuve.');
+}
+function dSurvSilencieux(sa, c) {
+  const [id, a0, a1] = c.split('|'); if (!id) return;
+  if (!sa.surv.includes(id)) sa.surv.push(id);
+  if (+a0 <= h2m(X.draft.debut) && +a1 >= h2m(X.draft.fin)) { if (sa.cren) delete sa.cren[id]; }
+  else { sa.cren = sa.cren || {}; sa.cren[id] = [m2h(+a0), m2h(+a1)]; }
+}
 function manquants(D) {
   const m = [];
   if (!D.salles.length) m.push('• Affectez au moins une salle.');
-  D.salles.forEach(sa => { if (!sa.surv.length) m.push(`• Salle ${salle(sa.id).num} : affectez au moins un surveillant.`); });
+  D.salles.forEach(sa => { const T = trous(sa, D); if (!sa.surv.length) m.push(`• Salle ${salle(sa.id).num} : affectez au moins un surveillant.`);
+    else if (T.length) m.push(`• Salle ${salle(sa.id).num} : personne ne surveille de ${libZ(T)} (voir 💡 l'analyse automatique).`); });
   return m;
 }
 function dValider() {
@@ -810,6 +927,7 @@ function dupRapide(id) {
 }
 function ouvrirCopie(D) {
   // on garde la salle et les surveillants seulement s'ils sont libres sur le nouveau créneau
+  D.salles.forEach(sa => { delete sa.cren; });   // relais propres au créneau d'origine
   D.salles = D.salles.filter(sa => etatSalle(sa.id, D).ok).map(sa => ({ id: sa.id, surv: sa.surv.filter(v => etatSurv(v, D, sa.id).ok) }));
   X.draft = D; X.classeSel = D.classe; X.onglet = 'edt'; rendreTabs(); rendreCorps();
   msg(`Copie pour ${D.classe} (${libJour(D.jour)} ${D.debut}–${D.fin}) : choisissez la salle et le surveillant, puis validez.`);
@@ -919,7 +1037,7 @@ function setRelances(v) { if (!X.ecriture) return; S().relances = !!v; modifie()
 // contrôles de la checklist : [clé, libellé, ok?]
 function controles(e) {
   const su = suiviDe(e.id);
-  return [['form', 'Formateur', (e.formateurs || []).length > 0], ['salle', 'Salle', e.salles.length > 0], ['surv', 'Surveillant', e.salles.length > 0 && e.salles.every(sa => sa.surv.length)],
+  return [['form', 'Formateur', (e.formateurs || []).length > 0], ['salle', 'Salle', e.salles.length > 0], ['surv', 'Surveillant', e.salles.length > 0 && e.salles.every(sa => sa.surv.length && !trous(sa, e).length)],
     ['sujet', 'Sujet', !!su.sujet], ['corrige', 'Corrigé', !!su.corrige], ['imprime', 'Impression', !!su.imprime], ['valide', 'Validation', !!su.valide]];
 }
 const nbManquants = () => S().epreuves.reduce((t, e) => t + controles(e).filter(c => !c[2]).length, 0);
@@ -969,7 +1087,7 @@ function affectations(version) { // lignes {jour,a0,a1,salleId,parts:[{classe,ma
   s.epreuves.forEach(e => {
     if (dansOptim.has(e.id)) return;
     const pt = partage(e);
-    e.salles.forEach(sa => R.push({ jour: e.jour, a0: h2m(e.debut), a1: h2m(e.fin), salleId: sa.id, parts: [{ classe: e.classe, matiere: e.matiere, n: pt[sa.id] || 0, epId: e.id, a0: h2m(e.debut), a1: h2m(e.fin) }], surv: sa.surv, note: e.note }));
+    e.salles.forEach(sa => R.push({ jour: e.jour, a0: h2m(e.debut), a1: h2m(e.fin), salleId: sa.id, parts: [{ classe: e.classe, matiere: e.matiere, n: pt[sa.id] || 0, epId: e.id, a0: h2m(e.debut), a1: h2m(e.fin) }], surv: sa.surv, cren: sa.cren, note: e.note }));
   });
   if (opt) s.optim.groupes.forEach(g => R.push({ jour: g.jour, a0: g.a0, a1: g.a1, salleId: g.salleId, parts: g.parts, surv: g.surv, groupe: g.id }));
   return R.sort((a, b) => a.jour - b.jour || a.a0 - b.a0);
@@ -981,7 +1099,7 @@ function celluleEp(classe, jour, demi, R) {
   return S().epreuves.filter(e => e.classe === classe && e.jour === jour && (h2m(e.debut) < MIDI ? 0 : 1) === demi)
     .sort((a, b) => h2m(a.debut) - h2m(b.debut))
     .map(e => { const L = R.filter(r => r.parts.some(p => p.epId === e.id));
-      const lieux = L.map(r => 'Salle ' + salle(r.salleId).num + (r.surv.length ? ' (' + nomsSurv(r.surv) + ')' : '')).join(', ');
+      const lieux = L.map(r => 'Salle ' + salle(r.salleId).num + (r.surv.length ? ' (' + nomsSurv(r.surv, r) + ')' : '')).join(', ');
       return { e, txt: `${e.matiere || 'Épreuve'}\n${e.debut} – ${e.fin}${lieux ? '\n' + lieux : ''}` }; });
 }
 // mode 'cj' : lignes = classes (bloc matin puis bloc après-midi), colonnes = jours
@@ -1061,7 +1179,7 @@ function vChrono() {
   const s = S(), an = analyse(), D0 = h0(), D1 = h1(), span = D1 - D0, pct = m => ((m - D0) / span * 100).toFixed(3) + '%';
   const version = s.optim ? X.etatVersion : 'init', rows = affectations(version);
   const jours = X.jourVue === 'tous' ? Array.from({ length: s.nbJours }, (_, j) => j) : [+X.jourVue];
-  const blocTitre = r => `${libJour(r.jour)} ${m2h(r.a0)}–${m2h(r.a1)} · Salle ${salle(r.salleId).num} · ${r.parts.map(p => p.classe + ' (' + p.n + ') ' + (p.matiere || '')).join(' + ')} · Surveillance : ${r.surv.map(x => (surv(x) || { nom: '?' }).nom).join(', ') || 'aucune'}`;
+  const blocTitre = r => `${libJour(r.jour)} ${m2h(r.a0)}–${m2h(r.a1)} · Salle ${salle(r.salleId).num} · ${r.parts.map(p => p.classe + ' (' + p.n + ') ' + (p.matiere || '')).join(' + ')} · Surveillance : ${r.surv.length ? nomsSurv(r.surv, r) : 'aucune'}`;
   const bloc = (r, lab) => { const c = couleur(r.parts[0].classe), multi = r.parts.length > 1;
     return `<div class="bk" style="left:${pct(r.a0)};width:calc(${((r.a1 - r.a0) / span * 100).toFixed(3)}% - 2px);background:${multi ? 'linear-gradient(90deg,' + r.parts.map(p => couleur(p.classe) + '2e').join(',') + ')' : c + '24'};border-left-color:${c}" title="${esc(blocTitre(r))}" onclick="EXSIM.editer('${r.parts[0].epId}')">${esc(lab)}</div>`; };
   const graduations = `<div class="ex-tl" style="border:0"><div></div><div style="position:relative;height:16px">${Array.from({ length: Math.floor(span / 60) + 1 }, (_, k) => D0 + k * 60).filter(m => m <= D1).map(m => `<span style="position:absolute;left:${pct(m)};font-size:10px;color:#94a3b8;font-weight:700;transform:translateX(-50%)">${m2h(m).replace(':00', 'h')}</span>`).join('')}</div></div>`;
@@ -1073,7 +1191,7 @@ function vChrono() {
     const lignesSurv = s.surveillants.map(v => {
       const pl = v.dispo[String(j)], na = [];
       if (pl) { let t = D0; pl.slice().sort((a, b) => h2m(a[0]) - h2m(b[0])).forEach(p => { if (h2m(p[0]) > t) na.push([t, Math.min(D1, h2m(p[0]))]); t = Math.max(t, h2m(p[1])); }); if (t < D1) na.push([t, D1]); }
-      const L = R.filter(r => r.surv.includes(v.id));
+      const L = R.filter(r => r.surv.includes(v.id)).map(r => { const w = fenR(r, v.id); return Object.assign({}, r, { a0: w[0], a1: w[1] }); });
       return `<div class="ex-tl"><div class="lb">👁 ${esc(v.nom)}</div><div class="tr" style="${tracks}">${na.filter(z => z[1] > z[0]).map(z => `<div class="na" style="left:${pct(Math.max(D0, z[0]))};width:${((Math.min(D1, z[1]) - Math.max(D0, z[0])) / span * 100).toFixed(3)}%" title="Non disponible"></div>`).join('')}${L.map(r => bloc(r, 'Salle ' + salle(r.salleId).num + ' · ' + r.parts.map(p => p.classe).join(' + '))).join('')}</div></div>`; }).join('');
     return `<div class="ex-card"><h3 style="color:#1A4E8A;font-size:13px">${esc(libJour(j))}</h3>${graduations}${lignesSalles}
       <div class="text-xs font-black uppercase text-gray-400 mt-3 mb-1">Surveillants <span class="normal-case font-semibold">(hachuré = non disponible)</span></div>${lignesSurv}</div>`;
@@ -1090,7 +1208,7 @@ function vChrono() {
 /* ---------- 7. États ---------- */
 function etatsHtml(vue, filtre, version) {
   const s = S(), R = affectations(version), H = m => (m / 60).toFixed(1).replace('.', ',') + ' h';
-  const survN = L => L.map(x => esc((surv(x) || { nom: '?' }).nom)).join(', ') || '<span style="color:#b45309">—</span>';
+  const survN = (L, r) => L.map(x => esc((surv(x) || { nom: '?' }).nom) + (r && r.cren && r.cren[x] ? ' <span class="text-gray-400">(' + libZ([fenR(r, x)]) + ')</span>' : '')).join(', ') || '<span style="color:#b45309">—</span>';
   const ligneJ = r => `<td>${esc(libJour(r.jour))}</td><td>${m2h(r.a0)}–${m2h(r.a1)}</td>`;
   const sec = (titre, sous, corps) => `<section class="ex-card ex-etat"><h3 style="color:#1A4E8A;font-size:14px;text-transform:none;letter-spacing:0">${titre}</h3><p class="text-xs text-gray-500" style="margin:-6px 0 8px">${sous}</p>${corps}</section>`;
   if (vue === 'salle') return s.salles.filter(x => !filtre || x.id === filtre).map(x => {
@@ -1105,12 +1223,12 @@ function etatsHtml(vue, filtre, version) {
         const L = R.filter(r => r.parts.some(p => p.epId === e.id));
         return `<tr><td>${esc(libJour(e.jour))}</td><td>${e.debut}–${e.fin}</td><td><b>${esc(e.matiere || 'Épreuve')}</b>${e.note ? `<div class="text-xs text-gray-500">${esc(e.note)}</div>` : ''}</td>
           <td>${L.map(r => `Salle ${esc(salle(r.salleId).num)} · ${r.parts.filter(p => p.epId === e.id).reduce((t, p) => t + p.n, 0)} étu.${r.parts.length > 1 ? ' <span class="text-gray-400">(avec ' + esc(r.parts.filter(p => p.epId !== e.id).map(p => p.classe).join(', ')) + ')</span>' : ''}`).join('<br>') || '—'}</td>
-          <td>${L.map(r => survN(r.surv)).join('<br>')}</td></tr>`; }).join('')}</tbody></table>` : '<p class="text-sm text-gray-400">Aucune épreuve.</p>');
+          <td>${L.map(r => survN(r.surv, r)).join('<br>')}</td></tr>`; }).join('')}</tbody></table>` : '<p class="text-sm text-gray-400">Aucune épreuve.</p>');
   }).join('');
   return s.surveillants.filter(v => !filtre || v.id === filtre).map(v => {
-    const L = R.filter(r => r.surv.includes(v.id)), tot = L.reduce((t, r) => t + r.a1 - r.a0, 0);
+    const L = R.filter(r => r.surv.includes(v.id)).map(r => { const w = fenR(r, v.id); return Object.assign({}, r, { a0: w[0], a1: w[1], cren: null, crenAutres: r }); }), tot = L.reduce((t, r) => t + r.a1 - r.a0, 0);
     return sec(`👁 ${esc(v.nom)}`, `${H(tot)} de surveillance · disponibilités : ${Array.from({ length: s.nbJours }, (_, j) => JOURS[j].slice(0, 3) + '. ' + dispoTexte(v, j)).map(esc).join(' · ')}`,
-      L.length ? `<table class="ex-tbl"><thead><tr><th>Jour</th><th>Horaires</th><th>Salle</th><th>Classe(s) · matière</th><th>Avec</th></tr></thead><tbody>${L.map(r => `<tr>${ligneJ(r)}<td><b>Salle ${esc(salle(r.salleId).num)}</b></td><td>${r.parts.map(p => esc(p.classe) + ' · ' + esc(p.matiere || '')).join('<br>')}</td><td>${survN(r.surv.filter(x => x !== v.id))}</td></tr>`).join('')}</tbody></table>` : '<p class="text-sm text-gray-400">Aucune surveillance.</p>');
+      L.length ? `<table class="ex-tbl"><thead><tr><th>Jour</th><th>Horaires</th><th>Salle</th><th>Classe(s) · matière</th><th>Avec</th></tr></thead><tbody>${L.map(r => `<tr>${ligneJ(r)}<td><b>Salle ${esc(salle(r.salleId).num)}</b></td><td>${r.parts.map(p => esc(p.classe) + ' · ' + esc(p.matiere || '')).join('<br>')}</td><td>${survN(r.surv.filter(x => x !== v.id), r.crenAutres)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-sm text-gray-400">Aucune surveillance.</p>');
   }).join('');
 }
 function vEtats() {
@@ -1210,9 +1328,9 @@ function optimiser(prm) {
       const etus = etudiants(e.classe).map(x => ({ id: x.id, nom: x.nom })).sort((a, b) => nomTri(a.nom).localeCompare(nomTri(b.nom), 'fr'));
       const n = effectif(e.classe); while (etus.length < n) etus.push({ id: '', nom: 'Étudiant ' + (etus.length + 1) });
       items.push({ e, a0, a1, jour: e.jour, etus, n: etus.length });
-    } else e.salles.forEach(sa => fixes.push({ jour: e.jour, a0, a1, salleId: sa.id, surv: sa.surv }));
+    } else e.salles.forEach(sa => fixes.push({ jour: e.jour, a0, a1, salleId: sa.id, surv: sa.surv, cren: sa.cren }));
   });
-  const occupe = []; fixes.forEach(f => f.surv.forEach(sid => occupe.push({ sid, jour: f.jour, a0: f.a0, a1: f.a1 })));
+  const occupe = []; fixes.forEach(f => f.surv.forEach(sid => { const w = fenR(f, sid); occupe.push({ sid, jour: f.jour, a0: w[0], a1: w[1] }); }));
   const groupes = [], sansPlace = [];
   for (let j = 0; j < s.nbJours; j++) {
     const its = items.filter(i => i.jour === j).sort((a, b) => a.a0 - b.a0);
@@ -1409,7 +1527,7 @@ async function logo() {
 const nomFichier = (t, ext) => ((S().titre || 'Simulation') + ' - ' + t).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() + '.' + ext;
 const semaineTxt = () => S().lundi ? `Semaine du ${dateJour(0)} au ${dateJour(S().nbJours - 1)}` : '';
 const H1 = m => (m / 60).toFixed(1).replace('.', ',') + ' h';
-const nomsSurv = L => L.map(x => (surv(x) || { nom: '?' }).nom).join(', ') || '—';
+const nomsSurv = (L, r) => L.map(x => (surv(x) || { nom: '?' }).nom + (r && r.cren && r.cren[x] ? ' (' + libZ([fenR(r, x)]) + ')' : '')).join(', ') || '—';
 const LIBV = { salle: 'par salle', classe: 'par classe', surv: 'par surveillant' };
 
 // Données communes aux exports : une « section » = titre, sous-titre, colonnes, lignes
@@ -1421,7 +1539,7 @@ function sections(vue, filtre, version) {
       cols: ['Jour', 'Horaires', 'Classe(s) et épreuve', 'Effectif', 'Surveillant(s)'], larg: [18, 15, 50, 12, 34],
       couleurs: L.map(r => couleur(r.parts[0].classe)), vide: 'Salle libre toute la semaine.',
       rows: L.map(r => [libJour(r.jour), m2h(r.a0) + ' – ' + m2h(r.a1), r.parts.map(p => p.classe + ' · ' + (p.matiere || 'Épreuve') + (r.parts.length > 1 ? ' (' + m2h(p.a0) + '–' + m2h(p.a1) + ')' : '')).join('\n'),
-        r.parts.reduce((t, p) => t + p.n, 0) + ' / ' + capSalle(x.id), nomsSurv(r.surv)]) };
+        r.parts.reduce((t, p) => t + p.n, 0) + ' / ' + capSalle(x.id), nomsSurv(r.surv, r)]) };
   });
   if (vue === 'classe') return s.classes.filter(c => !filtre || c.classe === filtre).map(c => {
     const E = s.epreuves.filter(e => e.classe === c.classe), tot = E.reduce((t, e) => t + h2m(e.fin) - h2m(e.debut), 0);
@@ -1430,13 +1548,13 @@ function sections(vue, filtre, version) {
       rows: E.map(e => { const L = R.filter(r => r.parts.some(p => p.epId === e.id));
         return [libJour(e.jour), e.debut + ' – ' + e.fin, (e.matiere || 'Épreuve') + (e.note ? '\n' + e.note : ''),
           L.map(r => 'Salle ' + salle(r.salleId).num + ' · ' + r.parts.filter(p => p.epId === e.id).reduce((t, p) => t + p.n, 0) + ' étu.' + (r.parts.length > 1 ? ' (avec ' + r.parts.filter(p => p.epId !== e.id).map(p => p.classe).join(', ') + ')' : '')).join('\n') || '—',
-          L.map(r => nomsSurv(r.surv)).join('\n')]; }) };
+          L.map(r => nomsSurv(r.surv, r)).join('\n')]; }) };
   });
   return s.surveillants.filter(v => !filtre || v.id === filtre).map(v => {
-    const L = R.filter(r => r.surv.includes(v.id)), tot = L.reduce((t, r) => t + r.a1 - r.a0, 0);
+    const L = R.filter(r => r.surv.includes(v.id)).map(r => { const w = fenR(r, v.id); return Object.assign({}, r, { a0: w[0], a1: w[1], cren: null, crenAutres: r }); }), tot = L.reduce((t, r) => t + r.a1 - r.a0, 0);
     return { titre: v.nom, sous: `${H1(tot)} de surveillance · disponibilités : ${Array.from({ length: s.nbJours }, (_, j) => JOURS[j].slice(0, 3) + '. ' + dispoTexte(v, j)).join(' · ')}`,
       cols: ['Jour', 'Horaires', 'Salle', 'Classe(s) et épreuve', 'Avec'], larg: [18, 15, 14, 50, 34], couleurs: L.map(r => couleur(r.parts[0].classe)), vide: 'Aucune surveillance.',
-      rows: L.map(r => [libJour(r.jour), m2h(r.a0) + ' – ' + m2h(r.a1), 'Salle ' + salle(r.salleId).num, r.parts.map(p => p.classe + ' · ' + (p.matiere || 'Épreuve')).join('\n'), nomsSurv(r.surv.filter(x => x !== v.id))]) };
+      rows: L.map(r => [libJour(r.jour), m2h(r.a0) + ' – ' + m2h(r.a1), 'Salle ' + salle(r.salleId).num, r.parts.map(p => p.classe + ' · ' + (p.matiere || 'Épreuve')).join('\n'), nomsSurv(r.surv.filter(x => x !== v.id), r.crenAutres)]) };
   });
 }
 const placesTriees = g => (g.places || []).slice().sort((a, b) => nomTri(a.nom).localeCompare(nomTri(b.nom), 'fr'));
@@ -1655,7 +1773,7 @@ async function pdfEmargement() {
 }
 
 window.EXSIM = { _t: { optimiser: p => optimiser(p), analyse: () => analyse(), X }, liste, nouveau, ouvrir, dupliquer, supprimer, fermer: () => fermerUI(false), onglet, enregistrer, terminer, rouvrir,
-  set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispoMode, dispoSauver, dPlage, dPlageAjout, dPlageSuppr, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
+  set, setLundi, setJours, ajoutSurv, retirerSurv, dispoEdit, dispoMode, dispoSauver, dCren, dSugg, dPlage, dPlageAjout, dPlageSuppr, filtreClasse, classe, toutesClasses, salle: salleCoche, campus,
   choixClasse, clicCal, editer, glisser, ajoutLibre, dSet, dSalle, dSurv, dValider, dSupprimer, dAnnuler, dDupliquer, dupRapide, dForm, suiviForm, docChoisir, docRetirer, docImprime, valider, relancer, setRelances, suiviManq: v => { X.suiviManq = v; rendreCorps(); },
   jourVue: k => { X.jourVue = k; rendreCorps(); }, gVue: k => { X.gVue = k; rendreCorps(); }, exportGrille, version: v => { X.etatVersion = v; rendreCorps(); },
   etatVue: k => { X.etatVue = k; X.etatFiltre = ''; rendreCorps(); }, etatFiltre: v => { X.etatFiltre = v; rendreCorps(); },
