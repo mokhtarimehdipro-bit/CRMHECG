@@ -47,7 +47,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
 const U = JSON.parse(localStorage.getItem('user') || '{}');
 const ADMINS = ['m.mokhtari@hecg.fr', 'a.mhoudini@hecg.fr'];
-const S = { ct: null, ctCompte: '', annu: null, selAnn: new Set(), t: 'groupes', etat: null, plan: null, verif: null, ouvert: null, rap: null, comptes: null, selPlan: new Set(), selRap: {}, selCpt: new Set() };
+const S = { sauv: null, ct: null, ctCompte: '', annu: null, selAnn: new Set(), t: 'groupes', etat: null, plan: null, verif: null, ouvert: null, rap: null, comptes: null, selPlan: new Set(), selRap: {}, selCpt: new Set() };
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
 function msg(t, ok = true) { const m = $('msg'); m.textContent = t; m.style.background = ok ? '#065f46' : '#b91c1c'; m.style.color = '#fff'; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(() => m.style.display = 'none', 6000); }
@@ -59,7 +59,7 @@ async function api(action, data = {}) {
   } catch (e) { return { success: false, message: 'Erreur de connexion : ' + e.message }; }
 }
 function occupe(btn, txt) { if (!btn) return () => {}; const a = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ ' + txt; return () => { btn.disabled = false; btn.innerHTML = a; }; }
-function onglet(t) { S.t = t; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t)); rendre(); if (t === 'comptes' && !S.comptes) chargerComptes(); if (t === 'annuaire' && !S.annu) chargerAnnuaire(); if (t === 'contacts' && !S.ct) chargerContacts(); }
+function onglet(t) { S.t = t; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t)); rendre(); if (t === 'comptes' && !S.comptes) chargerComptes(); if (t === 'annuaire' && !S.annu) chargerAnnuaire(); if (t === 'contacts' && !S.ct) { chargerContacts(); chargerSauv(); } }
 function rendre() { $('corps').innerHTML = S.t === 'groupes' ? vGroupes() : S.t === 'drive' ? vDrive() : S.t === 'annuaire' ? vAnnuaire() : S.t === 'contacts' ? vContacts() : vComptes(); }
 
 /* ───────── 1. Groupes ───────── */
@@ -274,20 +274,21 @@ function vContacts() {
     <button class="btn" onclick="chargerContacts(this)">🔎 Revérifier</button>
     <button class="btn ora" onclick="corrigerContacts(this)" ${C && !C.erreur ? '' : 'disabled'}>🧹 Corriger maintenant ${S.ctCompte ? 'ce compte' : 'tous les comptes'}</button></div>
     <p class="text-xs text-gray-500 mb-3">Compare chaque fiche Google Contacts des comptes synchronisés avec le CRM (étudiants, MA / entreprises, formateurs, encadrants).
-    Correction : les fiches en double partent dans la corbeille Google Contacts (récupérables 30 jours), chaque fiche retenue ne garde que le numéro du CRM,
-    et un numéro du CRM est retiré des autres fiches qui le portent. Nom, prénom, entreprise, tuteur et libellés sont conservés. La synchro automatique de 2 h applique ces mêmes règles chaque nuit.</p>`;
+    Correction : <b>sauvegarde intégrale du compte d'abord</b> (restaurable ci-dessous), puis une seule fiche par personne — les anciennes fiches « de diffusion » (adresse @hecg.fr seule) et les doublons
+    sont fusionnés dans la fiche unique, qui porte <b>tous les libellés</b> (classe, statut, campus, HECG_…, FORM-…, MA-…) et les adresses perso + @hecg.fr —, un seul numéro (celui du CRM),
+    et un numéro du CRM est retiré des autres fiches qui le portent. Nom, prénom, entreprise et tuteur sont conservés. La synchro automatique de 2 h applique ces mêmes règles chaque nuit (avec sauvegarde).</p>`;
   if (!C) return `<div class="card">${tete}<div class="text-gray-400">Vérification en cours (lecture de toutes les fiches de chaque compte, ~1 min)…</div></div>`;
   if (C.erreur) return `<div class="card">${tete}<div class="text-red-600 font-bold">${esc(C.erreur)}</div></div>`;
   const crm = `<div class="card"><h3 class="font-black text-[#1A4E8A] mb-2">Côté CRM</h3>
     <p class="text-sm">${C.nbPersonnes} personne(s) à synchroniser · ${C.sansTel} sans numéro dans le CRM · <b>${C.nbFusions}</b> personne(s) saisie(s) plusieurs fois (fusionnée(s) en une seule fiche) · <b class="${C.nbConflits ? 'text-red-700' : ''}">${C.nbConflits}</b> numéro(s) saisi(s) sur plusieurs personnes</p>
     ${C.nbConflits ? `<details class="mt-2" open><summary class="font-bold text-red-700 cursor-pointer">Numéros partagés — à corriger dans les fiches CRM (le numéro reste sur une seule fiche)</summary><table class="t mt-2"><thead><tr><th>Numéro</th><th>Gardé sur</th><th>Retiré de</th></tr></thead><tbody>${C.conflits.map(x => `<tr><td>${esc(x.tel)}</td><td>${esc(x.garde)}</td><td class="text-red-700">${esc(x.retire)}</td></tr>`).join('')}</tbody></table></details>` : ''}
     ${C.nbFusions ? `<details class="mt-2"><summary class="font-bold cursor-pointer">Personnes présentes plusieurs fois dans le CRM (${C.nbFusions})</summary><table class="t mt-2"><thead><tr><th>Personne</th><th>Lignes CRM réunies</th></tr></thead><tbody>${C.fusions.map(f => `<tr><td><b>${esc(f.nom)}</b></td><td class="text-xs">${f.sources.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table></details>` : ''}</div>`;
-  const resume = `<div class="card"><div style="overflow-x:auto"><table class="t"><thead><tr><th>Compte</th><th>Fiches</th><th>Fiches en double</th><th>Numéros à corriger</th><th>N° CRM sur une autre fiche</th><th>Sans fiche (créées à 2 h)</th><th>Résultat correction</th></tr></thead><tbody>
-    ${C.comptes.map(c => c.erreur ? `<tr><td>${esc(c.compte)}</td><td colspan="6" class="text-red-700">${esc(c.erreur)}</td></tr>` :
+  const resume = `<div class="card"><div style="overflow-x:auto"><table class="t"><thead><tr><th>Compte</th><th>Fiches</th><th>Fiches de diffusion à fusionner</th><th>Fiches en double</th><th>Numéros à corriger</th><th>N° CRM sur une autre fiche</th><th>Sans fiche (créées à 2 h)</th><th>Résultat correction</th></tr></thead><tbody>
+    ${C.comptes.map(c => c.erreur ? `<tr><td>${esc(c.compte)}</td><td colspan="7" class="text-red-700">${esc(c.erreur)}</td></tr>` :
       `<tr><td><a href="#" onclick="chargerContacts(null,'${c.compte}');return false" class="font-bold text-[#1A4E8A]">${esc(c.compte)}</a></td><td>${c.fiches} <span class="text-xs text-gray-400">(+${c.diffusion} diffusion)</span></td>
-      <td class="${c.nbDoublons ? 'text-red-700 font-bold' : 'text-green-700'}">${c.nbDoublons}</td><td class="${c.nbTelFix ? 'text-orange-700 font-bold' : 'text-green-700'}">${c.nbTelFix}</td>
+      <td class="${c.nbDiffusionSuppr ? 'text-orange-700 font-bold' : 'text-green-700'}">${c.nbDiffusionSuppr || 0}</td><td class="${c.nbDoublons ? 'text-red-700 font-bold' : 'text-green-700'}">${c.nbDoublons}</td><td class="${c.nbTelFix ? 'text-orange-700 font-bold' : 'text-green-700'}">${c.nbTelFix}</td>
       <td class="${c.nbOrphelins ? 'text-red-700 font-bold' : 'text-green-700'}">${c.nbOrphelins}</td><td>${c.nbSansFiche}</td>
-      <td class="text-xs">${c.bilan ? `${c.bilan.supprimes} doublon(s) supprimé(s), ${c.bilan.telCorriges} fiche(s) corrigée(s), ${c.bilan.telRetires} n° retiré(s)${c.bilan.erreurs.length ? '<br><span class="text-red-700">' + c.bilan.erreurs.map(esc).join('<br>') + '</span>' : ''}` : '—'}</td></tr>`).join('')}</tbody></table></div>
+      <td class="text-xs">${c.bilan ? `${c.bilan.diffusionSupprimees || 0} fiche(s) de diffusion fusionnée(s), ${c.bilan.supprimes} doublon(s) supprimé(s), ${c.bilan.telCorriges} fiche(s) corrigée(s), ${c.bilan.telRetires} n° retiré(s)${c.bilan.erreurs.length ? '<br><span class="text-red-700">' + c.bilan.erreurs.map(esc).join('<br>') + '</span>' : ''}` : '—'}</td></tr>`).join('')}</tbody></table></div>
     ${S.ctCompte ? '' : '<p class="text-xs text-gray-400 mt-2">Cliquez sur un compte pour voir le détail fiche par fiche.</p>'}</div>`;
   let detail = '';
   const c = S.ctCompte && C.comptes[0] && !C.comptes[0].erreur ? C.comptes[0] : null;
@@ -301,13 +302,34 @@ function vContacts() {
       ${c.horsCrmMultiTel ? `<p class="text-xs text-gray-500 mt-2">${c.horsCrmMultiTel} fiche(s) sans lien avec le CRM (contacts personnels du compte) ont plusieurs numéros : non modifiées.</p>` : ''}</div>
     ${c.nbSansFiche ? `<div class="card"><details><summary class="font-bold cursor-pointer">Personnes du CRM sans fiche sur ce compte (${c.nbSansFiche}) — créées par la synchro de 2 h</summary><p class="text-xs mt-2">${c.sansFiche.map(esc).join(' · ')}</p></details></div>` : ''}`;
   }
-  return `<div class="card">${tete}</div>${crm}${resume}${detail}`;
+  return `<div class="card">${tete}</div>${vSauv()}${crm}${resume}${detail}`;
 }
+async function chargerSauv() { const r = await api('pilotage', { op: 'sauvegardes' }); S.sauv = r.success ? r : { erreur: r.message }; if (S.t === 'contacts') rendre(); }
+function vSauv() {
+  const V = S.sauv; if (!V) return '<div class="card text-gray-400">Lecture des sauvegardes…</div>';
+  if (V.erreur) return `<div class="card text-red-600">${esc(V.erreur)}</div>`;
+  const dt = d => d ? new Date(d).toLocaleString('fr-FR') : '';
+  const pause = V.suspendus.length ? `<div class="mb-2 p-2 rounded-lg" style="background:#fef3c7">⏸️ Synchro de nuit suspendue (après restauration) : ${V.suspendus.map(x => `<b>${esc(x.compte)}</b> <button class="btn" style="height:28px" onclick="reprendre(this,'${esc(x.compte)}')">▶ Réactiver</button>`).join(' ')}</div>` : '';
+  return `<div class="card"><h3 class="font-black text-[#1A4E8A] mb-1">↩️ Sauvegardes — bouton de repentir</h3>
+    <p class="text-xs text-gray-500 mb-2">Chaque correction (manuelle ou de nuit) est précédée d'une copie intégrale des fiches du compte (dossier Drive « CRM HECG — Sauvegardes contacts »). « Restaurer » remet chaque fiche exactement comme dans la sauvegarde, recrée les fiches supprimées et retire celles créées depuis par la synchro ; la synchro de ce compte est ensuite suspendue jusqu'à réactivation. La sauvegarde ORIGINE (la toute première) est conservée pour toujours.</p>${pause}
+    <div style="overflow-x:auto;max-height:320px"><table class="t"><thead><tr><th>Date</th><th>Compte</th><th>Fiches</th><th>Origine</th><th></th></tr></thead><tbody>
+    ${V.sauvegardes.map(s => `<tr><td class="text-xs">${dt(s.date)}</td><td><b>${esc(s.compte)}</b>${s.type === 'ORIGINE' ? ' <span class="text-xs font-bold" style="color:#065f46">ORIGINE</span>' : ''}</td><td>${s.fiches}</td><td class="text-xs">${esc(s.origine)}${s.restauree ? `<br><span class="text-orange-700">restaurée le ${dt(s.restauree)} par ${esc(s.par)}</span>` : ''}</td>
+      <td><button class="btn red" style="height:30px" onclick="restaurer(this,'${esc(s.id)}','${esc(s.compte)} du ${dt(s.date)}')">↩️ Restaurer</button></td></tr>`).join('') || '<tr><td colspan="5" class="text-gray-400">Aucune sauvegarde pour l’instant (la première sera faite avant la première correction).</td></tr>'}</tbody></table></div></div>`;
+}
+async function restaurer(btn, id, lib) {
+  if (prompt(`Restaurer « ${lib} » ?\nToutes les fiches de ce compte reviendront à cet état (la synchro de nuit de ce compte sera suspendue).\n\nTapez RESTAURER pour confirmer :`) !== 'RESTAURER') return;
+  const fin = occupe(btn, 'Restauration…');
+  const r = await api('pilotage', { op: 'restaurer', id, libelle: lib }); fin();
+  if (!r.success) { msg(r.message, false); return; }
+  const b = r.bilan; msg(`Restauré : ${b.restaurees} fiche(s) remise(s) en état, ${b.recreees} recréée(s), ${b.retirees} retirée(s)${b.erreurs.length ? ' — ' + b.erreurs.length + ' erreur(s)' : ''}.`, !b.erreurs.length);
+  chargerSauv(); chargerContacts();
+}
+async function reprendre(btn, compte) { const fin = occupe(btn, '…'); await api('pilotage', { op: 'reprendreSynchro', compte }); fin(); chargerSauv(); }
 async function corrigerContacts(btn) {
   const C = S.ct; if (!C || C.erreur) return;
   const cibles = S.ctCompte ? [S.ctCompte] : C.comptes.filter(c => !c.erreur).map(c => c.compte);
   const nbD = C.comptes.reduce((a, c) => a + (c.nbDoublons || 0), 0), nbT = C.comptes.reduce((a, c) => a + (c.nbTelFix || 0) + (c.nbOrphelins || 0), 0);
-  if (!confirm(`Corriger ${cibles.length} compte(s) :\n• ${nbD} fiche(s) en double → corbeille Google Contacts (récupérables 30 jours)\n• ${nbT} fiche(s) ramenée(s) à un seul numéro\n\nContinuer ?`)) return;
+  if (!confirm(`Corriger ${cibles.length} compte(s) :\n• sauvegarde intégrale de chaque compte d'abord (restaurable)\n• fiches de diffusion fusionnées dans la fiche unique (tous les libellés conservés)\n• ${nbD} fiche(s) en double → corbeille Google Contacts\n• ${nbT} fiche(s) ramenée(s) à un seul numéro\n\nContinuer ?`)) return;
   const fin = occupe(btn, 'Correction…'); const res = [];
   for (const compte of cibles) {
     const r = await api('pilotage', { op: 'contactsCorriger', compte });
@@ -316,7 +338,7 @@ async function corrigerContacts(btn) {
   }
   fin();
   const ok = res.filter(x => x.bilan && !x.bilan.erreurs.length).length;
-  msg(`Correction terminée : ${ok}/${cibles.length} compte(s) sans erreur. Nouvelle vérification…`, ok === cibles.length);
+  msg(`Correction terminée : ${ok}/${cibles.length} compte(s) sans erreur. Nouvelle vérification…`, ok === cibles.length); chargerSauv();
   await chargerContacts();
   if (S.ct && S.ct.comptes) S.ct.comptes.forEach(c => { const b = res.find(x => x.compte === c.compte); if (b) c.bilan = b.bilan || { supprimes: 0, telCorriges: 0, telRetires: 0, erreurs: [b.erreur || '?'] }; });
   rendre();

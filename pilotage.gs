@@ -343,6 +343,17 @@ function handlePilotage(p, ss) {
       RC.success = true;
       return createJsonResponse(RC);
     }
+    if (op === "sauvegardes") return createJsonResponse({ success: true, sauvegardes: sc2ListeSauvegardes_(), suspendus: sc2Suspensions_() });
+    if (op === "restaurer") {
+      var B = sc2RestaurerSauvegarde_(String(p.id || ""), par);
+      logAction(par, "", "Modification", "Pilotage Workspace — contacts Google", "Restauration", "Sauvegarde " + p.id + " (" + (p.libelle || "") + ") restaurée : " + B.restaurees + " fiche(s) remise(s) en état, " + B.recreees + " recréée(s), " + B.retirees + " retirée(s)" + (B.erreurs.length ? " — erreurs : " + B.erreurs.join(" ; ") : "") + ". Synchro de nuit suspendue pour ce compte.");
+      return createJsonResponse({ success: true, bilan: B });
+    }
+    if (op === "reprendreSynchro") {
+      sc2Reprendre_(String(p.compte || ""));
+      logAction(par, "", "Modification", "Pilotage Workspace — contacts Google", "Synchro réactivée", String(p.compte || ""));
+      return createJsonResponse({ success: true });
+    }
     if (op === "annuaireTel") {
       var L = _pilAnnuaireTel_(ss);
       logAction(par, "", "Consultation", "Pilotage Workspace — annuaire téléphones", "Contrôle", L.length + " compte(s) étudiant(s) avec un numéro en trop ou incorrect dans l'annuaire (" + L.filter(function (x) { return x.maPresent; }).length + " portant le n° du MA)");
@@ -380,7 +391,7 @@ function _pilAnnuaireTel_(ss) {
       var voulu = e.tel ? _pilChiffres_(e.tel) : "";
       var ok = voulu ? (ph.length === 1 && ph[0].chiffres === voulu) : !ph.length;
       if (ok) return;
-      out.push({ email: em, id: e.id, nom: e.nom, actuels: ph.map(function (p) { return p.valeur + " (" + p.type + ")" + (p.chiffres && p.chiffres === e.telMa ? " ← n° du MA " + e.ma : ""); }),
+      out.push({ brut: u.phones || [], email: em, id: e.id, nom: e.nom, actuels: ph.map(function (p) { return p.valeur + " (" + p.type + ")" + (p.chiffres && p.chiffres === e.telMa ? " ← n° du MA " + e.ma : ""); }),
         cible: e.tel || "", maPresent: ph.some(function (p) { return p.chiffres && p.chiffres === e.telMa; }) });
     });
     page = j.nextPageToken || "";
@@ -390,6 +401,9 @@ function _pilAnnuaireTel_(ss) {
 function _pilAnnuaireCorriger_(ss, emails, par) {
   var ecarts = _pilAnnuaireTel_(ss), parMail = {}, res = [], jr = [];
   ecarts.forEach(function (x) { parMail[x.email] = x; });
+  // Sauvegarde des numéros actuels AVANT correction (restaurable depuis Pilotage Workspace › Contacts Google)
+  var aSauver = emails.slice(0, 60).map(function (em) { return parMail[String(em).toLowerCase()]; }).filter(Boolean).map(function (x) { return { email: x.email, phones: x.brut }; });
+  if (aSauver.length) sc2SauvegarderAnnuaire_(aSauver);
   emails.slice(0, 60).forEach(function (em) {
     var x = parMail[String(em).toLowerCase()];
     if (!x) { res.push({ email: em, ok: false, detail: "déjà conforme ou compte non relié à une fiche étudiant" }); return; }

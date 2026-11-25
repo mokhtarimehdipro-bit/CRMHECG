@@ -750,8 +750,8 @@ function synchroniserTousLesContacts2() {
 
   // Liste consolidée : UNE entrée par personne réelle, un numéro = une seule personne
   // (contacts_unicite.gs — règle 2026-11-25 « une fiche, un numéro »).
-  const crm           = sc2PersonnesCrm(ss);
-  const dataDiffusion = [...sc2ExtractGroupesDiffusion(ss), ...sc2ExtractGroupesFormateursParClasse(ss)];
+  const crm           = sc2PersonnesCrm(ss);   // intègre aussi les libellés HECG_* / FORM-* et l'adresse @hecg.fr (plus de fiche de diffusion séparée)
+  const dataDiffusion = [];
   const tousLesContacts = crm.personnes;
   if (crm.fusions.length) Logger.log('🔗 ' + crm.fusions.length + ' personne(s) présente(s) plusieurs fois dans le CRM → une seule fiche : '
     + crm.fusions.slice(0, 20).map(f => f.nom).join(', '));
@@ -808,6 +808,7 @@ function synchroniserTousLesContacts2() {
       // Chaque utilisateur dispose d'un budget propre, plafonné par ce qu'il
       // reste du budget global du run.
       const userDeadline = Math.min(runStart + SC2_RUN_BUDGET_MS, Date.now() + SC2_USER_BUDGET_MS);
+      if (sc2SyncSuspendue_(userEmail)) { Logger.log('  ⏸️ Synchro suspendue pour ' + userEmail + ' (restauration d’une sauvegarde) — réactiver dans Pilotage Workspace.'); traites++; continue; }
       sc2SyncUser(userEmail, contactsValides, tousLibelles, userDeadline, dataDiffusion, crm);
     } catch(e) {
       Logger.log('❌ Erreur non récupérée pour ' + userEmail + ' : ' + e.message + '\n' + (e.stack || ''));
@@ -855,12 +856,15 @@ function sc2SyncUser(email, contactsValides, tousLibelles, deadline, dataDiffusi
   // 4bis. Unicité (contacts_unicite.gs) : une fiche par personne, un numéro par fiche.
   let affectation = null;
   if (crm) {
+    // Sauvegarde intégrale AVANT toute modification (bouton « Restaurer » dans Pilotage Workspace)
+    try { sc2SauvegarderCompte_(email, token, existants, 'synchro de nuit'); }
+    catch (eS) { Logger.log('  ❌ Sauvegarde impossible (' + eS.message + ') : aucune modification pour ce compte.'); return; }
     let plan = sc2PlanUnicite(existants, crm);
     const tropDeSuppr = plan.doublons.length > SC2_SUPPR_MAX_AUTO;
     if (tropDeSuppr) Logger.log('  ⚠️ ' + plan.doublons.length + ' doublon(s) détecté(s) (> ' + SC2_SUPPR_MAX_AUTO + ') : aucune suppression automatique — à valider dans Pilotage Workspace › Contacts Google.');
-    if (plan.doublons.length || plan.telFix.length || plan.orphelins.length) {
+    if (plan.doublons.length || plan.telFix.length || plan.orphelins.length || plan.diffusionSuppr.length) {
       const b = sc2AppliquerUnicite(token, plan, { supprimer: !tropDeSuppr });
-      Logger.log('  🧹 Unicité : ' + b.supprimes + ' doublon(s) mis à la corbeille, ' + b.telCorriges + ' fiche(s) ramenée(s) à 1 numéro, '
+      Logger.log('  🧹 Unicité : ' + b.supprimes + ' doublon(s) mis à la corbeille, ' + b.diffusionSupprimees + ' fiche(s) de diffusion fusionnée(s), ' + b.telCorriges + ' fiche(s) ramenée(s) à 1 numéro, '
         + b.telRetires + ' numéro(s) CRM retiré(s) de fiches hors CRM' + (b.erreurs.length ? ' | erreurs : ' + b.erreurs.join(' ; ') : ''));
       existants.splice(0, existants.length, ...sc2LireContactsExistants(token));
       plan = sc2PlanUnicite(existants, crm);
@@ -904,7 +908,7 @@ function sc2CheckMyContacts(token) {
 
 function sc2LireContactsExistants(token) {
   const baseUrl = 'https://people.googleapis.com/v1/people/me/connections'
-    + '?personFields=names,phoneNumbers,emailAddresses,organizations,addresses,memberships,userDefined,relations'
+    + '?personFields=' + SC2_CHAMPS_LECTURE
     + '&pageSize=1000';
   const contacts = [];
   let pageToken = null;
@@ -1811,6 +1815,7 @@ function sc2ExtractEtudiants(ss) {
     const telEtu = tel && sc2PhoneKey(tel) !== telMa ? tel : '';   // n° identique à celui du MA = erreur de saisie : pas sur la fiche étudiant
     if (tel && !telEtu) Logger.log('⚠️ ' + prenom + ' ' + nom + ' : le numéro de la fiche étudiant est celui de son MA — non synchronisé (corriger la fiche CRM).');
     list.push({
+      id: String(data[i][0] || '').trim(),
       nom, prenom, phones: telEtu ? [telEtu] : [], emails: (mail && mail.includes('@')) ? [mail] : [],
       labels: [...labelsSet], entreprise: nomEnt, contactEnt: ma
     });
@@ -1845,6 +1850,7 @@ function sc2ExtractPartenaires(ss) {
     // au fil des changements de statut/classe dans ETUDIANTS.
     const maLabels = [...(maClassesMap[idContact] || [])].map(cl => 'MA-' + cl);
     list.push({
+      id: idContact,
       nom, prenom, phones, emails, labels: ['Entreprise', ...maLabels], entreprise,
       adresseEnt: null,   // plus d'adresse sur la fiche (spec 2026-11-25 : nom, prénom, tél, mail, entreprise, étudiants)
       etudiants: etudiantsMap[idContact] || []
@@ -1875,7 +1881,7 @@ function sc2ExtractPersonnel(ss) {
     var emails = [];
     if (mailPro.includes('@'))                          emails.push(mailPro);
     if (mailPerso.includes('@') && mailPerso !== mailPro) emails.push(mailPerso);
-    list.push({ nom, prenom, phones: tel ? [tel] : [], emails, label });
+    list.push({ id: String(data[i][0] || '').trim(), nom, prenom, phones: tel ? [tel] : [], emails, label });
   }
   return list;
 }

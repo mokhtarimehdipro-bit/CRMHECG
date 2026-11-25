@@ -19,7 +19,10 @@
 // Les fiches de diffusion HECG_* / FORM-* (mail @hecg.fr seul, jamais de téléphone) sont
 // tenues à part — voir sc2ExtractGroupesDiffusion.
 
-var SC2_SUPPR_MAX_AUTO = 300;   // au-delà, la synchro de nuit n'efface rien (contrôle manuel dans Pilotage Workspace)
+var SC2_SUPPR_MAX_AUTO = 300;
+var SC2_CHAMPS_RESTAURES = ['names', 'nicknames', 'phoneNumbers', 'emailAddresses', 'organizations', 'addresses', 'memberships', 'userDefined', 'relations', 'biographies', 'birthdays', 'urls', 'events', 'imClients', 'occupations'];
+var SC2_CHAMPS_LECTURE = SC2_CHAMPS_RESTAURES.join(',');
+var SC2_DERNIER_BILAN = null;   // au-delà, la synchro de nuit n'efface rien (contrôle manuel dans Pilotage Workspace)
 
 function sc2NomF_(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
 function sc2CleTel_(v) { return sc2PhoneKey(sc2FormatPhone(v) || v); }   // « 06 12… » = « +33 6 12… »
@@ -51,6 +54,7 @@ function sc2MemePersonne_(a, b) {
 function sc2Fusionner_(g) {
   g.sort(function (a, b) { return sc2Priorite_(a) - sc2Priorite_(b) || b._rang - a._rang; });
   var base = g[0];
+  base._ids = g.map(function (x) { return x._cat + ':' + x.id; });
   if (g.length === 1) return base;
   var m = Object.assign({}, base), labels = new Set((base.labels || [base.label]).filter(Boolean)), vues = {};
   vues[base._cat] = 1;
@@ -63,6 +67,7 @@ function sc2Fusionner_(g) {
   if (!sc2Mails_(m).length) { var e = g.filter(function (x) { return sc2Mails_(x).length; })[0]; if (e) m.emails = e.emails.slice(0, 1); }
   if (!m.entreprise) { var en = g.filter(function (x) { return x.entreprise; })[0]; if (en) m.entreprise = en.entreprise; }
   if (!m.contactEnt) { var ce = g.filter(function (x) { return x.contactEnt; })[0]; if (ce) m.contactEnt = ce.contactEnt; }
+  m._ids = base._ids;
   var etus = new Set(); g.forEach(function (x) { (x.etudiants || []).forEach(function (n) { etus.add(n); }); });
   if (etus.size) m.etudiants = Array.from(etus);
   m._fusion = g.map(function (x) { return sc2Cat_(x) + (x._cat === 'etu' ? ' (' + ((x.labels || [])[0] || '') + ')' : x.entreprise ? ' (' + x.entreprise + ')' : ''); });
@@ -94,6 +99,26 @@ function sc2PersonnesCrm(ss) {
 
   var personnes = [], fusions = [];
   groupes.forEach(function (g) { var m = sc2Fusionner_(g); if (g.length > 1) fusions.push({ nom: sc2NomAff_(m), sources: m._fusion }); personnes.push(m); });
+
+  // Libellés de diffusion HECG_<classe>, HECG_Formateurs, FORM-<classe> + adresse @hecg.fr : sur la MÊME fiche
+  // (plus de fiche de diffusion séparée — demande direction 2026-11-25 : une seule fiche par personne).
+  var parId = {};
+  personnes.forEach(function (c) { (c._ids || []).forEach(function (k) { parId[k] = c; }); });
+  var diff = sc2ExtractGroupesDiffusion(ss).concat(sc2ExtractGroupesFormateursParClasse(ss)), sansFiche = 0;
+  diff.forEach(function (d) {
+    var k = d.diffusionKey, id;
+    if (k.indexOf('ETU_') === 0) id = 'etu:' + k.slice(4);
+    else if (k.indexOf('FORM_') === 0) id = 'perso:' + k.slice(5);
+    else { var cl = String(d.labels[0]).replace(/^FORM-/, ''), r = k.slice('FORMCLASSE_'.length); id = 'perso:' + r.slice(0, r.length - cl.length - 1); }
+    var c = parId[id];
+    if (!c) { sansFiche++; return; }
+    if (!c.labels) c.labels = [c.label];
+    delete c.label;
+    d.labels.forEach(function (l) { if (l && c.labels.indexOf(l) === -1) c.labels.push(l); });
+    var mails = sc2Mails_(c);
+    d.emails.forEach(function (e) { if (mails.indexOf(String(e).toLowerCase()) === -1) { c.emails = (c.emails || []).concat([e]); mails.push(String(e).toLowerCase()); } });
+  });
+  if (sansFiche) Logger.log('⚠️ ' + sansFiche + ' entrée(s) de diffusion sans personne CRM correspondante.');
 
   // Un numéro = une seule personne (la prioritaire) ; les autres perdent ce numéro sur leur fiche.
   personnes.sort(function (a, b) { return sc2Priorite_(a) - sc2Priorite_(b); });
@@ -140,7 +165,7 @@ function sc2PlanUnicite(existants, crm) {
   var aff = new Map(), prise = {};
   paires.forEach(function (p) { if (aff.has(p.pi) || prise[p.f.resourceName]) return; aff.set(p.pi, p.f); prise[p.f.resourceName] = p.pi; });
 
-  var plan = { fiches: fiches.length, diffusion: nbDiffusion, personnes: personnes.length, aff: aff,
+  var plan = { diffusionSuppr: existants.filter(sc2EstContactDiffusion).map(function (e) { return e.resourceName; }), fiches: fiches.length, diffusion: nbDiffusion, personnes: personnes.length, aff: aff,
     doublons: [], telFix: [], orphelins: [], sansFiche: [], horsCrmMultiTel: 0 };
 
   // Doublons : fiche non retenue portant exactement le nom + prénom d'une personne qui a déjà sa fiche.
@@ -191,7 +216,14 @@ function sc2PlanUnicite(existants, crm) {
 // Applique le plan. opts.supprimer=false → n'efface aucun doublon. Retourne un bilan.
 function sc2AppliquerUnicite(token, plan, opts) {
   opts = opts || {};
-  var bilan = { supprimes: 0, telCorriges: 0, telRetires: 0, erreurs: [] };
+  var bilan = { supprimes: 0, diffusionSupprimees: 0, telCorriges: 0, telRetires: 0, erreurs: [] };
+  var rd = plan.diffusionSuppr || [];   // anciennes fiches de diffusion : leur contenu est désormais sur la fiche unique
+  for (var q = 0; q < rd.length; q += 400) {
+    var rr = sc2ApiCall('https://people.googleapis.com/v1/people:batchDeleteContacts', { method: 'post', contentType: 'application/json',
+      headers: sc2AuthHeader(token), payload: JSON.stringify({ resourceNames: rd.slice(q, q + 400) }) });
+    if (rr.error || rr._parseError) bilan.erreurs.push('Suppression fiches de diffusion : ' + (rr.error ? rr.error.message : 'réponse non-JSON'));
+    else bilan.diffusionSupprimees += Math.min(400, rd.length - q);
+  }
   if (opts.supprimer !== false && plan.doublons.length) {
     var rns = plan.doublons.map(function (d) { return d.rn; });
     for (var i = 0; i < rns.length; i += 400) {
@@ -219,6 +251,7 @@ function sc2AppliquerUnicite(token, plan, opts) {
       break;
     }
   }
+  SC2_DERNIER_BILAN = bilan;
   return bilan;
 }
 
@@ -226,7 +259,7 @@ function sc2AppliquerUnicite(token, plan, opts) {
 function sc2ResumePlan_(compte, plan, max) {
   max = max || 400;
   return { compte: compte, fiches: plan.fiches, diffusion: plan.diffusion, personnes: plan.personnes,
-    nbDoublons: plan.doublons.length, nbTelFix: plan.telFix.length, nbOrphelins: plan.orphelins.length, nbSansFiche: plan.sansFiche.length,
+    nbDiffusionSuppr: (plan.diffusionSuppr || []).length, nbDoublons: plan.doublons.length, nbTelFix: plan.telFix.length, nbOrphelins: plan.orphelins.length, nbSansFiche: plan.sansFiche.length,
     horsCrmMultiTel: plan.horsCrmMultiTel,
     motifs: plan.telFix.reduce(function (a, t) { a[t.motif] = (a[t.motif] || 0) + 1; return a; }, {}),
     doublons: plan.doublons.slice(0, max).map(function (d) { return { nom: d.nom, cat: d.cat, tels: d.tels, telsGarde: d.telsGarde }; }),
@@ -242,9 +275,15 @@ function _pilContactsAudit_(ss, compte, appliquer) {
   var crm = sc2PersonnesCrm(ss), out = [];
   comptes.forEach(function (c) {
     try {
-      var token = sc2GetToken(c), existants = sc2LireContactsExistants(token), plan = sc2PlanUnicite(existants, crm);
+      var token = sc2GetToken(c), bilan = null;
+      if (appliquer) {
+        SC2_DERNIER_BILAN = null;
+        sc2SyncCompteComplet_(c, crm, Date.now() + 270000);
+        bilan = SC2_DERNIER_BILAN || { supprimes: 0, diffusionSupprimees: 0, telCorriges: 0, telRetires: 0, erreurs: [] };
+      }
+      var existants = sc2LireContactsExistants(token), plan = sc2PlanUnicite(existants, crm);
       var r = sc2ResumePlan_(c, plan, compte ? 400 : 40);
-      if (appliquer) r.bilan = sc2AppliquerUnicite(token, plan, { supprimer: true });
+      if (bilan) r.bilan = bilan;
       out.push(r);
     } catch (e) { out.push({ compte: c, erreur: String(e.message || e) }); }
   });
@@ -262,4 +301,206 @@ function verifierUniciteContacts() {
       + ' | n° CRM sur fiches hors CRM ' + c.nbOrphelins + ' | personnes sans fiche ' + c.nbSansFiche + ' | détail numéros : ' + JSON.stringify(c.motifs));
   });
   return R;
+}
+
+// Éditeur : inspecte toutes les fiches d'un compte dont le nom contient `motif` (diagnostic).
+function inspecterContactLambot() { return inspecterContact_('lambot', 'm.mokhtari@hecg.fr'); }
+function inspecterContact_(motif, compte) {
+  var token = sc2GetToken(compte), m = sc2NomF_(motif);
+  var url = 'https://people.googleapis.com/v1/people/me/connections?pageSize=1000&personFields=names,phoneNumbers,emailAddresses,organizations,memberships,userDefined,metadata', page = null, n = 0, grp = {};
+  sc2ApiCall('https://people.googleapis.com/v1/contactGroups?pageSize=1000', { headers: sc2AuthHeader(token) }).contactGroups.forEach(function (g) { grp[g.resourceName] = g.name; });
+  do {
+    var d = sc2ApiCall(url + (page ? '&pageToken=' + encodeURIComponent(page) : ''), { headers: sc2AuthHeader(token) });
+    (d.connections || []).forEach(function (c) {
+      var nm = (c.names || []).map(function (x) { return x.displayName; }).join(' / ');
+      if (sc2NomF_(nm).indexOf(m) === -1) return; n++;
+      Logger.log(c.resourceName + ' | ' + nm + ' | tél : ' + (c.phoneNumbers || []).map(function (p) { return p.value + ' (' + (p.type || '') + ')'; }).join(', ')
+        + ' | mails : ' + (c.emailAddresses || []).map(function (e) { return e.value; }).join(', ') + ' | org : ' + (c.organizations || []).map(function (o) { return o.name; }).join(', ')
+        + ' | libellés : ' + (c.memberships || []).map(function (x) { var r = x.contactGroupMembership && x.contactGroupMembership.contactGroupResourceName; return grp[r] || r; }).join(', ')
+        + ' | perso : ' + JSON.stringify(c.userDefined || []) + ' | sources : ' + JSON.stringify(((c.metadata || {}).sources || []).map(function (s) { return s.type + ':' + (s.updateTime || ''); })));
+    });
+    page = d.nextPageToken;
+  } while (page);
+  var crm = sc2PersonnesCrm(SpreadsheetApp.getActiveSpreadsheet());
+  crm.personnes.filter(function (p) { return sc2NomF_(p.nom + ' ' + p.prenom).indexOf(m) >= 0; }).forEach(function (p) {
+    Logger.log('CRM : ' + JSON.stringify({ nom: p.nom, prenom: p.prenom, cat: p._cat, tel: p.phones, mails: p.emails, labels: p.labels, ent: p.entreprise, fusion: p._fusion }));
+  });
+  Logger.log(n + ' fiche(s) Google trouvée(s).');
+}
+
+// ── Synchro complète d'UN compte (sauvegarde → unicité → réécriture des fiches) ──
+function sc2SyncCompteComplet_(email, crm, deadline) {
+  var valides = crm.personnes.filter(function (c) { return sc2Tel1_(c) || c.entreprise || c.nom || c.prenom; });
+  var libelles = new Set();
+  valides.forEach(function (c) { (c.labels || [c.label]).forEach(function (l) { if (l) libelles.add(l); }); });
+  sc2SyncUser(email, valides, libelles, deadline, [], crm);
+}
+
+// ═════════════ SAUVEGARDES & RESTAURATION (« bouton de repentir ») ═════════════
+// Avant toute modification d'un compte : copie intégrale de TOUTES ses fiches (tous les champs
+// modifiables + libellés) dans un fichier JSON sur Drive (dossier « CRM HECG — Sauvegardes contacts »).
+// La toute première sauvegarde de chaque compte (« ORIGINE ») n'est jamais purgée ; les 12 dernières
+// sont conservées. Restaurer = remettre chaque fiche exactement dans l'état sauvegardé, recréer les fiches
+// supprimées, retirer les fiches créées depuis par la synchro ; puis la synchro de ce compte est
+// suspendue jusqu'à réactivation (sinon elle referait les mêmes changements la nuit suivante).
+var SC2_SAUV_DOSSIER = 'CRM HECG — Sauvegardes contacts', SC2_SAUV_H = ['Date', 'Compte', 'Fichier (ID)', 'Fiches', 'Origine', 'Type', 'Restaurée le', 'Par'];
+function sc2SauvDossier_() {
+  var it = DriveApp.getFoldersByName(SC2_SAUV_DOSSIER);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(SC2_SAUV_DOSSIER);
+}
+function sc2SauvFeuille_() { return _pilFeuille_(SpreadsheetApp.getActiveSpreadsheet(), 'CONTACTS_SAUVEGARDES', SC2_SAUV_H); }
+function sc2Groupes_(token) {
+  var m = {}, page = null;
+  do {
+    var d = sc2ApiCall('https://people.googleapis.com/v1/contactGroups?pageSize=1000' + (page ? '&pageToken=' + encodeURIComponent(page) : ''), { headers: sc2AuthHeader(token) });
+    if (d.error || d._parseError) throw new Error('Lecture des libellés impossible : ' + (d.error ? d.error.message : 'réponse non-JSON'));
+    (d.contactGroups || []).forEach(function (g) { m[g.resourceName] = g.name; });
+    page = d.nextPageToken;
+  } while (page);
+  return m;
+}
+function sc2SauvegarderCompte_(compte, token, existants, origine) {
+  if (!existants || !existants.length) throw new Error('aucune fiche lue — sauvegarde refusée par prudence');
+  var ws = sc2SauvFeuille_(), lignes = ws.getLastRow() > 1 ? ws.getRange(2, 1, ws.getLastRow() - 1, SC2_SAUV_H.length).getValues() : [];
+  var dejaOrigine = lignes.some(function (r) { return r[1] === compte && r[5] === 'ORIGINE'; });
+  var d = new Date(), tag = Utilities.formatDate(d, 'Europe/Paris', 'yyyyMMdd-HHmmss');
+  var f = sc2SauvDossier_().createFile('contacts_' + compte + '_' + tag + '.json',
+    JSON.stringify({ type: 'contacts', compte: compte, date: d.toISOString(), origine: origine, groupes: sc2Groupes_(token), contacts: existants }), 'application/json');
+  ws.appendRow([d, compte, f.getId(), existants.length, origine, dejaOrigine ? 'sauvegarde' : 'ORIGINE', '', '']);
+  // Purge : garder ORIGINE + les 12 plus récentes du compte
+  var miennes = [];
+  lignes.forEach(function (r, i) { if (r[1] === compte && r[5] === 'sauvegarde') miennes.push({ i: i + 2, id: r[2], t: new Date(r[0]).getTime() }); });
+  miennes.sort(function (a, b) { return b.t - a.t; });
+  miennes.slice(11).sort(function (a, b) { return b.i - a.i; }).forEach(function (x) {
+    try { DriveApp.getFileById(x.id).setTrashed(true); } catch (e) {}
+    ws.deleteRow(x.i);
+  });
+  return f.getId();
+}
+function sc2ListeSauvegardes_() {
+  var ws = sc2SauvFeuille_();
+  if (ws.getLastRow() < 2) return [];
+  return ws.getRange(2, 1, ws.getLastRow() - 1, SC2_SAUV_H.length).getValues().map(function (r) {
+    return { date: r[0] instanceof Date ? r[0].toISOString() : String(r[0]), compte: r[1], id: r[2], fiches: r[3], origine: r[4], type: r[5],
+      restauree: r[6] instanceof Date ? r[6].toISOString() : String(r[6] || ''), par: r[7] };
+  }).reverse();
+}
+function sc2SyncSuspendue_(compte) { return !!PropertiesService.getScriptProperties().getProperty('SC2_PAUSE_' + compte); }
+function sc2Reprendre_(compte) { PropertiesService.getScriptProperties().deleteProperty('SC2_PAUSE_' + compte); }
+function sc2Suspensions_() {
+  return SC2_TARGET_USERS.filter(sc2SyncSuspendue_).map(function (c) { return { compte: c, depuis: PropertiesService.getScriptProperties().getProperty('SC2_PAUSE_' + c) }; });
+}
+
+var SC2_LECTURE_SEULE = ['metadata', 'displayName', 'displayNameLastFirst', 'canonicalForm', 'formattedType', 'formattedProtocol'];
+function sc2Nettoyer_(v) {   // retire les champs en lecture seule
+  if (Array.isArray(v)) return v.map(sc2Nettoyer_);
+  if (v && typeof v === 'object') {
+    var o = {};
+    Object.keys(v).forEach(function (k) { if (SC2_LECTURE_SEULE.indexOf(k) === -1) o[k] = sc2Nettoyer_(v[k]); });
+    return o;
+  }
+  return v;
+}
+var SC2_GROUPES_SYSTEME = ['myContacts', 'starred', 'all', 'chatBuddies', 'friends', 'family', 'coworkers', 'blocked'];
+function sc2PersonneRestauree_(c, nomDuGroupe, rnParNom) {
+  var p = {};
+  SC2_CHAMPS_RESTAURES.forEach(function (f) {
+    if (f === 'memberships') return;
+    p[f] = c[f] && c[f].length ? sc2Nettoyer_(c[f]) : [];
+  });
+  p.memberships = (c.memberships || []).map(function (m) {
+    var rn = m.contactGroupMembership && m.contactGroupMembership.contactGroupResourceName;
+    if (!rn) return null;
+    if (rn === 'contactGroups/myContacts' || rn === 'contactGroups/starred') return { contactGroupMembership: { contactGroupResourceName: rn } };
+    var nr = rnParNom[nomDuGroupe[rn]];
+    return nr ? { contactGroupMembership: { contactGroupResourceName: nr } } : null;
+  }).filter(Boolean);
+  return p;
+}
+
+// Restaure un fichier de sauvegarde (contacts d'un compte, ou annuaire Workspace).
+function sc2RestaurerSauvegarde_(fileId, par) {
+  var S = JSON.parse(DriveApp.getFileById(fileId).getBlob().getDataAsString());
+  var bilan = { restaurees: 0, recreees: 0, retirees: 0, erreurs: [] };
+  if (S.type === 'annuaire') {
+    S.entrees.forEach(function (x) {
+      try { _wsFetch_('put', '/users/' + encodeURIComponent(x.email), { phones: x.phones || [] }); bilan.restaurees++; }
+      catch (e) { bilan.erreurs.push(x.email + ' : ' + String(e.message || e).slice(0, 120)); }
+    });
+  } else {
+    var compte = S.compte, token = sc2GetToken(compte);
+    PropertiesService.getScriptProperties().setProperty('SC2_PAUSE_' + compte, new Date().toISOString());   // la synchro de nuit ne refait pas les changements
+    var nomDuGroupe = S.groupes || {}, actuels = sc2Groupes_(token), rnParNom = {};
+    Object.keys(actuels).forEach(function (rn) { rnParNom[actuels[rn]] = rn; });
+    Object.keys(nomDuGroupe).forEach(function (rn) {   // libellés supprimés depuis → recréés
+      var nom = nomDuGroupe[rn];
+      if (rnParNom[nom] || SC2_GROUPES_SYSTEME.indexOf(String(rn).split('/')[1]) >= 0) return;
+      var cg = sc2ApiCall('https://people.googleapis.com/v1/contactGroups', { method: 'post', contentType: 'application/json', headers: sc2AuthHeader(token),
+        payload: JSON.stringify({ contactGroup: { name: nom } }) });
+      if (cg.resourceName) rnParNom[nom] = cg.resourceName;
+      Utilities.sleep(400);
+    });
+    var maintenant = sc2LireContactsExistants(token), parRn = {};
+    maintenant.forEach(function (c) { parRn[c.resourceName] = c; });
+    var sauves = {};
+    S.contacts.forEach(function (c) { sauves[c.resourceName] = 1; });
+    var aMaj = [], aCreer = [];
+    S.contacts.forEach(function (c) { if (parRn[c.resourceName]) aMaj.push(c); else aCreer.push(c); });
+    for (var i = 0; i < aMaj.length; i += 150) {
+      var lot = {};
+      aMaj.slice(i, i + 150).forEach(function (c) { var p = sc2PersonneRestauree_(c, nomDuGroupe, rnParNom); p.etag = parRn[c.resourceName].etag; lot[c.resourceName] = p; });
+      var r = sc2ApiCall('https://people.googleapis.com/v1/people:batchUpdateContacts', { method: 'post', contentType: 'application/json', headers: sc2AuthHeader(token),
+        payload: JSON.stringify({ contacts: lot, updateMask: SC2_CHAMPS_LECTURE, readMask: 'names' }) });
+      if (r.error || r._parseError) bilan.erreurs.push('Restauration lot ' + (i / 150 + 1) + ' : ' + (r.error ? r.error.message : 'réponse non-JSON'));
+      else bilan.restaurees += Object.keys(lot).length;
+    }
+    for (var j = 0; j < aCreer.length; j += 150) {
+      var cr = aCreer.slice(j, j + 150).map(function (c) { return { contactPerson: sc2PersonneRestauree_(c, nomDuGroupe, rnParNom) }; });
+      var r2 = sc2ApiCall('https://people.googleapis.com/v1/people:batchCreateContacts', { method: 'post', contentType: 'application/json', headers: sc2AuthHeader(token),
+        payload: JSON.stringify({ contacts: cr, readMask: 'names' }) });
+      if (r2.error || r2._parseError) bilan.erreurs.push('Recréation lot ' + (j / 150 + 1) + ' : ' + (r2.error ? r2.error.message : 'réponse non-JSON'));
+      else bilan.recreees += cr.length;
+      Utilities.sleep(1000);
+    }
+    // Fiches créées APRÈS la sauvegarde par la synchro (portant un libellé) → retirées. Les contacts ajoutés à la main sans libellé restent.
+    var aRetirer = maintenant.filter(function (c) {
+      return !sauves[c.resourceName] && (c.memberships || []).some(function (m) {
+        var rn = m.contactGroupMembership && m.contactGroupMembership.contactGroupResourceName;
+        return rn && SC2_GROUPES_SYSTEME.indexOf(rn.split('/')[1]) === -1;
+      });
+    }).map(function (c) { return c.resourceName; });
+    for (var k = 0; k < aRetirer.length; k += 400) {
+      var r3 = sc2ApiCall('https://people.googleapis.com/v1/people:batchDeleteContacts', { method: 'post', contentType: 'application/json', headers: sc2AuthHeader(token),
+        payload: JSON.stringify({ resourceNames: aRetirer.slice(k, k + 400) }) });
+      if (r3.error || r3._parseError) bilan.erreurs.push('Retrait fiches créées depuis : ' + (r3.error ? r3.error.message : 'réponse non-JSON'));
+      else bilan.retirees += Math.min(400, aRetirer.length - k);
+    }
+  }
+  var ws = sc2SauvFeuille_(), ids = ws.getLastRow() > 1 ? ws.getRange(2, 3, ws.getLastRow() - 1, 1).getValues() : [];
+  for (var n = 0; n < ids.length; n++) if (ids[n][0] === fileId) { ws.getRange(n + 2, 7, 1, 2).setValues([[new Date(), par || '']]); break; }
+  return bilan;
+}
+
+// Annuaire Workspace : sauvegarde des numéros AVANT correction
+function sc2SauvegarderAnnuaire_(entrees) {
+  var d = new Date(), tag = Utilities.formatDate(d, 'Europe/Paris', 'yyyyMMdd-HHmmss');
+  var f = sc2SauvDossier_().createFile('annuaire_' + tag + '.json', JSON.stringify({ type: 'annuaire', date: d.toISOString(), entrees: entrees }), 'application/json');
+  sc2SauvFeuille_().appendRow([d, 'Annuaire Workspace', f.getId(), entrees.length, 'correction des téléphones', 'annuaire', '', '']);
+  return f.getId();
+}
+
+// ═════════════ Remise à plat complète (à lancer une fois depuis l'éditeur) ═════════════
+// 1. Annuaire Workspace : un seul numéro (celui de l'étudiant) sur chaque profil @hecg.fr — sauvegardé avant.
+// 2. Les 8 comptes : sauvegarde intégrale → une fiche par personne (fiches de diffusion fusionnées,
+//    doublons à la corbeille) → un numéro par fiche → tous les libellés sur la fiche unique.
+function remiseAPlatContacts() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ec = _pilAnnuaireTel_(ss);
+  if (ec.length) {
+    var res = [];
+    for (var i = 0; i < ec.length; i += 60) res = res.concat(_pilAnnuaireCorriger_(ss, ec.slice(i, i + 60).map(function (x) { return x.email; }), 'Remise à plat contacts'));
+    Logger.log('Annuaire : ' + res.filter(function (x) { return x.ok; }).length + '/' + ec.length + ' profil(s) ramené(s) à un seul numéro.');
+  } else Logger.log('Annuaire : aucun profil à corriger.');
+  PropertiesService.getScriptProperties().setProperty(SC2_PROP_NEXT_USER_INDEX, '0');
+  synchroniserTousLesContacts2();
 }
