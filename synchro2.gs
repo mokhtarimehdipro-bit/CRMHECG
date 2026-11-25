@@ -1262,7 +1262,7 @@ function sc2Identite(c) { return (String(c.nom || '') + '|' + String(c.prenom ||
 function sc2IndexerTelephones(contacts) {
   SC2_TELS_CRM = {};
   contacts.forEach(c => (c.phones || (c.phone ? [c.phone] : [])).forEach(p => {
-    const k = sc2PhoneKey(p); if (!k) return;
+    const k = sc2PhoneKey(sc2FormatPhone(p) || p); if (!k) return;
     const id = sc2Identite(c); SC2_TELS_CRM[k] = SC2_TELS_CRM[k] || [];
     if (SC2_TELS_CRM[k].indexOf(id) === -1) SC2_TELS_CRM[k].push(id);
   }));
@@ -1271,7 +1271,7 @@ function sc2IndexerTelephones(contacts) {
     + partages.slice(0, 20).map(k => k + ' → ' + SC2_TELS_CRM[k].join(' / ')).join(' ; '));
 }
 function sc2NumeroAutrui(c, phone) {
-  const k = sc2PhoneKey(phone); if (!k || !SC2_TELS_CRM || !SC2_TELS_CRM[k]) return false;
+  const k = sc2PhoneKey(sc2FormatPhone(phone) || phone); if (!k || !SC2_TELS_CRM || !SC2_TELS_CRM[k]) return false;
   const id = sc2Identite(c);
   return SC2_TELS_CRM[k].some(x => x !== id);
 }

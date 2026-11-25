@@ -22,7 +22,8 @@
 var SC2_SUPPR_MAX_AUTO = 300;   // au-delà, la synchro de nuit n'efface rien (contrôle manuel dans Pilotage Workspace)
 
 function sc2NomF_(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
-function sc2Tel1_(c) { var p = (c.phones || (c.phone ? [c.phone] : [])).filter(Boolean); return p.length ? sc2PhoneKey(p[0]) : ''; }
+function sc2CleTel_(v) { return sc2PhoneKey(sc2FormatPhone(v) || v); }   // « 06 12… » = « +33 6 12… »
+function sc2Tel1_(c) { var p = (c.phones || (c.phone ? [c.phone] : [])).filter(Boolean); return p.length ? sc2CleTel_(p[0]) : ''; }
 function sc2TelVal_(c) { var p = (c.phones || (c.phone ? [c.phone] : [])).filter(Boolean); return p.length ? p[0] : ''; }
 function sc2Mails_(c) { return (c.emails || []).map(function (e) { return String(e).trim().toLowerCase(); }).filter(Boolean); }
 function sc2NomAff_(c) { return ((c.prenom || '') + ' ' + (c.nom || '')).trim() || c.entreprise || '?'; }
@@ -116,9 +117,9 @@ function sc2PlanUnicite(existants, crm) {
     var n = (f.names || [])[0] || {}, k = sc2NameKey(n.familyName, n.givenName);
     if (k) (idxNk[k] = idxNk[k] || []).push(f);
     (f.emailAddresses || []).forEach(function (e) { var m = String(e.value || '').trim().toLowerCase(); if (m) (idxMail[m] = idxMail[m] || []).push(f); });
-    (f.phoneNumbers || []).forEach(function (p) { var t = sc2PhoneKey(p.value); if (t) (idxTel[t] = idxTel[t] || []).push(f); });
+    (f.phoneNumbers || []).forEach(function (p) { var t = sc2CleTel_(p.value); if (t) (idxTel[t] = idxTel[t] || []).push(f); });
   });
-  function telsDe(f) { return (f.phoneNumbers || []).map(function (p) { return sc2PhoneKey(p.value); }).filter(Boolean); }
+  function telsDe(f) { return (f.phoneNumbers || []).map(function (p) { return sc2CleTel_(p.value); }).filter(Boolean); }
 
   // Paires (personne, fiche) candidates avec score ; nkDe[rn] = personnes dont la fiche porte exactement le nom + prénom
   var paires = [], nkDe = {};
@@ -162,10 +163,10 @@ function sc2PlanUnicite(existants, crm) {
     var cible = '';
     if (tel) cible = sc2TelVal_(c);
     else {
-      var libre = avant.filter(function (v) { var k = sc2PhoneKey(v); return k && !utilises[k] && !sc2NumeroAutrui(c, v); })[0];
-      if (libre) { cible = sc2FormatPhone(libre) || libre; utilises[sc2PhoneKey(libre)] = 1; }
+      var libre = avant.filter(function (v) { var k = sc2CleTel_(v); return k && !utilises[k] && !sc2NumeroAutrui(c, v); })[0];
+      if (libre) { cible = sc2FormatPhone(libre) || libre; utilises[sc2CleTel_(libre)] = 1; }
     }
-    var ok = cible ? (avant.length === 1 && sc2PhoneKey(avant[0]) === sc2PhoneKey(cible)) : !avant.length;
+    var ok = cible ? (avant.length === 1 && sc2CleTel_(avant[0]) === sc2CleTel_(cible)) : !avant.length;
     if (!ok) plan.telFix.push({ rn: f.resourceName, etag: f.etag, nom: sc2NomAff_(c), cat: sc2Cat_(c), avant: avant, apres: cible,
       motif: avant.length > 1 ? 'plusieurs numéros' : !avant.length ? 'numéro manquant' : !cible ? 'numéro d\'une autre personne' : 'numéro différent du CRM' });
   });
@@ -175,12 +176,12 @@ function sc2PlanUnicite(existants, crm) {
     if (prise[f.resourceName] !== undefined) return;
     var ph = f.phoneNumbers || [];
     if (ph.length > 1) plan.horsCrmMultiTel++;
-    var retirer = ph.filter(function (p) { return proprio[sc2PhoneKey(p.value)]; });
+    var retirer = ph.filter(function (p) { return proprio[sc2CleTel_(p.value)]; });
     if (!retirer.length) return;
     var n = (f.names || [])[0] || {};
     plan.orphelins.push({ rn: f.resourceName, etag: f.etag, nom: ((n.givenName || '') + ' ' + (n.familyName || '')).trim() || '(sans nom)',
-      retirer: retirer.map(function (p) { return p.value + ' → ' + sc2NomAff_(proprio[sc2PhoneKey(p.value)]); }),
-      garder: ph.filter(function (p) { return !proprio[sc2PhoneKey(p.value)]; }).map(function (p) { return p.value; }) });
+      retirer: retirer.map(function (p) { return p.value + ' → ' + sc2NomAff_(proprio[sc2CleTel_(p.value)]); }),
+      garder: ph.filter(function (p) { return !proprio[sc2CleTel_(p.value)]; }).map(function (p) { return p.value; }) });
   });
 
   personnes.forEach(function (c, pi) { if (!aff.has(pi)) plan.sansFiche.push(sc2NomAff_(c) + ' — ' + sc2Cat_(c)); });
@@ -227,6 +228,7 @@ function sc2ResumePlan_(compte, plan, max) {
   return { compte: compte, fiches: plan.fiches, diffusion: plan.diffusion, personnes: plan.personnes,
     nbDoublons: plan.doublons.length, nbTelFix: plan.telFix.length, nbOrphelins: plan.orphelins.length, nbSansFiche: plan.sansFiche.length,
     horsCrmMultiTel: plan.horsCrmMultiTel,
+    motifs: plan.telFix.reduce(function (a, t) { a[t.motif] = (a[t.motif] || 0) + 1; return a; }, {}),
     doublons: plan.doublons.slice(0, max).map(function (d) { return { nom: d.nom, cat: d.cat, tels: d.tels, telsGarde: d.telsGarde }; }),
     telFix: plan.telFix.slice(0, max).map(function (t) { return { nom: t.nom, cat: t.cat, avant: t.avant, apres: t.apres, motif: t.motif }; }),
     orphelins: plan.orphelins.slice(0, max).map(function (o) { return { nom: o.nom, retirer: o.retirer, garder: o.garder }; }),
@@ -257,7 +259,7 @@ function verifierUniciteContacts() {
   R.comptes.forEach(function (c) {
     if (c.erreur) { Logger.log(c.compte + ' : ERREUR ' + c.erreur); return; }
     Logger.log(c.compte + ' : ' + c.fiches + ' fiches (+' + c.diffusion + ' diffusion) | doublons ' + c.nbDoublons + ' | numéros à corriger ' + c.nbTelFix
-      + ' | n° CRM sur fiches hors CRM ' + c.nbOrphelins + ' | personnes sans fiche ' + c.nbSansFiche);
+      + ' | n° CRM sur fiches hors CRM ' + c.nbOrphelins + ' | personnes sans fiche ' + c.nbSansFiche + ' | détail numéros : ' + JSON.stringify(c.motifs));
   });
   return R;
 }
