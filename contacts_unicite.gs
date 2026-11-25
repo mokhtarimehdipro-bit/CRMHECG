@@ -132,6 +132,10 @@ function sc2PersonnesCrm(ss) {
   return { personnes: personnes, fusions: fusions, conflits: conflits, proprio: proprio };
 }
 
+// Données propres à la fiche (source CONTACT) — hors profil Google / annuaire Workspace que l'API fusionne à la lecture
+function sc2DuContact_(arr) { return (arr || []).filter(function (x) { var src = x && x.metadata && x.metadata.source; return !src || src.type === 'CONTACT'; }); }
+function sc2PhonesContact_(f) { return sc2DuContact_(f.phoneNumbers); }
+
 // Plan pour UN compte Google (existants = sc2LireContactsExistants).
 function sc2PlanUnicite(existants, crm) {
   var personnes = crm.personnes, proprio = crm.proprio;
@@ -142,9 +146,9 @@ function sc2PlanUnicite(existants, crm) {
     var n = (f.names || [])[0] || {}, k = sc2NameKey(n.familyName, n.givenName);
     if (k) (idxNk[k] = idxNk[k] || []).push(f);
     (f.emailAddresses || []).forEach(function (e) { var m = String(e.value || '').trim().toLowerCase(); if (m) (idxMail[m] = idxMail[m] || []).push(f); });
-    (f.phoneNumbers || []).forEach(function (p) { var t = sc2CleTel_(p.value); if (t) (idxTel[t] = idxTel[t] || []).push(f); });
+    sc2PhonesContact_(f).forEach(function (p) { var t = sc2CleTel_(p.value); if (t) (idxTel[t] = idxTel[t] || []).push(f); });
   });
-  function telsDe(f) { return (f.phoneNumbers || []).map(function (p) { return sc2CleTel_(p.value); }).filter(Boolean); }
+  function telsDe(f) { return sc2PhonesContact_(f).map(function (p) { return sc2CleTel_(p.value); }).filter(Boolean); }
 
   // Paires (personne, fiche) candidates avec score ; nkDe[rn] = personnes dont la fiche porte exactement le nom + prénom
   var paires = [], nkDe = {};
@@ -175,8 +179,8 @@ function sc2PlanUnicite(existants, crm) {
     if (!pis.length) return;
     var c = personnes[pis[0]], g = aff.get(pis[0]);
     plan.doublons.push({ rn: f.resourceName, nom: sc2NomAff_(c), cat: sc2Cat_(c),
-      tels: (f.phoneNumbers || []).map(function (p) { return p.value; }), garde: g.resourceName,
-      telsGarde: (g.phoneNumbers || []).map(function (p) { return p.value; }) });
+      tels: sc2PhonesContact_(f).map(function (p) { return p.value; }), garde: g.resourceName,
+      telsGarde: sc2PhonesContact_(g).map(function (p) { return p.value; }) });
     prise[f.resourceName] = -1;
   });
 
@@ -184,7 +188,7 @@ function sc2PlanUnicite(existants, crm) {
   var utilises = {};
   Object.keys(proprio).forEach(function (k) { utilises[k] = 1; });
   aff.forEach(function (f, pi) {
-    var c = personnes[pi], tel = sc2Tel1_(c), avant = (f.phoneNumbers || []).map(function (p) { return p.value; });
+    var c = personnes[pi], tel = sc2Tel1_(c), avant = sc2PhonesContact_(f).map(function (p) { return p.value; });
     var cible = '';
     if (tel) cible = sc2TelVal_(c);
     else {
@@ -199,7 +203,7 @@ function sc2PlanUnicite(existants, crm) {
   // Fiches sans lien avec le CRM portant le numéro d'une personne du CRM → on retire ce numéro.
   fiches.forEach(function (f) {
     if (prise[f.resourceName] !== undefined) return;
-    var ph = f.phoneNumbers || [];
+    var ph = sc2PhonesContact_(f);
     if (ph.length > 1) plan.horsCrmMultiTel++;
     var retirer = ph.filter(function (p) { return proprio[sc2CleTel_(p.value)]; });
     if (!retirer.length) return;
@@ -406,7 +410,7 @@ function sc2PersonneRestauree_(c, nomDuGroupe, rnParNom) {
   var p = {};
   SC2_CHAMPS_RESTAURES.forEach(function (f) {
     if (f === 'memberships') return;
-    p[f] = c[f] && c[f].length ? sc2Nettoyer_(c[f]) : [];
+    p[f] = sc2Nettoyer_(f === 'names' ? (sc2DuContact_(c[f]).length ? sc2DuContact_(c[f]) : (c[f] || []).slice(0, 1)) : sc2DuContact_(c[f]));
   });
   p.memberships = (c.memberships || []).map(function (m) {
     var rn = m.contactGroupMembership && m.contactGroupMembership.contactGroupResourceName;
@@ -501,6 +505,21 @@ function remiseAPlatContacts() {
     for (var i = 0; i < ec.length; i += 60) res = res.concat(_pilAnnuaireCorriger_(ss, ec.slice(i, i + 60).map(function (x) { return x.email; }), 'Remise à plat contacts'));
     Logger.log('Annuaire : ' + res.filter(function (x) { return x.ok; }).length + '/' + ec.length + ' profil(s) ramené(s) à un seul numéro.');
   } else Logger.log('Annuaire : aucun profil à corriger.');
-  PropertiesService.getScriptProperties().setProperty(SC2_PROP_NEXT_USER_INDEX, '0');
-  synchroniserTousLesContacts2();
+  PropertiesService.getScriptProperties().setProperty('SC2_REMISE_IDX', '0');
+  remiseAPlatContactsSuite();
+}
+// Un compte par exécution (limite Apps Script de 6 min), enchaînées par déclencheur unique d'1 min.
+function remiseAPlatContactsSuite() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'remiseAPlatContactsSuite') ScriptApp.deleteTrigger(t); });
+  var props = PropertiesService.getScriptProperties(), idx = parseInt(props.getProperty('SC2_REMISE_IDX') || '0', 10);
+  if (idx >= SC2_TARGET_USERS.length) return;
+  var compte = SC2_TARGET_USERS[idx], ss = SpreadsheetApp.getActiveSpreadsheet();
+  props.setProperty('SC2_REMISE_IDX', String(idx + 1));
+  if (idx + 1 < SC2_TARGET_USERS.length) { try { ScriptApp.newTrigger('remiseAPlatContactsSuite').timeBased().after(60 * 1000).create(); } catch (eT) { Logger.log('(enchaînement automatique impossible : relancer remiseAPlatContactsSuite pour le compte suivant)'); } }
+  var crm = sc2PersonnesCrm(ss);
+  SC2_DERNIER_BILAN = null;
+  Logger.log('➡️ Remise à plat ' + compte + ' (' + (idx + 1) + '/' + SC2_TARGET_USERS.length + ')');
+  sc2SyncCompteComplet_(compte, crm, Date.now() + 290000);
+  var b = SC2_DERNIER_BILAN || {};
+  try { logAction('Remise à plat contacts', '', 'Modification', 'Pilotage Workspace — contacts Google', compte, 'Sauvegarde intégrale puis : ' + (b.diffusionSupprimees || 0) + ' fiche(s) de diffusion fusionnée(s), ' + (b.supprimes || 0) + ' doublon(s) à la corbeille, ' + (b.telCorriges || 0) + ' fiche(s) ramenée(s) à 1 numéro, ' + (b.telRetires || 0) + ' n° CRM retiré(s) d’autres fiches' + ((b.erreurs || []).length ? ' — erreurs : ' + b.erreurs.join(' ; ') : '')); } catch (e) {}
 }
