@@ -56,23 +56,41 @@ function _rcPage_() {
   if (/post-password-form/.test(page)) throw new Error("MDP_INCORRECT");
   return page;
 }
-// Fiches de la CVthèque : nom, diplôme, campus, disponibilité, lien du CV
+// Fiches de la CVthèque : nom, diplôme, campus, statut, lien du CV.
+// Statut réel d'un profil (demande direction 2026-11-25) : bouton « Lien CV » (fond bleu) = en recherche ;
+// mention « PLUS DISPONIBLE » (fond gris) = plus disponible. La ligne « Disponibilité : Immédiate » n'est PAS le statut.
 function _rcFiches_(html) {
-  var out = [], vus = {}, re = /href="(https:\/\/hecg\.fr\/wp-content\/uploads\/[^"]+\.pdf)"/gi, m;
-  while ((m = re.exec(html))) {
-    var url = m[1];
-    if (vus[url] || /dossier-de-candidature|plaquette|certificat/i.test(url)) continue;
-    vus[url] = 1;
-    var avant = html.slice(Math.max(0, m.index - 4000), m.index).replace(/<(script|style|svg)[\s\S]*?<\/\1>/gi, " ");
-    var seg = avant.replace(/<[^>]+>/g, "|").split("|").map(function (x) {
-      return x.replace(/&nbsp;/g, " ").replace(/&#8217;|&rsquo;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
-    }).filter(Boolean);
-    var iD = -1;
-    for (var k = seg.length - 1; k >= 0; k--) if (/^dipl[oô]me\s*:/i.test(seg[k])) { iD = k; break; }
-    var nom = iD > 0 ? seg[iD - 1] : "", get = function (re2) { for (var j = Math.max(0, iD); j < seg.length; j++) if (re2.test(seg[j])) { var v = seg[j].replace(re2, "").trim(); if (!v && seg[j + 1] && !/:\s*$/.test(seg[j + 1]) && !/^(campus|disponibilit)/i.test(seg[j + 1])) v = seg[j + 1]; return v; } return ""; };
-    if (!nom) nom = decodeURIComponent(url.split("/").pop()).replace(/\.pdf$/i, "").replace(/CV|HECG|[-_]\d+$|\d{4}-\d{2}-\d{2}/gi, " ").replace(/[-_]+/g, " ").trim();
-    out.push({ nom: nom, diplome: get(/^dipl[oô]me\s*:\s*/i), campus: get(/^campus\s*:\s*/i), dispo: get(/^disponibilit[ée]\s*:\s*/i), url: url });
-  }
+  var propre = String(html || "").replace(/<(script|style|svg|noscript)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<a\b[^>]*href="(https:\/\/hecg\.fr\/wp-content\/uploads\/[^"]+\.pdf)"[^>]*>/gi, "|@@PDF $1@@|");
+  var seg = propre.replace(/<[^>]+>/g, "|").split("|").map(function (x) {
+    return x.replace(/&nbsp;/g, " ").replace(/&#8217;|&rsquo;/g, "'").replace(/&amp;/g, "&").replace(/&#039;/g, "'").replace(/\s+/g, " ").trim();
+  }).filter(Boolean);
+  var idx = [];
+  seg.forEach(function (s, k) { if (/^dipl[oô]me\s*:/i.test(s) && k > 0) idx.push(k); });
+  var out = [], vus = {};
+  idx.forEach(function (iD, n) {
+    var finBloc = n + 1 < idx.length ? idx[n + 1] - 1 : Math.min(seg.length, iD + 25), bloc = seg.slice(iD, finBloc);
+    var get = function (re) {
+      for (var j = 0; j < bloc.length; j++) if (re.test(bloc[j])) {
+        var v = bloc[j].replace(re, "").trim();
+        if (!v && bloc[j + 1] && !/:\s*$/.test(bloc[j + 1]) && !/^(campus|disponibilit|@@PDF)/i.test(bloc[j + 1])) v = bloc[j + 1];
+        return v;
+      }
+      return "";
+    };
+    var url = "", plus = false;
+    bloc.forEach(function (s) {
+      var m = s.match(/^@@PDF (\S+)@@$/);
+      if (m && !url && !/dossier-de-candidature|plaquette|certificat/i.test(m[1])) url = m[1];
+      if (/plus\s+disponible/i.test(s)) plus = true;
+    });
+    var nom = seg[iD - 1].replace(/^@@PDF \S+@@$/, "");
+    if (!nom || /^@@/.test(nom)) return;
+    var cle = _rcNorm_(nom) + "|" + url;
+    if (vus[cle]) return; vus[cle] = 1;
+    out.push({ nom: nom, diplome: get(/^dipl[oô]me\s*:\s*/i), campus: get(/^campus\s*:\s*/i), dispoTexte: get(/^disponibilit[ée]\s*:\s*/i),
+      plusDispo: plus, statutSite: plus ? "PLUS DISPONIBLE" : (url ? "En recherche (lien CV)" : "Sans CV"), dispo: plus ? "Plus disponible" : "", url: url });
+  });
   return out;
 }
 
@@ -137,7 +155,7 @@ function _rcAudit_(ss, auteur, budgetMs) {
   // Cache des CV déjà lus
   var wsC = _rcCacheFeuille_(ss), dC = wsC.getDataRange().getValues(), cache = {};
   for (var i = 1; i < dC.length; i++) if (dC[i][0]) cache[String(dC[i][0])] = { date: dC[i][2] instanceof Date ? _rcIso_(dC[i][2]) : String(dC[i][2] || ""), origine: String(dC[i][3] || ""), drive: String(dC[i][4] || "") };
-  var aLire = fiches.filter(function (f) { return !cache[f.url]; }), dossier = null, lus = 0;
+  var aLire = fiches.filter(function (f) { return f.url && !cache[f.url]; }), dossier = null, lus = 0;
   aLire.forEach(function (f) {
     if (Date.now() > fin) return;
     try {
@@ -147,7 +165,7 @@ function _rcAudit_(ss, auteur, budgetMs) {
       wsC.appendRow([f.url, f.nom, r.date, r.origine, r.drive, new Date()]);
     } catch (e) { console.warn("CV " + f.url + " : " + e); }
   });
-  var enAttente = fiches.filter(function (f) { return !cache[f.url]; }).length;
+  var enAttente = fiches.filter(function (f) { return f.url && !cache[f.url]; }).length;
 
   // Étudiants du CRM
   var wsE = getSheetSafe(ss, "ETUDIANTS"), C = _rcColonnes_(wsE), dE = wsE.getDataRange().getValues();
@@ -173,24 +191,26 @@ function _rcAudit_(ss, auteur, budgetMs) {
     var c = trouver(f.nom), actifs = c.filter(function (e) { return e.actif; });
     var e = actifs.length === 1 ? actifs[0] : (c.length === 1 ? c[0] : null);
     if (!e) {
-      ecarts.push({ type: c.length > 1 ? "Homonymes" : "Inconnu du CRM", gravite: "À vérifier", nom: f.nom, id: "", detail: c.length > 1 ? "Plusieurs fiches CRM possibles : " + c.map(function (x) { return x.id; }).join(", ") : "Profil présent sur l'espace recruteurs sans fiche correspondante dans le CRM", site: f.diplome + (f.campus ? " · " + f.campus : ""), url: f.url });
+      ecarts.push({ statutCrm: "—", surSite: true, statutSite: f.statutSite, type: c.length > 1 ? "Homonymes" : "Inconnu du CRM", gravite: "À vérifier", nom: f.nom, id: "", detail: c.length > 1 ? "Plusieurs fiches CRM possibles : " + c.map(function (x) { return x.id; }).join(", ") : "Profil présent sur l'espace recruteurs sans fiche correspondante dans le CRM", site: f.diplome + (f.campus ? " · " + f.campus : ""), url: f.url });
       return;
     }
     surSite[e.id] = f;
     var info = cache[f.url] || {};
-    var note = "", type = "", dispo = _rcLibDispo_(f.dispo), indispo = dispo === "Indisponible";
+    // Statut sur le site : « Lien CV » (bleu) = en recherche ; « PLUS DISPONIBLE » (gris) = plus disponible
+    var note = "", type = "", indispo = f.plusDispo, dispo = indispo ? "Plus disponible" : (f.url ? "En recherche" : "Sans CV");
     if (indispo) {
-      if (indispo && e.actif && e.recherche) { type = "À repasser disponible"; note = "Présenté « Indisponible » aux recruteurs alors qu'en recherche d'alternance dans le CRM — à repasser « Disponible » sur le site"; }
-      else nbIndispo++;   // profil déjà choisi, laissé en vitrine : conforme
-    } else if (!e.actif) { type = "À passer indisponible"; note = "Étudiant sorti / prospect dans le CRM mais présenté « " + (dispo || "Disponible") + " » aux recruteurs — à passer « Indisponible » (ou à retirer du site)"; }
-    else if (!e.recherche) { type = "À passer indisponible"; note = "Statut CRM « " + (e.statut || "vide") + " » mais présenté « " + (dispo || "Disponible") + " » aux recruteurs — à passer « Indisponible » sur le site (ou statut CRM à corriger)"; }
-    if (note) ecarts.push({ type: type, gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: f.diplome, url: f.url });
-    maj[e.ligne] = { lien: f.url, drive: info.drive || "", date: info.date || "", ecart: note, dispo: dispo || String(f.dispo || ""), cvtheque: _rcEtatCvtheque_(info.date) };
+      if (e.actif && e.recherche) { type = "À repasser en recherche"; note = "Affiché « PLUS DISPONIBLE » aux recruteurs alors qu'en recherche d'alternance dans le CRM — remettre le « Lien CV » sur le site"; }
+      else nbIndispo++;   // profil déjà choisi (ou sorti), laissé en vitrine « PLUS DISPONIBLE » : conforme
+    } else if (!e.actif) { type = "Sorti mais disponible"; note = "Étudiant sorti dans le CRM mais présenté en recherche (lien CV) aux recruteurs — les sortis ne doivent pas être disponibles : passer en « PLUS DISPONIBLE » ou retirer du site"; }
+    else if (!e.recherche) { type = "À passer PLUS DISPONIBLE"; note = "Statut CRM « " + (e.statut || "vide") + " » mais présenté en recherche (lien CV) aux recruteurs — passer en « PLUS DISPONIBLE » sur le site (ou corriger le statut CRM)"; }
+    else if (!f.url) { type = "Sans lien CV"; note = "En recherche dans le CRM, présent sur le site mais sans « Lien CV » — ajouter le CV"; }
+    if (note) ecarts.push({ statutCrm: e.statut || (e.actif ? "—" : "Sorti"), surSite: true, statutSite: f.statutSite, type: type, gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: f.diplome, url: f.url });
+    maj[e.ligne] = { lien: f.url, drive: info.drive || "", date: info.date || "", ecart: note, dispo: dispo, cvtheque: indispo ? "Plus disponible" : _rcEtatCvtheque_(info.date) };
   });
   etus.forEach(function (e) {
     if (!e.actif || !e.recherche || surSite[e.id]) return;
     var note = "En recherche d'alternance dans le CRM mais absent de l'espace recruteurs du site";
-    ecarts.push({ type: "Absent du site", gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: "—", url: "" });
+    ecarts.push({ statutCrm: e.statut, surSite: false, statutSite: "", type: "Absent du site", gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: "—", url: "" });
     maj[e.ligne] = { lien: "", drive: "", date: "", ecart: note, dispo: "", cvtheque: "Non" };
   });
   // Les étudiants qui ne sont plus concernés : on efface l'ancien écart
@@ -233,8 +253,9 @@ function _rcAudit_(ss, auteur, budgetMs) {
   var meta = JSON.parse(JSON.stringify(R)); meta.ecarts = ecarts.length;
   PropertiesService.getScriptProperties().setProperty("RC_DERNIER", JSON.stringify(meta));
   if (enAttente) PropertiesService.getScriptProperties().setProperty("RC_SUITE", "1"); else PropertiesService.getScriptProperties().deleteProperty("RC_SUITE");
+  R.ecartsDetail = ecarts;
   logAction(auteur, "", "Action", "Étudiants — audit espace recruteurs", "AUDIT_RECRUTEURS",
-    R.profilsSite + " profils sur le site, " + R.enRecherche + " en recherche dans le CRM, " + R.presents + " rapprochés (" + nbIndispo + " indisponibles), " + ecarts.length + " écart(s), " + notes + " note(s) ajoutée(s) aux dossiers, " + lus + " CV lus" + (enAttente ? " (" + enAttente + " en attente)" : ""));
+    R.profilsSite + " profils sur le site (" + nbIndispo + " « PLUS DISPONIBLE » conformes), " + R.enRecherche + " en recherche dans le CRM, " + R.presents + " rapprochés (" + nbIndispo + " indisponibles), " + ecarts.length + " écart(s), " + notes + " note(s) ajoutée(s) aux dossiers, " + lus + " CV lus" + (enAttente ? " (" + enAttente + " en attente)" : ""));
   return R;
 }
 
@@ -251,6 +272,8 @@ function handleLancerAuditRecruteurs(p, ss) {
   if (!lock.tryLock(20000)) return createJsonResponse({ success: false, message: "Un autre traitement est en cours, réessayez dans une minute." });
   try {
     var R = _rcAudit_(ss, p.nomAuteur || p.emailAuteur || "Manuel", 200000);
+    if (p.envoyerMail === true || p.envoyerMail === "true") _rcMailEcarts_(R, R.ecartsDetail);
+    delete R.ecartsDetail;
     return createJsonResponse({ success: true, rapport: R });
   } catch (e) {
     var m = String(e.message || e);
@@ -275,6 +298,42 @@ function _rcAuto_() {
   var suite = props.getProperty("RC_SUITE"), nuit = h === 6 && Date.now() - dernier > 20 * 3600 * 1000;
   if (!suite && !nuit) return;
   props.setProperty("RC_AUTO_TS", String(Date.now()));
-  try { _rcAudit_(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), "Audit automatique (nuit)", 150000); }
+  try {
+    var R = _rcAudit_(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), "Audit automatique (nuit)", 150000);
+    // Rapport des écarts par mail tous les 2 jours (une fois tous les CV lus, ou au plus tard au passage de nuit suivant)
+    var dernierMail = Number(props.getProperty("RC_MAIL_TS") || 0);
+    if (Date.now() - dernierMail > 44 * 3600 * 1000 && (!props.getProperty("RC_SUITE") || nuit)) {
+      _rcMailEcarts_(R, R.ecartsDetail);
+      props.setProperty("RC_MAIL_TS", String(Date.now()));
+    }
+  }
   catch (e) { console.error("audit recruteurs : " + e); }
+}
+
+// ── Mail des écarts, tous les 2 jours (demande direction 2026-11-25) ─────────
+var RC_MAIL_DEST = ["m.mokhtari@hecg.fr", "a.mhoudini@hecg.fr"];
+var RC_APP = "https://mokhtarimehdipro-bit.github.io/CRMHECG/";
+function _rcMailEcarts_(R, ecarts) {
+  var esc = function (v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  var th = 'style="background:#1A4E8A;color:#fff;padding:7px 8px;font-size:12px;text-align:left"', td = 'style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top"';
+  var lignes = ecarts.map(function (x) {
+    var coul = x.gravite === "Erreur" ? "#b91c1c" : "#b45309";
+    return "<tr><td " + td + "><b>" + esc(x.nom) + "</b>" + (x.id ? '<br><span style="color:#94a3b8">' + esc(x.id) + "</span>" : "") + "</td>" +
+      "<td " + td + ">" + esc(x.statutCrm || "—") + "</td>" +
+      "<td " + td + ">" + (x.surSite ? "Oui" : "<b>Non</b>") + "</td>" +
+      "<td " + td + ">" + (x.statutSite === "PLUS DISPONIBLE" ? '<span style="background:#6b7280;color:#fff;border-radius:4px;padding:1px 6px;font-weight:bold">PLUS DISPONIBLE</span>' : x.statutSite ? '<span style="background:#2563eb;color:#fff;border-radius:4px;padding:1px 6px;font-weight:bold">' + esc(x.statutSite) + "</span>" : "—") + "</td>" +
+      '<td ' + td + '><span style="color:' + coul + ';font-weight:bold">' + esc(x.type) + "</span><br>" + esc(x.detail) + "</td>" +
+      "<td " + td + ">" + (x.id ? '<a href="' + RC_APP + "dossier.html?id=" + encodeURIComponent(x.id) + '">Espace CRM</a>' : "—") + "</td>" +
+      "<td " + td + '><a href="' + esc(x.url || RC_PAGE) + '">' + (x.url ? "CV sur l'espace recruteurs" : "Espace recruteurs") + "</a></td></tr>";
+  }).join("");
+  var html = '<div style="font-family:Arial,sans-serif;max-width:1000px">' +
+    '<h2 style="color:#1A4E8A;margin:0 0 6px">Audit espace recruteurs ↔ CRM — ' + esc(R.date) + "</h2>" +
+    '<p style="font-size:13px;color:#374151;margin:0 0 12px">' + R.profilsSite + " profils sur l'espace recruteurs · " + R.enRecherche + " étudiants « En recherche » dans le CRM · " +
+    R.presents + " rapprochés (dont " + R.indisponibles + " « PLUS DISPONIBLE ») · <b>" + ecarts.length + " écart(s)</b></p>" +
+    (ecarts.length ? '<table style="border-collapse:collapse;width:100%"><tr><th ' + th + ">Étudiant</th><th " + th + ">Statut CRM</th><th " + th + ">Présent CVthèque</th><th " + th + ">Statut CVthèque</th><th " + th + ">Écart</th><th " + th + ">CRM</th><th " + th + ">Espace recruteurs</th></tr>" + lignes + "</table>"
+      : '<p style="font-size:14px;color:#047857;font-weight:bold">✓ Aucun écart : la CVthèque est conforme au CRM.</p>') +
+    '<p style="font-size:11px;color:#94a3b8;margin-top:14px">Règles : « Lien CV » (fond bleu) = en recherche ; « PLUS DISPONIBLE » (fond gris) = plus disponible. Un étudiant sorti ne doit jamais être présenté en recherche. ' +
+    "Détail complet : CRM › Vie scolaire › Espace recruteurs. Envoi automatique tous les 2 jours.</p></div>";
+  MailApp.sendEmail({ to: RC_MAIL_DEST.join(","), subject: "🔎 Audit espace recruteurs — " + ecarts.length + " écart(s) — " + R.date.slice(0, 10), htmlBody: html, name: "CRM HECG" });
+  logAction("Système", "", "Envoi mail", "Étudiants — audit espace recruteurs", "AUDIT_RECRUTEURS", "Rapport des écarts (" + ecarts.length + ") envoyé à " + RC_MAIL_DEST.join(", "));
 }

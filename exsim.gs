@@ -12,7 +12,8 @@
 //   optim:{ params, groupes:[…], placements… } }
 // Règles dures (rappelées ici et revérifiées pour passer au statut « terminée ») :
 //  - une salle n'accueille jamais deux épreuves en même temps (même classe ou non) ;
-//  - un surveillant n'est jamais sur deux épreuves en même temps ;
+//  - une salle peut réunir 2 classes différentes en même temps (alerte si capacité dépassée) ;
+//  - un surveillant n'est jamais sur deux épreuves en même temps (sauf 2 classes réunies dans la même salle) ;
 //  - un surveillant n'est affecté que sur un créneau couvert par ses disponibilités.
 
 var EXSIM_HEADERS = ["ID", "Titre", "Lundi", "Statut", "Mis à jour le", "Par", "Version", "JSON (tranches →)"];
@@ -72,9 +73,10 @@ function _exsimConflits_(S) {
       (a.salles || []).forEach(function (sa) {
         (b.salles || []).forEach(function (sb) {
           var lib = a.classe === b.classe ? a.classe + " (" + (a.matiere || "épreuve") + " / " + (b.matiere || "épreuve") + ")" : a.classe + " et " + b.classe;
-          if (sa.id === sb.id) out.push("Salle " + sa.id.split("||")[1] + " : deux épreuves en même temps — " + lib);
+          // salle partagée : autorisée entre 2 classes différentes (alerte de capacité côté écran), jamais pour la même classe
+          if (sa.id === sb.id && a.classe === b.classe) out.push("Salle " + sa.id.split("||")[1] + " : deux épreuves en même temps — " + lib);
           (sa.surv || []).forEach(function (x) {
-            if ((sb.surv || []).indexOf(x) === -1) return;
+            if ((sb.surv || []).indexOf(x) === -1 || sa.id === sb.id) return;   // même salle : un surveillant peut surveiller les 2 classes
             var p = _exsimFen_(sa, x, a), q = _exsimFen_(sb, x, b);   // relais : seuls les créneaux réellement surveillés comptent
             if (p[0] < q[1] && q[0] < p[1]) out.push((surv[x] ? surv[x].nom : x) + " sur deux épreuves en même temps — " + lib);
           });
