@@ -333,6 +333,16 @@ function handlePilotage(p, ss) {
         " — " + res.slice(0, 25).map(function (x) { return x.id + " : " + x.detail; }).join(" ; "));
       return createJsonResponse({ success: true, resultats: res, restant: restant, rapatriement: _pilLireRap_(ss) });
     }
+    if (op === "contactsAudit" || op === "contactsCorriger") {
+      var app = op === "contactsCorriger", RC = _pilContactsAudit_(ss, String(p.compte || ""), app);
+      var tot = function (k) { return RC.comptes.reduce(function (a, c) { return a + (c[k] || 0); }, 0); };
+      logAction(par, "", app ? "Modification" : "Consultation", "Pilotage Workspace — contacts Google", app ? "Correction" : "Vérification",
+        (p.compte ? p.compte : "tous les comptes") + " : " + tot("nbDoublons") + " fiche(s) en double, " + tot("nbTelFix") + " numéro(s) à corriger, " + tot("nbOrphelins") + " n° CRM sur d'autres fiches"
+        + (app ? " → " + RC.comptes.map(function (c) { return c.bilan ? c.compte + " : " + c.bilan.supprimes + " supprimé(s), " + c.bilan.telCorriges + " corrigé(s), " + c.bilan.telRetires + " n° retiré(s)" + (c.bilan.erreurs.length ? " (erreurs : " + c.bilan.erreurs.join(" ; ") + ")" : "") : c.compte + " : " + (c.erreur || "?"); }).join(" | ") : "")
+        + " — CRM : " + RC.nbFusions + " personne(s) en double, " + RC.nbConflits + " numéro(s) partagé(s)");
+      RC.success = true;
+      return createJsonResponse(RC);
+    }
     if (op === "annuaireTel") {
       var L = _pilAnnuaireTel_(ss);
       logAction(par, "", "Consultation", "Pilotage Workspace — annuaire téléphones", "Contrôle", L.length + " compte(s) étudiant(s) avec un numéro en trop ou incorrect dans l'annuaire (" + L.filter(function (x) { return x.maPresent; }).length + " portant le n° du MA)");
@@ -347,7 +357,7 @@ function handlePilotage(p, ss) {
   } catch (e) { return createJsonResponse({ success: false, message: String(e.message || e) }); }
 }
 // À lancer UNE fois dans l'éditeur Apps Script (compte administrateur) : autorise la gestion des groupes
-function autoriserGroupesWorkspace() { Logger.log(_pilGroupes_().length + " groupe(s) lu(s) dans Google Workspace."); }
+function autoriserGroupesWorkspace() { ScriptApp.requireScopes(ScriptApp.AuthMode.FULL, ["https://www.googleapis.com/auth/admin.directory.group"]); Logger.log(_pilGroupes_().length + " groupe(s) lu(s) dans Google Workspace."); }
 
 // ── Annuaire Workspace : un seul numéro (celui de l'étudiant) sur le profil @hecg.fr ──
 // Le « Profil de l'annuaire » d'un compte étudiant peut porter un n° « Work » (MA / ancien MA) : il s'affiche

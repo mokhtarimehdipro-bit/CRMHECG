@@ -36,7 +36,8 @@
         <button class="tab on" data-t="groupes" onclick="onglet('groupes')">👥 Groupes de classes</button>
         <button class="tab" data-t="drive" onclick="onglet('drive')">🗂️ Drive — rapatriement GED</button>
         <button class="tab" data-t="comptes" onclick="onglet('comptes')">🚪 Comptes des étudiants sortis</button>
-        <button class="tab" data-t="annuaire" onclick="onglet('annuaire')">📞 Annuaire : téléphones</button>
+        <button class="tab" data-t="contacts" onclick="onglet('contacts')">📇 Contacts Google : 1 fiche, 1 numéro</button>
+        <button class="tab" data-t="annuaire" onclick="onglet('annuaire')">📞 Annuaire Workspace : téléphones</button>
       </div>
       <div id="corps"><div class="card text-gray-400">Chargement…</div></div>
     </div>
@@ -46,7 +47,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
 const U = JSON.parse(localStorage.getItem('user') || '{}');
 const ADMINS = ['m.mokhtari@hecg.fr', 'a.mhoudini@hecg.fr'];
-const S = { annu: null, selAnn: new Set(), t: 'groupes', etat: null, plan: null, verif: null, ouvert: null, rap: null, comptes: null, selPlan: new Set(), selRap: {}, selCpt: new Set() };
+const S = { ct: null, ctCompte: '', annu: null, selAnn: new Set(), t: 'groupes', etat: null, plan: null, verif: null, ouvert: null, rap: null, comptes: null, selPlan: new Set(), selRap: {}, selCpt: new Set() };
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
 function msg(t, ok = true) { const m = $('msg'); m.textContent = t; m.style.background = ok ? '#065f46' : '#b91c1c'; m.style.color = '#fff'; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(() => m.style.display = 'none', 6000); }
@@ -58,8 +59,8 @@ async function api(action, data = {}) {
   } catch (e) { return { success: false, message: 'Erreur de connexion : ' + e.message }; }
 }
 function occupe(btn, txt) { if (!btn) return () => {}; const a = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ ' + txt; return () => { btn.disabled = false; btn.innerHTML = a; }; }
-function onglet(t) { S.t = t; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t)); rendre(); if (t === 'comptes' && !S.comptes) chargerComptes(); if (t === 'annuaire' && !S.annu) chargerAnnuaire(); }
-function rendre() { $('corps').innerHTML = S.t === 'groupes' ? vGroupes() : S.t === 'drive' ? vDrive() : S.t === 'annuaire' ? vAnnuaire() : vComptes(); }
+function onglet(t) { S.t = t; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t)); rendre(); if (t === 'comptes' && !S.comptes) chargerComptes(); if (t === 'annuaire' && !S.annu) chargerAnnuaire(); if (t === 'contacts' && !S.ct) chargerContacts(); }
+function rendre() { $('corps').innerHTML = S.t === 'groupes' ? vGroupes() : S.t === 'drive' ? vDrive() : S.t === 'annuaire' ? vAnnuaire() : S.t === 'contacts' ? vContacts() : vComptes(); }
 
 /* ───────── 1. Groupes ───────── */
 async function charger() {
@@ -254,6 +255,71 @@ async function corrigerAnnuaire(btn) {
     ok += r.resultats.filter(x => x.ok).length; ko += r.resultats.filter(x => !x.ok).length;
   }
   fin(); msg(`${ok} profil(s) corrigé(s)${ko ? ', ' + ko + ' échec(s)' : ''}.`, !ko); chargerAnnuaire();
+}
+
+/* ───────── 5. Contacts Google : une fiche par personne, un numéro par fiche ───────── */
+async function chargerContacts(btn, compte) {
+  if (compte !== undefined) S.ctCompte = compte;
+  const fin = occupe(btn, 'Vérification en profondeur…');
+  if (!btn) { S.ct = null; rendre(); }
+  const r = await api('pilotage', { op: 'contactsAudit', compte: S.ctCompte || '' }); fin();
+  S.ct = r.success ? r : { erreur: r.message }; rendre();
+}
+function ctListe(arr, f) { return (arr || []).map(f).join('') || '<tr><td colspan="4" class="text-green-700 font-bold">✓ Rien à signaler.</td></tr>'; }
+function vContacts() {
+  const C = S.ct;
+  const comptes = ['m.mokhtari@hecg.fr', 'a.mhoudini@hecg.fr', 'n.mas@hecg.fr', 'd.benyounes@hecg.fr', 'v.velcker@hecg.fr', 'contact@hecg.fr', 'k.bouhassane@hecg.fr', 'communication@hecg.fr'];
+  const sel = `<select class="btn" onchange="chargerContacts(null, this.value)"><option value="">Tous les comptes (résumé)</option>${comptes.map(c => `<option value="${c}" ${S.ctCompte === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+  const tete = `<div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#1A4E8A] flex-1">Contacts Google — une fiche par personne, un seul numéro par fiche</h3>${sel}
+    <button class="btn" onclick="chargerContacts(this)">🔎 Revérifier</button>
+    <button class="btn ora" onclick="corrigerContacts(this)" ${C && !C.erreur ? '' : 'disabled'}>🧹 Corriger maintenant ${S.ctCompte ? 'ce compte' : 'tous les comptes'}</button></div>
+    <p class="text-xs text-gray-500 mb-3">Compare chaque fiche Google Contacts des comptes synchronisés avec le CRM (étudiants, MA / entreprises, formateurs, encadrants).
+    Correction : les fiches en double partent dans la corbeille Google Contacts (récupérables 30 jours), chaque fiche retenue ne garde que le numéro du CRM,
+    et un numéro du CRM est retiré des autres fiches qui le portent. Nom, prénom, entreprise, tuteur et libellés sont conservés. La synchro automatique de 2 h applique ces mêmes règles chaque nuit.</p>`;
+  if (!C) return `<div class="card">${tete}<div class="text-gray-400">Vérification en cours (lecture de toutes les fiches de chaque compte, ~1 min)…</div></div>`;
+  if (C.erreur) return `<div class="card">${tete}<div class="text-red-600 font-bold">${esc(C.erreur)}</div></div>`;
+  const crm = `<div class="card"><h3 class="font-black text-[#1A4E8A] mb-2">Côté CRM</h3>
+    <p class="text-sm">${C.nbPersonnes} personne(s) à synchroniser · ${C.sansTel} sans numéro dans le CRM · <b>${C.nbFusions}</b> personne(s) saisie(s) plusieurs fois (fusionnée(s) en une seule fiche) · <b class="${C.nbConflits ? 'text-red-700' : ''}">${C.nbConflits}</b> numéro(s) saisi(s) sur plusieurs personnes</p>
+    ${C.nbConflits ? `<details class="mt-2" open><summary class="font-bold text-red-700 cursor-pointer">Numéros partagés — à corriger dans les fiches CRM (le numéro reste sur une seule fiche)</summary><table class="t mt-2"><thead><tr><th>Numéro</th><th>Gardé sur</th><th>Retiré de</th></tr></thead><tbody>${C.conflits.map(x => `<tr><td>${esc(x.tel)}</td><td>${esc(x.garde)}</td><td class="text-red-700">${esc(x.retire)}</td></tr>`).join('')}</tbody></table></details>` : ''}
+    ${C.nbFusions ? `<details class="mt-2"><summary class="font-bold cursor-pointer">Personnes présentes plusieurs fois dans le CRM (${C.nbFusions})</summary><table class="t mt-2"><thead><tr><th>Personne</th><th>Lignes CRM réunies</th></tr></thead><tbody>${C.fusions.map(f => `<tr><td><b>${esc(f.nom)}</b></td><td class="text-xs">${f.sources.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table></details>` : ''}</div>`;
+  const resume = `<div class="card"><div style="overflow-x:auto"><table class="t"><thead><tr><th>Compte</th><th>Fiches</th><th>Fiches en double</th><th>Numéros à corriger</th><th>N° CRM sur une autre fiche</th><th>Sans fiche (créées à 2 h)</th><th>Résultat correction</th></tr></thead><tbody>
+    ${C.comptes.map(c => c.erreur ? `<tr><td>${esc(c.compte)}</td><td colspan="6" class="text-red-700">${esc(c.erreur)}</td></tr>` :
+      `<tr><td><a href="#" onclick="chargerContacts(null,'${c.compte}');return false" class="font-bold text-[#1A4E8A]">${esc(c.compte)}</a></td><td>${c.fiches} <span class="text-xs text-gray-400">(+${c.diffusion} diffusion)</span></td>
+      <td class="${c.nbDoublons ? 'text-red-700 font-bold' : 'text-green-700'}">${c.nbDoublons}</td><td class="${c.nbTelFix ? 'text-orange-700 font-bold' : 'text-green-700'}">${c.nbTelFix}</td>
+      <td class="${c.nbOrphelins ? 'text-red-700 font-bold' : 'text-green-700'}">${c.nbOrphelins}</td><td>${c.nbSansFiche}</td>
+      <td class="text-xs">${c.bilan ? `${c.bilan.supprimes} doublon(s) supprimé(s), ${c.bilan.telCorriges} fiche(s) corrigée(s), ${c.bilan.telRetires} n° retiré(s)${c.bilan.erreurs.length ? '<br><span class="text-red-700">' + c.bilan.erreurs.map(esc).join('<br>') + '</span>' : ''}` : '—'}</td></tr>`).join('')}</tbody></table></div>
+    ${S.ctCompte ? '' : '<p class="text-xs text-gray-400 mt-2">Cliquez sur un compte pour voir le détail fiche par fiche.</p>'}</div>`;
+  let detail = '';
+  const c = S.ctCompte && C.comptes[0] && !C.comptes[0].erreur ? C.comptes[0] : null;
+  if (c) {
+    detail = `<div class="card"><h3 class="font-black text-red-700 mb-2">Fiches en double (${c.nbDoublons}) — mises à la corbeille</h3><div style="overflow-x:auto"><table class="t"><thead><tr><th>Personne</th><th>Type</th><th>Numéros du doublon</th><th>Fiche conservée</th></tr></thead><tbody>
+      ${ctListe(c.doublons, d => `<tr><td><b>${esc(d.nom)}</b></td><td class="text-xs">${esc(d.cat)}</td><td class="text-xs">${d.tels.map(esc).join('<br>') || '—'}</td><td class="text-xs">${d.telsGarde.map(esc).join('<br>') || '—'}</td></tr>`)}</tbody></table></div></div>
+    <div class="card"><h3 class="font-black text-orange-700 mb-2">Numéros à corriger (${c.nbTelFix})</h3><div style="overflow-x:auto"><table class="t"><thead><tr><th>Personne</th><th>Problème</th><th>Numéros actuels</th><th>Après correction</th></tr></thead><tbody>
+      ${ctListe(c.telFix, t => `<tr><td><b>${esc(t.nom)}</b><br><span class="text-xs text-gray-400">${esc(t.cat)}</span></td><td class="text-xs">${esc(t.motif)}</td><td class="text-xs">${t.avant.map(esc).join('<br>') || '—'}</td><td class="text-xs font-bold text-green-700">${esc(t.apres || 'aucun numéro')}</td></tr>`)}</tbody></table></div></div>
+    <div class="card"><h3 class="font-black text-red-700 mb-2">Fiches hors CRM portant le numéro d'une personne du CRM (${c.nbOrphelins})</h3><div style="overflow-x:auto"><table class="t"><thead><tr><th>Fiche</th><th>Numéro retiré → propriétaire CRM</th><th>Numéros conservés</th><th></th></tr></thead><tbody>
+      ${ctListe(c.orphelins, o => `<tr><td><b>${esc(o.nom)}</b></td><td class="text-xs text-red-700">${o.retirer.map(esc).join('<br>')}</td><td class="text-xs">${o.garder.map(esc).join('<br>') || '—'}</td><td></td></tr>`)}</tbody></table></div>
+      ${c.horsCrmMultiTel ? `<p class="text-xs text-gray-500 mt-2">${c.horsCrmMultiTel} fiche(s) sans lien avec le CRM (contacts personnels du compte) ont plusieurs numéros : non modifiées.</p>` : ''}</div>
+    ${c.nbSansFiche ? `<div class="card"><details><summary class="font-bold cursor-pointer">Personnes du CRM sans fiche sur ce compte (${c.nbSansFiche}) — créées par la synchro de 2 h</summary><p class="text-xs mt-2">${c.sansFiche.map(esc).join(' · ')}</p></details></div>` : ''}`;
+  }
+  return `<div class="card">${tete}</div>${crm}${resume}${detail}`;
+}
+async function corrigerContacts(btn) {
+  const C = S.ct; if (!C || C.erreur) return;
+  const cibles = S.ctCompte ? [S.ctCompte] : C.comptes.filter(c => !c.erreur).map(c => c.compte);
+  const nbD = C.comptes.reduce((a, c) => a + (c.nbDoublons || 0), 0), nbT = C.comptes.reduce((a, c) => a + (c.nbTelFix || 0) + (c.nbOrphelins || 0), 0);
+  if (!confirm(`Corriger ${cibles.length} compte(s) :\n• ${nbD} fiche(s) en double → corbeille Google Contacts (récupérables 30 jours)\n• ${nbT} fiche(s) ramenée(s) à un seul numéro\n\nContinuer ?`)) return;
+  const fin = occupe(btn, 'Correction…'); const res = [];
+  for (const compte of cibles) {
+    const r = await api('pilotage', { op: 'contactsCorriger', compte });
+    if (!r.success) { res.push({ compte, erreur: r.message }); continue; }
+    res.push(...r.comptes);
+  }
+  fin();
+  const ok = res.filter(x => x.bilan && !x.bilan.erreurs.length).length;
+  msg(`Correction terminée : ${ok}/${cibles.length} compte(s) sans erreur. Nouvelle vérification…`, ok === cibles.length);
+  await chargerContacts();
+  if (S.ct && S.ct.comptes) S.ct.comptes.forEach(c => { const b = res.find(x => x.compte === c.compte); if (b) c.bilan = b.bilan || { supprimes: 0, telCorriges: 0, telRetires: 0, erreurs: [b.erreur || '?'] }; });
+  rendre();
 }
 
 if (ADMINS.includes(String(U.email || '').toLowerCase())) { $('app').classList.remove('hidden'); charger(); }

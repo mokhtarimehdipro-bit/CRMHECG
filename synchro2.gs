@@ -748,12 +748,15 @@ const SC2_PROP_NEXT_USER_INDEX = 'SC2_NEXT_USER_INDEX';
 function synchroniserTousLesContacts2() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const dataEtu       = sc2ExtractEtudiants(ss);
-  const dataPart      = sc2ExtractPartenaires(ss);
-  const dataPerso     = sc2ExtractPersonnel(ss);
+  // Liste consolidée : UNE entrée par personne réelle, un numéro = une seule personne
+  // (contacts_unicite.gs — règle 2026-11-25 « une fiche, un numéro »).
+  const crm           = sc2PersonnesCrm(ss);
   const dataDiffusion = [...sc2ExtractGroupesDiffusion(ss), ...sc2ExtractGroupesFormateursParClasse(ss)];
-  const tousLesContacts = [...dataEtu, ...dataPart, ...dataPerso];
-  sc2IndexerTelephones(tousLesContacts);
+  const tousLesContacts = crm.personnes;
+  if (crm.fusions.length) Logger.log('🔗 ' + crm.fusions.length + ' personne(s) présente(s) plusieurs fois dans le CRM → une seule fiche : '
+    + crm.fusions.slice(0, 20).map(f => f.nom).join(', '));
+  if (crm.conflits.length) Logger.log('⚠️ ' + crm.conflits.length + ' numéro(s) saisi(s) sur plusieurs personnes : gardé sur une seule fiche — '
+    + crm.conflits.slice(0, 20).map(c => c.tel + ' : ' + c.garde + ' (retiré de ' + c.retire + ')').join(' ; '));
 
   Logger.log('🔍 ' + tousLesContacts.length + ' contacts source + ' + dataDiffusion.length
     + ' membre(s) de diffusion HECG_*/FORM-*. Début de la synchronisation V2...');
@@ -805,7 +808,7 @@ function synchroniserTousLesContacts2() {
       // Chaque utilisateur dispose d'un budget propre, plafonné par ce qu'il
       // reste du budget global du run.
       const userDeadline = Math.min(runStart + SC2_RUN_BUDGET_MS, Date.now() + SC2_USER_BUDGET_MS);
-      sc2SyncUser(userEmail, contactsValides, tousLibelles, userDeadline, dataDiffusion);
+      sc2SyncUser(userEmail, contactsValides, tousLibelles, userDeadline, dataDiffusion, crm);
     } catch(e) {
       Logger.log('❌ Erreur non récupérée pour ' + userEmail + ' : ' + e.message + '\n' + (e.stack || ''));
     }
@@ -817,7 +820,7 @@ function synchroniserTousLesContacts2() {
   Logger.log('\n✅ Synchronisation V2 terminée (cycle complet des ' + SC2_TARGET_USERS.length + ' utilisateurs).');
 }
 
-function sc2SyncUser(email, contactsValides, tousLibelles, deadline, dataDiffusion) {
+function sc2SyncUser(email, contactsValides, tousLibelles, deadline, dataDiffusion, crm) {
   let token;
   try { token = sc2GetToken(email); }
   catch(e) { Logger.log('  ❌ Auth : ' + e.message); return; }
@@ -849,8 +852,25 @@ function sc2SyncUser(email, contactsValides, tousLibelles, deadline, dataDiffusi
     Logger.log('  📖 Après purge : ' + existants.length + ' contacts.');
   }
 
+  // 4bis. Unicité (contacts_unicite.gs) : une fiche par personne, un numéro par fiche.
+  let affectation = null;
+  if (crm) {
+    let plan = sc2PlanUnicite(existants, crm);
+    const tropDeSuppr = plan.doublons.length > SC2_SUPPR_MAX_AUTO;
+    if (tropDeSuppr) Logger.log('  ⚠️ ' + plan.doublons.length + ' doublon(s) détecté(s) (> ' + SC2_SUPPR_MAX_AUTO + ') : aucune suppression automatique — à valider dans Pilotage Workspace › Contacts Google.');
+    if (plan.doublons.length || plan.telFix.length || plan.orphelins.length) {
+      const b = sc2AppliquerUnicite(token, plan, { supprimer: !tropDeSuppr });
+      Logger.log('  🧹 Unicité : ' + b.supprimes + ' doublon(s) mis à la corbeille, ' + b.telCorriges + ' fiche(s) ramenée(s) à 1 numéro, '
+        + b.telRetires + ' numéro(s) CRM retiré(s) de fiches hors CRM' + (b.erreurs.length ? ' | erreurs : ' + b.erreurs.join(' ; ') : ''));
+      existants.splice(0, existants.length, ...sc2LireContactsExistants(token));
+      plan = sc2PlanUnicite(existants, crm);
+    }
+    affectation = new Map();
+    plan.aff.forEach((f, pi) => affectation.set(crm.personnes[pi], f));
+  }
+
   // 5. Smart sync
-  const stats = sc2SyncerContacts(token, contactsValides, existants, groupesMap, deadline);
+  const stats = sc2SyncerContacts(token, contactsValides, existants, groupesMap, deadline, affectation);
   Logger.log('  ✅ ' + email + ' : ' + stats.created + ' créés, ' + stats.updated + ' màj, ' + stats.deleted + ' supprimés.');
 
   // 5bis. Groupes de diffusion HECG_* (mailing-list par classe / formateurs — fiches
@@ -1037,7 +1057,7 @@ function sc2NettoyerGroupesObsoletes(token, libellesActifs) {
 // - Si aucune correspondance → création
 // - Les contacts Google sans équivalent CRM sont CONSERVÉS (jamais supprimés)
 // Pour supprimer manuellement un contact, utilisez directement contacts.google.com.
-function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) {
+function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline, affectation) {
   existants   = existants   || [];
   newContacts = newContacts || [];
 
@@ -1091,15 +1111,17 @@ function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) 
     const phones = c.phones || (c.phone ? [c.phone] : []);
     let existing = null;
 
+    // Correspondance déjà établie par sc2PlanUnicite (synchro de nuit) : elle fait foi.
+    if (affectation) existing = affectation.get(c) || null;
     // Recherche par téléphone (priorité) — uniquement une fiche au MÊME nom de famille
-    for (const p of phones) {
+    else for (const p of phones) {
       const k = sc2PhoneKey(p);
       const cands = (k && phoneIdx[k]) || [];
       const bon = cands.find(e => !prises.has(e.resourceName) && nomFamille(((e.names || [])[0] || {}).familyName) === nomFamille(c.nom));
       if (bon) { existing = bon; break; }
     }
     // Fallback : recherche par email
-    if (!existing) {
+    if (!existing && !affectation) {
       const emails = c.emails || (c.email && c.email.includes('@') ? [c.email] : []);
       for (const em of emails) {
         const k = String(em).trim().toLowerCase();
@@ -1107,7 +1129,7 @@ function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) 
       }
     }
     // Fallback : recherche par nom+prénom (normalisé)
-    if (!existing) {
+    if (!existing && !affectation) {
       const nk = sc2NameKey(c.nom, c.prenom);
       if (nk && nameIdx[nk]) existing = nameIdx[nk];
     }
