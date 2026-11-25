@@ -459,6 +459,7 @@ function doPostInner_(e) {
       case 'fp2':                     return handleFp2(params, ss);
       case 'signatureHecg':           return handleSignatureHecg(params, ss);
       case 'workspaceComptes':        return handleWorkspaceComptes(params, ss);
+      case 'pilotage':                return handlePilotage(params, ss);   // pilotage.gs — groupes Workspace + rapatriement GED (Mehdi + Ali)
       case 'getPresence':             return handleGetPresence(p, ss);       // présence du personnel (presence.gs)
       case 'getMessagerie':           return handleGetMessagerie(p, ss);     // messagerie instantanée (messagerie.gs)
       case 'comptesEtudiant':         return handleComptesEtudiant(p, ss);   // comptes_etudiants.gs (Charlemagne / Workspace)
@@ -10353,17 +10354,10 @@ function handleGedUploadStudentDoc(p, ss) {
       if (String(data[i][0]) === String(p.idEtu)) { folderId = String(data[i][2]||"").trim(); break; }
     }
     if (!folderId) {
-      // Auto-create dans le dossier racine si pas encore lié
-      var root = DriveApp.getFolderById(GED_ETU_ROOT_ID);
-      var newFolder = null;
-      try { var it=root.getFoldersByName(p.nomPrenom||p.idEtu); newFolder=it.hasNext()?it.next():root.createFolder(p.nomPrenom||p.idEtu); }
-      catch(ec){ newFolder=root.createFolder(p.nomPrenom||p.idEtu); }
-      folderId = newFolder.getId();
-      // Link automatiquement
-      for (var j = 1; j < data.length; j++) {
-        if (String(data[j][0]) === String(p.idEtu)) { ws.getRange(j+1,3).setValue(folderId); ws.getRange(j+1,4).setValue(newFolder.getUrl()); break; }
-      }
-      if (folderId === newFolder.getId()) ws.appendRow([p.idEtu||"", p.nomPrenom||"", folderId, newFolder.getUrl()]);
+      // Pas encore de dossier lié : sous-dossier « GED CRM NOM Prénom » du dossier d'origine s'il existe, sinon dossier dans la GED (pilotage.gs)
+      var nomE = "", prenomE = "";
+      try { var dEt = getSheetSafe(ss, "ETUDIANTS").getDataRange().getValues(); for (var q = 1; q < dEt.length; q++) if (String(dEt[q][0]).trim() === String(p.idEtu)) { nomE = String(dEt[q][2] || "").trim(); prenomE = String(dEt[q][3] || "").trim(); break; } } catch (eE) {}
+      folderId = _gedDossierCrm_(ss, p.idEtu, nomE || p.nomPrenom || p.idEtu, prenomE).getId();
     }
     var folder = DriveApp.getFolderById(folderId);
     var blob = Utilities.newBlob(Utilities.base64Decode(p.base64Data), p.mimeType, p.fileName);

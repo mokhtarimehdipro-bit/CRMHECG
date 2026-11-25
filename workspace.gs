@@ -86,7 +86,7 @@ function _wsApercu_(ss) {
 }
 
 function handleWorkspaceComptes(p, ss) {
-  if (!_fp2Autorise_(p)) return createJsonResponse({ success: false, message: "Module réservé à m.mokhtari@hecg.fr." });
+  if (!_fp2Autorise_(p) && !_pilAutorise_(p)) return createJsonResponse({ success: false, message: "Module réservé à m.mokhtari@hecg.fr et a.mhoudini@hecg.fr." });
   var par = String(p.nomAuteur || p.emailAuteur || ""), op = String(p.op || "");
   try {
     if (op === "apercu") {

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <script src="auth-fetch.js?v=2"></script><script src="hecg-skins.js?v=8"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HECG - Pilotage Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="hecg-theme.css?v=1">
+    <style>
+      .tab{padding:.55rem 1rem;border-radius:.75rem;font-weight:800;font-size:.85rem;color:#475569;background:#fff;border:1px solid #e2e8f0;cursor:pointer}
+      .tab.on{background:#1A4E8A;color:#fff;border-color:#1A4E8A}
+      .card{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:1rem 1.2rem;margin-bottom:1rem}
+      .btn{height:38px;padding:0 14px;border-radius:.7rem;border:1px solid #dfe6f0;background:#fff;font-weight:700;font-size:.82rem;color:#334155;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+      .btn.pri{background:#1A4E8A;border-color:#1A4E8A;color:#fff}.btn.ora{background:#F26522;border-color:#F26522;color:#fff}.btn.red{background:#dc2626;border-color:#dc2626;color:#fff}
+      .btn:disabled{opacity:.5;cursor:wait}
+      table.t{width:100%;border-collapse:collapse;font-size:.8rem}table.t th{text-align:left;background:#f1f5f9;color:#475569;font-size:.68rem;text-transform:uppercase;padding:.45rem .5rem}
+      table.t td{padding:.45rem .5rem;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      input.i{border:1px solid #dfe6f0;border-radius:.5rem;padding:.3rem .5rem;font-size:.8rem;width:100%}
+      .pill{display:inline-block;font-size:.66rem;font-weight:800;padding:.1rem .45rem;border-radius:.4rem}
+      #msg{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:99;padding:.6rem 1rem;border-radius:.8rem;font-weight:700;font-size:.85rem;display:none;max-width:92vw}
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-md px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+    <div class="flex items-center gap-4">
+      <img src="https://hecg.fr/wp-content/uploads/2025/03/LOGO-FORMAT-PNG-1-1.png" alt="Logo" class="h-10 cursor-pointer" onclick="window.location.href='dashboard.html'">
+      <div class="border-l-2 pl-4 border-gray-200"><div class="font-black text-[#1A4E8A]">⚙️ Pilotage Google Workspace</div><div class="text-xs text-gray-400 font-bold">Groupes de classes · GED Drive · comptes des sortis — accès direction</div></div>
+    </div>
+    <a href="vie_scolaire.html" class="text-sm font-bold text-gray-500 hover:text-[#1A4E8A]">← Vie scolaire</a>
+  </nav>
+  <main class="max-w-7xl mx-auto px-4 py-5">
+    <div id="refus" class="hidden card text-center text-gray-500 font-bold">Cette page est réservée à m.mokhtari@hecg.fr et a.mhoudini@hecg.fr.</div>
+    <div id="app" class="hidden">
+      <div class="flex gap-2 flex-wrap mb-4">
+        <button class="tab on" data-t="groupes" onclick="onglet('groupes')">👥 Groupes de classes</button>
+        <button class="tab" data-t="drive" onclick="onglet('drive')">🗂️ Drive — rapatriement GED</button>
+        <button class="tab" data-t="comptes" onclick="onglet('comptes')">🚪 Comptes des étudiants sortis</button>
+        <button class="tab" data-t="annuaire" onclick="onglet('annuaire')">📞 Annuaire : téléphones</button>
+      </div>
+      <div id="corps"><div class="card text-gray-400">Chargement…</div></div>
+    </div>
+  </main>
+  <div id="msg"></div>
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwfwxfVa2968AgKLdwwV8VIazVACVPVypKXrEUTc-zTuQ08gda8m5_qPfC2BgMyJMwb/exec";
+const U = JSON.parse(localStorage.getItem('user') || '{}');
+const ADMINS = ['m.mokhtari@hecg.fr', 'a.mhoudini@hecg.fr'];
+const S = { annu: null, selAnn: new Set(), t: 'groupes', etat: null, plan: null, verif: null, ouvert: null, rap: null, comptes: null, selPlan: new Set(), selRap: {}, selCpt: new Set() };
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = id => document.getElementById(id);
+function msg(t, ok = true) { const m = $('msg'); m.textContent = t; m.style.background = ok ? '#065f46' : '#b91c1c'; m.style.color = '#fff'; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(() => m.style.display = 'none', 6000); }
+async function api(action, data = {}) {
+  try {
+    const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action, emailAuteur: U.email, nomAuteur: U.nom || U.email, vieScRole: U.vieScRole }, data)) });
+    return await r.json();
+  } catch (e) { return { success: false, message: 'Erreur de connexion : ' + e.message }; }
+}
+function occupe(btn, txt) { if (!btn) return () => {}; const a = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ ' + txt; return () => { btn.disabled = false; btn.innerHTML = a; }; }
+function onglet(t) { S.t = t; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t)); rendre(); if (t === 'comptes' && !S.comptes) chargerComptes(); if (t === 'annuaire' && !S.annu) chargerAnnuaire(); }
+function rendre() { $('corps').innerHTML = S.t === 'groupes' ? vGroupes() : S.t === 'drive' ? vDrive() : S.t === 'annuaire' ? vAnnuaire() : vComptes(); }
+
+/* ───────── 1. Groupes ───────── */
+async function charger() {
+  const r = await api('pilotage', { op: 'etat' });
+  if (!r.success) { $('corps').innerHTML = `<div class="card text-red-600 font-bold">${esc(r.message)}</div>`; return; }
+  S.etat = r; S.plan = r.plan && r.plan.length ? r.plan : null; S.rap = r.rapatriement;
+  S.selPlan = new Set((S.plan || []).filter(a => a.coche && a.statut !== 'Fait').map(a => a.id));
+  rendre();
+}
+function formateursDe(c) {
+  if (c.formateurs) return new Set(c.formateurs.map(String));
+  return new Set(S.etat.formateurs.filter(f => !f.sorti && f.classes.includes(c.classe)).map(f => f.id));   // proposition : classes renseignées dans la fiche formateur
+}
+function vGroupes() {
+  const E = S.etat; if (!E) return '<div class="card text-gray-400">Chargement…</div>';
+  const droits = E.droitsGroupes ? '' : `<div class="card" style="border-color:#f59e0b;background:#fffbeb"><b class="text-amber-700">🔑 Autorisation Google à donner une fois</b>
+    <p class="text-sm text-gray-700 mt-1">Le CRM n'a pas encore le droit de gérer les groupes Workspace. Dans l'éditeur Apps Script du CRM (compte m.mokhtari@hecg.fr), choisissez la fonction <b>autoriserGroupesWorkspace</b>, cliquez sur <b>Exécuter</b> et acceptez. Vous pouvez déjà paramétrer les classes ci-dessous.</p>
+    <p class="text-xs text-gray-400 mt-1">${esc(E.msgDroits || '')}</p></div>`;
+  const lignes = E.classes.map((c, i) => {
+    const sansMail = c.etudiants.filter(e => !e.email).length, F = formateursDe(c);
+    const ouvert = S.ouvert === i;
+    return `<tr style="${c.actif ? '' : 'opacity:.5'}"><td><b>${esc(c.classe)}</b>${c.configure ? '' : ' <span class="pill" style="background:#eef2ff;color:#4338ca">nouveau</span>'}</td>
+      <td>${c.etudiants.length}${sansMail ? ` <span class="pill" style="background:#fee2e2;color:#b91c1c" title="sans adresse @hecg.fr">${sansMail} sans @hecg</span>` : ''}</td>
+      <td><input class="i" id="ge${i}" value="${esc(c.etu)}"></td><td><input class="i" id="gf${i}" value="${esc(c.form)}"></td>
+      <td><button class="btn" onclick="S.ouvert=${ouvert ? 'null' : i};rendre()">👩‍🏫 ${F.size} formateur(s) ${ouvert ? '▲' : '▼'}</button></td>
+      <td style="text-align:center"><input type="checkbox" id="ga${i}" ${c.actif ? 'checked' : ''}></td>
+      <td><button class="btn pri" onclick="sauverClasse(${i},this)">💾</button></td></tr>
+      ${ouvert ? `<tr><td colspan="7" style="background:#f8fafc"><div class="text-xs font-bold text-gray-500 mb-2">Formateurs du groupe ${esc(c.form)} — décidez au cas par cas (${c.formateurs ? 'choix enregistré' : 'proposition : formateurs dont la fiche mentionne cette classe'}). <input class="i" style="width:220px;display:inline-block" placeholder="🔎 filtrer" oninput="filtreF(this.value)"></div>
+        <div id="fList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px;max-height:300px;overflow:auto">${E.formateurs.map(f => `<label data-n="${esc(f.nom.toLowerCase())}" class="flex gap-2 items-center text-sm ${f.sorti ? 'text-gray-400' : ''}"><input type="checkbox" class="fcb" value="${esc(f.id)}" ${F.has(f.id) ? 'checked' : ''} ${f.email ? '' : 'disabled'}>
+          <span>${esc(f.nom)}${f.email ? '' : ' <i class="text-red-500">(sans e-mail)</i>'}${f.sorti ? ' <i>(sorti)</i>' : ''}${f.classes.includes(c.classe) ? ' ⭐' : ''}</span></label>`).join('')}</div>
+        <p class="text-[11px] text-gray-400 mt-1">⭐ = la fiche du formateur mentionne cette classe. Cliquez sur 💾 pour enregistrer.</p></td></tr>` : ''}`;
+  }).join('');
+  return droits + `<div class="card"><div class="flex flex-wrap items-center gap-2 mb-3"><h3 class="font-black text-[#1A4E8A] flex-1">Classes (étudiants inscrits / préinscrits) et leurs 2 groupes</h3>
+      <button class="btn ora" onclick="preparer(this)">🧰 Préparer les groupes</button></div>
+    <p class="text-xs text-gray-500 mb-2">Chaque classe a un groupe <b>étudiants</b> (adresse @hecg.fr des fiches inscrites et préinscrites) et un groupe <b>formateurs</b> (votre choix). Les adresses sont modifiables. « Préparer » ne modifie rien : il calcule les actions, que vous cochez avant d'autoriser l'import.</p>
+    <div style="overflow-x:auto"><table class="t"><thead><tr><th>Classe</th><th>Étudiants</th><th>Groupe étudiants</th><th>Groupe formateurs</th><th>Formateurs</th><th>Active</th><th></th></tr></thead><tbody>${lignes}</tbody></table></div></div>` + vPlan();
+}
+function filtreF(v) { v = v.toLowerCase(); document.querySelectorAll('#fList label').forEach(l => l.style.display = l.dataset.n.includes(v) ? '' : 'none'); }
+async function sauverClasse(i, btn) {
+  const c = S.etat.classes[i], fin = occupe(btn, '');
+  const form = S.ouvert === i ? [...document.querySelectorAll('.fcb:checked')].map(x => x.value) : [...formateursDe(c)];
+  const o = { classe: c.classe, etu: $('ge' + i).value.trim().toLowerCase(), form: $('gf' + i).value.trim().toLowerCase(), formateurs: form, actif: $('ga' + i).checked };
+  const r = await api('pilotage', { op: 'sauverClasse', classe: JSON.stringify(o) }); fin();
+  if (!r.success) { msg(r.message, false); return; }
+  Object.assign(c, o, { configure: true }); msg(c.classe + ' enregistrée ✓'); rendre();
+}
+async function preparer(btn) {
+  const fin = occupe(btn, 'Préparation… (lecture des groupes Workspace)');
+  const r = await api('pilotage', { op: 'preparer' }); fin();
+  if (!r.success) { msg(r.message, false); return; }
+  S.plan = r.plan; S.verif = r.verif; S.selPlan = new Set(r.plan.filter(a => a.coche).map(a => a.id)); rendre();
+  msg(r.plan.length + ' action(s) préparée(s) — rien n\'a encore été modifié.');
+}
+const TYPES = { creer: ['➕ Groupes à créer', '#047857'], renommer: ['✏️ Groupes à renommer', '#1d4ed8'], ajouter: ['👤 Membres à ajouter', '#047857'], retirer: ['➖ Membres à retirer', '#b45309'], supprimer: ['🗑️ Autres groupes existants (suppression proposée — décochés par défaut)', '#b91c1c'] };
+function vPlan() {
+  if (!S.plan) return '';
+  const verif = (S.verif || []).length ? `<div class="card" style="border-color:#fca5a5"><h3 class="font-black text-red-700 mb-1">🔎 Vérification : ${S.verif.length} point(s)</h3><div class="text-sm" style="max-height:200px;overflow:auto">${S.verif.map(v => `<div>• <b>${esc(v.classe)}</b> ${v.etudiant ? '— ' + esc(v.etudiant) + (v.id ? ' <a class="text-blue-600 underline" href="dossier.html?id=' + encodeURIComponent(v.id) + '" target="_blank">fiche</a>' : '') : ''} : ${esc(v.probleme)}</div>`).join('')}</div></div>` : '';
+  const blocs = Object.keys(TYPES).map(t => {
+    const L = S.plan.filter(a => a.type === t); if (!L.length) return '';
+    const nb = L.filter(a => S.selPlan.has(a.id)).length;
+    return `<details class="mb-2" ${t !== 'supprimer' ? 'open' : ''}><summary class="cursor-pointer font-black text-sm" style="color:${TYPES[t][1]}">${TYPES[t][0]} — ${L.length} (${nb} cochée(s))
+      <button class="btn" style="height:26px;margin-left:8px" onclick="event.preventDefault();cocherType('${t}',true)">tout cocher</button><button class="btn" style="height:26px" onclick="event.preventDefault();cocherType('${t}',false)">tout décocher</button></summary>
+      <div style="max-height:320px;overflow:auto;margin-top:6px">${L.map(a => `<label class="flex gap-2 items-start text-sm py-0.5 ${a.statut === 'Fait' ? 'text-gray-400' : ''}"><input type="checkbox" ${S.selPlan.has(a.id) ? 'checked' : ''} ${a.statut === 'Fait' ? 'disabled' : ''} onchange="selA('${a.id}',this.checked)">
+        <span>${esc(a.lib)}${a.statut !== 'À faire' ? ` <span class="pill" style="background:${a.statut === 'Fait' ? '#dcfce7;color:#166534' : '#fee2e2;color:#b91c1c'}">${esc(a.statut)}${a.resultat ? ' — ' + esc(a.resultat) : ''}</span>` : ''}</span></label>`).join('')}</div></details>`;
+  }).join('');
+  return verif + `<div class="card" style="border-color:#F26522;border-width:2px"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#F26522] flex-1">Plan préparé — ${S.plan.length} action(s), ${S.selPlan.size} cochée(s)</h3>
+    <button class="btn pri" onclick="appliquer(this)">✅ Autoriser l'import (${S.selPlan.size})</button></div>
+    <p class="text-xs text-gray-500 mb-2">Retraits cochés par défaut : seulement les adresses @hecg.fr d'étudiants qui ne sont plus inscrits dans la classe. Aucune suppression de groupe n'est cochée : à vous de décider (confirmation demandée).</p>${blocs || '<p class="text-sm text-green-700 font-bold">✓ Tout est déjà conforme.</p>'}</div>`;
+}
+function selA(id, on) { on ? S.selPlan.add(id) : S.selPlan.delete(id); rendre(); }
+function cocherType(t, on) { S.plan.filter(a => a.type === t && a.statut !== 'Fait').forEach(a => on ? S.selPlan.add(a.id) : S.selPlan.delete(a.id)); rendre(); }
+async function appliquer(btn) {
+  const ids = [...S.selPlan]; if (!ids.length) { msg('Aucune action cochée.', false); return; }
+  const nSup = S.plan.filter(a => a.type === 'supprimer' && S.selPlan.has(a.id)).length;
+  let conf = '';
+  if (nSup) { conf = prompt(`${nSup} groupe(s) vont être SUPPRIMÉS définitivement (avec leurs listes de membres et l'historique des messages).\nTapez SUPPRIMER pour confirmer :`) || ''; if (conf !== 'SUPPRIMER') { msg('Import annulé.', false); return; } }
+  else if (!confirm(`Appliquer ${ids.length} action(s) dans Google Workspace ?`)) return;
+  const fin = occupe(btn, 'Import en cours…'); let tot = 0, ko = 0;
+  for (let k = 0; k < 10; k++) {
+    const r = await api('pilotage', { op: 'appliquer', ids, confirmation: conf });
+    if (!r.success) { fin(); msg(r.message, false); return; }
+    tot += r.resultats.length; ko += r.resultats.filter(x => !x.ok).length; S.plan = r.plan;
+    if (!r.restant) break;
+  }
+  fin(); S.selPlan = new Set([...S.selPlan].filter(id => (S.plan.find(a => a.id === id) || {}).statut !== 'Fait')); rendre();
+  msg(`${tot - ko} action(s) réussie(s)${ko ? ', ' + ko + ' échec(s) (détail dans la liste)' : ''}.`, !ko);
+}
+
+/* ───────── 2. Drive ───────── */
+function vDrive() {
+  const R = S.rap || [];
+  const lib = { 'Prêt': ['#dcfce7', '#166534'], 'À choisir': ['#fef3c7', '#92400e'], "Pas de dossier d'origine": ['#f1f5f9', '#64748b'], 'Rapatrié': ['#dbeafe', '#1e40af'], 'Échec': ['#fee2e2', '#b91c1c'] };
+  const lignes = R.map(r => {
+    const fait = /^Rapatri/.test(r.statut), choisible = !fait && (r.statut === 'Prêt' || r.statut === 'À choisir' || r.statut === 'Échec') && (r.origine || r.candidats.length);
+    const val = S.selRap[r.id];
+    const sel = !choisible ? '' : r.candidats.length > 1 ? `<select class="i" onchange="S.selRap['${r.id}']=this.value||undefined;rendre()"><option value="">— choisir le dossier d'origine —</option>${r.candidats.map(c => `<option value="${esc(c.id)}" ${val === c.id ? 'selected' : ''}>${esc(c.chemin)}</option>`).join('')}</select>`
+      : `<label class="flex gap-2 items-center"><input type="checkbox" ${val ? 'checked' : ''} onchange="S.selRap['${r.id}']=this.checked?'${esc(r.origine || (r.candidats[0] || {}).id)}':undefined;rendre()"> rapatrier</label>`;
+    const c = lib[r.statut] || lib['Rapatrié'];
+    return `<tr><td><b>${esc(r.nom)}</b><br><a class="text-xs text-blue-600 underline" href="dossier.html?id=${encodeURIComponent(r.id)}" target="_blank">${esc(r.id)}</a></td>
+      <td><span class="pill" style="background:${c[0]};color:${c[1]}">${esc(r.statut)}</span></td><td class="text-xs">${esc(r.detail)}${r.chemin && r.candidats.length <= 1 ? '<br><span class="text-gray-400">' + esc(r.chemin) + '</span>' : ''}</td><td style="min-width:220px">${sel}</td></tr>`;
+  }).join('');
+  const nSel = Object.values(S.selRap).filter(Boolean).length, prets = R.filter(r => r.statut === 'Prêt').length;
+  return `<div class="card"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#1A4E8A] flex-1">Dossiers étudiants créés par le CRM en double d'un dossier d'origine</h3>
+      <button class="btn" onclick="analyserDrive(this)">🔎 Analyser le Drive</button>
+      ${prets ? `<button class="btn" onclick="R0()">☑ Cocher les ${prets} « Prêt »</button>` : ''}
+      <button class="btn ora" onclick="rapatrier(this)" ${nSel ? '' : 'disabled'}>📦 Rapatrier la sélection (${nSel})</button></div>
+    <p class="text-xs text-gray-500 mb-3">Pour chaque dossier coché : un sous-dossier <b>« GED CRM NOM Prénom »</b> est créé dans le dossier d'origine de l'étudiant (Dossiers étudiants / Candidatures), les fichiers y sont <b>déplacés</b> (les liens existants continuent de fonctionner), le CRM pointe désormais dessus, un <b>raccourci</b> le remplace dans la GED et l'ancien dossier vide part à la corbeille (récupérable 30 jours). Les prochains dossiers suivront automatiquement cette règle.</p>
+    ${R.length ? `<div style="overflow-x:auto"><table class="t"><thead><tr><th>Étudiant</th><th>Statut</th><th>Détail</th><th>Action</th></tr></thead><tbody>${lignes}</tbody></table></div>` : '<p class="text-sm text-gray-400">Lancez « Analyser le Drive » (1 à 3 minutes).</p>'}</div>`;
+}
+function R0() { (S.rap || []).filter(r => r.statut === 'Prêt').forEach(r => S.selRap[r.id] = r.origine); rendre(); }
+async function analyserDrive(btn) {
+  const fin = occupe(btn, 'Analyse du Drive… (1 à 3 min)');
+  const r = await api('pilotage', { op: 'driveApercu' }); fin();
+  if (!r.success) { msg(r.message, false); return; }
+  S.rap = r.rapatriement; S.selRap = {}; rendre(); msg(r.origines + ' dossiers d\'origine indexés ; ' + r.rapatriement.filter(x => x.statut === 'Prêt').length + ' dossier(s) prêt(s).');
+}
+async function rapatrier(btn) {
+  const choix = {}; Object.entries(S.selRap).forEach(([k, v]) => { if (v) choix[k] = v; });
+  const n = Object.keys(choix).length; if (!n || !confirm(`Rapatrier ${n} dossier(s) dans les dossiers d'origine des étudiants ?`)) return;
+  const fin = occupe(btn, 'Rapatriement…'); let ok = 0, ko = 0;
+  for (let k = 0; k < 10; k++) {
+    const r = await api('pilotage', { op: 'driveAppliquer', choix });
+    if (!r.success) { fin(); msg(r.message, false); return; }
+    ok += r.resultats.filter(x => x.ok).length; ko += r.resultats.filter(x => !x.ok).length; S.rap = r.rapatriement;
+    if (!r.restant) break;
+  }
+  fin(); S.selRap = {}; rendre(); msg(`${ok} dossier(s) rapatrié(s)${ko ? ', ' + ko + ' échec(s)' : ''}.`, !ko);
+}
+
+/* ───────── 3. Comptes des sortis ───────── */
+async function chargerComptes(btn) {
+  const fin = occupe(btn, 'Lecture de l\'annuaire…');
+  const r = await api('workspaceComptes', { op: 'apercu' }); fin();
+  if (!r.success) { S.comptes = { erreur: r.message }; rendre(); return; }
+  S.comptes = r; S.selCpt = new Set(); rendre();
+}
+function vComptes() {
+  const C = S.comptes; if (!C) return '<div class="card text-gray-400">Lecture de l\'annuaire Google Workspace…</div>';
+  if (C.erreur) return `<div class="card text-red-600 font-bold">${esc(C.erreur)}</div>`;
+  const L = C.items.filter(x => x.email);
+  const aSusp = L.filter(x => !x.bloque && !x.suspendu).length, aSupp = L.filter(x => !x.bloque && x.suspendu).length;
+  const lignes = L.map(x => `<tr style="${x.bloque ? 'opacity:.55' : ''}"><td>${x.bloque ? '🔒' : `<input type="checkbox" ${S.selCpt.has(x.email) ? 'checked' : ''} onchange="this.checked?S.selCpt.add('${esc(x.email)}'):S.selCpt.delete('${esc(x.email)}');rendre()">`}</td>
+    <td><b>${esc(x.nomCrm)}</b><br><span class="text-xs text-gray-400">${esc(x.classe || '')} · ${esc(x.typo)}</span></td><td>${esc(x.email)}<br><span class="text-xs text-gray-400">${esc(x.ou || '')}</span></td>
+    <td>${x.suspendu ? '<span class="pill" style="background:#fef3c7;color:#92400e">suspendu</span>' : '<span class="pill" style="background:#dcfce7;color:#166534">actif</span>'}</td><td class="text-xs">${esc(x.derniere || '—')}</td><td class="text-xs text-red-600">${esc(x.doute || '')}</td></tr>`).join('');
+  return `<div class="card"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#1A4E8A] flex-1">Comptes Workspace des étudiants sortis — ${L.length} compte(s)</h3>
+      <button class="btn" onclick="chargerComptes(this)">↻ Actualiser</button>
+      <button class="btn" onclick="L1('actif')">☑ Les ${aSusp} actifs</button><button class="btn" onclick="L1('susp')">☑ Les ${aSupp} suspendus</button>
+      <button class="btn ora" onclick="actCpt('suspendre',this)">⏸ Suspendre (${S.selCpt.size})</button><button class="btn red" onclick="actCpt('supprimer',this)">🗑 Supprimer (${S.selCpt.size})</button></div>
+    <p class="text-xs text-gray-500 mb-3">La suppression ne vise que des comptes <b>déjà suspendus</b> (étape 1 : suspendre, étape 2 : supprimer). Un compte supprimé reste récupérable 20 jours dans la console d'administration Google. 🔒 = compte bloqué (relié aussi à une fiche active, homonymes ou hors des unités étudiantes) : traitement manuel.</p>
+    <div style="overflow-x:auto"><table class="t"><thead><tr><th></th><th>Étudiant (CRM)</th><th>Compte</th><th>État</th><th>Dernière connexion</th><th>Remarque</th></tr></thead><tbody>${lignes || '<tr><td colspan="6" class="text-gray-400">Aucun compte d\'étudiant sorti.</td></tr>'}</tbody></table></div></div>`;
+}
+function L1(k) { S.selCpt = new Set(S.comptes.items.filter(x => x.email && !x.bloque && (k === 'actif' ? !x.suspendu : x.suspendu)).map(x => x.email)); rendre(); }
+async function actCpt(op, btn) {
+  const emails = [...S.selCpt]; if (!emails.length) { msg('Cochez au moins un compte.', false); return; }
+  let conf = '';
+  if (op === 'supprimer') { conf = prompt(`${emails.length} compte(s) vont être SUPPRIMÉS (seuls ceux déjà suspendus le seront). Tapez SUPPRIMER pour confirmer :`) || ''; if (conf !== 'SUPPRIMER') { msg('Annulé.', false); return; } }
+  else if (!confirm(`Suspendre ${emails.length} compte(s) et les ranger dans « Anciens étudiants » ?`)) return;
+  const fin = occupe(btn, 'En cours…'); const res = [];
+  for (let k = 0; k < emails.length; k += 15) {
+    const r = await api('workspaceComptes', { op, emails: emails.slice(k, k + 15), confirmation: conf });
+    if (!r.success) { fin(); msg(r.message, false); return; }
+    res.push(...r.resultats);
+  }
+  fin(); const ok = res.filter(x => x.statut === 'ok').length;
+  msg(`${ok} compte(s) traité(s)${res.length - ok ? ', ' + (res.length - ok) + ' refusé(s)/en échec : ' + res.filter(x => x.statut !== 'ok').slice(0, 3).map(x => x.email + ' (' + x.detail + ')').join(', ') : ''}.`, ok === res.length);
+  chargerComptes();
+}
+
+/* ───────── 4. Annuaire : un seul numéro par étudiant ───────── */
+async function chargerAnnuaire(btn) {
+  const fin = occupe(btn, 'Lecture de l\'annuaire…');
+  const r = await api('pilotage', { op: 'annuaireTel' }); fin();
+  S.annu = r.success ? r.ecarts : { erreur: r.message }; S.selAnn = new Set(r.success ? r.ecarts.map(x => x.email) : []); rendre();
+}
+function vAnnuaire() {
+  const A = S.annu; if (!A) return '<div class="card text-gray-400">Lecture de l\'annuaire Google Workspace…</div>';
+  if (A.erreur) return `<div class="card text-red-600 font-bold">${esc(A.erreur)}</div>`;
+  const lignes = A.map(x => `<tr><td><input type="checkbox" ${S.selAnn.has(x.email) ? 'checked' : ''} onchange="this.checked?S.selAnn.add('${esc(x.email)}'):S.selAnn.delete('${esc(x.email)}');rendre()"></td>
+    <td><b>${esc(x.nom)}</b><br><span class="text-xs text-gray-400">${esc(x.email)}</span></td><td class="text-xs">${x.actuels.map(t => `<div style="${/n° du MA/.test(t) ? 'color:#b91c1c;font-weight:700' : ''}">${esc(t)}</div>`).join('') || '—'}</td>
+    <td class="text-xs font-bold text-green-700">${esc(x.cible || 'aucun numéro')}</td></tr>`).join('');
+  return `<div class="card"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#1A4E8A] flex-1">Profils de l'annuaire Workspace (comptes étudiants) — ${A.length} à corriger</h3>
+      <button class="btn" onclick="chargerAnnuaire(this)">↻ Actualiser</button><button class="btn ora" onclick="corrigerAnnuaire(this)" ${S.selAnn.size ? '' : 'disabled'}>📞 Ne garder que le numéro de l'étudiant (${S.selAnn.size})</button></div>
+    <p class="text-xs text-gray-500 mb-3">Le « Profil de l'annuaire » d'un compte @hecg.fr s'affiche sur les fiches Contacts et WhatsApp. Plusieurs numéros sur ce profil (souvent le n° « Work » du maître d'apprentissage ou d'un ancien MA) télescopent les identités. La correction ne garde que le numéro personnel de l'étudiant tel qu'il figure dans le CRM (jamais celui de son MA). En rouge : numéros qui sont ceux du MA.</p>
+    <div style="overflow-x:auto"><table class="t"><thead><tr><th></th><th>Étudiant</th><th>Numéros actuels (annuaire)</th><th>Après correction</th></tr></thead><tbody>${lignes || '<tr><td colspan="4" class="text-green-700 font-bold">✓ Tous les profils étudiants ont un seul numéro, le bon.</td></tr>'}</tbody></table></div></div>`;
+}
+async function corrigerAnnuaire(btn) {
+  const emails = [...S.selAnn]; if (!emails.length || !confirm(`Corriger ${emails.length} profil(s) de l'annuaire : un seul numéro, celui de l'étudiant ?`)) return;
+  const fin = occupe(btn, 'Correction…'); let ok = 0, ko = 0;
+  for (let k = 0; k < emails.length; k += 60) {
+    const r = await api('pilotage', { op: 'annuaireCorriger', emails: emails.slice(k, k + 60) });
+    if (!r.success) { fin(); msg(r.message, false); return; }
+    ok += r.resultats.filter(x => x.ok).length; ko += r.resultats.filter(x => !x.ok).length;
+  }
+  fin(); msg(`${ok} profil(s) corrigé(s)${ko ? ', ' + ko + ' échec(s)' : ''}.`, !ko); chargerAnnuaire();
+}
+
+if (ADMINS.includes(String(U.email || '').toLowerCase())) { $('app').classList.remove('hidden'); charger(); }
+else $('refus').classList.remove('hidden');
+</script>
+</body>
+</html>

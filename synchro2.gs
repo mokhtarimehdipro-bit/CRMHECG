@@ -753,6 +753,7 @@ function synchroniserTousLesContacts2() {
   const dataPerso     = sc2ExtractPersonnel(ss);
   const dataDiffusion = [...sc2ExtractGroupesDiffusion(ss), ...sc2ExtractGroupesFormateursParClasse(ss)];
   const tousLesContacts = [...dataEtu, ...dataPart, ...dataPerso];
+  sc2IndexerTelephones(tousLesContacts);
 
   Logger.log('🔍 ' + tousLesContacts.length + ' contacts source + ' + dataDiffusion.length
     + ' membre(s) de diffusion HECG_*/FORM-*. Début de la synchronisation V2...');
@@ -1065,7 +1066,7 @@ function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) 
       // tuteur lui-même — matcherait par erreur sur la fiche de ce premier étudiant.
       if (p.type === SC2_TYPE_TEL_RESPONSABLE) return;
       const k = sc2PhoneKey(p.value);
-      if (k && !phoneIdx[k]) phoneIdx[k] = e;
+      if (k) (phoneIdx[k] = phoneIdx[k] || []).push(e);   // toutes les fiches portant ce numéro (choix par le nom plus bas)
     });
     (e.emailAddresses || []).forEach(em => {
       const k = String(em.value || '').trim().toLowerCase();
@@ -1081,14 +1082,21 @@ function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) 
   // ── Tri UPSERT : créer ou mettre à jour, jamais supprimer ───────────────
   const toCreate = [], toUpdate = [];
 
+  // Une fiche Google ne peut servir qu'à UNE personne du CRM : sinon deux personnes (ex. un étudiant
+  // et son MA dont le numéro traînait en « Work » sur la fiche de l'étudiant) se réécrivent
+  // mutuellement la même fiche à chaque synchro → télescopage des identités sur téléphone / WhatsApp.
+  const prises = new Set();
+  const nomFamille = s0 => String(s0 || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   for (const c of newContacts) {
     const phones = c.phones || (c.phone ? [c.phone] : []);
     let existing = null;
 
-    // Recherche par téléphone (priorité)
+    // Recherche par téléphone (priorité) — uniquement une fiche au MÊME nom de famille
     for (const p of phones) {
       const k = sc2PhoneKey(p);
-      if (k && phoneIdx[k]) { existing = phoneIdx[k]; break; }
+      const cands = (k && phoneIdx[k]) || [];
+      const bon = cands.find(e => !prises.has(e.resourceName) && nomFamille(((e.names || [])[0] || {}).familyName) === nomFamille(c.nom));
+      if (bon) { existing = bon; break; }
     }
     // Fallback : recherche par email
     if (!existing) {
@@ -1104,10 +1112,10 @@ function sc2SyncerContacts(token, newContacts, existants, groupesMap, deadline) 
       if (nk && nameIdx[nk]) existing = nameIdx[nk];
     }
 
+    if (existing && prises.has(existing.resourceName)) existing = null;   // déjà attribuée à une autre personne → nouvelle fiche
     if (existing) {
-      // Politique téléphone : un numéro déjà présent côté Google n'est JAMAIS écrasé
-      // par celui du CRM (on le réharmonise juste au même format) ; s'il est absent,
-      // on importe celui du CRM.
+      prises.add(existing.resourceName);
+      // Politique téléphone (2026-11-25) : UN seul numéro, celui de la personne (voir sc2ResoudrePhonesExistant).
       const c2 = sc2ResoudrePhonesExistant(c, existing);
       // Vérifier si une mise à jour est nécessaire (évite les appels API inutiles)
       if (sc2ContactAChange(c2, existing, groupesMap)) {
@@ -1221,15 +1229,40 @@ function sc2RetirerAppartenancesGroupes(token, toUpdate, groupesMap) {
 // numéro sur 2 fiches distinctes causait des confusions de nom WhatsApp/iOS). Sans ce
 // filtre, un résidu serait à tort traité comme "numéro propre" du contact et ne serait
 // jamais nettoyé (le remplacement complet de phoneNumbers au prochain update s'en charge).
+// RÈGLE (direction 2026-11-25) : UN SEUL numéro par fiche — celui de la personne elle-même.
+// Plusieurs numéros sur une fiche (ex. le n° « Work » du MA ou d'un ancien MA sur la fiche
+// de l'étudiant) provoquent le télescopage des identités sur le téléphone / WhatsApp.
+// - Numéro présent dans le CRM → c'est le seul gardé (tous les autres numéros de la fiche Google sont retirés).
+// - Pas de numéro dans le CRM → on garde UN numéro existant, à condition qu'il n'appartienne
+//   à aucune autre personne du CRM (jamais le numéro d'un MA sur la fiche d'un étudiant).
+var SC2_TELS_CRM = null;   // chiffres du n° → [identités CRM] (rempli par sc2IndexerTelephones)
+function sc2Identite(c) { return (String(c.nom || '') + '|' + String(c.prenom || '') + '|' + String(c.entreprise || '')).toLowerCase().trim(); }
+function sc2IndexerTelephones(contacts) {
+  SC2_TELS_CRM = {};
+  contacts.forEach(c => (c.phones || (c.phone ? [c.phone] : [])).forEach(p => {
+    const k = sc2PhoneKey(p); if (!k) return;
+    const id = sc2Identite(c); SC2_TELS_CRM[k] = SC2_TELS_CRM[k] || [];
+    if (SC2_TELS_CRM[k].indexOf(id) === -1) SC2_TELS_CRM[k].push(id);
+  }));
+  const partages = Object.keys(SC2_TELS_CRM).filter(k => SC2_TELS_CRM[k].length > 1);
+  if (partages.length) Logger.log('⚠️ ' + partages.length + ' numéro(s) saisi(s) sur plusieurs personnes dans le CRM (à corriger dans les fiches) : '
+    + partages.slice(0, 20).map(k => k + ' → ' + SC2_TELS_CRM[k].join(' / ')).join(' ; '));
+}
+function sc2NumeroAutrui(c, phone) {
+  const k = sc2PhoneKey(phone); if (!k || !SC2_TELS_CRM || !SC2_TELS_CRM[k]) return false;
+  const id = sc2Identite(c);
+  return SC2_TELS_CRM[k].some(x => x !== id);
+}
 function sc2ResoudrePhonesExistant(c, existing) {
+  const crm = (c.phones || (c.phone ? [c.phone] : [])).filter(Boolean);
+  if (crm.length) return Object.assign({}, c, { phones: [crm[0]] });
   const existants = (existing.phoneNumbers || [])
     .filter(p => p.type !== SC2_TYPE_TEL_RESPONSABLE)
     .map(p => p.value)
     .filter(Boolean)
-    .map(p => sc2FormatPhone(p) || p);
-  const uniques = [...new Set(existants)];
-  const phones = uniques.length > 0 ? uniques : (c.phones || (c.phone ? [c.phone] : []));
-  return Object.assign({}, c, { phones });
+    .map(p => sc2FormatPhone(p) || p)
+    .filter(p => !sc2NumeroAutrui(c, p));
+  return Object.assign({}, c, { phones: existants.length ? [existants[0]] : [] });
 }
 
 // Détecte si le contact CRM diffère du contact Google existant
@@ -1564,7 +1597,7 @@ function sc2BuildPerson(c, groupesMap) {
     names:       [{ givenName: c.prenom || '', familyName: c.nom || '' }],
     memberships: memberships
   };
-  const phoneEntries = phoneList.map((p, i) => ({ value: p, type: i === 0 ? 'mobile' : 'work' }));
+  const phoneEntries = phoneList.slice(0, 1).map(p => ({ value: p, type: 'mobile' }));   // un seul numéro par fiche (règle 2026-11-25)
   // Le numéro du responsable entreprise (tuteur) n'est PAS dupliqué ici (voir extra
   // ci-dessous pour son nom/entreprise). Essayé un temps comme 2e phoneNumbers typé,
   // mais un même numéro dialable présent sur DEUX fiches Google Contacts distinctes
@@ -1751,9 +1784,13 @@ function sc2ExtractEtudiants(ss) {
     // sc2ExtractGroupesDiffusion) — jamais les deux sur la même fiche, sinon Gmail
     // affiche les deux adresses dès qu'on tape N'IMPORTE LEQUEL des deux libellés
     // (classe ou HECG_<classe>), quelle que soit celle marquée "primaire".
+    const ma = partMap[idCont] || null;
+    const telMa = ma && ma.tel ? sc2PhoneKey(ma.tel) : '';
+    const telEtu = tel && sc2PhoneKey(tel) !== telMa ? tel : '';   // n° identique à celui du MA = erreur de saisie : pas sur la fiche étudiant
+    if (tel && !telEtu) Logger.log('⚠️ ' + prenom + ' ' + nom + ' : le numéro de la fiche étudiant est celui de son MA — non synchronisé (corriger la fiche CRM).');
     list.push({
-      nom, prenom, phones: tel ? [tel] : [], emails: (mail && mail.includes('@')) ? [mail] : [],
-      labels: [...labelsSet], entreprise: nomEnt, contactEnt: partMap[idCont] || null
+      nom, prenom, phones: telEtu ? [telEtu] : [], emails: (mail && mail.includes('@')) ? [mail] : [],
+      labels: [...labelsSet], entreprise: nomEnt, contactEnt: ma
     });
   }
   return list;
@@ -1777,8 +1814,9 @@ function sc2ExtractPartenaires(ss) {
     const cp         = String(data[i][11] || '').trim();
     const ville      = String(data[i][12] || '').trim();
     if (!entreprise && !nom && !prenom) continue;
-    const phones = []; if (tel1) phones.push(tel1); if (tel2 && tel2 !== tel1) phones.push(tel2);
-    const emails = []; if (email1.includes('@')) emails.push(email1); if (email2.includes('@') && email2 !== email1) emails.push(email2);
+    // Une seule fiche = un seul numéro et un seul mail (règle 2026-11-25, télescopages WhatsApp)
+    const phones = tel1 ? [tel1] : (tel2 ? [tel2] : []);
+    const emails = email1.includes('@') ? [email1] : (email2.includes('@') ? [email2] : []);
     // MA-<classe> : un libellé par classe où ce contact a au moins un étudiant
     // actuellement Inscrit ou Préinscrit (voir sc2BuildMAClassesParContact). Recalculé
     // à chaque synchro, donc se met à jour automatiquement (ajout/retrait de classe)
@@ -1786,7 +1824,7 @@ function sc2ExtractPartenaires(ss) {
     const maLabels = [...(maClassesMap[idContact] || [])].map(cl => 'MA-' + cl);
     list.push({
       nom, prenom, phones, emails, labels: ['Entreprise', ...maLabels], entreprise,
-      adresseEnt: (adresse || cp || ville) ? { adresse, cp, ville } : null,
+      adresseEnt: null,   // plus d'adresse sur la fiche (spec 2026-11-25 : nom, prénom, tél, mail, entreprise, étudiants)
       etudiants: etudiantsMap[idContact] || []
     });
   }

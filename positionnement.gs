@@ -176,6 +176,9 @@ function _gedFichierInfo_(f, fichesPos) {
 }
 
 function _fpDossierGed_(ss, id, nom, prenom) {
+  return _gedDossierCrm_(ss, id, nom, prenom);   // pilotage.gs : dossier d'origine prioritaire (pas de doublon)
+}
+function _fpDossierGedAncien_(ss, id, nom, prenom) {
   var ws = getOrCreateGedEtuSheet(ss), d = ws.getDataRange().getValues();
   for (var i = 1; i < d.length; i++) if (String(d[i][0]).trim() === id && String(d[i][2] || "").trim()) {
     try { return DriveApp.getFolderById(String(d[i][2]).trim()); } catch (e) { break; }
