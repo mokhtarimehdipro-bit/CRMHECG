@@ -100,13 +100,22 @@ function sc2PersonnesCrm(ss) {
   var personnes = [], fusions = [];
   groupes.forEach(function (g) { var m = sc2Fusionner_(g); if (g.length > 1) fusions.push({ nom: sc2NomAff_(m), sources: m._fusion }); personnes.push(m); });
 
-  // Adresse @hecg.fr ajoutée à la fiche unique de la personne. Les libellés de diffusion HECG_<classe>,
+  // Règle des libellés (demande direction 2026-11-27) : tout libellé « HECG… » (HECG_<classe>, HECG_Formateurs,
+  // campus HECG / HECG_AIX) et FORM-<classe> = adresses @hecg.fr UNIQUEMENT, portées par une fiche « 📧 Liste ».
+  // Les fiches personnes gardent leur adresse perso (classe, statut, MA-… → perso) et ne portent aucun de ces libellés.
+  // (ancien commentaire) Les libellés de diffusion HECG_<classe>,
   // HECG_Formateurs, FORM-<classe> ne sont PAS posés sur les fiches personnes : Gmail enverrait aussi aux
   // mails perso (il prend toutes les adresses d'une fiche). Chaque libellé de diffusion est porté par UNE
   // fiche « 📧 Liste <libellé> » qui ne contient que les adresses @hecg.fr (demande direction 2026-11-27).
   var parId = {};
   personnes.forEach(function (c) { (c._ids || []).forEach(function (k) { parId[k] = c; }); });
-  var diff = sc2ExtractGroupesDiffusion(ss).concat(sc2ExtractGroupesFormateursParClasse(ss)), sansFiche = 0, listes = {};
+  var diff = sc2ExtractGroupesDiffusion(ss).concat(sc2ExtractGroupesFormateursParClasse(ss)), sansFiche = 0, listes = {}, mailHecgEtu = {}, horsDomaine = [];
+  function ajouterListe_(L, e, qui) {
+    var k = String(e || '').trim().toLowerCase();
+    if (!k) return;
+    if (!/@hecg\.fr$/.test(k)) { if (horsDomaine.indexOf(k) === -1) { horsDomaine.push(k); Logger.log('⚠️ Adresse non @hecg.fr écartée des listes : ' + k + ' (' + ((qui.prenom || '') + ' ' + (qui.nom || '')).trim() + ' — colonne « Mail HECG » à corriger)'); } return; }
+    if (!L._vus[k]) { L._vus[k] = 1; L.emails.push(k); }
+  }
   diff.forEach(function (d) {
     var k = d.diffusionKey, id;
     if (k.indexOf('ETU_') === 0) id = 'etu:' + k.slice(4);
@@ -115,15 +124,37 @@ function sc2PersonnesCrm(ss) {
     d.labels.forEach(function (l) {
       if (!l) return;
       var L = listes[l] = listes[l] || { prenom: '📧 Liste', nom: l, emails: [], labels: [l], diffusionKey: 'LISTE_' + l, _vus: {} };
-      d.emails.forEach(function (e) { var k = String(e).trim().toLowerCase(); if (k && !L._vus[k]) { L._vus[k] = 1; L.emails.push(String(e).trim()); } });
+      d.emails.forEach(function (e) { ajouterListe_(L, e, d); });
     });
+    if (k.indexOf('ETU_') === 0 && d.emails[0]) mailHecgEtu[id] = d.emails[0];
     var c = parId[id];
     if (!c) { sansFiche++; return; }
+    // L'adresse @hecg.fr reste AUSSI sur la fiche de la personne : constaté le 2026-11-27, sans elle Google relie le
+    // profil d'annuaire Workspace à la fiche « Liste », qui affiche alors les téléphones des étudiants.
     var mails = sc2Mails_(c);
-    d.emails.forEach(function (e) { if (mails.indexOf(String(e).toLowerCase()) === -1) { c.emails = (c.emails || []).concat([e]); mails.push(String(e).toLowerCase()); } });
+    d.emails.forEach(function (e) { if (/@hecg\.fr$/i.test(String(e)) && mails.indexOf(String(e).toLowerCase()) === -1) { c.emails = (c.emails || []).concat([e]); mails.push(String(e).toLowerCase()); } });
+  });
+  // Libellés de campus (« HECG » = Marseille, « HECG_AIX ») : retirés des fiches personnes → fiche liste @hecg.fr du campus
+  personnes.forEach(function (c) {
+    var labs = c.labels || [c.label];
+    var campus = labs.filter(function (l) { return /^HECG(_|$)/.test(String(l || '')); });
+    if (!campus.length) return;
+    c.labels = labs.filter(function (l) { return campus.indexOf(l) === -1; }); delete c.label;
+    var mh = (c._ids || []).map(function (k2) { return mailHecgEtu[k2]; }).filter(Boolean)[0];
+    campus.forEach(function (l) {
+      var L = listes[l] = listes[l] || { prenom: '📧 Liste', nom: l, emails: [], labels: [l], diffusionKey: 'LISTE_' + l, _vus: {} };
+      if (mh) ajouterListe_(L, mh, c);
+    });
   });
   if (sansFiche) Logger.log('⚠️ ' + sansFiche + ' entrée(s) de diffusion sans personne CRM correspondante.');
-  var fichesListes = Object.keys(listes).sort().map(function (k) { var L = listes[k]; delete L._vus; L.emails.sort(); return L; });
+  // Une fiche Google accepte au plus 100 adresses : au-delà de 90, la liste est répartie sur plusieurs fiches au même libellé.
+  var fichesListes = [];
+  Object.keys(listes).sort().forEach(function (k) {
+    var L = listes[k]; delete L._vus; L.emails.sort();
+    if (L.emails.length <= 90) { fichesListes.push(L); return; }
+    var n = Math.ceil(L.emails.length / 90);
+    for (var q = 0; q < n; q++) fichesListes.push({ prenom: L.prenom, nom: L.nom + ' (' + (q + 1) + '/' + n + ')', emails: L.emails.slice(q * 90, (q + 1) * 90), labels: L.labels, diffusionKey: L.diffusionKey + '_' + (q + 1) });
+  });
 
   // Un numéro = une seule personne (la prioritaire) ; les autres perdent ce numéro sur leur fiche.
   personnes.sort(function (a, b) { return sc2Priorite_(a) - sc2Priorite_(b); });
@@ -134,7 +165,7 @@ function sc2PersonnesCrm(ss) {
     else proprio[k] = c;
   });
   sc2IndexerTelephones(personnes);
-  return { personnes: personnes, fusions: fusions, conflits: conflits, proprio: proprio, listes: fichesListes };
+  return { personnes: personnes, fusions: fusions, conflits: conflits, proprio: proprio, listes: fichesListes, horsDomaine: horsDomaine };
 }
 
 // Données propres à la fiche (source CONTACT) — hors profil Google / annuaire Workspace que l'API fusionne à la lecture
@@ -550,7 +581,7 @@ function listesDiffusionDemarrer() {
 // fiches personnes portant encore un libellé de diffusion.
 function inspecterListesDiffusion(compte) {
   compte = compte || 'm.mokhtari@hecg.fr';
-  var token = sc2GetToken(compte), grp = {}, listes = 0, avecTel = 0, persoAvecLib = 0, exemples = [];
+  var token = sc2GetToken(compte), grp = {}, listes = 0, avecTel = 0, persoAvecLib = 0, persoEtHecg = 0, exemples = [];
   sc2ApiCall('https://people.googleapis.com/v1/contactGroups?pageSize=1000', { headers: sc2AuthHeader(token) }).contactGroups.forEach(function (g) { grp[g.resourceName] = g.name; });
   var url = 'https://people.googleapis.com/v1/people/me/connections?pageSize=1000&personFields=names,phoneNumbers,emailAddresses,memberships,userDefined', page = null;
   do {
@@ -558,16 +589,17 @@ function inspecterListesDiffusion(compte) {
     (d.connections || []).forEach(function (c) {
       var libs = (c.memberships || []).map(function (x) { var r = x.contactGroupMembership && x.contactGroupMembership.contactGroupResourceName; return grp[r] || ''; }).filter(Boolean);
       var nom = ((c.names || [])[0] || {}).displayName || '';
-      var mails = (c.emailAddresses || []).map(function (e) { return e.value; });
+      var mails = sc2DuContact_(c.emailAddresses).map(function (e) { return e.value; });
+      if (!sc2EstContactDiffusion(c) && mails.some(function (m) { return /@hecg\.fr$/i.test(m); }) && mails.some(function (m) { return !/@hecg\.fr$/i.test(m); })) persoEtHecg++;
       if (sc2EstContactDiffusion(c)) {
         listes++;
         var tels = (c.phoneNumbers || []).map(function (p) { return p.value + ' [' + ((p.metadata && p.metadata.source && p.metadata.source.type) || '?') + ']'; });
         if (tels.length) avecTel++;
         var nonHecg = mails.filter(function (m) { return !/@hecg\.fr$/i.test(m); });
         Logger.log('📧 ' + nom + ' | ' + mails.length + ' adresse(s)' + (nonHecg.length ? ' | ⚠️ hors @hecg.fr : ' + nonHecg.join(', ') : '') + ' | libellés : ' + libs.join(', ') + (tels.length ? ' | ⚠️ tél visibles : ' + tels.join(', ') : ''));
-      } else if (libs.some(function (l) { return /^HECG_|^FORM-/.test(l); })) { persoAvecLib++; if (exemples.length < 10) exemples.push(nom + ' (' + libs.join(', ') + ')'); }
+      } else if (libs.some(function (l) { return /^HECG(_|$)|^FORM-/.test(l); })) { persoAvecLib++; if (exemples.length < 10) exemples.push(nom + ' (' + libs.join(', ') + ')'); }
     });
     page = d.nextPageToken;
   } while (page);
-  Logger.log(compte + ' : ' + listes + ' fiche(s) liste, ' + avecTel + ' avec un téléphone visible, ' + persoAvecLib + ' fiche(s) personne portant encore un libellé HECG_/FORM-' + (exemples.length ? ' ex. ' + exemples.join(' ; ') : ''));
+  Logger.log(compte + ' : ' + listes + ' fiche(s) liste, ' + avecTel + ' avec un téléphone visible, ' + persoAvecLib + ' fiche(s) personne portant encore un libellé HECG/FORM-, ' + persoEtHecg + ' fiche(s) personne mêlant adresse perso et @hecg.fr' + (exemples.length ? ' ex. ' + exemples.join(' ; ') : ''));
 }

@@ -403,7 +403,11 @@ function _pilAnnuaireTel_(ss) {
     (j.users || []).forEach(function (u) {
       var em = String(u.primaryEmail || "").toLowerCase(), e = parMail[em]; if (!e) return;
       var ph = (u.phones || []).map(function (p) { return { valeur: String(p.value || ""), type: p.type === "custom" ? (p.customType || "custom") : (p.type || ""), chiffres: _pilChiffres_(p.value) }; });
-      var voulu = e.tel ? _pilChiffres_(e.tel) : "";
+      // Règle 2026-11-27 : AUCUN numéro sur le profil d'annuaire d'un étudiant. Google rattache ce profil à toute fiche
+      // Contacts portant l'adresse @hecg.fr (fiches « 📧 Liste » de diffusion) et y affiche le numéro → mauvaise
+      // identification d'appel / WhatsApp. Le numéro de l'étudiant vit uniquement sur SA fiche Contacts (1 fiche, 1 numéro).
+      e.tel = "";
+      var voulu = "";
       var ok = voulu ? (ph.length === 1 && ph[0].chiffres === voulu) : !ph.length;
       if (ok) return;
       out.push({ brut: u.phones || [], email: em, id: e.id, nom: e.nom, actuels: ph.map(function (p) { return p.valeur + " (" + p.type + ")" + (p.chiffres && p.chiffres === e.telMa ? " ← n° du MA " + e.ma : ""); }),
@@ -424,10 +428,20 @@ function _pilAnnuaireCorriger_(ss, emails, par) {
     if (!x) { res.push({ email: em, ok: false, detail: "déjà conforme ou compte non relié à une fiche étudiant" }); return; }
     try {
       _wsFetch_("put", "/users/" + encodeURIComponent(x.email), { phones: x.cible ? [{ value: x.cible, type: "mobile", primary: true }] : [] });
-      res.push({ email: x.email, ok: true, detail: x.cible ? "seul numéro conservé : " + x.cible : "numéros retirés (aucun n° personnel dans le CRM)" });
+      res.push({ email: x.email, ok: true, detail: "numéro(s) retiré(s) du profil d'annuaire (le numéro reste sur la fiche Contacts de l'étudiant)" });
       jr.push(["annuaire-telephone", x.email, x.nom, "OK — avant : " + x.actuels.join(", ") + " → après : " + (x.cible || "aucun")]);
     } catch (e) { res.push({ email: x.email, ok: false, detail: String(e.message || e).slice(0, 200) }); jr.push(["annuaire-telephone", x.email, x.nom, "ÉCHEC — " + String(e.message || e).slice(0, 200)]); }
   });
   _pilJournal_(ss, par, jr);
   return res;
+}
+
+// Éditeur : retire les numéros de TOUS les profils d'annuaire étudiants (sauvegarde avant, par lots de 60).
+function viderTelephonesAnnuaireEtudiants() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ec = _pilAnnuaireTel_(ss), ok = 0, ko = [];
+  for (var i = 0; i < ec.length; i += 60) {
+    _pilAnnuaireCorriger_(ss, ec.slice(i, i + 60).map(function (x) { return x.email; }), 'Annuaire sans téléphone (direction)').forEach(function (r) { if (r.ok) ok++; else ko.push(r.email + ' : ' + r.detail); });
+  }
+  logAction('Annuaire sans téléphone', '', 'Modification', 'Pilotage Workspace — annuaire téléphones', 'Profils étudiants', ok + ' profil(s) d’annuaire étudiant vidé(s) de leur numéro (sauvegarde restaurable)' + (ko.length ? ' — ' + ko.length + ' échec(s)' : ''));
+  Logger.log(ok + '/' + ec.length + ' profil(s) vidé(s) de leur numéro.' + (ko.length ? ' Échecs : ' + ko.join(' ; ') : ''));
 }

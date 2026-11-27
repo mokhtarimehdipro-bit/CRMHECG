@@ -244,10 +244,10 @@ function vAnnuaire() {
   return `<div class="card"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#1A4E8A] flex-1">Profils de l'annuaire Workspace (comptes étudiants) — ${A.length} à corriger</h3>
       <button class="btn" onclick="chargerAnnuaire(this)">↻ Actualiser</button><button class="btn ora" onclick="corrigerAnnuaire(this)" ${S.selAnn.size ? '' : 'disabled'}>📞 Ne garder que le numéro de l'étudiant (${S.selAnn.size})</button></div>
     <p class="text-xs text-gray-500 mb-3">Le « Profil de l'annuaire » d'un compte @hecg.fr s'affiche sur les fiches Contacts et WhatsApp. Plusieurs numéros sur ce profil (souvent le n° « Work » du maître d'apprentissage ou d'un ancien MA) télescopent les identités. La correction ne garde que le numéro personnel de l'étudiant tel qu'il figure dans le CRM (jamais celui de son MA). En rouge : numéros qui sont ceux du MA.</p>
-    <div style="overflow-x:auto"><table class="t"><thead><tr><th></th><th>Étudiant</th><th>Numéros actuels (annuaire)</th><th>Après correction</th></tr></thead><tbody>${lignes || '<tr><td colspan="4" class="text-green-700 font-bold">✓ Tous les profils étudiants ont un seul numéro, le bon.</td></tr>'}</tbody></table></div></div>`;
+    <div style="overflow-x:auto"><table class="t"><thead><tr><th></th><th>Étudiant</th><th>Numéros actuels (annuaire)</th><th>Après correction</th></tr></thead><tbody>${lignes || '<tr><td colspan="4" class="text-green-700 font-bold">✓ Aucun profil étudiant ne porte de numéro dans l’annuaire.</td></tr>'}</tbody></table></div></div>`;
 }
 async function corrigerAnnuaire(btn) {
-  const emails = [...S.selAnn]; if (!emails.length || !confirm(`Corriger ${emails.length} profil(s) de l'annuaire : un seul numéro, celui de l'étudiant ?`)) return;
+  const emails = [...S.selAnn]; if (!emails.length || !confirm(`Corriger ${emails.length} profil(s) de l'annuaire : retirer leur(s) numéro(s) (le numéro reste sur la fiche Contacts de l'étudiant) ?`)) return;
   const fin = occupe(btn, 'Correction…'); let ok = 0, ko = 0;
   for (let k = 0; k < emails.length; k += 60) {
     const r = await api('pilotage', { op: 'annuaireCorriger', emails: emails.slice(k, k + 60) });
@@ -275,7 +275,7 @@ function vContacts() {
     <button class="btn ora" onclick="corrigerContacts(this)" ${C && !C.erreur ? '' : 'disabled'}>🧹 Corriger maintenant ${S.ctCompte ? 'ce compte' : 'tous les comptes'}</button></div>
     <p class="text-xs text-gray-500 mb-3">Compare chaque fiche Google Contacts des comptes synchronisés avec le CRM (étudiants, MA / entreprises, formateurs, encadrants).
     Correction : <b>sauvegarde intégrale du compte d'abord</b> (restaurable ci-dessous), puis une seule fiche par personne — les anciennes fiches « de diffusion » (adresse @hecg.fr seule) et les doublons
-    sont fusionnés dans la fiche unique, qui porte <b>tous les libellés</b> (classe, statut, campus, HECG_…, FORM-…, MA-…) et les adresses perso + @hecg.fr —, un seul numéro (celui du CRM),
+    sont fusionnés dans la fiche unique (classe, statut, MA-…, adresses perso + @hecg.fr), un seul numéro (celui du CRM) ; les libellés HECG, HECG_… et FORM-… sont portés par des fiches « 📧 Liste » ne contenant que les adresses @hecg.fr,
     et un numéro du CRM est retiré des autres fiches qui le portent. Nom, prénom, entreprise et tuteur sont conservés. La synchro automatique de 2 h applique ces mêmes règles chaque nuit (avec sauvegarde).</p>`;
   if (!C) return `<div class="card">${tete}<div class="text-gray-400">Vérification en cours (lecture de toutes les fiches de chaque compte, ~1 min)…</div></div>`;
   if (C.erreur) return `<div class="card">${tete}<div class="text-red-600 font-bold">${esc(C.erreur)}</div></div>`;
@@ -329,7 +329,7 @@ async function corrigerContacts(btn) {
   const C = S.ct; if (!C || C.erreur) return;
   const cibles = S.ctCompte ? [S.ctCompte] : C.comptes.filter(c => !c.erreur).map(c => c.compte);
   const nbD = C.comptes.reduce((a, c) => a + (c.nbDoublons || 0), 0), nbT = C.comptes.reduce((a, c) => a + (c.nbTelFix || 0) + (c.nbOrphelins || 0), 0);
-  if (!confirm(`Corriger ${cibles.length} compte(s) :\n• sauvegarde intégrale de chaque compte d'abord (restaurable)\n• fiches de diffusion fusionnées dans la fiche unique (tous les libellés conservés)\n• ${nbD} fiche(s) en double → corbeille Google Contacts\n• ${nbT} fiche(s) ramenée(s) à un seul numéro\n\nContinuer ?`)) return;
+  if (!confirm(`Corriger ${cibles.length} compte(s) :\n• sauvegarde intégrale de chaque compte d'abord (restaurable)\n• une fiche « 📧 Liste » @hecg.fr par libellé HECG/HECG_/FORM-\n• ${nbD} fiche(s) en double → corbeille Google Contacts\n• ${nbT} fiche(s) ramenée(s) à un seul numéro\n\nContinuer ?`)) return;
   const fin = occupe(btn, 'Correction…'); const res = [];
   for (const compte of cibles) {
     const r = await api('pilotage', { op: 'contactsCorriger', compte });
