@@ -114,7 +114,7 @@ async function preparer(btn) {
   S.plan = r.plan; S.verif = r.verif; S.selPlan = new Set(r.plan.filter(a => a.coche).map(a => a.id)); rendre();
   msg(r.plan.length + ' action(s) préparée(s) — rien n\'a encore été modifié.');
 }
-const TYPES = { creer: ['➕ Groupes à créer', '#047857'], renommer: ['✏️ Groupes à renommer', '#1d4ed8'], ajouter: ['👤 Membres à ajouter', '#047857'], retirer: ['➖ Membres à retirer', '#b45309'], supprimer: ['🗑️ Autres groupes existants (suppression proposée — décochés par défaut)', '#b91c1c'] };
+const TYPES = { purger: ['♻️ Purge : groupes de classe supprimés puis recréés à neuf (évite les doublons)', '#b91c1c'], creer: ['➕ Groupes à créer', '#047857'], renommer: ['✏️ Groupes à renommer', '#1d4ed8'], ajouter: ['👤 Membres à ajouter', '#047857'], retirer: ['➖ Membres à retirer', '#b45309'], supprimer: ['🗑️ Autres groupes existants (anciens groupes de classe cochés ; groupes hors CRM décochés)', '#b91c1c'] };
 function vPlan() {
   if (!S.plan) return '';
   const verif = (S.verif || []).length ? `<div class="card" style="border-color:#fca5a5"><h3 class="font-black text-red-700 mb-1">🔎 Vérification : ${S.verif.length} point(s)</h3><div class="text-sm" style="max-height:200px;overflow:auto">${S.verif.map(v => `<div>• <b>${esc(v.classe)}</b> ${v.etudiant ? '— ' + esc(v.etudiant) + (v.id ? ' <a class="text-blue-600 underline" href="dossier.html?id=' + encodeURIComponent(v.id) + '" target="_blank">fiche</a>' : '') : ''} : ${esc(v.probleme)}</div>`).join('')}</div></div>` : '';
@@ -128,13 +128,13 @@ function vPlan() {
   }).join('');
   return verif + `<div class="card" style="border-color:#F26522;border-width:2px"><div class="flex flex-wrap items-center gap-2 mb-2"><h3 class="font-black text-[#F26522] flex-1">Plan préparé — ${S.plan.length} action(s), ${S.selPlan.size} cochée(s)</h3>
     <button class="btn pri" onclick="appliquer(this)">✅ Autoriser l'import (${S.selPlan.size})</button></div>
-    <p class="text-xs text-gray-500 mb-2">Retraits cochés par défaut : seulement les adresses @hecg.fr d'étudiants qui ne sont plus inscrits dans la classe. Aucune suppression de groupe n'est cochée : à vous de décider (confirmation demandée).</p>${blocs || '<p class="text-sm text-green-700 font-bold">✓ Tout est déjà conforme.</p>'}</div>`;
+    <p class="text-xs text-gray-500 mb-2">Retraits cochés par défaut : seulement les adresses @hecg.fr d'étudiants qui ne sont plus inscrits dans la classe. Purge cochée par défaut : chaque groupe de classe existant est supprimé puis recréé avec exactement ses membres (pas de doublon). Anciens groupes de classe (etu-/form-) : suppression cochée ; groupes hors CRM (pôles, services…) : décochés. Confirmation « SUPPRIMER » demandée.</p>${blocs || '<p class="text-sm text-green-700 font-bold">✓ Tout est déjà conforme.</p>'}</div>`;
 }
 function selA(id, on) { on ? S.selPlan.add(id) : S.selPlan.delete(id); rendre(); }
 function cocherType(t, on) { S.plan.filter(a => a.type === t && a.statut !== 'Fait').forEach(a => on ? S.selPlan.add(a.id) : S.selPlan.delete(a.id)); rendre(); }
 async function appliquer(btn) {
   const ids = [...S.selPlan]; if (!ids.length) { msg('Aucune action cochée.', false); return; }
-  const nSup = S.plan.filter(a => a.type === 'supprimer' && S.selPlan.has(a.id)).length;
+  const nSup = S.plan.filter(a => (a.type === 'supprimer' || a.type === 'purger') && S.selPlan.has(a.id)).length;
   let conf = '';
   if (nSup) { conf = prompt(`${nSup} groupe(s) vont être SUPPRIMÉS définitivement (avec leurs listes de membres et l'historique des messages).\nTapez SUPPRIMER pour confirmer :`) || ''; if (conf !== 'SUPPRIMER') { msg('Import annulé.', false); return; } }
   else if (!confirm(`Appliquer ${ids.length} action(s) dans Google Workspace ?`)) return;

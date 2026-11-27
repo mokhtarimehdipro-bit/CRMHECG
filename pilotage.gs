@@ -111,9 +111,10 @@ function _pilPreparer_(ss) {
       var cle = x[0], mail = x[1]; prevus[mail] = true;
       if (!_pilMailOk_(mail) || mail.split("@")[1] !== PIL_DOMAINE) { verif.push({ classe: c.classe, etudiant: "", id: "", probleme: "Adresse de groupe invalide : " + mail }); return; }
       var g = parMail[mail], membres = [];
-      if (!g) act("creer", mail, "", "Créer le groupe « " + x[2] + " » (" + mail + ")");
-      else { try { membres = _pilMembres_(g.email).map(function (m) { return m.email; }); } catch (eM) { verif.push({ classe: c.classe, etudiant: "", id: "", probleme: "Membres illisibles pour " + mail + " : " + eM.message }); } }
-      if (g && g.nom !== x[2]) act("renommer", mail, x[2], "Renommer « " + g.nom + " » en « " + x[2] + " »");
+      // Purge (demande direction 2026-11-27) : un groupe de classe existant est SUPPRIMÉ puis recréé à neuf avec
+      // exactement les membres attendus — plus de membres ou d'alias résiduels, plus de doublons.
+      if (g) act("purger", g.email, "", "Purger le groupe existant « " + g.nom + " » (" + g.email + ", " + g.membres + " membre(s)) avant de le recréer", true);
+      act("creer", mail, "", "Créer le groupe « " + x[2] + " » (" + mail + ")");
       voulu[cle].forEach(function (m) { if (membres.indexOf(m) === -1) act("ajouter", mail, m, "Ajouter " + m + " à " + mail); });
       membres.forEach(function (m) {
         if (voulu[cle].indexOf(m) !== -1) return;
@@ -122,10 +123,12 @@ function _pilPreparer_(ss) {
       });
     });
   });
-  // Groupes existants hors plan : suppression proposée, NON cochée (décision au cas par cas)
+  // Groupes existants hors plan : anciens groupes de classe (etu-/form- ou créés par le CRM) → suppression cochée
+  // (doublons / classes disparues) ; autres groupes du domaine (pôles, services…) → proposés NON cochés.
   existants.forEach(function (g) {
     if (prevus[g.email] || g.alias.some(function (a) { return prevus[a]; })) return;
-    act("supprimer", g.email, "", "Supprimer le groupe « " + g.nom + " » (" + g.email + ", " + g.membres + " membre(s))" + (g.description ? " — " + g.description : ""), false);
+    var classeCrm = /^(etu|form)-/.test(g.email) || /géré par le CRM HECG/i.test(g.description);
+    act("supprimer", g.email, "", "Supprimer le groupe « " + g.nom + " » (" + g.email + ", " + g.membres + " membre(s))" + (g.description ? " — " + g.description : "") + (classeCrm ? " — ancien groupe de classe" : " — groupe hors CRM, à vérifier"), classeCrm);
   });
   var ws = _pilFeuille_(ss, "PIL_PLAN", PIL_PLAN_H), now = new Date();
   if (ws.getLastRow() > 1) ws.getRange(2, 1, ws.getLastRow() - 1, PIL_PLAN_H.length).clearContent();
@@ -141,15 +144,27 @@ function _pilAppliquer_(ss, ids, confirmationSuppr, par) {
   var plan = _pilLirePlan_(ss), ws = _pilFeuille_(ss, "PIL_PLAN", PIL_PLAN_H), fin = Date.now() + 240000, res = [], jr = [];
   var aFaire = plan.filter(function (a) { return ids.indexOf(a.id) !== -1 && a.statut !== "Fait"; });
   // ordre sûr : créations, renommages, ajouts, retraits, puis suppressions de groupes
-  var ordre = { creer: 0, renommer: 1, ajouter: 2, retirer: 3, supprimer: 4 };
+  // ordre : purge des groupes de classe, suppressions, puis créations à neuf, ajouts
+  var ordre = { purger: 0, supprimer: 1, creer: 2, renommer: 3, ajouter: 4, retirer: 5 };
   aFaire.sort(function (a, b) { return ordre[a.type] - ordre[b.type]; });
-  if (aFaire.some(function (a) { return a.type === "supprimer"; }) && confirmationSuppr !== "SUPPRIMER") throw new Error("Confirmation « SUPPRIMER » manquante pour la suppression de groupes.");
+  if (aFaire.some(function (a) { return a.type === "supprimer" || a.type === "purger"; }) && confirmationSuppr !== "SUPPRIMER") throw new Error("Confirmation « SUPPRIMER » manquante pour la suppression de groupes.");
   var restant = 0;
   aFaire.forEach(function (a) {
     if (Date.now() > fin) { restant++; return; }
     var ok = true, txt = "";
     try {
-      if (a.type === "creer") { var nomG = a.lib.match(/« (.+) »/); _wsFetch_("post", "/groups", { email: a.groupe, name: nomG ? nomG[1] : a.groupe, description: "Groupe de classe géré par le CRM HECG" }); txt = "groupe créé"; }
+      if (a.type === "creer") {
+        var nomG = a.lib.match(/« (.+) »/);
+        for (var essai = 0; ; essai++) {   // juste après une purge, Google peut refuser l'adresse quelques secondes
+          try { _wsFetch_("post", "/groups", { email: a.groupe, name: nomG ? nomG[1] : a.groupe, description: "Groupe de classe géré par le CRM HECG" }); txt = "groupe créé"; break; }
+          catch (eC) {
+            if (!/409|already exists|duplicate/i.test(eC.message)) throw eC;
+            if (essai >= 4) { txt = "groupe déjà existant (non purgé)"; break; }
+            Utilities.sleep(4000);
+          }
+        }
+      }
+      else if (a.type === "purger") { _wsFetch_("delete", "/groups/" + encodeURIComponent(a.groupe)); txt = "groupe purgé"; }
       else if (a.type === "renommer") { _wsFetch_("patch", "/groups/" + encodeURIComponent(a.groupe), { name: a.membre }); txt = "renommé"; }
       else if (a.type === "ajouter") {
         try { _wsFetch_("post", "/groups/" + encodeURIComponent(a.groupe) + "/members", { email: a.membre, role: "MEMBER" }); txt = "ajouté"; }

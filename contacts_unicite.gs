@@ -537,3 +537,37 @@ function remiseAPlatContactsSuite() {
   var b = SC2_DERNIER_BILAN || {};
   try { logAction('Remise à plat contacts', '', 'Modification', 'Pilotage Workspace — contacts Google', compte, 'Sauvegarde intégrale puis : ' + (b.diffusionSupprimees || 0) + ' fiche(s) de diffusion fusionnée(s), ' + (b.supprimes || 0) + ' doublon(s) à la corbeille, ' + (b.telCorriges || 0) + ' fiche(s) ramenée(s) à 1 numéro, ' + (b.telRetires || 0) + ' n° CRM retiré(s) d’autres fiches' + ((b.erreurs || []).length ? ' — erreurs : ' + b.erreurs.join(' ; ') : '')); } catch (e) {}
 }
+
+// ═════════════ Listes de diffusion @hecg.fr (demande direction 2026-11-27) ═════════════
+// Lance la mise en place des fiches « 📧 Liste <libellé> » compte par compte (1er compte tout de suite ;
+// les suivants : relancer remiseAPlatContactsSuite, le projet n'ayant plus de déclencheur disponible).
+function listesDiffusionDemarrer() {
+  PropertiesService.getScriptProperties().setProperty('SC2_REMISE_IDX', '0');
+  remiseAPlatContactsSuite();
+  inspecterListesDiffusion();
+}
+// Contrôle d'un compte : fiches liste (adresses, téléphones visibles y compris issus des profils) et
+// fiches personnes portant encore un libellé de diffusion.
+function inspecterListesDiffusion(compte) {
+  compte = compte || 'm.mokhtari@hecg.fr';
+  var token = sc2GetToken(compte), grp = {}, listes = 0, avecTel = 0, persoAvecLib = 0, exemples = [];
+  sc2ApiCall('https://people.googleapis.com/v1/contactGroups?pageSize=1000', { headers: sc2AuthHeader(token) }).contactGroups.forEach(function (g) { grp[g.resourceName] = g.name; });
+  var url = 'https://people.googleapis.com/v1/people/me/connections?pageSize=1000&personFields=names,phoneNumbers,emailAddresses,memberships,userDefined', page = null;
+  do {
+    var d = sc2ApiCall(url + (page ? '&pageToken=' + encodeURIComponent(page) : ''), { headers: sc2AuthHeader(token) });
+    (d.connections || []).forEach(function (c) {
+      var libs = (c.memberships || []).map(function (x) { var r = x.contactGroupMembership && x.contactGroupMembership.contactGroupResourceName; return grp[r] || ''; }).filter(Boolean);
+      var nom = ((c.names || [])[0] || {}).displayName || '';
+      var mails = (c.emailAddresses || []).map(function (e) { return e.value; });
+      if (sc2EstContactDiffusion(c)) {
+        listes++;
+        var tels = (c.phoneNumbers || []).map(function (p) { return p.value + ' [' + ((p.metadata && p.metadata.source && p.metadata.source.type) || '?') + ']'; });
+        if (tels.length) avecTel++;
+        var nonHecg = mails.filter(function (m) { return !/@hecg\.fr$/i.test(m); });
+        Logger.log('📧 ' + nom + ' | ' + mails.length + ' adresse(s)' + (nonHecg.length ? ' | ⚠️ hors @hecg.fr : ' + nonHecg.join(', ') : '') + ' | libellés : ' + libs.join(', ') + (tels.length ? ' | ⚠️ tél visibles : ' + tels.join(', ') : ''));
+      } else if (libs.some(function (l) { return /^HECG_|^FORM-/.test(l); })) { persoAvecLib++; if (exemples.length < 10) exemples.push(nom + ' (' + libs.join(', ') + ')'); }
+    });
+    page = d.nextPageToken;
+  } while (page);
+  Logger.log(compte + ' : ' + listes + ' fiche(s) liste, ' + avecTel + ' avec un téléphone visible, ' + persoAvecLib + ' fiche(s) personne portant encore un libellé HECG_/FORM-' + (exemples.length ? ' ex. ' + exemples.join(' ; ') : ''));
+}
