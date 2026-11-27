@@ -751,7 +751,7 @@ function synchroniserTousLesContacts2() {
   // Liste consolidée : UNE entrée par personne réelle, un numéro = une seule personne
   // (contacts_unicite.gs — règle 2026-11-25 « une fiche, un numéro »).
   const crm           = sc2PersonnesCrm(ss);   // intègre aussi les libellés HECG_* / FORM-* et l'adresse @hecg.fr (plus de fiche de diffusion séparée)
-  const dataDiffusion = [];
+  const dataDiffusion = crm.listes || [];   // une fiche « 📧 Liste <libellé> » par libellé HECG_*/FORM-* (adresses @hecg.fr seules)
   const tousLesContacts = crm.personnes;
   if (crm.fusions.length) Logger.log('🔗 ' + crm.fusions.length + ' personne(s) présente(s) plusieurs fois dans le CRM → une seule fiche : '
     + crm.fusions.slice(0, 20).map(f => f.nom).join(', '));

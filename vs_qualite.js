@@ -1298,7 +1298,7 @@ function renderRelances() {
   box.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 p-5">
     <div class="flex flex-wrap justify-between items-start gap-3">
       <div><h2 class="text-lg font-black text-[#1A4E8A]">📬 Relance quotidienne des étudiants en recherche</h2>
-        <p class="text-xs text-gray-500 mt-1">Du lundi au vendredi à partir de ${r.heure} h : un mail rappelle de mettre à jour l'application aux étudiants « En recherche » sans nouvelle candidature depuis plus de 24 h. Copie systématique : <b>${vxEsc(r.copie)}</b>.</p></div>
+        <p class="text-xs text-gray-500 mt-1">Du lundi au vendredi à partir de ${r.heure} h : un mail rappelle de mettre à jour l'application aux étudiants « En recherche » sans nouvelle candidature depuis plus de 24 h. Pas de copie : les réponses des étudiants arrivent à <b>${vxEsc(r.copie)}</b>, qui reçoit aussi une mini-synthèse de chaque envoi (qui a été relancé).</p></div>
       <div class="flex items-center gap-3">
         <label class="flex items-center gap-2 text-sm font-bold" style="text-transform:none;margin:0"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="relActiver(this.checked)" style="width:18px;height:18px"> Relance automatique active</label>
         <button id="btnRelEnvoyer" onclick="relEnvoyer()" class="btn-orange text-sm" ${r.cibles.length ? '' : 'disabled'}>✉️ Envoyer maintenant (${r.cibles.length})</button></div></div>
@@ -1313,7 +1313,7 @@ async function relActiver(on) {
   toast(on ? 'Relance quotidienne activée ✓' : 'Relance quotidienne désactivée');
 }
 async function relEnvoyer() {
-  if (!confirm(`Envoyer maintenant la relance à ${relData.cibles.length} étudiant(s) (copie ${relData.copie}) ?\nLa relance automatique de ce jour sera alors considérée comme faite.`)) return;
+  if (!confirm(`Envoyer maintenant la relance à ${relData.cibles.length} étudiant(s) (synthèse à ${relData.copie}) ?\nLa relance automatique de ce jour sera alors considérée comme faite.`)) return;
   const b = document.getElementById('btnRelEnvoyer'); b.disabled = true; b.textContent = '⏳ Envoi…';
   const r = await api('saveRelanceCandidatures', { envoyerMaintenant: true });
   if (!r.success) { toast(r.message, false); b.disabled = false; return; }

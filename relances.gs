@@ -2,8 +2,9 @@
 //  RELANCE QUOTIDIENNE DES ÉTUDIANTS EN RECHERCHE (demande direction 2026-11-09)
 //  Chaque jour ouvré (lundi-vendredi, 9 h), un mail est envoyé aux étudiants INSCRITS ou PRÉINSCRITS « En recherche »
 //  qui n'ont ajouté AUCUNE candidature dans leur suivi (feuille TSUIVI) depuis plus de 24 h,
-//  pour leur rappeler de tenir l'application à jour. polepedagogique@hecg.fr est en copie de
-//  toutes les relances étudiants (celle-ci et les relances hebdomadaires de code.gs).
+//  pour leur rappeler de tenir l'application à jour. Le pôle pédagogique n'est PAS en copie (demande direction
+//  2026-11-27) : les réponses des étudiants lui parviennent (Répondre à = polepedagogique@hecg.fr) et il reçoit,
+//  après chaque envoi, UNE mini-synthèse (qui a été relancé, classe, nombre de candidatures).
 //  Réglages (onglet Vie scolaire › Espace recruteurs) : activation, aperçu, envoi immédiat.
 // =============================================================================
 var POLE_PEDA_EMAIL = "polepedagogique@hecg.fr";
@@ -58,25 +59,47 @@ function _relCandHtml_(c) {
     + '<li>consultez les <b>offres partagées</b> par l\'école ;</li>'
     + '<li>vous avez trouvé votre alternance ? <b>Prévenez-nous</b> pour mettre à jour votre statut.</li></ul>'
     + '<p style="text-align:center;margin:22px 0"><a href="' + app + '" style="background:#F26522;color:#fff;text-decoration:none;font-weight:bold;padding:13px 28px;border-radius:12px;display:inline-block">Mettre à jour mon suivi</a></p>'
-    + '<p style="font-size:12.5px;color:#6b7280">Identifiant de connexion : <b>' + c.id + '</b>. En cas de difficulté, répondez à ce message : le pôle pédagogique est en copie.</p></div>'
+    + '<p style="font-size:12.5px;color:#6b7280">Identifiant de connexion : <b>' + c.id + '</b>. En cas de difficulté, répondez simplement à ce message : votre réponse arrive directement au pôle pédagogique.</p></div>'
     + '<div style="background:#f8fafc;padding:12px 26px;font-size:11px;color:#9ca3af">Rappel automatique envoyé les jours ouvrés aux étudiants en recherche sans nouvelle candidature depuis 24 h.</div></div>';
 }
 
 function _relCandEnvoyer_(ss, auteur) {
-  var cibles = _relCandCibles_(ss), envoyes = 0, erreurs = [];
+  var cibles = _relCandCibles_(ss), envoyes = 0, erreurs = [], envoyesListe = [];
   cibles.forEach(function (c) {
     var sujet = "HECG — Pensez à mettre à jour votre suivi de candidatures";
     try {
-      GmailApp.sendEmail(c.mail, sujet, "", { htmlBody: _relCandHtml_(c), from: SENDER_EMAIL, cc: POLE_PEDA_EMAIL, name: "HECG — Pôle pédagogique" });
-      envoyes++;
-      try { logMailDetail(ss, { auteur: auteur, categorie: "Relance auto", sousCat: "Relance quotidienne candidatures", objet: sujet, destinataires: [c.mail, POLE_PEDA_EMAIL],
+      GmailApp.sendEmail(c.mail, sujet, "", { htmlBody: _relCandHtml_(c), from: SENDER_EMAIL, replyTo: POLE_PEDA_EMAIL, name: "HECG — Pôle pédagogique" });
+      envoyes++; envoyesListe.push(c);
+      try { logMailDetail(ss, { auteur: auteur, categorie: "Relance auto", sousCat: "Relance quotidienne candidatures", objet: sujet, destinataires: [c.mail],
         corps: c.prenom + " " + c.nom + " — " + c.nb + " candidature(s), dernière : " + (c.derniere || "aucune"), sourceId: "RELCAND-" + c.id + "-" + Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd") }); } catch (eL) {}
     } catch (e) { erreurs.push(c.mail + " : " + e); }
   });
+  var synthese = false;
+  if (envoyesListe.length || erreurs.length) { try { _relCandSynthese_(envoyesListe, erreurs, auteur); synthese = true; } catch (eS) { erreurs.push("Synthèse pôle pédagogique : " + eS); } }
   logAction(auteur, "", "Action", "Étudiants — relance candidatures", "TSUIVI",
-    envoyes + " relance(s) envoyée(s) aux étudiants en recherche sans candidature depuis 24 h (copie " + POLE_PEDA_EMAIL + ")" + (erreurs.length ? " — " + erreurs.length + " erreur(s)" : ""));
+    envoyes + " relance(s) envoyée(s) aux étudiants en recherche sans candidature depuis 24 h" + (synthese ? " — synthèse envoyée à " + POLE_PEDA_EMAIL : "") + (erreurs.length ? " — " + erreurs.length + " erreur(s)" : ""));
   PropertiesService.getScriptProperties().setProperty("RELANCE_CAND_DERNIER", JSON.stringify({ date: Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"), envoyes: envoyes, erreurs: erreurs.length, auteur: auteur }));
   return { envoyes: envoyes, erreurs: erreurs };
+}
+
+// Mini-synthèse au pôle pédagogique (remplace la copie de chaque relance) : un seul mail par envoi
+function _relCandSynthese_(liste, erreurs, auteur) {
+  var esc = function (v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  var td = 'style="padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:12.5px"', th = 'style="padding:6px 8px;background:#1A4E8A;color:#fff;font-size:12px;text-align:left"';
+  liste = liste.slice().sort(function (a, b) { return (a.classe + a.nom).localeCompare(b.classe + b.nom); });
+  var parClasse = {};
+  liste.forEach(function (c) { parClasse[c.classe || "—"] = (parClasse[c.classe || "—"] || 0) + 1; });
+  var sansCand = liste.filter(function (c) { return !c.nb; }).length;
+  var date = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy à HH:mm");
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px">'
+    + '<h3 style="color:#1A4E8A;margin:0 0 6px">Relance « suivi de candidatures » — ' + date + '</h3>'
+    + '<p style="font-size:13.5px;margin:0 0 6px"><b>' + liste.length + ' étudiant(s)</b> relancé(s) (en recherche, sans nouvelle candidature depuis 24 h), dont <b>' + sansCand + '</b> sans aucune candidature enregistrée.</p>'
+    + '<p style="font-size:12.5px;color:#374151;margin:0 0 10px">Par classe : ' + Object.keys(parClasse).sort().map(function (k) { return esc(k) + " (" + parClasse[k] + ")"; }).join(" · ") + '</p>'
+    + (liste.length ? '<table style="border-collapse:collapse;width:100%"><tr><th ' + th + '>Étudiant</th><th ' + th + '>Classe</th><th ' + th + '>Candidatures</th><th ' + th + '>Dernière</th></tr>'
+      + liste.map(function (c) { return '<tr><td ' + td + '>' + esc(c.prenom + " " + c.nom) + '</td><td ' + td + '>' + esc(c.classe) + '</td><td ' + td + '>' + c.nb + '</td><td ' + td + '>' + esc(c.derniere || "aucune") + '</td></tr>'; }).join("") + '</table>' : '')
+    + (erreurs.length ? '<p style="color:#b91c1c;font-size:12.5px">Non envoyé(s) : ' + erreurs.map(esc).join("<br>") + '</p>' : '')
+    + '<p style="font-size:11px;color:#9ca3af;margin-top:12px">Les étudiants qui répondent à leur relance écrivent directement à ' + POLE_PEDA_EMAIL + '. Envoi : ' + esc(auteur) + '.</p></div>';
+  GmailApp.sendEmail(POLE_PEDA_EMAIL, "📋 Synthèse relance candidatures — " + liste.length + " étudiant(s) relancé(s) — " + date.slice(0, 10), "", { htmlBody: html, from: SENDER_EMAIL, name: "CRM HECG" });
 }
 
 // Déclencheur : appelé à chaque passage de auditAdressesTick (toutes les 5 min)

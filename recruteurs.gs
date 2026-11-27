@@ -169,13 +169,21 @@ function _rcAudit_(ss, auteur, budgetMs) {
 
   // Étudiants du CRM
   var wsE = getSheetSafe(ss, "ETUDIANTS"), C = _rcColonnes_(wsE), dE = wsE.getDataRange().getValues();
+  // Alternants chez HECG (entreprise « HECG » dans PARTENARIAT) : doivent rester DISPONIBLES sur la CVthèque,
+  // comme les étudiants en recherche (demande direction 2026-11-26).
+  var idsHecg = {};
+  try { getSheetSafe(ss, "PARTENARIAT").getDataRange().getValues().forEach(function (r) {
+    if (/^\s*HECG\s*$/i.test(String(r[2] || "")) && r[1]) idsHecg[String(r[1]).trim().toUpperCase()] = 1; }); } catch (eH) {}
   var etus = [];
   for (var j = 1; j < dE.length; j++) {
     var row = dE[j];
     if (!row[0] || String(row[0]).toUpperCase() === "ETU000X") continue;
     var toks = _rcNorm_(row[2] + " " + row[3]).split(" ").filter(function (w) { return w.length > 1; });
     etus.push({ ligne: j + 1, id: String(row[0]), nom: (String(row[3] || "") + " " + String(row[2] || "")).trim(), classe: String(row[14] || ""), statut: String(row[13] || ""),
-      actif: !_etuMotifRefus_(row), recherche: /recherche/i.test(String(row[13] || "")), toks: toks, ancienEcart: String(row[C.ecart] || "") });
+      // Périmètre de comparaison : uniquement les étudiants INSCRITS et PRÉINSCRITS (typologie col U) — demande direction 2026-11-26
+      nomT: _rcNorm_(row[2]).split(" ").filter(function (w) { return w.length > 1; }), prenomT: _rcNorm_(row[3]).split(" ").filter(function (w) { return w.length > 1; }),
+      actif: /^(pr[ée]inscrit|inscrit)$/i.test(String(row[20] || "").trim()), hecg: !/recherche/i.test(String(row[13] || "")) && /altern|apprenti/i.test(String(row[13] || "")) && !!idsHecg[String(row[11] || "").trim().toUpperCase()],
+      recherche: /recherche/i.test(String(row[13] || "")) || (/altern|apprenti/i.test(String(row[13] || "")) && !!idsHecg[String(row[11] || "").trim().toUpperCase()]), toks: toks, ancienEcart: String(row[C.ecart] || "") });
   }
   function trouver(nom) {
     var t = _rcNorm_(nom).split(" ").filter(function (w) { return w.length > 1; });
@@ -186,12 +194,33 @@ function _rcAudit_(ss, auteur, budgetMs) {
       return a || b;
     });
   }
-  var ecarts = [], surSite = {}, maj = {}, nbIndispo = 0;
+  // Rapprochement tolérant (orthographe du prénom différente sur le site : Fayikoh/Fayikoth, Amelia/Amellia, Mehdi/Mahdi-Chahine…) :
+  // NOM identique + un prénom proche (≤ 2 lettres d'écart, ou l'un commence par l'autre) — retenu seulement si un seul candidat.
+  function lev(a, b) {
+    var d = []; for (var i = 0; i <= a.length; i++) { d[i] = [i]; } for (var j = 1; j <= b.length; j++) d[0][j] = j;
+    for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
+  function proche(nom) {
+    var t = _rcNorm_(nom).split(" ").filter(function (w) { return w.length > 1; });
+    return etus.filter(function (e) {
+      if (!e.nomT.length || !e.nomT.every(function (w) { return t.indexOf(w) !== -1; })) return false;
+      var reste = t.filter(function (w) { return e.nomT.indexOf(w) === -1; });
+      return reste.some(function (w) { return e.prenomT.some(function (q) {
+        return (w.length >= 3 && q.length >= 3 && (w.indexOf(q) === 0 || q.indexOf(w) === 0)) || (Math.min(w.length, q.length) >= 4 && lev(w, q) <= 2);
+      }); });
+    });
+  }
+  var ecarts = [], surSite = {}, maj = {}, nbIndispo = 0, horsPerimetre = 0, approx = 0;
   fiches.forEach(function (f) {
-    var c = trouver(f.nom), actifs = c.filter(function (e) { return e.actif; });
-    var e = actifs.length === 1 ? actifs[0] : (c.length === 1 ? c[0] : null);
+    var c = trouver(f.nom);
+    if (!c.length) { c = proche(f.nom); if (c.length) approx++; }
+    var actifs = c.filter(function (e) { return e.actif; });
+    // Profil rattaché à un étudiant hors périmètre (prospect, sorti, alumni…) : ignoré, pas de comparaison
+    if (!actifs.length && c.length) { horsPerimetre++; return; }
+    var e = actifs.length === 1 ? actifs[0] : null;
     if (!e) {
-      ecarts.push({ statutCrm: "—", surSite: true, statutSite: f.statutSite, type: c.length > 1 ? "Homonymes" : "Inconnu du CRM", gravite: "À vérifier", nom: f.nom, id: "", detail: c.length > 1 ? "Plusieurs fiches CRM possibles : " + c.map(function (x) { return x.id; }).join(", ") : "Profil présent sur l'espace recruteurs sans fiche correspondante dans le CRM", site: f.diplome + (f.campus ? " · " + f.campus : ""), url: f.url });
+      ecarts.push({ statutCrm: "—", surSite: true, statutSite: f.statutSite, type: actifs.length > 1 ? "Homonymes" : "Inconnu du CRM", gravite: "À vérifier", nom: f.nom, id: "", detail: actifs.length > 1 ? "Plusieurs fiches CRM inscrites/préinscrites possibles : " + actifs.map(function (x) { return x.id; }).join(", ") : "Profil présent sur l'espace recruteurs sans fiche correspondante dans le CRM", site: f.diplome + (f.campus ? " · " + f.campus : ""), url: f.url });
       return;
     }
     surSite[e.id] = f;
@@ -199,17 +228,17 @@ function _rcAudit_(ss, auteur, budgetMs) {
     // Statut sur le site : « Lien CV » (bleu) = en recherche ; « PLUS DISPONIBLE » (gris) = plus disponible
     var note = "", type = "", indispo = f.plusDispo, dispo = indispo ? "Plus disponible" : (f.url ? "En recherche" : "Sans CV");
     if (indispo) {
-      if (e.actif && e.recherche) { type = "À repasser en recherche"; note = "Affiché « PLUS DISPONIBLE » aux recruteurs alors qu'en recherche d'alternance dans le CRM — remettre le « Lien CV » sur le site"; }
+      if (e.actif && e.recherche) { type = "À repasser en recherche"; note = e.hecg ? "En alternance chez HECG : doit rester DISPONIBLE sur la CVthèque, or il est affiché « PLUS DISPONIBLE » — remettre le « Lien CV » sur le site" : "Affiché « PLUS DISPONIBLE » aux recruteurs alors qu'en recherche d'alternance dans le CRM — remettre le « Lien CV » sur le site"; }
       else nbIndispo++;   // profil déjà choisi (ou sorti), laissé en vitrine « PLUS DISPONIBLE » : conforme
     } else if (!e.actif) { type = "Sorti mais disponible"; note = "Étudiant sorti dans le CRM mais présenté en recherche (lien CV) aux recruteurs — les sortis ne doivent pas être disponibles : passer en « PLUS DISPONIBLE » ou retirer du site"; }
     else if (!e.recherche) { type = "À passer PLUS DISPONIBLE"; note = "Statut CRM « " + (e.statut || "vide") + " » mais présenté en recherche (lien CV) aux recruteurs — passer en « PLUS DISPONIBLE » sur le site (ou corriger le statut CRM)"; }
-    else if (!f.url) { type = "Sans lien CV"; note = "En recherche dans le CRM, présent sur le site mais sans « Lien CV » — ajouter le CV"; }
+    else if (!f.url) { type = "Sans lien CV"; note = (e.hecg ? "En alternance chez HECG (doit être disponible)" : "En recherche dans le CRM") + ", présent sur le site mais sans « Lien CV » — ajouter le CV"; }
     if (note) ecarts.push({ statutCrm: e.statut || (e.actif ? "—" : "Sorti"), surSite: true, statutSite: f.statutSite, type: type, gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: f.diplome, url: f.url });
     maj[e.ligne] = { lien: f.url, drive: info.drive || "", date: info.date || "", ecart: note, dispo: dispo, cvtheque: indispo ? "Plus disponible" : _rcEtatCvtheque_(info.date) };
   });
   etus.forEach(function (e) {
     if (!e.actif || !e.recherche || surSite[e.id]) return;
-    var note = "En recherche d'alternance dans le CRM mais absent de l'espace recruteurs du site";
+    var note = e.hecg ? "En alternance chez HECG (doit apparaître disponible sur la CVthèque) mais absent de l'espace recruteurs du site" : "En recherche d'alternance dans le CRM mais absent de l'espace recruteurs du site";
     ecarts.push({ statutCrm: e.statut, surSite: false, statutSite: "", type: "Absent du site", gravite: "Erreur", nom: e.nom, id: e.id, detail: note, site: "—", url: "" });
     maj[e.ligne] = { lien: "", drive: "", date: "", ecart: note, dispo: "", cvtheque: "Non" };
   });
@@ -240,11 +269,11 @@ function _rcAudit_(ss, auteur, budgetMs) {
 
   // Rapport
   var R = { date: Utilities.formatDate(maintenant, "Europe/Paris", "dd/MM/yyyy HH:mm"), auteur: auteur, profilsSite: fiches.length,
-    enRecherche: etus.filter(function (e) { return e.actif && e.recherche; }).length, cvthequeOk: cvOk, presents: Object.keys(surSite).length, indisponibles: nbIndispo, cvLus: lus, cvEnAttente: enAttente, notes: notes, ecarts: ecarts };
+    enRecherche: etus.filter(function (e) { return e.actif && e.recherche; }).length, cvthequeOk: cvOk, presents: Object.keys(surSite).length, indisponibles: nbIndispo, alternantsHecg: etus.filter(function (e) { return e.actif && e.hecg; }).length, horsPerimetre: horsPerimetre, rapprochesApprox: approx, perimetre: "Inscrits + Préinscrits", cvLus: lus, cvEnAttente: enAttente, notes: notes, ecarts: ecarts };
   var wsR = ss.getSheetByName("AUDIT_RECRUTEURS") || ss.insertSheet("AUDIT_RECRUTEURS");
   wsR.clear();
   var rows = [["Audit espace recruteurs ↔ CRM — " + R.date + " — " + auteur, "", "", "", "", ""],
-    [R.profilsSite + " profils sur le site · " + R.enRecherche + " étudiants « En recherche » dans le CRM · " + R.presents + " rapprochés (dont " + nbIndispo + " affichés « Indisponible » — déjà choisis) · " + ecarts.length + " écart(s) · " + R.cvEnAttente + " CV en attente de lecture", "", "", "", "", ""],
+    [R.profilsSite + " profils sur le site · " + R.enRecherche + " étudiants « En recherche » dans le CRM (dont " + R.alternantsHecg + " alternants chez HECG, à afficher disponibles) · " + R.presents + " rapprochés (dont " + nbIndispo + " affichés « Indisponible » — déjà choisis) · " + horsPerimetre + " profil(s) d'étudiants ni inscrits ni préinscrits ignorés · " + ecarts.length + " écart(s) · " + R.cvEnAttente + " CV en attente de lecture", "", "", "", "", ""],
     ["", "", "", "", "", ""], ["Gravité", "Type", "Étudiant", "ID CRM", "Détail", "CV sur le site"]];
   ecarts.forEach(function (x) { rows.push([x.gravite, x.type, x.nom, x.id, x.detail, x.url]); });
   wsR.getRange(1, 1, rows.length, 6).setValues(rows);
@@ -255,7 +284,7 @@ function _rcAudit_(ss, auteur, budgetMs) {
   if (enAttente) PropertiesService.getScriptProperties().setProperty("RC_SUITE", "1"); else PropertiesService.getScriptProperties().deleteProperty("RC_SUITE");
   R.ecartsDetail = ecarts;
   logAction(auteur, "", "Action", "Étudiants — audit espace recruteurs", "AUDIT_RECRUTEURS",
-    R.profilsSite + " profils sur le site (" + nbIndispo + " « PLUS DISPONIBLE » conformes), " + R.enRecherche + " en recherche dans le CRM, " + R.presents + " rapprochés (" + nbIndispo + " indisponibles), " + ecarts.length + " écart(s), " + notes + " note(s) ajoutée(s) aux dossiers, " + lus + " CV lus" + (enAttente ? " (" + enAttente + " en attente)" : ""));
+    R.profilsSite + " profils sur le site (" + nbIndispo + " « PLUS DISPONIBLE » conformes), " + R.enRecherche + " inscrits/préinscrits en recherche dans le CRM, " + horsPerimetre + " profils hors périmètre ignorés, " + R.presents + " rapprochés (" + nbIndispo + " indisponibles), " + ecarts.length + " écart(s), " + notes + " note(s) ajoutée(s) aux dossiers, " + lus + " CV lus" + (enAttente ? " (" + enAttente + " en attente)" : ""));
   return R;
 }
 
@@ -328,12 +357,21 @@ function _rcMailEcarts_(R, ecarts) {
   }).join("");
   var html = '<div style="font-family:Arial,sans-serif;max-width:1000px">' +
     '<h2 style="color:#1A4E8A;margin:0 0 6px">Audit espace recruteurs ↔ CRM — ' + esc(R.date) + "</h2>" +
-    '<p style="font-size:13px;color:#374151;margin:0 0 12px">' + R.profilsSite + " profils sur l'espace recruteurs · " + R.enRecherche + " étudiants « En recherche » dans le CRM · " +
-    R.presents + " rapprochés (dont " + R.indisponibles + " « PLUS DISPONIBLE ») · <b>" + ecarts.length + " écart(s)</b></p>" +
+    '<p style="font-size:13px;color:#374151;margin:0 0 12px">' + R.profilsSite + " profils sur l'espace recruteurs · " + R.enRecherche + " étudiants inscrits/préinscrits « En recherche » dans le CRM (dont " + (R.alternantsHecg || 0) + " alternants chez HECG, à afficher disponibles) · " +
+    R.presents + " rapprochés (dont " + R.indisponibles + " « PLUS DISPONIBLE ») · " + (R.horsPerimetre || 0) + " profil(s) d'étudiants ni inscrits ni préinscrits ignorés · <b>" + ecarts.length + " écart(s)</b></p>" +
     (ecarts.length ? '<table style="border-collapse:collapse;width:100%"><tr><th ' + th + ">Étudiant</th><th " + th + ">Statut CRM</th><th " + th + ">Présent CVthèque</th><th " + th + ">Statut CVthèque</th><th " + th + ">Écart</th><th " + th + ">CRM</th><th " + th + ">Espace recruteurs</th></tr>" + lignes + "</table>"
       : '<p style="font-size:14px;color:#047857;font-weight:bold">✓ Aucun écart : la CVthèque est conforme au CRM.</p>') +
     '<p style="font-size:11px;color:#94a3b8;margin-top:14px">Règles : « Lien CV » (fond bleu) = en recherche ; « PLUS DISPONIBLE » (fond gris) = plus disponible. Un étudiant sorti ne doit jamais être présenté en recherche. ' +
     "Détail complet : CRM › Vie scolaire › Espace recruteurs. Envoi automatique tous les 2 jours.</p></div>";
   MailApp.sendEmail({ to: RC_MAIL_DEST.join(","), subject: "🔎 Audit espace recruteurs — " + ecarts.length + " écart(s) — " + R.date.slice(0, 10), htmlBody: html, name: "CRM HECG" });
   logAction("Système", "", "Envoi mail", "Étudiants — audit espace recruteurs", "AUDIT_RECRUTEURS", "Rapport des écarts (" + ecarts.length + ") envoyé à " + RC_MAIL_DEST.join(", "));
+}
+
+// Lancement manuel depuis l'éditeur : audit complet + mail des écarts (sans attendre le passage de nuit)
+function auditRecruteursMaintenant() {
+  var R = _rcAudit_(SpreadsheetApp.openById("1TfghkrbVnei_vQTdO3_jXW6-gqVQIKKYGtQN4_W_iWQ"), "Audit manuel (éditeur)", 300000);
+  _rcMailEcarts_(R, R.ecartsDetail);
+  PropertiesService.getScriptProperties().setProperty("RC_MAIL_TS", String(Date.now()));
+  Logger.log(R.profilsSite + " profils site · " + R.enRecherche + " inscrits/préinscrits en recherche · " + R.presents + " rapprochés · " + R.horsPerimetre + " hors périmètre ignorés · " + R.ecartsDetail.length + " écart(s) · " + R.rapprochesApprox + " rapprochés malgré une orthographe différente · " + R.cvEnAttente + " CV en attente");
+  R.ecartsDetail.forEach(function (x) { Logger.log(x.type + " — " + x.nom + " — " + x.detail); });
 }

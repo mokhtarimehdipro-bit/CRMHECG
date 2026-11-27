@@ -100,25 +100,30 @@ function sc2PersonnesCrm(ss) {
   var personnes = [], fusions = [];
   groupes.forEach(function (g) { var m = sc2Fusionner_(g); if (g.length > 1) fusions.push({ nom: sc2NomAff_(m), sources: m._fusion }); personnes.push(m); });
 
-  // Libellés de diffusion HECG_<classe>, HECG_Formateurs, FORM-<classe> + adresse @hecg.fr : sur la MÊME fiche
-  // (plus de fiche de diffusion séparée — demande direction 2026-11-25 : une seule fiche par personne).
+  // Adresse @hecg.fr ajoutée à la fiche unique de la personne. Les libellés de diffusion HECG_<classe>,
+  // HECG_Formateurs, FORM-<classe> ne sont PAS posés sur les fiches personnes : Gmail enverrait aussi aux
+  // mails perso (il prend toutes les adresses d'une fiche). Chaque libellé de diffusion est porté par UNE
+  // fiche « 📧 Liste <libellé> » qui ne contient que les adresses @hecg.fr (demande direction 2026-11-27).
   var parId = {};
   personnes.forEach(function (c) { (c._ids || []).forEach(function (k) { parId[k] = c; }); });
-  var diff = sc2ExtractGroupesDiffusion(ss).concat(sc2ExtractGroupesFormateursParClasse(ss)), sansFiche = 0;
+  var diff = sc2ExtractGroupesDiffusion(ss).concat(sc2ExtractGroupesFormateursParClasse(ss)), sansFiche = 0, listes = {};
   diff.forEach(function (d) {
     var k = d.diffusionKey, id;
     if (k.indexOf('ETU_') === 0) id = 'etu:' + k.slice(4);
     else if (k.indexOf('FORM_') === 0) id = 'perso:' + k.slice(5);
     else { var cl = String(d.labels[0]).replace(/^FORM-/, ''), r = k.slice('FORMCLASSE_'.length); id = 'perso:' + r.slice(0, r.length - cl.length - 1); }
+    d.labels.forEach(function (l) {
+      if (!l) return;
+      var L = listes[l] = listes[l] || { prenom: '📧 Liste', nom: l, emails: [], labels: [l], diffusionKey: 'LISTE_' + l, _vus: {} };
+      d.emails.forEach(function (e) { var k = String(e).trim().toLowerCase(); if (k && !L._vus[k]) { L._vus[k] = 1; L.emails.push(String(e).trim()); } });
+    });
     var c = parId[id];
     if (!c) { sansFiche++; return; }
-    if (!c.labels) c.labels = [c.label];
-    delete c.label;
-    d.labels.forEach(function (l) { if (l && c.labels.indexOf(l) === -1) c.labels.push(l); });
     var mails = sc2Mails_(c);
     d.emails.forEach(function (e) { if (mails.indexOf(String(e).toLowerCase()) === -1) { c.emails = (c.emails || []).concat([e]); mails.push(String(e).toLowerCase()); } });
   });
   if (sansFiche) Logger.log('⚠️ ' + sansFiche + ' entrée(s) de diffusion sans personne CRM correspondante.');
+  var fichesListes = Object.keys(listes).sort().map(function (k) { var L = listes[k]; delete L._vus; L.emails.sort(); return L; });
 
   // Un numéro = une seule personne (la prioritaire) ; les autres perdent ce numéro sur leur fiche.
   personnes.sort(function (a, b) { return sc2Priorite_(a) - sc2Priorite_(b); });
@@ -129,7 +134,7 @@ function sc2PersonnesCrm(ss) {
     else proprio[k] = c;
   });
   sc2IndexerTelephones(personnes);
-  return { personnes: personnes, fusions: fusions, conflits: conflits, proprio: proprio };
+  return { personnes: personnes, fusions: fusions, conflits: conflits, proprio: proprio, listes: fichesListes };
 }
 
 // Données propres à la fiche (source CONTACT) — hors profil Google / annuaire Workspace que l'API fusionne à la lecture
@@ -169,7 +174,16 @@ function sc2PlanUnicite(existants, crm) {
   var aff = new Map(), prise = {};
   paires.forEach(function (p) { if (aff.has(p.pi) || prise[p.f.resourceName]) return; aff.set(p.pi, p.f); prise[p.f.resourceName] = p.pi; });
 
-  var plan = { diffusionSuppr: existants.filter(sc2EstContactDiffusion).map(function (e) { return e.resourceName; }), fiches: fiches.length, diffusion: nbDiffusion, personnes: personnes.length, aff: aff,
+  // Fiches de diffusion : on garde UNE fiche « 📧 Liste » par libellé de diffusion actif ; les anciennes fiches
+  // de diffusion individuelles (ETU_/FORM_/FORMCLASSE_), les listes obsolètes et les doublons de liste sont supprimés.
+  var listesOk = {}, listesVues = {};
+  (crm.listes || []).forEach(function (L) { listesOk[L.diffusionKey] = 1; });
+  var diffusionSuppr = existants.filter(sc2EstContactDiffusion).filter(function (e) {
+    var k = ((e.userDefined || []).filter(function (u) { return u.key === 'HECG_DIFFUSION_ID'; })[0] || {}).value || '';
+    if (!listesOk[k] || listesVues[k]) return true;
+    listesVues[k] = 1; return false;
+  }).map(function (e) { return e.resourceName; });
+  var plan = { diffusionSuppr: diffusionSuppr, fiches: fiches.length, diffusion: nbDiffusion, personnes: personnes.length, aff: aff,
     doublons: [], telFix: [], orphelins: [], sansFiche: [], horsCrmMultiTel: 0 };
 
   // Doublons : fiche non retenue portant exactement le nom + prénom d'une personne qui a déjà sa fiche.
@@ -336,8 +350,8 @@ function inspecterContact_(motif, compte) {
 function sc2SyncCompteComplet_(email, crm, deadline) {
   var valides = crm.personnes.filter(function (c) { return sc2Tel1_(c) || c.entreprise || c.nom || c.prenom; });
   var libelles = new Set();
-  valides.forEach(function (c) { (c.labels || [c.label]).forEach(function (l) { if (l) libelles.add(l); }); });
-  sc2SyncUser(email, valides, libelles, deadline, [], crm);
+  valides.concat(crm.listes || []).forEach(function (c) { (c.labels || [c.label]).forEach(function (l) { if (l) libelles.add(l); }); });
+  sc2SyncUser(email, valides, libelles, deadline, crm.listes || [], crm);
 }
 
 // ═════════════ SAUVEGARDES & RESTAURATION (« bouton de repentir ») ═════════════
